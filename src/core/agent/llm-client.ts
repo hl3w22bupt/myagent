@@ -3,7 +3,9 @@
  *
  * Supports:
  * - Anthropic (Claude)
- * - OpenAI-compatible (GLM-4, etc.)
+ * - GLM-4.7 (Anthropic-compatible)
+ * - GLM-4 (OpenAI-compatible)
+ * - Other OpenAI-compatible APIs
  */
 
 import { Anthropic } from '@anthropic-ai/sdk';
@@ -31,6 +33,83 @@ export interface LLMClientConfig {
   apiKey: string;
   baseURL?: string;
   model?: string;
+}
+
+/**
+ * Preset configurations for popular LLM providers.
+ */
+export class LLMPresets {
+  /**
+   * Claude (Anthropic)
+   */
+  static claude(apiKey: string, model: string = 'claude-sonnet-4-5'): LLMClientConfig {
+    return {
+      provider: 'anthropic',
+      apiKey,
+      baseURL: 'https://api.anthropic.com',
+      model
+    };
+  }
+
+  /**
+   * GLM-4.7 (Anthropic-compatible API) - Recommended
+   */
+  static glm47Anthropic(apiKey: string, model: string = 'glm-4.7'): LLMClientConfig {
+    return {
+      provider: 'anthropic',
+      apiKey,
+      baseURL: 'https://open.bigmodel.cn/api/anthropic',
+      model
+    };
+  }
+
+  /**
+   * GLM-4 (OpenAI-compatible API)
+   */
+  static glm4OpenAI(apiKey: string, model: string = 'glm-4'): LLMClientConfig {
+    return {
+      provider: 'openai-compatible',
+      apiKey,
+      baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+      model
+    };
+  }
+
+  /**
+   * OpenAI (GPT-4, etc.)
+   */
+  static openai(apiKey: string, model: string = 'gpt-4'): LLMClientConfig {
+    return {
+      provider: 'openai-compatible',
+      apiKey,
+      baseURL: 'https://api.openai.com/v1',
+      model
+    };
+  }
+
+  /**
+   * Custom OpenAI-compatible endpoint
+   */
+  static customOpenAI(apiKey: string, baseURL: string, model: string): LLMClientConfig {
+    return {
+      provider: 'openai-compatible',
+      apiKey,
+      baseURL,
+      model
+    };
+  }
+
+  /**
+   * Custom Anthropic-compatible endpoint
+   */
+  static customAnthropic(apiKey: string, baseURL: string, model: string): LLMClientConfig {
+    return {
+      provider: 'anthropic',
+      apiKey,
+      baseURL,
+      model
+    };
+  }
 }
 
 /**
@@ -174,9 +253,9 @@ export class LLMClient {
   private getDefaultModel(provider: LLMProvider): string {
     switch (provider) {
       case 'anthropic':
-        return 'claude-sonnet-4-5';
+        return 'claude-sonnet-4-5'; // Default for Anthropic API
       case 'openai-compatible':
-        return 'glm-4';
+        return 'glm-4'; // Default for GLM OpenAI-compatible API
       default:
         return 'claude-sonnet-4-5';
     }

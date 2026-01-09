@@ -131,8 +131,13 @@ export const handler = async (
 
   // Store execution history in state (last 100 executions)
   try {
-    const historyKey = 'agent:execution:history';
-    const history = await state.get(historyKey) || [];
+    // Use Motia state API with groupId and key
+    const groupId = 'agent:execution';
+    const key = 'history';
+
+    // Get existing history or initialize empty array
+    const existingHistory = await state.get(groupId, key);
+    const history = existingHistory || [];
 
     // Add new entry
     history.unshift({
@@ -151,14 +156,16 @@ export const handler = async (
       history.pop();
     }
 
-    await state.set(historyKey, history);
+    // Save back to state
+    await state.set(groupId, key, history);
 
     logger.info('Execution history updated', {
       totalEntries: history.length
     });
   } catch (error: any) {
     logger.warn('Failed to update execution history', {
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
 

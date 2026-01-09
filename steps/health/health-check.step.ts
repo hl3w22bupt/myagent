@@ -82,7 +82,8 @@ export const handler = async (
     // Get metrics from state if available
     let metrics;
     try {
-      const history = await state.get('agent:execution:history') || [];
+      // Use Motia state API with groupId and key
+      const history = await state.get('agent:execution', 'history') || [];
 
       const successfulTasks = history.filter((entry: any) => entry.success).length;
       const failedTasks = history.filter((entry: any) => !entry.success).length;

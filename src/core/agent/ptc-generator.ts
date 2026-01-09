@@ -200,25 +200,27 @@ ${skillsBlock}
 ${selectedSkills.join(', ')}
 </available_skills>
 
-Generate Python code using this pattern:
+Generate Python code to accomplish the task.
 
-<code>
+IMPORTANT - Code structure requirements:
+- The code will be wrapped in an async main() function automatically
+- DO NOT include 'async def main()' or 'if __name__ == "__main__"'
+- DO NOT include 'asyncio.run()' - it will be called automatically
+- DO NOT import asyncio
+- Just write the logic code that goes inside the async function
+
+${selectedSkills.length > 0 ? `Available skills to use:
 from core.skill.executor import SkillExecutor
-
 executor = SkillExecutor()
 
-# Use the selected skills to accomplish the task
-result1 = await executor.execute('skill-name', {'param': 'value'})
+# Use skills with await:
+result = await executor.execute('skill-name', {'param': 'value'})` : `No skills needed - solve the task directly with Python code.`}
 
-# Process results and print final output
-print(result)
-</code>
-
-Important:
-- Use async/await for all skill executions
+Code requirements:
+- Use 'await' for any async operations (like skill execution)
 - Print the final result
 - Handle errors gracefully with try/except
-- Only output the Python code, no explanations
+- Only output the code logic, no function definitions or boilerplate
 
 Generate the code now:`;
 
@@ -233,14 +235,37 @@ Generate the code now:`;
     // Try multiple code block formats
     let codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
     if (!codeMatch) {
+      codeMatch = response.content.match(/```(\s*.*?)\s*```/s); // Generic code block
+    }
+    if (!codeMatch) {
       codeMatch = response.content.match(/<code>\s*(.*?)\s*<\/code>/s);
+    }
+    if (!codeMatch) {
+      // Last resort: try to extract code after specific markers
+      codeMatch = response.content.match(/(?:Generate the code now:?|Code:?\s*)([\s\S]*?)(?:\n\n|\n*$|$)/i);
     }
     if (!codeMatch) {
       console.error('[PTC Generator] Failed to parse code. Response:', response.content);
       throw new Error('Failed to parse code from LLM response');
     }
 
-    return codeMatch[1].trim();
+    let code = codeMatch[1].trim();
+
+    // Clean up: remove common unwanted patterns
+    code = code
+      .replace(/^async def main\(\):[\s\S]*?$/m, '') // Remove async def main() if present
+      .replace(/^if __name__ == ["']__main__["']:[\s\S]*?$/m, '') // Remove if __name__ check
+      .replace(/^import asyncio\s*$/m, '') // Remove asyncio imports
+      .replace(/^asyncio\.run\(main\(\)\)\s*$/m, '') // Remove asyncio.run() calls
+      .trim();
+
+    // Validate: code should not be empty
+    if (!code || code.length < 5) {
+      console.error('[PTC Generator] Extracted code is too short. Response:', response.content);
+      throw new Error('Extracted code is too short or empty');
+    }
+
+    return code;
   }
 
   /**

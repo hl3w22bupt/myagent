@@ -1,8 +1,12 @@
-# 🎉 使用 GLM-4 API Key 配置
+# 🎉 使用 GLM-4 / GLM-4.7 API Key 配置
 
-## ✅ 是的，你可以使用 GLM-4 的 API key！
+## ✅ 是的，你可以使用 GLM 的 API key！
 
 并且环境变量名可以继续使用 `ANTHROPIC_API_KEY`，我们已经做了完整的适配！
+
+**支持两种配置方式：**
+1. **Anthropic 兼容模式（推荐）** - 使用 GLM-4.7
+2. **OpenAI 兼容模式** - 使用 GLM-4 系列
 
 ---
 
@@ -18,13 +22,38 @@
 
 ### 2. 配置 `.env` 文件
 
-复制示例配置：
+#### 方式 1：GLM-4.7 Anthropic 兼容模式（推荐）
+
+复制配置示例：
+
+```bash
+cp .env.glm4-anthropic.example .env
+```
+
+编辑 `.env` 文件：
+
+```bash
+ANTHROPIC_API_KEY=your_actual_glm_api_key_here
+DEFAULT_LLM_PROVIDER=anthropic
+DEFAULT_LLM_MODEL=glm-4.7
+LLM_BASE_URL=https://open.bigmodel.cn/api/anthropic
+```
+
+**优势**：
+- ✅ 使用最新的 GLM-4.7 模型
+- ✅ 完全兼容 Anthropic API
+- ✅ 更好的错误处理和响应格式
+- ✅ 与 Claude Code 配置一致
+
+#### 方式 2：GLM-4 OpenAI 兼容模式
+
+复制配置示例：
 
 ```bash
 cp .env.glm4.example .env
 ```
 
-编辑 `.env` 文件，填入你的 API key：
+编辑 `.env` 文件：
 
 ```bash
 ANTHROPIC_API_KEY=your_actual_glm_api_key_here
@@ -35,7 +64,7 @@ DEFAULT_LLM_MODEL=glm-4
 **重要提示**：
 - ✅ 环境变量名保持 `ANTHROPIC_API_KEY`
 - ✅ 实际值是你的智谱 API key
-- ✅ `DEFAULT_LLM_PROVIDER` 设置为 `openai-compatible`
+- ✅ 根据模式选择 `DEFAULT_LLM_PROVIDER`
 
 ### 3. 测试配置
 
@@ -134,7 +163,7 @@ DEFAULT_LLM_MODEL=claude-sonnet-4-5
 
 ## 🎨 代码示例
 
-### 基础使用
+### 基础使用（自动从 .env 读取）
 
 ```typescript
 import { Agent } from '@/core/agent/agent';
@@ -149,16 +178,53 @@ const result = await agent.run('请总结以下文章...');
 console.log(result.output);
 ```
 
-### 显式配置（可选）
+### 使用预设配置（推荐）
 
 ```typescript
+import { LLMClient, LLMPresets } from '@/core/agent/llm-client';
+import { PTCGenerator } from '@/core/agent/ptc-generator';
+
+// 方式 1: GLM-4.7 Anthropic 兼容模式（推荐）
+const llm = new LLMClient(LLMPresets.glm47Anthropic(process.env.GLM_API_KEY!));
+
+// 方式 2: GLM-4 OpenAI 兼容模式
+const llm = new LLMClient(LLMPresets.glm4OpenAI(process.env.GLM_API_KEY!));
+
+// 方式 3: Claude (Anthropic)
+const llm = new LLMClient(LLMPresets.claude(process.env.ANTHROPIC_API_KEY!));
+
+// 方式 4: OpenAI
+const llm = new LLMClient(LLMPresets.openai(process.env.OPENAI_API_KEY!));
+
+// 使用 PTC Generator
+const ptc = new PTCGenerator(llm, skills);
+const code = await ptc.generate('创建一个网页...');
+```
+
+### 显式配置（完全自定义）
+
+```typescript
+// GLM-4.7 Anthropic 兼容模式
+const agent = new Agent({
+  systemPrompt: 'You are a helpful assistant.',
+  availableSkills: ['web-search'],
+  llm: {
+    provider: 'anthropic',
+    model: 'glm-4.7',
+    apiKey: process.env.GLM_API_KEY,
+    baseURL: 'https://open.bigmodel.cn/api/anthropic'
+  }
+});
+
+// GLM-4 OpenAI 兼容模式
 const agent = new Agent({
   systemPrompt: 'You are a helpful assistant.',
   availableSkills: ['web-search'],
   llm: {
     provider: 'openai-compatible',
     model: 'glm-4-flash',
-    apiKey: process.env.ANTHROPIC_API_KEY
+    apiKey: process.env.GLM_API_KEY,
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4/'
   }
 });
 ```
@@ -203,18 +269,33 @@ GLM-4 的输出格式可能与 Claude 略有不同。已在代码中做适配，
 
 ## ✅ 验收检查清单
 
+### 基础功能
 - [x] 安装 OpenAI SDK (`npm install openai`)
 - [x] 创建 LLMClient 统一接口
 - [x] 更新 PTCGenerator 使用 LLMClient
 - [x] 更新 Agent 使用 LLMClient
 - [x] 更新 MasterAgent 使用 LLMClient
+- [x] 环境变量名保持 `ANTHROPIC_API_KEY`
+
+### 双模式支持
+- [x] 支持 Anthropic 兼容模式（GLM-4.7）
+- [x] 支持 OpenAI 兼容模式（GLM-4）
+- [x] 创建 `.env.glm4-anthropic.example` 配置示例
 - [x] 创建 `.env.glm4.example` 配置示例
+- [x] 更新 `.env.example` 包含多种配置
+- [x] 添加 LLMPresets 预设配置类
+
+### 文档和测试
 - [x] 创建测试脚本 (`npm run test:glm4`)
 - [x] 创建配置指南文档
-- [x] 环境变量名保持 `ANTHROPIC_API_KEY`
+- [x] 更新 GLM4-SETUP.md 包含双模式说明
+- [x] 添加代码示例和最佳实践
 
 ---
 
-**状态**: ✅ 完全支持 GLM-4
+**状态**: ✅ 完全支持 GLM-4 和 GLM-4.7
 **环境变量**: ✅ 保持 `ANTHROPIC_API_KEY`
-**最后更新**: 2025-01-08
+**支持模式**:
+  - ✅ Anthropic 兼容模式（GLM-4.7，推荐）
+  - ✅ OpenAI 兼容模式（GLM-4 系列）
+**最后更新**: 2025-01-09
