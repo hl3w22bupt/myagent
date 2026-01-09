@@ -53,5 +53,8 @@ htmlcov/
 # Claude Code
 .claude/settings.local.json
 
+# Motia Workbench
+motia-workbench.json
+
 # OrbStack
 .orbstack-id.yml
