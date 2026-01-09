@@ -151,6 +151,16 @@ export interface PTCGenerationOptions {
 
   /** Temperature for LLM */
   temperature?: number;
+
+  /** Conversation history for context */
+  history?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: number;
+  }>;
+
+  /** Variables available for reference */
+  variables?: Record<string, any>;
 }
 
 /**

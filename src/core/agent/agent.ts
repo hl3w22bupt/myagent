@@ -120,9 +120,11 @@ export class Agent {
         metadata: { task }
       });
 
-      // Note: Currently calling generate(task) without context.
-      // In Task 5.5, we'll add { history, variables } context support
-      const ptcCode = await this.ptcGenerator.generate(task);
+      // Generate PTC code with conversation history and variables as context
+      const ptcCode = await this.ptcGenerator.generate(task, {
+        history: this.state.conversationHistory,
+        variables: Object.fromEntries(this.state.variables)
+      });
 
       steps.push({
         type: 'ptc-generation',

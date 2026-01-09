@@ -42,15 +42,15 @@ export class PTCGenerator {
    * 2. Implement: Generate Python code
    *
    * @param task - User task description
-   * @param options - Generation options
+   * @param options - Generation options (including context)
    * @returns Generated PTC code and metadata
    */
   async generate(task: string, options?: PTCGenerationOptions): Promise<string> {
-    // Step 1: Plan - Select skills
-    const plan = await this.planSkills(task);
+    // Step 1: Plan - Select skills (with context)
+    const plan = await this.planSkills(task, options);
 
-    // Step 2: Implement - Generate Python code
-    const code = await this.generateCode(task, plan.selectedSkills);
+    // Step 2: Implement - Generate Python code (with context)
+    const code = await this.generateCode(task, plan.selectedSkills, options);
 
     return code;
   }
@@ -58,14 +58,33 @@ export class PTCGenerator {
   /**
    * Step 1: Planning phase - Select appropriate skills.
    */
-  private async planSkills(task: string): Promise<PTCResult> {
+  private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
     // Build skills list
     const skillsList = Array.from(this.skills.values())
       .map(s => `- ${s.name}: ${s.description}`)
       .join('\n');
 
+    // Build context section
+    let contextSection = '';
+    if (options?.history && options.history.length > 0) {
+      contextSection = '<conversation_history>\n';
+      for (const msg of options.history.slice(-5)) {  // Last 5 messages
+        contextSection += `${msg.role}: ${msg.content}\n`;
+      }
+      contextSection += '</conversation_history>\n\n';
+    }
+
+    if (options?.variables && Object.keys(options.variables).length > 0) {
+      contextSection += '<available_variables>\n';
+      for (const [key, value] of Object.entries(options.variables)) {
+        contextSection += `${key}: ${JSON.stringify(value)}\n`;
+      }
+      contextSection += '</available_variables>\n\n';
+    }
+
     const prompt = `You are an agent that plans task execution by selecting skills.
 
+${contextSection}
 <available_skills>
 ${skillsList}
 </available_skills>
@@ -108,7 +127,7 @@ Output format (JSON):
   /**
    * Step 2: Implementation phase - Generate Python code.
    */
-  private async generateCode(task: string, selectedSkills: string[]): Promise<string> {
+  private async generateCode(task: string, selectedSkills: string[], options?: PTCGenerationOptions): Promise<string> {
     // Get skill details
     const skillsDetails = selectedSkills.map(skillName => {
       const skill = this.skills.get(skillName);
@@ -125,7 +144,29 @@ Output format (JSON):
   Tags: ${skill.tags.join(', ')}`;
     }).join('\n\n');
 
-    const prompt = `<task>
+    // Build context section
+    let contextSection = '';
+    if (options?.history && options.history.length > 0) {
+      contextSection = '<conversation_history>\n';
+      for (const msg of options.history.slice(-5)) {  // Last 5 messages
+        contextSection += `${msg.role}: ${msg.content}\n`;
+      }
+      contextSection += '</conversation_history>\n\n';
+    }
+
+    if (options?.variables && Object.keys(options.variables).length > 0) {
+      contextSection += '<available_variables>\n';
+      for (const [key, value] of Object.entries(options.variables)) {
+        contextSection += `${key}: ${JSON.stringify(value)}\n`;
+      }
+      contextSection += '</available_variables>\n\n';
+    }
+
+    const prompt = `<context>
+${contextSection}
+</context>
+
+<task>
 ${task}
 </task>
 
