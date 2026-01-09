@@ -1,0 +1,35 @@
+name: web-search
+version: 1.0.0
+description: Search the web for information and return results
+tags: [web, research, search]
+type: hybrid
+
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: The search query string
+    limit:
+      type: number
+      default: 5
+      description: Maximum number of results
+  required: [query]
+
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+      items:
+        type: object
+    total:
+      type: number
+
+prompt_template: |
+  You are a web search assistant. Search for "{{query}}" and return the top {{limit}} results.
+
+execution:
+  handler: handler.py
+  function: execute
+  timeout: 30000

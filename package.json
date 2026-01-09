@@ -1,19 +1,37 @@
 {
   "name": "myagent",
-  "description": "",
+  "version": "1.0.0",
+  "description": "Motia-based Distributed Agent System with PTC Support",
   "type": "module",
   "scripts": {
     "postinstall": "motia install",
     "dev": "motia dev",
     "start": "motia start",
     "generate-types": "motia generate-types",
-    "build": "motia build",
-    "clean": "rm -rf dist node_modules python_modules .motia .mermaid"
+    "build": "tsc && motia build",
+    "build:ts": "tsc",
+    "clean": "rm -rf dist node_modules python_modules .motia .mermaid",
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "test:e2e": "jest tests/e2e",
+    "test:standalone": "bash scripts/test-standalone.sh",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ptc": "ts-node tests/manual/test-ptc-generation.ts",
+    "test:glm4": "ts-node scripts/test-glm4.ts",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.ts\""
   },
   "keywords": [
-    "motia"
+    "motia",
+    "agent",
+    "distributed-system",
+    "ptc",
+    "llm"
   ],
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@motiadev/adapter-bullmq-events": "^0.17.11-beta.193",
     "@motiadev/core": "^0.17.11-beta.193",
     "@motiadev/plugin-bullmq": "^0.17.11-beta.193",
@@ -21,13 +39,31 @@
     "@motiadev/plugin-logs": "^0.17.11-beta.193",
     "@motiadev/plugin-observability": "^0.17.11-beta.193",
     "@motiadev/plugin-states": "^0.17.11-beta.193",
+    "axios": "^1.6.2",
+    "bullmq": "^5.1.8",
+    "dotenv": "^16.3.1",
+    "ioredis": "^5.3.2",
+    "js-yaml": "^4.1.0",
     "motia": "^0.17.11-beta.193",
+    "openai": "^6.15.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.16.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@motiadev/workbench": "^0.17.11-beta.193",
-    "@types/react": "^19.1.1",
+    "@types/jest": "^29.5.11",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.6",
+    "@types/uuid": "^9.0.7",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.1",
+    "ts-jest": "^29.1.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.3.3"
   }
 }

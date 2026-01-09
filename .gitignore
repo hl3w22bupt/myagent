@@ -1,8 +1,51 @@
-node_modules
-python_modules
-.venv
-venv
-.motia
-.mermaid
-dist
+# Dependencies
+node_modules/
+python_modules/
+.venv/
+venv/
+
+# Build outputs
+dist/
 *.pyc
+__pycache__/
+
+# Motia
+.motia/
+.mermaid/
+
+# Testing
+coverage/
+.nyc_output/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sandbox workspace
+/tmp/motia-sandbox/
+/tmp/motia-sandbox-test/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# TypeScript
+*.tsbuildinfo

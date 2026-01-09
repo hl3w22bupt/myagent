@@ -17,5 +17,18 @@
         "sourceHandlePosition": "right"
       }
     }
+  },
+  {
+    "id": "agent-workflow",
+    "config": {
+      "steps/agents/master-agent.step.ts": {
+        "x": 472,
+        "y": 21
+      },
+      "steps/agents/agent-api.step.ts": {
+        "x": -127,
+        "y": -3
+      }
+    }
   }
 ]

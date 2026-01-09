@@ -1,0 +1,45 @@
+name: summarize
+version: 1.0.0
+description: Summarize text content
+tags: [text, summarization, nlp]
+type: pure-prompt
+
+input_schema:
+  type: object
+  properties:
+    content:
+      type: string
+      description: Text content to summarize
+    max_length:
+      type: number
+      default: 100
+      description: Maximum summary length in words
+    style:
+      type: string
+      default: concise
+      description: Summary style (concise, detailed, bullet-points)
+  required: [content]
+
+output_schema:
+  type: object
+  properties:
+    summary:
+      type: string
+    original_length:
+      type: number
+    summary_length:
+      type: number
+
+prompt_template: |
+  You are a text summarization expert. Please summarize the following content.
+
+  Content:
+  {{content}}
+
+  Requirements:
+  - Maximum length: {{max_length}} words
+  - Style: {{style}}
+  - Capture the key points and main ideas
+  - Maintain accuracy and avoid hallucinations
+
+  Provide a clear, concise summary below:

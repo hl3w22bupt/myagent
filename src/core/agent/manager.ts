@@ -72,9 +72,8 @@ export class AgentManager {
     }
 
     // Create new Agent with session state
-    // TODO: In Task 5.4, Agent constructor will accept sessionId parameter
-    // For now, we create Agent and it generates its own sessionId internally
-    const agent = new Agent(this.config.agentConfig);
+    // Now passing sessionId to Agent constructor (Task 5.4)
+    const agent = new Agent(this.config.agentConfig, sessionId);
 
     this.sessions.set(sessionId, agent);
     this.lastActivity.set(sessionId, Date.now());

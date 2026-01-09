@@ -54,9 +54,9 @@ Phase 4.5: Agent + Skill 集成测试 (独立测试) ⭐ NEW
 
 Phase 5: Motia 集成 (TypeScript)
   ├─ Motia Config 配置
-  ├─ Agent Plugin
-  ├─ Sandbox Plugin
-  └─ Step 实现
+  ├─ AgentManager 实现（框架无关）
+  ├─ SandboxManager 实现（框架无关）
+  └─ Master Agent Step 实现
 
 Phase 6: Master Agent 实现 (TypeScript)
   ├─ 两步规划器
@@ -2483,220 +2483,779 @@ npm run test:standalone
 
 ## Phase 5: Motia 集成层实现
 
-### 5.1 Motia Config 完整配置
+**架构设计原则**：
+- ✅ **框架解耦**: Manager 层不依赖 Motia，可在其他框架使用
+- ✅ **Session 独立**: 每个 session 有独立的 Agent 和 Sandbox 实例
+- ✅ **状态管理**: Agent 维护 session 状态（对话历史、变量等）
+- ✅ **并发安全**: 不同 session 之间完全隔离
+
+**架构分层**：
+```
+Motia Steps (框架层)
+    ↓
+AgentManager / SandboxManager (框架无关的 Manager 层)
+    ↓
+Agent / Sandbox (有状态，session-scoped)
+```
+
+详细设计见: `docs/AGENT_MANAGER_ARCHITECTURE.md`
+
+---
+
+### 5.1 Motia Config 配置（简化）
 
 **文件**: `motia.config.ts`
 
 ```typescript
 import { defineConfig } from '@motiadev/core';
-import { agentPlugin } from './core/agent/plugin';
-import { sandboxPlugin } from './core/sandbox/plugin';
+import endpointPlugin from '@motiadev/plugin-endpoint/plugin';
+import logsPlugin from '@motiadev/plugin-logs/plugin';
+import observabilityPlugin from '@motiadev/plugin-observability/plugin';
+import statesPlugin from '@motiadev/plugin-states/plugin';
+import bullmqPlugin from '@motiadev/plugin-bullmq/plugin';
 
 export default defineConfig({
-  projectId: 'myagent-distributed-system',
-  workspace: './',
-
   plugins: [
-    agentPlugin({
-      skillsDir: './skills',
-      subagentsDir: './subagents',
-      defaultLLM: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5',
-        apiKey: process.env.ANTHROPIC_API_KEY
-      }
-    }),
+    // ✅ 只使用 Motia 内置插件
+    observabilityPlugin,
+    statesPlugin,
+    endpointPlugin,
+    logsPlugin,
+    bullmqPlugin
 
-    sandboxPlugin({
-      configFile: './config/sandbox.config.yaml'
-    })
-  ],
-
-  adapters: {
-    events: {
-      type: 'memory',
-      config: {}
-    },
-    state: {
-      type: 'memory',
-      config: {}
-    }
-  },
-
-  dev: {
-    port: 3000,
-    hotReload: true,
-    observability: {
-      enabled: true,
-      port: 9464
-    }
-  }
+    // ❌ 不需要 Agent/Sandbox Plugin
+    // Agent 和 Sandbox 由独立的 Manager 管理
+  ]
 });
 ```
 
+**说明**：
+- ✅ **简化配置** - Motia 只负责事件流转和插件
+- ✅ **Manager 独立** - AgentManager 和 SandboxManager 在应用层管理
+- ✅ **框架解耦** - Manager 可以在任何框架中使用
+
 **依赖**: 所有前置阶段
-**产出**: 完整 Motia 配置
+**产出**: Motia 配置
 **验证**: `npm run dev` 成功启动
 
 ---
 
-### 5.2 Agent Plugin 实现
+### 5.2 AgentManager 实现
 
-**文件**: `core/agent/plugin.ts`
+**文件**: `src/core/agent/manager.ts`
 
 ```typescript
-import { Plugin } from '@motiadev/core';
+import { v4 as uuidv4 } from 'uuid';
+import { Agent } from './agent';
+import { AgentConfig } from './types';
 
-interface AgentPluginConfig {
-  skillsDir: string;
-  subagentsDir: string;
-  defaultLLM: {
-    provider: string;
-    model: string;
-    apiKey?: string;
-  };
+export interface AgentManagerConfig {
+  sessionTimeout: number;      // Session 过期时间（毫秒）
+  maxSessions: number;          // 最大 session 数量
+  agentConfig: AgentConfig;     // Agent 配置
 }
 
-export function agentPlugin(config: AgentPluginConfig): Plugin {
-  return {
-    name: 'agent-plugin',
-    version: '1.0.0',
-    async initialize() {
-      console.log('Initializing Agent Plugin...');
-      console.log(`Skills directory: ${config.skillsDir}`);
-      console.log(`Subagents directory: ${config.subagentsDir}`);
-    },
-    async shutdown() {
-      console.log('Shutting down Agent Plugin...');
+export class AgentManager {
+  private sessions: Map<string, Agent> = new Map();
+  private lastActivity: Map<string, number> = new Map();
+  private config: AgentManagerConfig;
+  private cleanupTimer?: NodeJS.Timeout;
+
+  constructor(config: AgentManagerConfig) {
+    this.config = config;
+
+    // 定期清理过期 session
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpiredSessions();
+    }, 60000);
+  }
+
+  /**
+   * 获取或创建 Agent（按 session）
+   */
+  async acquire(sessionId: string): Promise<Agent> {
+    if (this.sessions.has(sessionId)) {
+      const agent = this.sessions.get(sessionId)!;
+      this.lastActivity.set(sessionId, Date.now());
+      return agent;
     }
-  };
+
+    // ✅ 创建新的 Agent（带 session 状态）
+    const agent = new Agent(this.config.agentConfig, sessionId);
+    this.sessions.set(sessionId, agent);
+    this.lastActivity.set(sessionId, Date.now());
+
+    // 限制 session 数量
+    if (this.sessions.size > this.config.maxSessions) {
+      await this.evictOldestSession();
+    }
+
+    return agent;
+  }
+
+  /**
+   * 释放 session
+   */
+  async release(sessionId: string): Promise<void> {
+    if (this.sessions.has(sessionId)) {
+      const agent = this.sessions.get(sessionId)!;
+      await agent.cleanup();
+      this.sessions.delete(sessionId);
+      this.lastActivity.delete(sessionId);
+    }
+  }
+
+  /**
+   * 清理过期 session
+   */
+  private async cleanupExpiredSessions(): Promise<void> {
+    const now = Date.now();
+    const expired: string[] = [];
+
+    for (const [sessionId, lastActivity] of this.lastActivity) {
+      if (now - lastActivity > this.config.sessionTimeout) {
+        expired.push(sessionId);
+      }
+    }
+
+    for (const sessionId of expired) {
+      await this.release(sessionId);
+      console.log(`Cleaned up expired session: ${sessionId}`);
+    }
+  }
+
+  /**
+   * 驱逐最旧的 session
+   */
+  private async evictOldestSession(): Promise<void> {
+    let oldestSession: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [sessionId, lastActivity] of this.lastActivity) {
+      if (lastActivity < oldestTime) {
+        oldestTime = lastActivity;
+        oldestSession = sessionId;
+      }
+    }
+
+    if (oldestSession) {
+      await this.release(oldestSession);
+      console.log(`Evicted oldest session: ${oldestSession}`);
+    }
+  }
+
+  /**
+   * 关闭 Manager
+   */
+  async shutdown(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
+
+    await Promise.all(
+      Array.from(this.sessions.keys()).map(id => this.release(id))
+    );
+  }
 }
 ```
 
-**依赖**: 5.1 Motia Config
-**产出**: Agent Plugin
-**验证**: Motia 成功加载插件
+**依赖**: 4.3 Agent
+**产出**: AgentManager
+**验证**: 单元测试 + 并发测试
 
 ---
 
-### 5.3 Sandbox Plugin 实现
+### 5.3 SandboxManager 实现
 
-**文件**: `core/sandbox/plugin.ts`
+**文件**: `src/core/sandbox/manager.ts`
 
 ```typescript
-import { Plugin } from '@motiadev/core';
-import { loadSandboxConfig } from './config';
+import { SandboxAdapter } from './types';
 import { SandboxFactory } from './factory';
+import { SandboxAdapterConfig } from './types';
 
-interface SandboxPluginConfig {
-  configFile: string;
+export interface SandboxManagerConfig {
+  sessionTimeout: number;
+  maxSessions: number;
+  sandboxConfig: SandboxAdapterConfig;
 }
 
-export function sandboxPlugin(config: SandboxPluginConfig): Plugin {
-  return {
-    name: 'sandbox-plugin',
-    version: '1.0.0',
-    async initialize() {
-      console.log('Initializing Sandbox Plugin...');
+export class SandboxManager {
+  private sessions: Map<string, SandboxAdapter> = new Map();
+  private lastActivity: Map<string, number> = new Map();
+  private config: SandboxManagerConfig;
+  private cleanupTimer?: NodeJS.Timeout;
 
-      const sandboxConfig = loadSandboxConfig(config.configFile);
-      console.log(`Default adapter: ${sandboxConfig.default_adapter}`);
+  constructor(config: SandboxManagerConfig) {
+    this.config = config;
 
-      // Pre-initialize default adapter
-      const defaultAdapter = SandboxFactory.create(
-        sandboxConfig.adapters[sandboxConfig.default_adapter]
-      );
-      console.log('Sandbox adapters initialized');
-    },
-    async shutdown() {
-      console.log('Shutting down Sandbox Plugin...');
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpiredSessions();
+    }, 60000);
+  }
+
+  /**
+   * 获取或创建 Sandbox（按 session）
+   */
+  async acquire(sessionId: string): Promise<SandboxAdapter> {
+    if (this.sessions.has(sessionId)) {
+      const sandbox = this.sessions.get(sessionId)!;
+      this.lastActivity.set(sessionId, Date.now());
+      return sandbox;
     }
-  };
+
+    // 创建新的 Sandbox 实例
+    const sandbox = SandboxFactory.create(this.config.sandboxConfig);
+    this.sessions.set(sessionId, sandbox);
+    this.lastActivity.set(sessionId, Date.now());
+
+    if (this.sessions.size > this.config.maxSessions) {
+      await this.evictOldestSession();
+    }
+
+    return sandbox;
+  }
+
+  /**
+   * 释放 session
+   */
+  async release(sessionId: string): Promise<void> {
+    if (this.sessions.has(sessionId)) {
+      const sandbox = this.sessions.get(sessionId)!;
+      await sandbox.cleanup(sessionId);
+      this.sessions.delete(sessionId);
+      this.lastActivity.delete(sessionId);
+    }
+  }
+
+  /**
+   * 清理过期 session
+   */
+  private async cleanupExpiredSessions(): Promise<void> {
+    const now = Date.now();
+    const expired: string[] = [];
+
+    for (const [sessionId, lastActivity] of this.lastActivity) {
+      if (now - lastActivity > this.config.sessionTimeout) {
+        expired.push(sessionId);
+      }
+    }
+
+    for (const sessionId of expired) {
+      await this.release(sessionId);
+      console.log(`Cleaned up expired sandbox session: ${sessionId}`);
+    }
+  }
+
+  /**
+   * 驱逐最旧的 session
+   */
+  private async evictOldestSession(): Promise<void> {
+    let oldestSession: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [sessionId, lastActivity] of this.lastActivity) {
+      if (lastActivity < oldestTime) {
+        oldestTime = lastActivity;
+        oldestSession = sessionId;
+      }
+    }
+
+    if (oldestSession) {
+      await this.release(oldestSession);
+      console.log(`Evicted oldest sandbox session: ${oldestSession}`);
+    }
+  }
+
+  /**
+   * 关闭 Manager
+   */
+  async shutdown(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
+
+    await Promise.all(
+      Array.from(this.sessions.keys()).map(id => this.release(id))
+    );
+  }
 }
 ```
 
 **依赖**: 3.3 Sandbox Factory
-**产出**: Sandbox Plugin
-**验证**: Sandbox 成功初始化
+**产出**: SandboxManager
+**验证**: 单元测试 + 并发测试
 
 ---
 
-### 5.4 Master Agent Step 实现
+### 5.4 修改 Agent 类支持 Session 状态
+
+**文件**: `src/core/agent/agent.ts`
+
+**关键修改**：
+
+```typescript
+export interface SessionState {
+  sessionId: string;
+  createdAt: number;
+  lastActivityAt: number;
+
+  // 对话历史
+  conversationHistory: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: number;
+  }>;
+
+  // 执行历史
+  executionHistory: Array<{
+    task: string;
+    result: any;
+    timestamp: number;
+    executionTime: number;
+  }>;
+
+  // 中间变量
+  variables: Map<string, any>;
+}
+
+export class Agent {
+  // ✅ 添加 session 相关字段
+  private sessionId: string;
+  private state: SessionState;
+
+  private config: AgentConfig;
+  private llm: LLMClient;
+  private sandbox: any;
+  private ptcGenerator: PTCGenerator;
+
+  // ✅ 修改构造函数签名，接受 sessionId
+  constructor(config: AgentConfig, sessionId: string) {
+    this.config = config;
+    this.sessionId = sessionId;
+
+    // 初始化 LLM
+    this.llm = new LLMClient(config.llm);
+
+    // 初始化 Sandbox
+    this.sandbox = SandboxFactory.create(config.sandbox);
+
+    // 初始化 PTC Generator
+    this.ptcGenerator = new PTCGenerator(this.llm, skills);
+
+    // ✅ 初始化 session 状态
+    this.state = {
+      sessionId,
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      conversationHistory: [],
+      executionHistory: [],
+      variables: new Map()
+    };
+  }
+
+  async run(task: string): Promise<AgentResult> {
+    // ✅ 更新活动时间
+    this.state.lastActivityAt = Date.now();
+
+    // ✅ 记录用户输入
+    this.state.conversationHistory.push({
+      role: 'user',
+      content: task,
+      timestamp: Date.now()
+    });
+
+    const startTime = Date.now();
+    const steps: AgentStep[] = [];
+
+    try {
+      // Step 1: 生成 PTC（可以访问历史上下文）
+      const ptcCode = await this.ptcGenerator.generate(task, {
+        history: this.state.conversationHistory,
+        variables: Object.fromEntries(this.state.variables)
+      });
+
+      // Step 2: 执行
+      const sandboxResult = await this.sandbox.execute(ptcCode, {
+        sessionId: this.sessionId,
+        variables: Object.fromEntries(this.state.variables)
+      });
+
+      // Step 3: 更新状态
+      if (sandboxResult.success) {
+        // 记录执行历史
+        this.state.executionHistory.push({
+          task,
+          result: sandboxResult.output,
+          timestamp: Date.now(),
+          executionTime: Date.now() - startTime
+        });
+
+        // 记录助手回复
+        this.state.conversationHistory.push({
+          role: 'assistant',
+          content: sandboxResult.output,
+          timestamp: Date.now()
+        });
+
+        // 保存变量（如果有）
+        if (sandboxResult.variables) {
+          Object.entries(sandboxResult.variables).forEach(([key, value]) => {
+            this.state.variables.set(key, value);
+          });
+        }
+
+        return {
+          success: true,
+          sessionId: this.sessionId,
+          output: sandboxResult.output,
+          steps,
+          executionTime: Date.now() - startTime,
+          state: {
+            conversationLength: this.state.conversationHistory.length,
+            executionCount: this.state.executionHistory.length,
+            variablesCount: this.state.variables.size
+          }
+        };
+      }
+
+      // ... 错误处理
+    } catch (error: any) {
+      // 记录错误
+      this.state.conversationHistory.push({
+        role: 'assistant',
+        content: `Error: ${error.message}`,
+        timestamp: Date.now()
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 获取 session 状态
+   */
+  getState(): Readonly<SessionState> {
+    return this.state;
+  }
+
+  /**
+   * 设置变量
+   */
+  setVariable(key: string, value: any): void {
+    this.state.variables.set(key, value);
+  }
+
+  /**
+   * 获取变量
+   */
+  getVariable(key: string): any {
+    return this.state.variables.get(key);
+  }
+
+  /**
+   * 清理 session
+   */
+  async cleanup(): Promise<void> {
+    await this.sandbox.cleanup(this.sessionId);
+    // 清空状态
+    this.state.conversationHistory = [];
+    this.state.executionHistory = [];
+    this.state.variables.clear();
+  }
+}
+```
+
+**依赖**: 4.3 Agent
+**产出**: 支持 session 状态的 Agent
+**验证**: 单元测试
+
+---
+
+### 5.5 Master Agent Step 实现
 
 **文件**: `steps/agents/master-agent.step.ts`
 
 ```typescript
-import type { EventConfig } from '@motiadev/core';
+import type { EventConfig } from 'motia';
 import { z } from 'zod';
-import { MasterAgent } from '@/core/agent/master-agent';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { AgentManager } from '@/core/agent/manager';
+import { SandboxManager } from '@/core/sandbox/manager';
+
+// ✅ 全局 Manager 实例（应用启动时创建）
+const agentManager = new AgentManager({
+  sessionTimeout: 30 * 60 * 1000,  // 30 分钟
+  maxSessions: 1000,
+  agentConfig: {
+    llm: {
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: process.env.ANTHROPIC_API_KEY
+    },
+    availableSkills: ['web-search', 'summarize', 'code-analysis'],
+    constraints: {
+      timeout: 60000,
+      maxIterations: 5
+    }
+  }
+});
+
+const sandboxManager = new SandboxManager({
+  sessionTimeout: 30 * 60 * 1000,
+  maxSessions: 1000,
+  sandboxConfig: {
+    type: 'local',
+    pythonPath: process.env.PYTHON_PATH || 'python3',
+    workspace: '/tmp/motia-sandbox',
+    timeout: 60000
+  }
+});
+
+// ✅ 应用关闭时清理
+process.on('SIGTERM', async () => {
+  console.log('Shutting down managers...');
+  await agentManager.shutdown();
+  await sandboxManager.shutdown();
+});
+
+export const inputSchema = z.object({
+  task: z.string(),
+  sessionId: z.string().optional(),  // 可选：继续已有 session
+  continue: z.boolean().optional()   // 是否继续之前的对话
+});
 
 export const config: EventConfig = {
   type: 'event',
-  name: 'MasterAgent',
-  description: 'Master agent that can orchestrate skills and subagents',
-  subscribes: ['agent:master:execute'],
-  emits: ['agent:master:result', 'agent:master:error'],
-  input: z.object({
-    task: z.string(),
-    sessionId: z.string().optional()
-  })
+  name: 'master-agent',
+  description: 'Master agent that orchestrates task execution using PTC',
+  subscribes: ['agent.task.execute'],
+  emits: [
+    'agent.task.completed',
+    'agent.task.failed',
+    { topic: 'agent.step.started', label: 'Agent step started' },
+    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true }
+  ],
+  flows: ['agent-workflow']
 };
 
-export const handler = async (input: any, ctx: any) => {
-  const { task, sessionId } = input;
+export const handler = async (
+  input: z.infer<typeof inputSchema>,
+  { emit, logger, state }: any
+) => {
+  // ✅ 获取或创建 sessionId
+  const sessionId = input.sessionId || uuidv4();
+
+  logger.info('Master Agent: Starting task execution', {
+    task: input.task,
+    sessionId
+  });
 
   try {
-    // Load system prompt
-    const systemPromptPath = join(process.cwd(), 'prompts', 'master-system.txt');
-    const systemPrompt = readFileSync(systemPromptPath, 'utf-8');
+    // ✅ 从 Manager 获取 Agent 和 Sandbox（每个 session 独立）
+    const agent = await agentManager.acquire(sessionId);
+    const sandbox = await sandboxManager.acquire(sessionId);
 
-    // Create Master Agent
-    const masterAgent = new MasterAgent({
-      systemPrompt,
-      availableSkills: ['*'], // All skills
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5'
-      },
-      subagents: ['code-reviewer', 'data-analyst', 'security-auditor']
+    logger.info('Agent and Sandbox acquired', { sessionId });
+
+    // 如果是继续对话，获取历史
+    if (input.continue) {
+      const history = agent.getConversationHistory();
+      logger.info('Continuing conversation', {
+        sessionId,
+        historyLength: history.length
+      });
+    }
+
+    // ✅ 执行任务（Agent 维护 session 状态）
+    const result = await agent.run(input.task);
+
+    logger.info('Task execution completed', {
+      sessionId,
+      success: result.success,
+      executionTime: result.executionTime
     });
 
-    // Execute task
-    const result = await masterAgent.run(task);
-
-    // Emit result
-    await ctx.emit({
-      topic: result.success ? 'agent:master:result' : 'agent:master:error',
+    // ✅ 发送完成事件
+    await emit({
+      topic: 'agent.task.completed',
       data: {
-        ...result,
-        sessionId: sessionId || ctx.traceId
+        sessionId,
+        task: input.task,
+        result: {
+          success: result.success,
+          output: result.output,
+          executionTime: result.executionTime,
+          state: result.state
+        }
       }
     });
 
-    // Cleanup
-    await masterAgent.cleanup();
-
-    return result;
+    return {
+      success: true,
+      sessionId,  // ✅ 返回 sessionId，客户端可以继续
+      output: result.output,
+      state: result.state
+    };
 
   } catch (error: any) {
-    await ctx.emit({
-      topic: 'agent:master:error',
+    logger.error('Agent execution failed', {
+      error: error.message,
+      stack: error.stack,
+      sessionId
+    });
+
+    // ✅ 发送失败事件
+    await emit({
+      topic: 'agent.task.failed',
       data: {
+        sessionId,
+        task: input.task,
         error: error.message,
-        stack: error.stack,
-        sessionId: sessionId || ctx.traceId
+        stack: error.stack
       }
     });
+
     throw error;
+
+  } finally {
+    // ✅ 不释放！让 session 持续存在
+    // Manager 会自动清理过期 session
+    // await agentManager.release(sessionId);
+    // await sandboxManager.release(sessionId);
   }
 };
 ```
 
-**依赖**: 4.4 Master Agent
+**说明**：
+- ✅ **每个 session 独立** - Agent 和 Sandbox 实例绑定到 session
+- ✅ **状态维护** - Agent 维护对话历史和变量
+- ✅ **自动清理** - Manager 自动清理过期 session
+- ✅ **框架解耦** - Manager 可以在任何框架中使用
+
+**依赖**: 5.2 AgentManager, 5.3 SandboxManager, 5.4 Agent
 **产出**: Master Agent Motia Step
 **验证**: 通过 Motia 事件触发 Agent 执行
+
+---
+
+### 5.6 应用初始化
+
+**文件**: `src/index.ts`
+
+```typescript
+import { AgentManager } from '@/core/agent/manager';
+import { SandboxManager } from '@/core/sandbox/manager';
+
+// ✅ 导出全局 Manager（供 Step 使用）
+export const agentManager = new AgentManager({
+  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'),  // 30 分钟
+  maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
+  agentConfig: {
+    llm: {
+      provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible' || 'anthropic',
+      model: process.env.LLM_MODEL || 'claude-sonnet-4-5',
+      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY
+    },
+    availableSkills: ['web-search', 'summarize', 'code-analysis'],
+    sandbox: {
+      type: 'local',
+      pythonPath: process.env.PYTHON_PATH || 'python3'
+    },
+    constraints: {
+      timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
+      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5')
+    }
+  }
+});
+
+export const sandboxManager = new SandboxManager({
+  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'),
+  maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
+  sandboxConfig: {
+    type: 'local',
+    pythonPath: process.env.PYTHON_PATH || 'python3',
+    workspace: process.env.SANDBOX_WORKSPACE || '/tmp/motia-sandbox',
+    timeout: parseInt(process.env.TASK_TIMEOUT || '60000')
+  }
+});
+
+// ✅ 优雅关闭
+process.on('SIGTERM', async () => {
+  console.log('Shutting down managers...');
+  await agentManager.shutdown();
+  await sandboxManager.shutdown();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('\nShutting down managers...');
+  await agentManager.shutdown();
+  await sandboxManager.shutdown();
+  process.exit(0);
+});
+```
+
+**依赖**: 5.2, 5.3
+**产出**: 应用入口
+**验证**: `npm run dev` 启动成功
+
+---
+
+## ✅ Phase 5 验收标准
+
+完成此阶段后，你应该能够：
+
+### 5.1 功能验证
+
+- ✅ **Session 管理** - AgentManager 和 SandboxManager 正确管理 session 生命周期
+- ✅ **状态隔离** - 不同 session 之间状态完全独立
+- ✅ **状态维护** - Agent 正确维护对话历史、执行历史和变量
+- ✅ **自动清理** - 过期 session 自动清理
+- ✅ **并发安全** - 多个并发请求无状态污染
+
+### 5.2 测试验证
+
+```bash
+# 单元测试
+npm test -- tests/unit/agent/manager.test.ts
+npm test -- tests/unit/sandbox/manager.test.ts
+
+# 并发测试
+npm test -- tests/integration/concurrent-sessions.test.ts
+
+# 端到端测试
+npm test -- tests/integration/e2e-agent-flow.test.ts
+```
+
+**应该看到**:
+```
+✓ AgentManager manages sessions correctly
+✓ SandboxManager manages sessions correctly
+✓ Concurrent requests don't interfere
+✓ Session state is maintained across requests
+✓ Expired sessions are cleaned up automatically
+```
+
+### 5.3 架构验证
+
+- ✅ **框架解耦** - Manager 可以独立于 Motia 使用
+- ✅ **易迁移** - 可以轻松切换到 Express/Fastify 等其他框架
+- ✅ **易测试** - Manager 可以独立测试
+
+### 5.4 性能验证（当前版本未优化）
+
+**注意**: 当前版本优先保证正确性，性能优化见 `docs/PERFORMANCE_OPTIMIZATION.md`
+
+预期性能（未优化）:
+- Session 创建: ~100ms
+- 内存占用: 每个 session ~10-15MB
+- 并发能力: 支持 ~100 并发 session
+
+**如果测试失败**:
+1. 查看具体失败的测试用例
+2. 参考 `docs/TROUBLESHOOTING_STANDALONE.md` 排查
+3. 修复问题后重新测试
+4. **不要继续 Phase 6，直到所有测试通过**
 
 ---
 

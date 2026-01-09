@@ -1,0 +1,26 @@
+# Sandbox Configuration for Motia Agent System
+default_adapter: local
+
+adapters:
+  local:
+    type: local
+    python_path: python3
+    timeout: 30000
+    workspace: /tmp/motia-sandbox
+    max_sessions: 10
+
+  # Future implementations
+  # daytona:
+  #   type: daytona
+  #   api_key: ${DAYTONA_API_KEY}
+  #   template: python-311
+
+  # e2b:
+  #   type: e2b
+  #   api_key: ${E2B_API_KEY}
+  #   template: python3.11-pandas
+
+  # modal:
+  #   type: modal
+  #   token: ${MODAL_TOKEN}
+  #   function_id: motia-sandbox-runner

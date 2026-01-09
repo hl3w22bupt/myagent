@@ -1,7 +1,31 @@
 {
   "permissions": {
     "allow": [
-      "Skill(sc:git)"
+      "Skill(sc:git)",
+      "Bash(git config:*)",
+      "Bash(tree:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run generate-types:*)",
+      "Bash(npm run build:*)",
+      "Bash(python3:*)",
+      "Bash(pip3:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(npm test:*)",
+      "Bash(echo:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(grep:*)",
+      "Bash(npm run build:ts:*)",
+      "Bash(npx:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
     ]
   }
 }

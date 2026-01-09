@@ -1,1 +1,24 @@
-pydantic>=2.6.1
+# Core dependencies
+python-dotenv==1.0.0
+pydantic==2.5.2
+pyyaml==6.0.1
+
+# Async runtime
+asyncio==3.4.3
+
+# HTTP clients
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Code execution
+executing==2.0.1
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# Linting
+black==23.12.1
+pylint==3.0.3
+mypy==1.7.1

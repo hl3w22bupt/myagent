@@ -1,31 +1,40 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "allowJs": true,
-    "outDir": "dist",
-    "rootDir": ".",
-    "baseUrl": ".",
-    "jsx": "react-jsx"
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node", "jest"],
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/core/*": ["src/core/*"],
+      "@/steps/*": ["steps/*"],
+      "@/skills": ["skills"]
+    }
   },
   "include": [
     "**/*.ts",
-    "motia.config.ts",
-    "**/*.tsx",
-    "types.d.ts",
-    "**/*.jsx"
+    "types.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "tests"
-  ]
+    "**/*.test.ts"
+  ],
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  }
 }

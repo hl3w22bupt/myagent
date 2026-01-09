@@ -12,9 +12,10 @@ declare module 'motia' {
   }
 
   interface Handlers {
-    'LogGreeting': EventHandler<{ requestId: string; greeting: string; processedBy: string }, never>
-    'HelloAPI': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { message: string; status: string; appName: string }>, { topic: 'process-greeting'; data: { timestamp: string; appName: string; greetingPrefix: string; requestId: string } }>
-    'ProcessGreeting': EventHandler<{ timestamp: string; appName: string; greetingPrefix: string; requestId: string }, { topic: 'greeting-processed'; data: { requestId: string; greeting: string; processedBy: string } }>
+    'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'result-logger': EventHandler<never, never>
+    'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never }>
+    'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     
 }
