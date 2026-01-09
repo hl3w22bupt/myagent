@@ -1,58 +1,20 @@
 /**
  * Master Agent Step (Production Implementation).
  *
- * This is the full production implementation that uses AgentManager
- * and SandboxManager for session-scoped Agent/Sandbox instances.
+ * This is the full production implementation that uses the global
+ * AgentManager instance for session-scoped Agent instances.
  *
  * Features:
- * - Session-scoped Agent instances via AgentManager
+ * - Session-scoped Agent instances via AgentManager (imported from src/index.ts)
  * - Multi-turn conversation support
  * - Automatic session cleanup
- * - Graceful shutdown handling
+ * - Configuration unified with application-wide settings
  */
 
 import type { EventConfig } from 'motia';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { AgentManager } from '../../src/core/agent/manager';
-import { SandboxManager } from '../../src/core/sandbox/manager';
-
-// Global Manager instances (created at application startup)
-const agentManager = new AgentManager({
-  sessionTimeout: 30 * 60 * 1000,  // 30 minutes
-  maxSessions: 1000,
-  agentConfig: {
-    systemPrompt: 'You are a helpful assistant',
-    availableSkills: ['web-search', 'summarize', 'code-analysis'],
-    llm: {
-      provider: 'anthropic',
-      model: 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY
-    },
-    constraints: {
-      timeout: 60000,
-      maxIterations: 5
-    }
-  }
-});
-
-const sandboxManager = new SandboxManager({
-  sessionTimeout: 30 * 60 * 1000,
-  maxSessions: 1000,
-  sandboxConfig: {
-    type: 'local',
-    pythonPath: process.env.PYTHON_PATH || 'python3',
-    workspace: '/tmp/motia-sandbox',
-    timeout: 60000
-  }
-});
-
-// Graceful shutdown handler
-process.on('SIGTERM', async () => {
-  console.log('Shutting down managers...');
-  await agentManager.shutdown();
-  await sandboxManager.shutdown();
-});
+import { agentManager } from '../../src/index';
 
 /**
  * Input schema for Master Agent step.
@@ -85,9 +47,7 @@ export const config: EventConfig = {
   subscribes: ['agent.task.execute'],
   emits: [
     'agent.task.completed',
-    'agent.task.failed',
-    { topic: 'agent.step.started', label: 'Agent step started' },
-    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true }
+    'agent.task.failed'
   ],
   flows: ['agent-workflow']
 };
@@ -96,7 +56,7 @@ export const config: EventConfig = {
  * Master Agent handler.
  *
  * This is the full production implementation that:
- * - Uses AgentManager to acquire session-scoped Agent instances
+ * - Uses global AgentManager to acquire session-scoped Agent instances
  * - Supports multi-turn conversations via sessionId
  * - Returns sessionId for continued conversations
  * - Maintains session state (no release in finally)
@@ -146,8 +106,10 @@ export const handler = async (
         result: {
           success: result.success,
           output: result.output,
+          error: result.error,
           executionTime: result.executionTime,
-          state: result.state
+          state: result.state,
+          metadata: result.metadata
         }
       }
     });
@@ -184,6 +146,5 @@ export const handler = async (
     // Keep session alive - don't release!
     // Manager will automatically cleanup expired sessions
     // await agentManager.release(sessionId);
-    // await sandboxManager.release(sessionId);
   }
 };

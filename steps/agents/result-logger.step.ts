@@ -10,6 +10,8 @@ import { EventConfig } from 'motia';
 
 /**
  * Input schema for result logger.
+ *
+ * Note: master-agent sends nested structure with result wrapper.
  */
 export const inputSchema = z.object({
   /**
@@ -18,28 +20,52 @@ export const inputSchema = z.object({
   task: z.string(),
 
   /**
-   * Whether execution succeeded.
+   * Session ID.
    */
-  success: z.boolean(),
+  sessionId: z.string().optional(),
 
   /**
-   * Output from agent execution.
+   * Nested result object from Agent execution.
    */
-  output: z.string().optional(),
+  result: z.object({
+    /**
+     * Whether execution succeeded.
+     */
+    success: z.boolean(),
 
-  /**
-   * Execution metadata.
-   */
-  metadata: z.object({
-    llmCalls: z.number(),
-    skillCalls: z.number(),
-    totalTokens: z.number()
-  }).optional(),
+    /**
+     * Output from agent execution.
+     */
+    output: z.string().optional(),
 
-  /**
-   * Session ID if multi-turn conversation.
-   */
-  sessionId: z.string().optional()
+    /**
+     * Error message if execution failed.
+     */
+    error: z.string().optional(),
+
+    /**
+     * Execution time in ms.
+     */
+    executionTime: z.number().optional(),
+
+    /**
+     * State information.
+     */
+    state: z.object({
+      conversationLength: z.number().optional(),
+      executionCount: z.number().optional(),
+      variablesCount: z.number().optional()
+    }).optional(),
+
+    /**
+     * Execution metadata.
+     */
+    metadata: z.object({
+      llmCalls: z.number(),
+      skillCalls: z.number(),
+      totalTokens: z.number()
+    }).optional()
+  })
 });
 
 /**
@@ -76,26 +102,30 @@ export const handler = async (
   { logger, state }: any
 ) => {
   const timestamp = new Date().toISOString();
+  const { result } = input;
 
   logger.info('=== Agent Task Completed ===', {
     task: input.task,
-    success: input.success,
+    success: result.success,
     sessionId: input.sessionId,
     timestamp,
-    metadata: input.metadata
+    executionTime: result.executionTime,
+    metadata: result.metadata
   });
 
-  if (input.success) {
+  if (result.success) {
     logger.info('✅ Task Execution Successful', {
-      output: input.output?.substring(0, 200) + (input.output?.length > 200 ? '...' : ''),
-      llmCalls: input.metadata?.llmCalls,
-      skillCalls: input.metadata?.skillCalls,
-      totalTokens: input.metadata?.totalTokens
+      output: result.output?.substring(0, 200) + (result.output?.length > 200 ? '...' : ''),
+      llmCalls: result.metadata?.llmCalls,
+      skillCalls: result.metadata?.skillCalls,
+      totalTokens: result.metadata?.totalTokens
     });
   } else {
     logger.warn('❌ Task Execution Failed', {
       task: input.task,
-      sessionId: input.sessionId
+      sessionId: input.sessionId,
+      error: result.error,
+      stderr: result.output?.substring(0, 500)
     });
   }
 
@@ -108,9 +138,11 @@ export const handler = async (
     history.unshift({
       timestamp,
       task: input.task,
-      success: input.success,
-      output: input.output,
-      metadata: input.metadata,
+      success: result.success,
+      output: result.output,
+      error: result.error,
+      executionTime: result.executionTime,
+      metadata: result.metadata,
       sessionId: input.sessionId
     });
 

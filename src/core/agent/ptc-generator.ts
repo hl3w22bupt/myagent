@@ -109,10 +109,32 @@ Output format (JSON):
       { role: 'user', content: prompt }
     ]);
 
-    // Extract JSON from response
-    const jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+    // DEBUG: Log LLM response
+    console.log('[PTC Generator] LLM Response:', response.content);
+
+    // Extract JSON from response - try multiple patterns
+    let jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+
+    // Fallback 1: Try to find any JSON object with selected_skills
     if (!jsonMatch) {
-      throw new Error('Failed to parse plan from LLM response');
+      jsonMatch = response.content.match(/\{[\s\S]*"selected_skills"[\s\S]*\}/);
+    }
+
+    // Fallback 2: Try to find JSON in code blocks
+    if (!jsonMatch) {
+      const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        try {
+          jsonMatch = [null, codeBlockMatch[1]];
+        } catch (e) {
+          // Continue to next fallback
+        }
+      }
+    }
+
+    if (!jsonMatch) {
+      console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
+      throw new Error(`Failed to parse plan from LLM response. Got: ${response.content.substring(0, 200)}`);
     }
 
     const plan = JSON.parse(jsonMatch[1]);
@@ -181,7 +203,7 @@ ${selectedSkills.join(', ')}
 Generate Python code using this pattern:
 
 <code>
-from skill_executor import SkillExecutor
+from core.skill.executor import SkillExecutor
 
 executor = SkillExecutor()
 
@@ -204,6 +226,9 @@ Generate the code now:`;
       { role: 'user', content: prompt }
     ]);
 
+    // DEBUG: Log LLM response
+    console.log('[PTC Generator] Code Generation Response:', response.content);
+
     // Extract code from response
     // Try multiple code block formats
     let codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
@@ -211,6 +236,7 @@ Generate the code now:`;
       codeMatch = response.content.match(/<code>\s*(.*?)\s*<\/code>/s);
     }
     if (!codeMatch) {
+      console.error('[PTC Generator] Failed to parse code. Response:', response.content);
       throw new Error('Failed to parse code from LLM response');
     }
 

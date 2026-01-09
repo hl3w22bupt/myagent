@@ -12,10 +12,11 @@ declare module 'motia' {
   }
 
   interface Handlers {
-    'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
-    'result-logger': EventHandler<never, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never }>
+    'result-logger': EventHandler<never, never>
+    'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
+    'failure-handler': EventHandler<never, never>
+    'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     
 }

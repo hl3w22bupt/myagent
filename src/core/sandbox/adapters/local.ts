@@ -29,6 +29,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
     this.workspace = config.workspace || '/tmp/motia-sandbox';
     this.maxSessions = config.maxSessions || 10;
     this.activeSessions = new Map();
+
+    // DEBUG: Log Python path
+    console.log('[LocalSandbox] Initialized with pythonPath:', this.pythonPath);
   }
 
   async execute(code: string, options: SandboxOptions): Promise<SandboxResult> {

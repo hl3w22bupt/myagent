@@ -49,3 +49,9 @@ htmlcov/
 
 # TypeScript
 *.tsbuildinfo
+
+# Claude Code
+.claude/settings.local.json
+
+# OrbStack
+.orbstack-id.yml

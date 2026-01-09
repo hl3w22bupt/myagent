@@ -1,25 +1,22 @@
 /**
  * Application Entry Point
  *
- * This module initializes and exports global manager instances for Agent and Sandbox sessions.
- * These managers are created as singletons at application startup and can be imported by
- * any Motia step that needs session-scoped Agent or Sandbox instances.
+ * This module initializes and exports the global AgentManager instance for Agent sessions.
+ * The manager is created as a singleton at application startup and can be imported by
+ * any Motia step that needs session-scoped Agent instances.
  *
  * ## Architecture
  *
  * - **agentManager**: Manages session-scoped Agent instances with LLM configuration
- * - **sandboxManager**: Manages session-scoped Sandbox instances for code execution
  *
  * ## Usage
  *
- * Import the managers in your Motia steps:
+ * Import the manager in your Motia steps:
  *
  * ```typescript
  * import { agentManager } from '@/index';
- * import { sandboxManager } from '@/index';
  *
  * const agent = await agentManager.acquire(sessionId);
- * const sandbox = await sandboxManager.acquire(sessionId);
  * ```
  *
  * ## Configuration
@@ -34,7 +31,6 @@
  * - ANTHROPIC_API_KEY: API key for Anthropic
  * - OPENAI_API_KEY: API key for OpenAI-compatible providers
  * - PYTHON_PATH: Path to Python executable (default: python3)
- * - SANDBOX_WORKSPACE: Working directory for sandbox execution (default: /tmp/motia-sandbox)
  *
  * ## Graceful Shutdown
  *
@@ -43,64 +39,66 @@
  */
 
 import { AgentManager } from './core/agent/manager';
-import { SandboxManager } from './core/sandbox/manager';
+import { resolve } from 'path';
 
 /**
- * Global AgentManager instance.
+ * Global AgentManager singleton.
  *
- * Manages session-scoped Agent instances with the following configuration:
- * - Session timeout: 30 minutes (configurable via SESSION_TIMEOUT)
- * - Maximum sessions: 1000 (configurable via MAX_SESSIONS)
- * - LLM provider: Anthropic Claude (configurable via LLM_PROVIDER)
- * - Available skills: web-search, summarize, code-analysis
- * - Task timeout: 60 seconds (configurable via TASK_TIMEOUT)
- * - Max iterations: 5 (configurable via MAX_ITERATIONS)
+ * Uses lazy initialization to avoid issues with module hot-reload.
+ * The manager is created only once and reused across reloads.
  */
-export const agentManager = new AgentManager({
-  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
-  maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
-  agentConfig: {
-    systemPrompt: 'You are a helpful assistant',
-    llm: {
-      provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible' || 'anthropic',
-      model: process.env.LLM_MODEL || 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY
-    },
-    availableSkills: ['web-search', 'summarize', 'code-analysis'],
-    sandbox: {
-      type: 'local',
-      config: {
-        pythonPath: process.env.PYTHON_PATH || 'python3'
+let _agentManager: AgentManager | null = null;
+
+/**
+ * Get or create the global AgentManager instance.
+ */
+export function getAgentManager(): AgentManager {
+  if (_agentManager) {
+    console.log('[index.ts] Returning existing AgentManager instance');
+    return _agentManager;
+  }
+
+  const venvPythonPath = resolve(process.cwd(), 'venv', 'bin', 'python3');
+
+  console.log('[index.ts] Initializing AgentManager with config:');
+  console.log('[index.ts] venvPythonPath:', venvPythonPath);
+  console.log('[index.ts] process.cwd():', process.cwd());
+
+  _agentManager = new AgentManager({
+    sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
+    maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
+    agentConfig: {
+      systemPrompt: 'You are a helpful assistant',
+      llm: {
+        provider: (process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'anthropic'),
+        model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
+        apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || ''
+      },
+      availableSkills: ['web-search', 'summarize', 'code-analysis'],
+      sandbox: {
+        type: 'local',
+        config: {
+          pythonPath: process.env.PYTHON_PATH || venvPythonPath
+        }
+      },
+      constraints: {
+        timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
+        maxIterations: parseInt(process.env.MAX_ITERATIONS || '5')
       }
-    },
-    constraints: {
-      timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
-      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5')
     }
-  }
-});
+  });
+
+  return _agentManager;
+}
 
 /**
- * Global SandboxManager instance.
+ * Legacy export: AgentManager instance.
  *
- * Manages session-scoped Sandbox instances with the following configuration:
- * - Session timeout: 30 minutes (configurable via SESSION_TIMEOUT)
- * - Maximum sessions: 1000 (configurable via MAX_SESSIONS)
- * - Sandbox type: local (configurable via SANDBOX_TYPE)
- * - Python path: python3 (configurable via PYTHON_PATH)
- * - Workspace: /tmp/motia-sandbox (configurable via SANDBOX_WORKSPACE)
- * - Task timeout: 60 seconds (configurable via TASK_TIMEOUT)
+ * For backward compatibility with existing code that imports agentManager.
+ * This is a reference to the singleton instance.
  */
-export const sandboxManager = new SandboxManager({
-  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
-  maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
-  sandboxConfig: {
-    type: process.env.SANDBOX_TYPE || 'local',
-    pythonPath: process.env.PYTHON_PATH || 'python3',
-    workspace: process.env.SANDBOX_WORKSPACE || '/tmp/motia-sandbox',
-    timeout: parseInt(process.env.TASK_TIMEOUT || '60000')
-  }
-});
+export const agentManager = getAgentManager() as AgentManager;
+
 
 /**
  * Graceful shutdown handler for SIGTERM.
@@ -111,7 +109,6 @@ process.on('SIGTERM', async () => {
   console.log('SIGTERM received: Shutting down managers...');
   try {
     await agentManager.shutdown();
-    await sandboxManager.shutdown();
     console.log('Managers shut down successfully');
     process.exit(0);
   } catch (error) {
@@ -129,7 +126,6 @@ process.on('SIGINT', async () => {
   console.log('\nSIGINT received: Shutting down managers...');
   try {
     await agentManager.shutdown();
-    await sandboxManager.shutdown();
     console.log('Managers shut down successfully');
     process.exit(0);
   } catch (error) {

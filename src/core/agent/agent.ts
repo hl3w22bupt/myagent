@@ -68,10 +68,19 @@ export class Agent {
     });
 
     // Initialize Sandbox
-    const sandboxConfig = loadSandboxConfig();
-    const adapterConfig = sandboxConfig.adapters[
-      config.sandbox?.type || sandboxConfig.default_adapter
-    ];
+    // IMPORTANT: Only use config passed in AgentConfig, ignore YAML files
+    // This ensures configuration from src/index.ts is always used
+    if (!config.sandbox?.config) {
+      throw new Error('Sandbox config is required in AgentConfig. Please provide sandbox.config.');
+    }
+
+    const adapterConfig = {
+      type: config.sandbox.type || 'local',
+      local: config.sandbox.config
+    };
+
+    console.log('[Agent] Using sandbox config:', adapterConfig);
+
     this.sandbox = SandboxFactory.create(adapterConfig);
 
     // Initialize PTC Generator
