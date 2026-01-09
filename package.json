@@ -10,7 +10,7 @@
     "generate-types": "motia generate-types",
     "build": "tsc && motia build",
     "build:ts": "tsc",
-    "clean": "rm -rf dist node_modules python_modules .motia .mermaid",
+    "clean": "rm -rf dist node_modules python_modules .motia .mermaid .venv",
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
@@ -21,7 +21,14 @@
     "test:ptc": "ts-node tests/manual/test-ptc-generation.ts",
     "test:glm4": "ts-node scripts/test-glm4.ts",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"**/*.ts\""
+    "format": "prettier --write \"**/*.ts\"",
+    "py:install": "uv pip install -r requirements.txt",
+    "py:run": "uv run",
+    "py:test": "uv run pytest",
+    "py:lint": "uv run pylint **/*.py",
+    "py:format": "uv run black .",
+    "py:typecheck": "uv run mypy .",
+    "pytest": "uvx pytest"
   },
   "keywords": [
     "motia",

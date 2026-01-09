@@ -15,6 +15,11 @@ import { EventConfig } from 'motia';
  */
 export const inputSchema = z.object({
   /**
+   * Task ID for tracking.
+   */
+  taskId: z.string().optional(),
+
+  /**
    * Task that was executed.
    */
   task: z.string(),
@@ -105,6 +110,7 @@ export const handler = async (
   const { result } = input;
 
   logger.info('=== Agent Task Completed ===', {
+    taskId: input.taskId,
     task: input.task,
     success: result.success,
     sessionId: input.sessionId,
@@ -141,6 +147,7 @@ export const handler = async (
 
     // Add new entry
     history.unshift({
+      taskId: input.taskId,
       timestamp,
       task: input.task,
       success: result.success,

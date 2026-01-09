@@ -21,6 +21,11 @@ import { agentManager } from '../../src/index';
  */
 export const inputSchema = z.object({
   /**
+   * Task ID for tracking.
+   */
+  taskId: z.string().optional(),
+
+  /**
    * Task description to execute.
    */
   task: z.string(),
@@ -63,21 +68,46 @@ export const config: EventConfig = {
  */
 export const handler = async (
   input: z.infer<typeof inputSchema>,
-  { emit, logger, state }: any
+  { emit, logger, state, streams }: any
 ) => {
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
+  const taskId = input.taskId || `task-${Date.now()}`;
 
   logger.info('Master Agent: Starting task execution', {
     task: input.task,
-    sessionId
+    sessionId,
+    taskId
   });
 
+  // Helper function to update stream
+  const updateStream = async (status: string, data?: any) => {
+    try {
+      await streams.taskExecution.set(taskId, taskId, {
+        taskId,
+        task: input.task,
+        status,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        ...data
+      });
+    } catch (error) {
+      logger.warn('Failed to update stream', { error });
+    }
+  };
+
+  // Set initial status to pending
+  await updateStream('pending', { currentStep: 'Initializing' });
+
   try {
+    // Update status to running
+    await updateStream('running', { currentStep: 'Acquiring agent' });
+
     // Get Agent from Manager (each session has independent Agent instance)
     const agent = await agentManager.acquire(sessionId);
 
     logger.info('Agent acquired', { sessionId });
+    await updateStream('running', { currentStep: 'Agent acquired, starting execution' });
 
     // If continuing conversation, get history
     if (input.continue) {
@@ -86,9 +116,13 @@ export const handler = async (
         sessionId,
         conversationLength: agentState.conversationHistory.length
       });
+      await updateStream('running', {
+        currentStep: `Continuing conversation (${agentState.conversationHistory.length} messages)`
+      });
     }
 
     // Execute task (Agent maintains session state)
+    await updateStream('running', { currentStep: 'Executing task' });
     const result = await agent.run(input.task);
 
     logger.info('Task execution completed', {
@@ -97,10 +131,20 @@ export const handler = async (
       executionTime: result.executionTime
     });
 
+    // Update stream with completed status
+    await updateStream('completed', {
+      output: result.output,
+      error: result.error,
+      executionTime: result.executionTime,
+      currentStep: 'Task completed',
+      metadata: result.metadata
+    });
+
     // Emit completion event
     await emit({
       topic: 'agent.task.completed',
       data: {
+        taskId,
         sessionId,
         task: input.task,
         result: {
@@ -118,6 +162,7 @@ export const handler = async (
     return {
       success: true,
       sessionId,
+      taskId,
       output: result.output,
       state: result.state
     };
@@ -129,10 +174,17 @@ export const handler = async (
       sessionId
     });
 
+    // Update stream with failed status
+    await updateStream('failed', {
+      error: error.message,
+      currentStep: 'Task failed'
+    });
+
     // Emit failure event
     await emit({
       topic: 'agent.task.failed',
       data: {
+        taskId,
         sessionId,
         task: input.task,
         error: error.message,

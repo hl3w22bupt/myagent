@@ -82,9 +82,13 @@ export const handler = async (
 
   const { task, sessionId, systemPrompt, availableSkills } = validationResult.data;
 
+  // Generate unique taskId
+  const taskId = `task-${Date.now()}`;
+
   logger.info('Agent API: Received task request', {
     task,
     sessionId,
+    taskId,
     skills: availableSkills
   });
 
@@ -93,6 +97,7 @@ export const handler = async (
   await emit({
     topic: 'agent.task.execute',
     data: {
+      taskId,
       task,
       sessionId,
       systemPrompt,
@@ -107,7 +112,7 @@ export const handler = async (
     body: {
       success: true,
       message: 'Task submitted for execution',
-      taskId: `task-${Date.now()}`,
+      taskId,
       task,
       sessionId
     }

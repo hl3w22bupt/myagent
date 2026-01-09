@@ -8,14 +8,20 @@ import { EventHandler, ApiRouteHandler, ApiResponse, MotiaStream, CronHandler } 
 
 declare module 'motia' {
   interface FlowContextStateStreams {
-    
+    'taskExecution': MotiaStream<{ taskId: string; task: string; status: 'pending' | 'running' | 'completed' | 'failed'; output?: string; error?: string; currentStep?: string; executionTime?: number; sessionId?: string; timestamp: string; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number } }>
   }
 
   interface Handlers {
+    'task-web-ui': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'subagents-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'result-logger': EventHandler<never, never>
     'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
     'failure-handler': EventHandler<never, never>
+    'agent-results-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     

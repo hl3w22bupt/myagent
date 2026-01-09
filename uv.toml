@@ -1,0 +1,6 @@
+# UV configuration for optimal performance with requirements.txt
+
+# UV will automatically use:
+# - .python-version for Python version (3.11)
+# - requirements.txt for dependencies
+# - Fast resolver for better performance

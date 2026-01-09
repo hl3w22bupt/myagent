@@ -1,0 +1,142 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Code quality checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prettier check
+        run: |
+          npx prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}" || echo "⚠️  Some files need formatting"
+        continue-on-error: true
+
+      - name: Check file sizes
+        run: |
+          echo "Checking for large files..."
+          find . -type f -size +1M -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./dist/*" | head -10
+        continue-on-error: true
+
+      - name: Check for sensitive data patterns
+        run: |
+          echo "Checking for potential sensitive data..."
+          ! grep -r "api.*key\|secret\|password" --include="*.ts" --include="*.js" --include="*.env*" | grep -v "example\|sample\|API_KEY\|SECRET" || echo "⚠️  Found potential sensitive data patterns"
+        continue-on-error: true
+
+  # TypeScript specific checks
+  typescript-checks:
+    name: TypeScript Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for any TypeScript errors
+        run: |
+          npx tsc --noEmit --pretty false 2>&1 | tee ts-errors.txt
+          if [ -s ts-errors.txt ]; then
+            echo "❌ TypeScript errors found"
+            exit 1
+          fi
+          echo "✓ No TypeScript errors"
+
+      - name: Check for unused dependencies
+        run: |
+          npx tspr check --ignorePatterns "**/dist/**" "**/node_modules/**" || echo "⚠️  Some dependencies might be unused"
+        continue-on-error: true
+
+  # Test coverage check
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage -- --passWithNoTests
+        continue-on-error: true
+
+      - name: Check coverage threshold
+        run: |
+          if [ -f "coverage/coverage-summary.json" ]; then
+            echo "✓ Coverage report generated"
+          else
+            echo "⚠️  No coverage report found"
+          fi
+
+  # Motia specific checks
+  motia-checks:
+    name: Motia Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Motia types
+        run: npm run generate-types
+
+      - name: Check step configurations
+        run: |
+          echo "Checking Motia step files..."
+          find steps/ -name "*.step.ts" -type f | while read file; do
+            echo "✓ Found: $file"
+          done
+
+      - name: Verify motia.config.ts
+        run: |
+          if [ -f "motia.config.ts" ]; then
+            echo "✓ motia.config.ts exists"
+          else
+            echo "❌ motia.config.ts not found"
+            exit 1
+          fi

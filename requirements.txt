@@ -3,8 +3,8 @@ python-dotenv==1.0.0
 pydantic==2.5.2
 pyyaml==6.0.1
 
-# Async runtime
-asyncio==3.4.3
+# Async runtime (asyncio is built-in since Python 3.4)
+# asyncio==3.4.3  # Removed: conflicts with standard library
 
 # HTTP clients
 httpx==0.25.2
