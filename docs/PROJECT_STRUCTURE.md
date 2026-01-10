@@ -165,6 +165,7 @@ See `IMPLEMENTATION_WORKFLOW.md` for detailed implementation guide.
 ### Skills
 
 Skills are reusable capability units implemented in Python:
+
 - **pure-prompt**: Template-based, LLM-only
 - **pure-script**: Code-only, no LLM
 - **hybrid**: Code + LLM combination
@@ -177,6 +178,7 @@ Skills are reusable capability units implemented in Python:
 ### PTC (Programmatic Tool Calling)
 
 Two-step code generation:
+
 1. **Planning**: Select appropriate skills for the task
 2. **Implementation**: Generate Python code using selected skills
 

@@ -25,7 +25,7 @@ export const querySchema = z.object({
   /**
    * Limit number of results.
    */
-  limit: z.string().optional().describe('Limit number of results (default: 10)')
+  limit: z.string().optional().describe('Limit number of results (default: 10)'),
 });
 
 /**
@@ -55,7 +55,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -63,10 +63,7 @@ export const config: ApiRouteConfig = {
  *
  * Retrieves task results from state based on query parameters.
  */
-export const handler = async (
-  request: any,
-  { logger, state }: any
-) => {
+export const handler = async (request: any, { logger, state }: any) => {
   // Parse query parameters - use queryParams not query
   const queryParams: Record<string, any> = request.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
@@ -81,14 +78,14 @@ export const handler = async (
   logger.info('Agent Results API: Received query request', {
     taskId,
     sessionId,
-    limit: resultLimit
+    limit: resultLimit,
   });
 
   try {
     // Retrieve execution history from state
     const groupId = 'agent:execution';
     const key = 'history';
-    const history = await state.get(groupId, key) || [];
+    const history = (await state.get(groupId, key)) || [];
 
     // Filter and process results
     let results = history;
@@ -103,8 +100,8 @@ export const handler = async (
           body: {
             success: false,
             message: `Task with ID ${taskId} not found`,
-            taskId
-          }
+            taskId,
+          },
         };
       }
 
@@ -123,9 +120,9 @@ export const handler = async (
             executionTime: result.executionTime,
             metadata: result.metadata,
             sessionId: result.sessionId,
-            timestamp: result.timestamp
-          }
-        }
+            timestamp: result.timestamp,
+          },
+        },
       };
     }
 
@@ -151,15 +148,14 @@ export const handler = async (
           executionTime: r.executionTime,
           metadata: r.metadata,
           sessionId: r.sessionId,
-          timestamp: r.timestamp
-        }))
-      }
+          timestamp: r.timestamp,
+        })),
+      },
     };
-
   } catch (error: any) {
     logger.error('Agent Results API: Error retrieving results', {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
 
     return {
@@ -167,8 +163,8 @@ export const handler = async (
       body: {
         success: false,
         message: 'Failed to retrieve task results',
-        error: error.message
-      }
+        error: error.message,
+      },
     };
   }
 };

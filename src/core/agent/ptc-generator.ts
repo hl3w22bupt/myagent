@@ -61,14 +61,15 @@ export class PTCGenerator {
   private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
     // Build skills list
     const skillsList = Array.from(this.skills.values())
-      .map(s => `- ${s.name}: ${s.description}`)
+      .map((s) => `- ${s.name}: ${s.description}`)
       .join('\n');
 
     // Build context section
     let contextSection = '';
     if (options?.history && options.history.length > 0) {
       contextSection = '<conversation_history>\n';
-      for (const msg of options.history.slice(-5)) {  // Last 5 messages
+      for (const msg of options.history.slice(-5)) {
+        // Last 5 messages
         contextSection += `${msg.role}: ${msg.content}\n`;
       }
       contextSection += '</conversation_history>\n\n';
@@ -105,12 +106,7 @@ Output format (JSON):
 }
 </plan>`;
 
-    const response = await this.llm.messagesCreate([
-      { role: 'user', content: prompt }
-    ]);
-
-    // DEBUG: Log LLM response
-    console.log('[PTC Generator] LLM Response:', response.content);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
     // Extract JSON from response - try multiple patterns
     let jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
@@ -134,24 +130,52 @@ Output format (JSON):
 
     if (!jsonMatch) {
       console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
-      throw new Error(`Failed to parse plan from LLM response. Got: ${response.content.substring(0, 200)}`);
+      throw new Error(
+        `Failed to parse plan from LLM response. Got: ${response.content.substring(0, 200)}`
+      );
     }
 
-    const plan = JSON.parse(jsonMatch[1]);
+    // Validate JSON string before parsing
+    const jsonString = jsonMatch[1];
+    if (!jsonString || jsonString.trim() === '' || jsonString.includes('undefined')) {
+      console.error('[PTC Generator] Invalid JSON string:', jsonString);
+      throw new Error(`Invalid JSON in LLM response: contains undefined or is empty`);
+    }
+
+    let plan;
+    try {
+      plan = JSON.parse(jsonString);
+    } catch (error: any) {
+      console.error('[PTC Generator] JSON parse failed:', {
+        error: error.message,
+        jsonString: jsonString.substring(0, 500),
+      });
+      throw new Error(`Failed to parse plan JSON: ${error.message}`);
+    }
+
+    // Validate required fields
+    if (!plan.selected_skills || !Array.isArray(plan.selected_skills)) {
+      console.error('[PTC Generator] Missing or invalid selected_skills field:', plan);
+      throw new Error(`Plan missing valid 'selected_skills' array`);
+    }
 
     return {
       code: '', // Will be generated in step 2
       selectedSkills: plan.selected_skills,
-      reasoning: plan.reasoning
+      reasoning: plan.reasoning || 'No reasoning provided',
     };
   }
 
   /**
    * Step 2: Implementation phase - Generate Python code.
    */
-  private async generateCode(task: string, selectedSkills: string[], options?: PTCGenerationOptions): Promise<string> {
+  private async generateCode(
+    task: string,
+    selectedSkills: string[],
+    options?: PTCGenerationOptions
+  ): Promise<string> {
     // Get skill details
-    const skillsDetails = selectedSkills.map(skillName => {
+    const skillsDetails = selectedSkills.map((skillName) => {
       const skill = this.skills.get(skillName);
       if (!skill) {
         throw new Error(`Skill '${skillName}' not found`);
@@ -160,17 +184,20 @@ Output format (JSON):
     });
 
     // Build skills block for prompt
-    const skillsBlock = skillsDetails.map(skill => {
-      return `${skill.name}:
+    const skillsBlock = skillsDetails
+      .map((skill) => {
+        return `${skill.name}:
   Description: ${skill.description}
   Tags: ${skill.tags.join(', ')}`;
-    }).join('\n\n');
+      })
+      .join('\n\n');
 
     // Build context section
     let contextSection = '';
     if (options?.history && options.history.length > 0) {
       contextSection = '<conversation_history>\n';
-      for (const msg of options.history.slice(-5)) {  // Last 5 messages
+      for (const msg of options.history.slice(-5)) {
+        // Last 5 messages
         contextSection += `${msg.role}: ${msg.content}\n`;
       }
       contextSection += '</conversation_history>\n\n';
@@ -209,12 +236,16 @@ IMPORTANT - Code structure requirements:
 - DO NOT import asyncio
 - Just write the logic code that goes inside the async function
 
-${selectedSkills.length > 0 ? `Available skills to use:
+${
+  selectedSkills.length > 0
+    ? `Available skills to use:
 from core.skill.executor import SkillExecutor
 executor = SkillExecutor()
 
 # Use skills with await:
-result = await executor.execute('skill-name', {'param': 'value'})` : `No skills needed - solve the task directly with Python code.`}
+result = await executor.execute('skill-name', {'param': 'value'})`
+    : `No skills needed - solve the task directly with Python code.`
+}
 
 Code requirements:
 - Use 'await' for any async operations (like skill execution)
@@ -224,12 +255,7 @@ Code requirements:
 
 Generate the code now:`;
 
-    const response = await this.llm.messagesCreate([
-      { role: 'user', content: prompt }
-    ]);
-
-    // DEBUG: Log LLM response
-    console.log('[PTC Generator] Code Generation Response:', response.content);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
     // Extract code from response
     // Try multiple code block formats
@@ -242,7 +268,9 @@ Generate the code now:`;
     }
     if (!codeMatch) {
       // Last resort: try to extract code after specific markers
-      codeMatch = response.content.match(/(?:Generate the code now:?|Code:?\s*)([\s\S]*?)(?:\n\n|\n*$|$)/i);
+      codeMatch = response.content.match(
+        /(?:Generate the code now:?|Code:?\s*)([\s\S]*?)(?:\n\n|\n*$|$)/i
+      );
     }
     if (!codeMatch) {
       console.error('[PTC Generator] Failed to parse code. Response:', response.content);

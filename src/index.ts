@@ -54,7 +54,6 @@ let _agentManager: AgentManager | null = null;
  */
 export function getAgentManager(): AgentManager {
   if (_agentManager) {
-    console.log('[index.ts] Returning existing AgentManager instance');
     return _agentManager;
   }
 
@@ -64,32 +63,31 @@ export function getAgentManager(): AgentManager {
     resolve(process.cwd(), 'python_modules', 'bin', 'python3') ||
     resolve(process.cwd(), '.venv', 'bin', 'python3');
 
-  console.log('[index.ts] Initializing AgentManager with config:');
-  console.log('[index.ts] venvPythonPath:', venvPythonPath);
-  console.log('[index.ts] process.cwd():', process.cwd());
-
   _agentManager = new AgentManager({
     sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
     maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
     agentConfig: {
       systemPrompt: 'You are a helpful assistant',
       llm: {
-        provider: (process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'anthropic'),
+        provider:
+          process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible'
+            ? 'openai-compatible'
+            : 'anthropic',
         model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
-        apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || ''
+        apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
       },
       availableSkills: ['web-search', 'summarize', 'code-analysis'],
       sandbox: {
         type: 'local',
         config: {
-          pythonPath: process.env.PYTHON_PATH || venvPythonPath
-        }
+          pythonPath: process.env.PYTHON_PATH || venvPythonPath,
+        },
       },
       constraints: {
         timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
-        maxIterations: parseInt(process.env.MAX_ITERATIONS || '5')
-      }
-    }
+        maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
+      },
+    },
   });
 
   return _agentManager;
@@ -103,17 +101,14 @@ export function getAgentManager(): AgentManager {
  */
 export const agentManager = getAgentManager() as AgentManager;
 
-
 /**
  * Graceful shutdown handler for SIGTERM.
  *
  * Ensures all active sessions are properly cleaned up before process exit.
  */
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received: Shutting down managers...');
   try {
     await agentManager.shutdown();
-    console.log('Managers shut down successfully');
     process.exit(0);
   } catch (error) {
     console.error('Error during shutdown:', error);
@@ -127,10 +122,8 @@ process.on('SIGTERM', async () => {
  * Ensures all active sessions are properly cleaned up before process exit.
  */
 process.on('SIGINT', async () => {
-  console.log('\nSIGINT received: Shutting down managers...');
   try {
     await agentManager.shutdown();
-    console.log('Managers shut down successfully');
     process.exit(0);
   } catch (error) {
     console.error('Error during shutdown:', error);

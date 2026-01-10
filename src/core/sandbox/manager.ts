@@ -126,7 +126,6 @@ export class SandboxManager {
     // Release expired sessions
     for (const sessionId of expired) {
       await this.release(sessionId);
-      console.log(`Cleaned up expired sandbox session: ${sessionId}`);
     }
   }
 
@@ -149,7 +148,6 @@ export class SandboxManager {
 
     if (oldestSession) {
       await this.release(oldestSession);
-      console.log(`Evicted oldest sandbox session: ${oldestSession}`);
     }
   }
 
@@ -163,9 +161,7 @@ export class SandboxManager {
     }
 
     // Release all sessions
-    await Promise.all(
-      Array.from(this.sessions.keys()).map(id => this.release(id))
-    );
+    await Promise.all(Array.from(this.sessions.keys()).map((id) => this.release(id)));
   }
 
   /**

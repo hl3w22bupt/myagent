@@ -2,7 +2,7 @@
 # https://aider.chat/docs/config.html
 
 # Read AGENTS.md for project overview and guide references
-read: 
+read:
   - AGENTS.md
   # Uncomment specific guides as needed for more context:
   # - .cursor/rules/motia/api-steps.mdc

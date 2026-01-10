@@ -34,7 +34,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['metadata-api']
+  flows: ['metadata-api'],
 };
 
 /**
@@ -53,7 +53,8 @@ const DEFAULT_SUBAGENTS = [
     type: 'subagent',
     status: 'active',
     availableSkills: ['code-analysis', 'read-file', 'git-diff'],
-    systemPrompt: 'You are a code review expert with deep knowledge of software quality, design patterns, and best practices.'
+    systemPrompt:
+      'You are a code review expert with deep knowledge of software quality, design patterns, and best practices.',
   },
   {
     id: 'data-analyst',
@@ -62,7 +63,8 @@ const DEFAULT_SUBAGENTS = [
     type: 'subagent',
     status: 'active',
     availableSkills: ['data-processing', 'visualization'],
-    systemPrompt: 'You are a data analysis expert with strong skills in statistical analysis, data visualization, and insight generation.'
+    systemPrompt:
+      'You are a data analysis expert with strong skills in statistical analysis, data visualization, and insight generation.',
   },
   {
     id: 'security-auditor',
@@ -71,8 +73,9 @@ const DEFAULT_SUBAGENTS = [
     type: 'subagent',
     status: 'active',
     availableSkills: ['security-scan', 'dependency-check'],
-    systemPrompt: 'You are a security expert with deep knowledge of vulnerabilities, threats, and security best practices.'
-  }
+    systemPrompt:
+      'You are a security expert with deep knowledge of vulnerabilities, threats, and security best practices.',
+  },
 ];
 
 /**
@@ -80,10 +83,7 @@ const DEFAULT_SUBAGENTS = [
  *
  * Returns list of available subagents in the system.
  */
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler = async (request: any, { logger }: any) => {
   logger.info('Subagents API: Received request');
 
   try {
@@ -93,10 +93,9 @@ export const handler = async (
         success: true,
         count: DEFAULT_SUBAGENTS.length,
         agents: DEFAULT_SUBAGENTS,
-        note: 'These are default subagents that can be used by the MasterAgent for task delegation'
-      }
+        note: 'These are default subagents that can be used by the MasterAgent for task delegation',
+      },
     };
-
   } catch (error: any) {
     logger.error('Subagents API: Error', { error: error.message });
 
@@ -105,8 +104,8 @@ export const handler = async (
       body: {
         success: false,
         message: 'Failed to retrieve subagents',
-        error: error.message
-      }
+        error: error.message,
+      },
     };
   }
 };

@@ -16,22 +16,25 @@ Phase 6 successfully implements production-ready features for the Motia Agent Sy
 **File**: `steps/agents/result-logger.step.ts`
 
 **Features**:
+
 - Subscribes to `agent.task.completed` events
 - Logs all task executions with full details
 - Stores execution history in state (last 100 tasks)
 - Provides audit trail for debugging
 
 **Configuration**:
+
 ```typescript
 export const config: EventConfig = {
   type: 'event',
   name: 'result-logger',
   subscribes: ['agent.task.completed'],
-  flows: ['agent-workflow']
-}
+  flows: ['agent-workflow'],
+};
 ```
 
 **Benefits**:
+
 - ✅ Complete execution history
 - ✅ Success/failure tracking
 - ✅ Performance metrics logging
@@ -44,6 +47,7 @@ export const config: EventConfig = {
 **File**: `steps/health/health-check.step.ts`
 
 **Features**:
+
 - System health status endpoint
 - Service availability checks (API, Agent, Sandbox, LLM)
 - Execution metrics (total tasks, success rate, avg time)
@@ -52,6 +56,7 @@ export const config: EventConfig = {
 **Endpoint**: `GET /health`
 
 **Response**:
+
 ```json
 {
   "status": "healthy",
@@ -73,6 +78,7 @@ export const config: EventConfig = {
 ```
 
 **Benefits**:
+
 - ✅ Health monitoring
 - ✅ Load balancer integration
 - ✅ Operational visibility
@@ -87,6 +93,7 @@ export const config: EventConfig = {
 **Implemented Middleware**:
 
 #### a) Rate Limiting
+
 - **Type**: In-memory rate limiter (sliding window)
 - **Default**: 100 requests per minute per IP
 - **Configurable**: Via environment variables
@@ -98,6 +105,7 @@ export const rateLimitMiddleware = (rateLimiter, getIdentifier);
 ```
 
 #### b) API Key Authentication
+
 - **Optional**: Can be enabled/disabled via environment
 - **Header**: `X-API-Key`
 - **Environment**: `API_KEY`
@@ -107,6 +115,7 @@ export const apiKeyAuthMiddleware = (validApiKeys: Set<string>);
 ```
 
 #### c) CORS Middleware
+
 - **Configurable**: Allowed origins
 - **Default**: Allow all (`*`)
 - **Headers**: Proper CORS headers for cross-origin requests
@@ -116,6 +125,7 @@ export const corsMiddleware = (allowedOrigins: string[]);
 ```
 
 #### d) Security Headers
+
 - **X-Frame-Options**: DENY (prevent clickjacking)
 - **X-Content-Type-Options**: nosniff (prevent MIME sniffing)
 - **X-XSS-Protection**: 1; mode=block
@@ -128,24 +138,27 @@ export const securityHeadersMiddleware = (req, res, next);
 ```
 
 #### e) Request Logging
+
 - **Logs**: Method, path, IP, user-agent
 - **Response**: Status code, duration
 - **Structured**: JSON logging for easy parsing
 
 ```typescript
-export const requestLoggingMiddleware = (logger);
+export const requestLoggingMiddleware = logger;
 ```
 
 #### f) Error Handler
+
 - **Production**: Safe error messages (no stack traces)
 - **Development**: Full error details
 - **Logging**: All errors logged with context
 
 ```typescript
-export const errorHandlerMiddleware = (logger);
+export const errorHandlerMiddleware = logger;
 ```
 
 **Benefits**:
+
 - ✅ Security hardening
 - ✅ Rate limiting (prevents abuse)
 - ✅ Authentication (optional)
@@ -163,41 +176,49 @@ export const errorHandlerMiddleware = (logger);
 **Test Suites**:
 
 #### a) Health Check Tests
+
 - System status verification
 - Service availability checks
 - Metrics validation
 
 #### b) Agent Execution API Tests
+
 - Simple task execution
 - Task with sessionId
 - Task with availableSkills
 - Invalid request handling
 
 #### c) Agent Execution Flow Tests
+
 - Complete workflow verification
 - API → Event → Agent → Result
 - Timing validation
 
 #### d) Error Handling Tests
+
 - Malformed JSON handling
 - Empty task validation
 - Error responses
 
 #### e) Rate Limiting Tests
+
 - Rate limit enforcement
 - 429 response validation
 
 #### f) Authentication Tests
+
 - API key validation
 - Missing key handling
 - Invalid key rejection
 
 #### g) Direct Agent Tests
+
 - Agent execution without API
 - Error handling
 - Performance validation
 
 **Benefits**:
+
 - ✅ Comprehensive test coverage
 - ✅ Integration testing
 - ✅ Regression prevention
@@ -210,6 +231,7 @@ export const errorHandlerMiddleware = (logger);
 **File**: `docs/API-DOCUMENTATION.md`
 
 **Sections**:
+
 1. **Overview**: API basics, versioning
 2. **Authentication**: API key setup
 3. **Endpoints**: Complete API reference
@@ -226,6 +248,7 @@ export const errorHandlerMiddleware = (logger);
 12. **Troubleshooting**: Common issues
 
 **Benefits**:
+
 - ✅ Complete API reference
 - ✅ Code examples
 - ✅ Usage guidelines
@@ -281,10 +304,12 @@ export const errorHandlerMiddleware = (logger);
 Check system health and metrics.
 
 **Response Codes**:
+
 - `200 OK`: System healthy
 - `503 Service Unavailable`: System unhealthy
 
 **Response Body**:
+
 ```json
 {
   "status": "healthy" | "degraded" | "unhealthy",
@@ -341,7 +366,7 @@ import {
   corsMiddleware,
   securityHeadersMiddleware,
   requestLoggingMiddleware,
-  errorHandlerMiddleware
+  errorHandlerMiddleware,
 } from './src/middleware/api-security.js';
 
 const app = express();
@@ -439,6 +464,7 @@ No files were modified in Phase 6. All changes were additive.
 ## Production Readiness Checklist
 
 ### Security ✅
+
 - [x] API key authentication (optional)
 - [x] Rate limiting
 - [x] CORS support
@@ -447,6 +473,7 @@ No files were modified in Phase 6. All changes were additive.
 - [x] Error handling
 
 ### Monitoring ✅
+
 - [x] Health check endpoint
 - [x] Execution metrics
 - [x] Service availability checks
@@ -455,6 +482,7 @@ No files were modified in Phase 6. All changes were additive.
 - [x] Execution history
 
 ### Testing ✅
+
 - [x] Integration tests
 - [x] API tests
 - [x] Error handling tests
@@ -462,6 +490,7 @@ No files were modified in Phase 6. All changes were additive.
 - [x] Performance tests
 
 ### Documentation ✅
+
 - [x] API documentation
 - [x] Usage examples
 - [x] Error codes
@@ -474,17 +503,17 @@ No files were modified in Phase 6. All changes were additive.
 
 ### Overhead
 
-*   **Rate Limiting**: < 1ms per request (in-memory)
-*   **Authentication**: < 1ms per request (simple lookup)
-*   **Logging**: < 5ms per request (async)
-*   **Health Check**: < 10ms (state reads)
-*   **Result Logging**: < 20ms per task (async)
+- **Rate Limiting**: < 1ms per request (in-memory)
+- **Authentication**: < 1ms per request (simple lookup)
+- **Logging**: < 5ms per request (async)
+- **Health Check**: < 10ms (state reads)
+- **Result Logging**: < 20ms per task (async)
 
 ### Scalability
 
-*   **Rate Limiter**: In-memory (single server), use Redis for distributed
-*   **State**: Motia state plugin (Redis-backed)
-*   **Logging**: Structured JSON logs (aggregator-friendly)
+- **Rate Limiter**: In-memory (single server), use Redis for distributed
+- **State**: Motia state plugin (Redis-backed)
+- **Logging**: Structured JSON logs (aggregator-friendly)
 
 ---
 

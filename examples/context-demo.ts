@@ -20,7 +20,7 @@ async function demonstrateContextSupport() {
   const llm = new LLMClient({
     provider: 'anthropic',
     model: 'claude-sonnet-4-5',
-    apiKey: process.env.ANTHROPIC_API_KEY || 'demo-key'
+    apiKey: process.env.ANTHROPIC_API_KEY || 'demo-key',
   });
 
   // Define available skills
@@ -28,25 +28,25 @@ async function demonstrateContextSupport() {
     {
       name: 'summarize',
       description: 'Summarize text content',
-      tags: ['text', 'summarization', 'nlp']
+      tags: ['text', 'summarization', 'nlp'],
     },
     {
       name: 'web-search',
       description: 'Search the web for information',
-      tags: ['web', 'research', 'search']
+      tags: ['web', 'research', 'search'],
     },
     {
       name: 'code-analysis',
       description: 'Analyze code quality and patterns',
-      tags: ['code', 'analysis', 'quality']
-    }
+      tags: ['code', 'analysis', 'quality'],
+    },
   ];
 
   const ptcGenerator = new PTCGenerator(llm, skills);
   void ptcGenerator; // Mark as used
 
   console.log('Available Skills:');
-  skills.forEach(skill => {
+  skills.forEach((skill) => {
     console.log(`  - ${skill.name}: ${skill.description}`);
   });
   console.log();
@@ -60,14 +60,15 @@ async function demonstrateContextSupport() {
       {
         role: 'user' as const,
         content: 'Search for TypeScript best practices',
-        timestamp: Date.now() - 10000
+        timestamp: Date.now() - 10000,
       },
       {
         role: 'assistant' as const,
-        content: 'I found several articles about TypeScript best practices including type safety, interfaces, and async/await patterns.',
-        timestamp: Date.now() - 5000
-      }
-    ]
+        content:
+          'I found several articles about TypeScript best practices including type safety, interfaces, and async/await patterns.',
+        timestamp: Date.now() - 5000,
+      },
+    ],
   };
 
   console.log('Conversation History:');
@@ -82,7 +83,7 @@ async function demonstrateContextSupport() {
   // Show what context would be passed to the LLM
   console.log('Context that would be sent to LLM:');
   console.log('  <conversation_history>');
-  historyExample.history.forEach(msg => {
+  historyExample.history.forEach((msg) => {
     console.log(`    ${msg.role}: ${msg.content}`);
   });
   console.log('  </conversation_history>');
@@ -98,9 +99,9 @@ async function demonstrateContextSupport() {
       userId: 'user-456',
       preferences: {
         theme: 'dark',
-        language: 'en'
-      }
-    }
+        language: 'en',
+      },
+    },
   };
 
   console.log('Available Variables:');
@@ -129,23 +130,23 @@ async function demonstrateContextSupport() {
       {
         role: 'user' as const,
         content: 'What is the weather in San Francisco?',
-        timestamp: Date.now() - 15000
+        timestamp: Date.now() - 15000,
       },
       {
         role: 'assistant' as const,
         content: 'The current weather in San Francisco is 65°F and sunny.',
-        timestamp: Date.now() - 10000
+        timestamp: Date.now() - 10000,
       },
       {
         role: 'user' as const,
         content: 'What about in celsius?',
-        timestamp: Date.now() - 5000
-      }
+        timestamp: Date.now() - 5000,
+      },
     ],
     variables: {
       location: 'San Francisco',
-      units: 'celsius'
-    }
+      units: 'celsius',
+    },
   };
 
   console.log('Conversation History:');
@@ -165,7 +166,7 @@ async function demonstrateContextSupport() {
 
   console.log('Complete Context that would be sent to LLM:');
   console.log('  <conversation_history>');
-  combinedExample.history.forEach(msg => {
+  combinedExample.history.forEach((msg) => {
     console.log(`    ${msg.role}: ${msg.content}`);
   });
   console.log('  </conversation_history>');
@@ -211,7 +212,7 @@ async function demonstrateContextSupport() {
   const longHistory = Array.from({ length: 10 }, (_, i) => ({
     role: 'user' as const,
     content: `Message ${i + 1}`,
-    timestamp: Date.now() + i
+    timestamp: Date.now() + i,
   }));
 
   console.log('Total Messages in History:', longHistory.length);

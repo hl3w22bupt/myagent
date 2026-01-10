@@ -7,12 +7,14 @@ This repository uses GitHub Actions for continuous integration and automated tes
 ### 1. **CI Workflow** (`.github/workflows/ci.yml`)
 
 **Triggers:**
+
 - Pull requests to `main` or `develop` branches
 - Pushes to `main` or `develop` branches
 
 **Jobs:**
 
 #### Node.js CI
+
 - ✅ TypeScript type checking
 - ✅ ESLint linting
 - ✅ Jest test execution
@@ -20,6 +22,7 @@ This repository uses GitHub Actions for continuous integration and automated tes
 - ✅ Project build verification
 
 #### Python CI
+
 - ✅ Python 3.12 setup with `uv`
 - ✅ Dependency installation via `uv`
 - ✅ Pylint linting
@@ -27,6 +30,7 @@ This repository uses GitHub Actions for continuous integration and automated tes
 - ✅ Pytest execution
 
 #### Integration Check
+
 - ✅ Motia configuration validation
 - ✅ Console.log detection
 - ✅ TODO comment tracking
@@ -34,34 +38,41 @@ This repository uses GitHub Actions for continuous integration and automated tes
 ### 2. **PR Checks Workflow** (`.github/workflows/pr-checks.yml`)
 
 **Triggers:**
+
 - Pull requests (opened, synchronized, reopened)
 
 **Jobs:**
 
 #### Code Quality
+
 - Prettier formatting check
 - Large file detection (>1MB)
 - Sensitive data pattern detection
 
 #### TypeScript Checks
+
 - Comprehensive TypeScript error checking
 - Unused dependency detection
 
 #### Test Coverage
+
 - Jest coverage report generation
 - Coverage threshold validation
 
 #### Motia Checks
+
 - Step file validation
 - `motia.config.ts` verification
 
 ### 3. **Lint Workflow** (`.github/workflows/lint.yml`)
 
 **Triggers:**
+
 - Pull requests to `main` or `develop`
 - Pushes to `main` or `develop`
 
 **Jobs:**
+
 - Fast ESLint check
 - Quick TypeScript validation
 
@@ -99,17 +110,22 @@ npm run py:test
 ## CI Configuration Details
 
 ### Node.js Version
+
 - Uses Node.js 20 (LTS)
 
 ### Python Version
+
 - Uses Python 3.12 with `uv` package manager
 
 ### Caching
+
 - npm dependencies are cached for faster builds
 - Python virtual environment is cached
 
 ### Continue on Error
+
 Some non-critical checks use `continue-on-error: true`:
+
 - Pylint (warnings allowed)
 - Mypy (type hints in progress)
 - Coverage (enforced but doesn't block)
@@ -120,18 +136,21 @@ Some non-critical checks use `continue-on-error: true`:
 ### Common Issues
 
 **TypeScript errors in CI:**
+
 ```bash
 # Check locally
 npx tsc --noEmit
 ```
 
 **ESLint failures:**
+
 ```bash
 # Fix automatically
 npm run lint -- --fix
 ```
 
 **Python import errors:**
+
 ```bash
 # Reinstall with uv
 rm -rf .venv
@@ -142,6 +161,7 @@ uv pip install -r requirements.txt
 ### CI Environment Variables
 
 The CI runs with these environment variables:
+
 - `CI=true` - Enables CI mode in Jest
 - Node.js 20 from GitHub Actions
 - Python 3.12 from GitHub Actions
@@ -160,6 +180,7 @@ When contributing:
 ## Future Improvements
 
 Potential additions:
+
 - [ ] E2E tests with Playwright
 - [ ] Performance benchmarks
 - [ ] Security scanning (CodeQL)

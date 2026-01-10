@@ -18,7 +18,7 @@ export type {
   E2BSandboxConfig,
   ModalSandboxConfig,
   SandboxConfig,
-  SandboxAdapter
+  SandboxAdapter,
 } from './types';
 
 // Manager
@@ -32,7 +32,7 @@ export {
   loadSandboxConfig,
   getAdapterConfig,
   getDefaultAdapterConfig,
-  type SandboxSystemConfig
+  type SandboxSystemConfig,
 } from './config';
 
 // Adapters

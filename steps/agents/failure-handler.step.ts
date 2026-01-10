@@ -30,7 +30,7 @@ export const inputSchema = z.object({
   /**
    * Error stack trace (optional).
    */
-  stack: z.string().optional()
+  stack: z.string().optional(),
 });
 
 /**
@@ -42,7 +42,7 @@ export const config: EventConfig = {
   description: 'Handles agent task failures and logs them for monitoring',
   subscribes: ['agent.task.failed'],
   emits: [],
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -51,10 +51,7 @@ export const config: EventConfig = {
  * Logs task failures and can be extended to implement retry logic,
  * alerting, or other failure handling strategies.
  */
-export const handler = async (
-  input: z.infer<typeof inputSchema>,
-  { logger }: any
-) => {
+export const handler = async (input: z.infer<typeof inputSchema>, { logger }: any) => {
   const timestamp = new Date().toISOString();
 
   logger.warn('❌ Agent Task Failed', {
@@ -62,7 +59,7 @@ export const handler = async (
     sessionId: input.sessionId,
     error: input.error,
     timestamp,
-    hasStack: !!input.stack
+    hasStack: !!input.stack,
   });
 
   // Future enhancements:
@@ -74,6 +71,6 @@ export const handler = async (
   return {
     handled: true,
     timestamp,
-    task: input.task
+    task: input.task,
   };
 };

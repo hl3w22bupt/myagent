@@ -36,15 +36,18 @@ export interface PTCGenerationOptions {
 Updated three methods to support context:
 
 #### a) `generate()` - Main entry point
+
 - Now accepts optional `options` parameter with history and variables
 - Passes options to both sub-methods
 
 #### b) `planSkills()` - Planning phase
+
 - Builds context section with conversation history (last 5 messages)
 - Builds context section with available variables
 - Includes context at the beginning of the planning prompt
 
 #### c) `generateCode()` - Implementation phase
+
 - Builds context section with conversation history (last 5 messages)
 - Builds context section with available variables
 - Includes context at the beginning of the code generation prompt
@@ -58,11 +61,12 @@ Updated the Agent to pass context when generating PTC:
 ```typescript
 const ptcCode = await this.ptcGenerator.generate(task, {
   history: this.state.conversationHistory,
-  variables: Object.fromEntries(this.state.variables)
+  variables: Object.fromEntries(this.state.variables),
 });
 ```
 
 This replaced the previous call that had no context:
+
 ```typescript
 const ptcCode = await this.ptcGenerator.generate(task);
 ```
@@ -260,6 +264,7 @@ The Agent system now has full context support:
 - ✅ Multi-turn conversations are now possible
 
 Future enhancements could include:
+
 - Configurable history limit (currently fixed at 5)
 - Variable scoping/namespace support
 - Context summarization for long conversations

@@ -18,11 +18,11 @@ async function demonstrateSessionState() {
     availableSkills: ['summarize', 'code-analysis'],
     llm: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-5'
+      model: 'claude-sonnet-4-5',
     },
     sandbox: {
-      type: 'local'
-    }
+      type: 'local',
+    },
   };
 
   const sessionId = 'demo-session-' + Date.now();
@@ -88,7 +88,7 @@ async function demonstrateSessionState() {
 }
 
 // Run demonstration
-demonstrateSessionState().catch(error => {
+demonstrateSessionState().catch((error) => {
   console.error('Error:', error);
   process.exit(1);
 });

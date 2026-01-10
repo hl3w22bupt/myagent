@@ -16,15 +16,15 @@ describe('PTC Context Support', () => {
       const llm = new LLMClient({
         provider: 'anthropic',
         model: 'test-model',
-        apiKey: 'test-key'
+        apiKey: 'test-key',
       });
 
       const skills = [
         {
           name: 'test-skill',
           description: 'A test skill',
-          tags: ['test']
-        }
+          tags: ['test'],
+        },
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);
@@ -36,19 +36,19 @@ describe('PTC Context Support', () => {
           {
             role: 'user' as const,
             content: 'Hello',
-            timestamp: Date.now()
+            timestamp: Date.now(),
           },
           {
             role: 'assistant' as const,
             content: 'Hi there!',
-            timestamp: Date.now()
+            timestamp: Date.now(),
           },
           {
             role: 'user' as const,
             content: 'How are you?',
-            timestamp: Date.now()
-          }
-        ]
+            timestamp: Date.now(),
+          },
+        ],
       };
 
       // Verify the interface accepts history
@@ -63,8 +63,8 @@ describe('PTC Context Support', () => {
         variables: {
           username: 'test-user',
           count: 42,
-          data: { key: 'value' }
-        }
+          data: { key: 'value' },
+        },
       };
 
       // Verify the interface accepts variables
@@ -80,13 +80,13 @@ describe('PTC Context Support', () => {
           {
             role: 'user' as const,
             content: 'What is the value?',
-            timestamp: Date.now()
-          }
+            timestamp: Date.now(),
+          },
         ],
         variables: {
           apiKey: 'secret-key',
-          endpoint: 'https://api.example.com'
-        }
+          endpoint: 'https://api.example.com',
+        },
       };
 
       expect(options.history).toBeDefined();
@@ -102,28 +102,28 @@ describe('PTC Context Support', () => {
         {
           role: 'user' as const,
           content: 'Hello',
-          timestamp: 1000
+          timestamp: 1000,
         },
         {
           role: 'assistant' as const,
           content: 'Hi there!',
-          timestamp: 2000
+          timestamp: 2000,
         },
         {
           role: 'user' as const,
           content: 'How are you?',
-          timestamp: 3000
+          timestamp: 3000,
         },
         {
           role: 'assistant' as const,
           content: 'I am doing well!',
-          timestamp: 4000
+          timestamp: 4000,
         },
         {
           role: 'user' as const,
           content: 'Goodbye',
-          timestamp: 5000
-        }
+          timestamp: 5000,
+        },
       ];
 
       let contextSection = '';
@@ -148,7 +148,7 @@ describe('PTC Context Support', () => {
       const history = Array.from({ length: 10 }, (_, i) => ({
         role: 'user' as const,
         content: `Message ${i + 1}`,
-        timestamp: Date.now() + i
+        timestamp: Date.now() + i,
       }));
 
       let contextSection = '';
@@ -174,7 +174,7 @@ describe('PTC Context Support', () => {
       const variables = {
         apiKey: 'secret-key',
         endpoint: 'https://api.example.com',
-        count: 42
+        count: 42,
       };
 
       let contextSection = '';
@@ -228,18 +228,18 @@ describe('PTC Context Support', () => {
         {
           role: 'user' as const,
           content: 'What is the weather?',
-          timestamp: 1000
+          timestamp: 1000,
         },
         {
           role: 'assistant' as const,
           content: 'I can check that for you.',
-          timestamp: 2000
-        }
+          timestamp: 2000,
+        },
       ];
 
       const variables = {
         location: 'San Francisco',
-        units: 'celsius'
+        units: 'celsius',
       };
 
       let contextSection = '';
@@ -308,7 +308,7 @@ describe('PTC Context Support', () => {
         variables: Record<string, any>;
       } = {
         history: [],
-        variables: {}
+        variables: {},
       };
 
       let contextSection = '';
@@ -338,15 +338,15 @@ describe('PTC Context Support', () => {
       const llm = new LLMClient({
         provider: 'anthropic',
         model: 'test-model',
-        apiKey: 'test-key'
+        apiKey: 'test-key',
       });
 
       const skills = [
         {
           name: 'test-skill',
           description: 'A test skill',
-          tags: ['test']
-        }
+          tags: ['test'],
+        },
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);
@@ -361,15 +361,15 @@ describe('PTC Context Support', () => {
       const llm = new LLMClient({
         provider: 'anthropic',
         model: 'test-model',
-        apiKey: 'test-key'
+        apiKey: 'test-key',
       });
 
       const skills = [
         {
           name: 'test-skill',
           description: 'A test skill',
-          tags: ['test']
-        }
+          tags: ['test'],
+        },
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);

@@ -7,16 +7,18 @@ Replaced the simplified demonstration version of `steps/agents/master-agent.step
 ## Changes Made
 
 ### 1. File Location
+
 **File**: `/home/leo/projs/motia-demos/myagent/steps/agents/master-agent.step.ts`
 
 ### 2. Key Implementation Details
 
 #### Global Manager Instances
+
 Created global `AgentManager` and `SandboxManager` instances at application startup:
 
 ```typescript
 const agentManager = new AgentManager({
-  sessionTimeout: 30 * 60 * 1000,  // 30 minutes
+  sessionTimeout: 30 * 60 * 1000, // 30 minutes
   maxSessions: 1000,
   agentConfig: {
     systemPrompt: 'You are a helpful assistant',
@@ -24,13 +26,13 @@ const agentManager = new AgentManager({
     llm: {
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY
+      apiKey: process.env.ANTHROPIC_API_KEY,
     },
     constraints: {
       timeout: 60000,
-      maxIterations: 5
-    }
-  }
+      maxIterations: 5,
+    },
+  },
 });
 
 const sandboxManager = new SandboxManager({
@@ -40,12 +42,13 @@ const sandboxManager = new SandboxManager({
     type: 'local',
     pythonPath: process.env.PYTHON_PATH || 'python3',
     workspace: '/tmp/motia-sandbox',
-    timeout: 60000
-  }
+    timeout: 60000,
+  },
 });
 ```
 
 #### Graceful Shutdown Handler
+
 Added SIGTERM handler for proper cleanup:
 
 ```typescript
@@ -57,17 +60,19 @@ process.on('SIGTERM', async () => {
 ```
 
 #### Updated Input Schema
+
 Added `continue` field to support multi-turn conversations:
 
 ```typescript
 export const inputSchema = z.object({
   task: z.string(),
   sessionId: z.string().optional(),
-  continue: z.boolean().optional()  // NEW
+  continue: z.boolean().optional(), // NEW
 });
 ```
 
 #### Handler Implementation
+
 - Uses `agentManager.acquire(sessionId)` to get session-scoped Agent instances
 - Agent manages its own Sandbox internally (no direct sandboxManager.acquire())
 - Returns sessionId in response for continued conversations
@@ -75,10 +80,7 @@ export const inputSchema = z.object({
 - Supports `continue` flag to show conversation history
 
 ```typescript
-export const handler = async (
-  input: z.infer<typeof inputSchema>,
-  { emit, logger, state }: any
-) => {
+export const handler = async (input: z.infer<typeof inputSchema>, { emit, logger, state }: any) => {
   const sessionId = input.sessionId || uuidv4();
 
   try {
@@ -90,7 +92,7 @@ export const handler = async (
       const agentState = agent.getState();
       logger.info('Continuing conversation', {
         sessionId,
-        conversationLength: agentState.conversationHistory.length
+        conversationLength: agentState.conversationHistory.length,
       });
     }
 
@@ -107,9 +109,9 @@ export const handler = async (
           success: result.success,
           output: result.output,
           executionTime: result.executionTime,
-          state: result.state
-        }
-      }
+          state: result.state,
+        },
+      },
     });
 
     // Return sessionId so client can continue
@@ -117,9 +119,8 @@ export const handler = async (
       success: true,
       sessionId,
       output: result.output,
-      state: result.state
+      state: result.state,
     };
-
   } catch (error: any) {
     // Error handling...
   } finally {
@@ -159,6 +160,7 @@ export const handler = async (
 ## Testing Notes
 
 The implementation follows Motia event-step patterns:
+
 - Exports `inputSchema`, `config`, and `handler`
 - Uses Zod for input validation
 - Emits events to `agent.task.completed` and `agent.task.failed`
@@ -170,6 +172,7 @@ TypeScript compilation shows path alias warnings when running `tsc` directly, bu
 ## Next Steps
 
 This completes Task 5.6. The master-agent step is now ready to:
+
 - Accept agent task requests via events
 - Use AgentManager to acquire session-scoped Agent instances
 - Execute tasks using the Agent's PTC generation and Sandbox execution
@@ -177,6 +180,7 @@ This completes Task 5.6. The master-agent step is now ready to:
 - Automatically cleanup expired sessions
 
 The implementation is production-ready and integrates with:
+
 - `src/core/agent/agent.ts` - Agent class with PTC generation
 - `src/core/agent/manager.ts` - AgentManager for session management
 - `src/core/sandbox/manager.ts` - SandboxManager for session management

@@ -10,6 +10,7 @@
 ### ❌ **不使用 Motia Plugin**
 
 **原因**：
+
 1. Plugin 系统将 Manager 逻辑耦合到 Motia 框架
 2. 换框架需要重新实现 Plugin
 3. Plugin 主要是为了单例模式，但我们已有更好的方案
@@ -17,6 +18,7 @@
 ### ✅ **使用独立的 Manager 层**
 
 **优势**：
+
 1. ✅ 框架解耦 - Manager 不依赖 Motia
 2. ✅ 职责清晰 - Motia 管事件，Manager 管实例
 3. ✅ 易于迁移 - 换框架只需改应用层代码
@@ -73,6 +75,7 @@ sessionId "def-456" → Agent Instance B (有状态)
 ```
 
 **关键**：
+
 - ✅ 每个 session 有独立的 Agent/Sandbox
 - ✅ Agent/Sandbox 可以安全地持有状态
 - ✅ 不同 session 之间状态完全隔离
@@ -105,7 +108,7 @@ class AgentManager {
 
 ```typescript
 class Agent {
-  private sessionId: string;  // ✅ 绑定到特定 session
+  private sessionId: string; // ✅ 绑定到特定 session
   private state: SessionState;
 
   constructor(config: AgentConfig, sessionId: string) {
@@ -114,7 +117,7 @@ class Agent {
       sessionId,
       conversationHistory: [],
       executionHistory: [],
-      variables: new Map()
+      variables: new Map(),
     };
   }
 
@@ -202,16 +205,18 @@ export class SandboxManager {
 **文件**: `src/core/agent/agent.ts`
 
 **修改点**：
+
 1. 构造函数接受 `sessionId`
 2. 添加 `SessionState` 字段
 3. `run()` 方法维护会话历史
 
 ```typescript
 export class Agent {
-  private sessionId: string;  // ✅ 新增
-  private state: SessionState;  // ✅ 新增
+  private sessionId: string; // ✅ 新增
+  private state: SessionState; // ✅ 新增
 
-  constructor(config: AgentConfig, sessionId: string) {  // ✅ 修改签名
+  constructor(config: AgentConfig, sessionId: string) {
+    // ✅ 修改签名
     this.sessionId = sessionId;
     this.state = this.initializeState();
     // ...
@@ -222,7 +227,7 @@ export class Agent {
     this.state.conversationHistory.push({
       role: 'user',
       content: task,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     // 执行...
@@ -231,7 +236,7 @@ export class Agent {
     this.state.conversationHistory.push({
       role: 'assistant',
       content: result,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     return result;
@@ -260,8 +265,8 @@ export const handler = async (input, { emit, logger }) => {
 
     return {
       success: true,
-      sessionId,  // ✅ 返回 sessionId，客户端可以继续
-      output: result.output
+      sessionId, // ✅ 返回 sessionId，客户端可以继续
+      output: result.output,
     };
   } finally {
     // ✅ 不立即释放，让 session 持续存在
@@ -285,7 +290,7 @@ async function testConcurrentRequests() {
   // 并发执行
   const [result1, result2] = await Promise.all([
     agentManager.execute(sessionId1, 'Task A'),
-    agentManager.execute(sessionId2, 'Task B')
+    agentManager.execute(sessionId2, 'Task B'),
   ]);
 
   // 验证：两个 session 的状态独立
@@ -310,7 +315,7 @@ async function testSessionState() {
   const state2 = agent.getState();
 
   // 验证：状态在累积
-  assert(state2.conversationHistory.length === 4);  // 2轮 × 2条
+  assert(state2.conversationHistory.length === 4); // 2轮 × 2条
   assert(state2.conversationHistory[0].content === 'First task');
 }
 ```
@@ -330,6 +335,7 @@ motia.config.ts:
 ```
 
 **问题**：
+
 - ❌ 框架耦合
 - ❌ 难以测试
 - ❌ 迁移成本高
@@ -347,6 +353,7 @@ class Agent {
 ```
 
 **问题**：
+
 - ❌ Agent 无法维护状态
 - ❌ 多轮对话困难
 
@@ -358,10 +365,11 @@ const agentManager = new AgentManager(config);
 
 // 在任何框架中使用
 const agent = await agentManager.acquire(sessionId);
-await agent.run(task);  // Agent 维护 session 状态
+await agent.run(task); // Agent 维护 session 状态
 ```
 
 **优势**：
+
 - ✅ 框架解耦
 - ✅ Agent 有状态
 - ✅ 并发安全

@@ -14,7 +14,7 @@ import {
   SandboxOptions,
   SandboxResult,
   SandboxInfo,
-  LocalSandboxConfig
+  LocalSandboxConfig,
 } from '../types';
 
 export class LocalSandboxAdapter implements SandboxAdapter {
@@ -28,9 +28,6 @@ export class LocalSandboxAdapter implements SandboxAdapter {
     this.workspace = config.workspace || '/tmp/motia-sandbox';
     this.maxSessions = config.maxSessions || 10;
     this.activeSessions = new Map();
-
-    // DEBUG: Log Python path
-    console.log('[LocalSandbox] Initialized with pythonPath:', this.pythonPath);
   }
 
   async execute(code: string, options: SandboxOptions): Promise<SandboxResult> {
@@ -75,9 +72,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_SKILL_PATH: skillPath,
           PYTHONPATH: pythonPath,
-          ...options.env
+          ...options.env,
         },
-        timeout: options.timeout || 30000
+        timeout: options.timeout || 30000,
       });
 
       this.activeSessions.set(sessionId, childProcess);
@@ -94,26 +91,28 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       return {
         success: result.exitCode === 0,
         output: result.stdout,
-        error: result.exitCode !== 0 ? {
-          type: 'execution',
-          message: result.stderr || 'Unknown error'
-        } : undefined,
+        error:
+          result.exitCode !== 0
+            ? {
+                type: 'execution',
+                message: result.stderr || 'Unknown error',
+              }
+            : undefined,
         executionTime,
         sessionId,
         stdout: result.stdout,
-        stderr: result.stderr
+        stderr: result.stderr,
       };
-
     } catch (error: any) {
       return {
         success: false,
         error: {
           type: error.code === 'ETIMEDOUT' ? 'timeout' : 'unknown',
           message: error.message,
-          stack: error.stack
+          stack: error.stack,
         },
         executionTime: Date.now() - startTime,
-        sessionId
+        sessionId,
       };
     }
   }
@@ -157,7 +156,10 @@ executor = SkillExecutor()
 
 async def main():
     try:
-${code.split('\n').map(line => '        ' + line).join('\n')}
+${code
+  .split('\n')
+  .map((line) => '        ' + line)
+  .join('\n')}
     except Exception as e:
         print(json.dumps({
             "error": str(e),
@@ -184,7 +186,7 @@ asyncio.run(main())
         resolve({
           exitCode: -1,
           stdout,
-          stderr: 'Execution timeout'
+          stderr: 'Execution timeout',
         });
       }, 30000);
 
@@ -219,7 +221,7 @@ asyncio.run(main())
       // Cleanup all sessions
       for (const [_id, process] of this.activeSessions) {
         process.kill('SIGTERM');
-    void _id; // Mark as unused
+        void _id; // Mark as unused
       }
       this.activeSessions.clear();
     }
@@ -242,12 +244,7 @@ asyncio.run(main())
     return {
       type: 'local',
       version: '1.0.0',
-      capabilities: [
-        'python-execution',
-        'skill-execution',
-        'file-io',
-        'async-support'
-      ]
+      capabilities: ['python-execution', 'skill-execution', 'file-io', 'async-support'],
     };
   }
 

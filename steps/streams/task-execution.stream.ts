@@ -59,11 +59,13 @@ export const taskExecutionSchema = z.object({
   /**
    * Execution metadata.
    */
-  metadata: z.object({
-    llmCalls: z.number().optional(),
-    skillCalls: z.number().optional(),
-    totalTokens: z.number().optional()
-  }).optional()
+  metadata: z
+    .object({
+      llmCalls: z.number().optional(),
+      skillCalls: z.number().optional(),
+      totalTokens: z.number().optional(),
+    })
+    .optional(),
 });
 
 export type TaskExecution = z.infer<typeof taskExecutionSchema>;
@@ -74,5 +76,5 @@ export type TaskExecution = z.infer<typeof taskExecutionSchema>;
 export const config: StreamConfig = {
   name: 'taskExecution',
   schema: taskExecutionSchema as any,
-  baseConfig: { storageType: 'default' }
+  baseConfig: { storageType: 'default' },
 };

@@ -24,15 +24,8 @@
       "@/skills": ["skills"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "types.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts"
-  ],
+  "include": ["**/*.ts", "types.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"

@@ -117,6 +117,7 @@ npx husky add .husky/pre-commit "npm run pre-commit"
 ## 故障排查
 
 ### 问题: TypeScript 编译失败
+
 ```bash
 # 清理并重新安装
 npm run clean
@@ -125,12 +126,14 @@ npm run pre-commit
 ```
 
 ### 问题: 类型检查错误
+
 ```bash
 # 查看详细错误
 npx tsc --noEmit
 ```
 
 ### 问题: 测试超时
+
 ```bash
 # 跳过测试
 SKIP_TESTS=1 npm run pre-commit

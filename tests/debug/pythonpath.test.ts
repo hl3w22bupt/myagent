@@ -13,7 +13,7 @@ describe('PYTHONPATH Debug', () => {
     const venvPython = path.join(process.cwd(), 'venv', 'bin', 'python3');
     sandbox = new LocalSandboxAdapter({
       pythonPath: venvPython,
-      timeout: 30000
+      timeout: 30000,
     });
   });
 
@@ -53,7 +53,7 @@ except Exception as e:
       skills: [],
       skillImplPath: process.cwd(),
       sessionId: 'pythonpath-test',
-      timeout: 10000
+      timeout: 10000,
     });
 
     console.log('Result:', result);

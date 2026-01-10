@@ -35,7 +35,7 @@ class RateLimiter {
     let timestamps = this.requests.get(identifier) || [];
 
     // Filter out old requests outside the window
-    timestamps = timestamps.filter(t => t > windowStart);
+    timestamps = timestamps.filter((t) => t > windowStart);
 
     // Check if limit exceeded
     if (timestamps.length >= this.maxRequests) {
@@ -57,7 +57,7 @@ class RateLimiter {
     const windowStart = now - this.windowMs;
 
     for (const [identifier, timestamps] of this.requests.entries()) {
-      const validTimestamps = timestamps.filter(t => t > windowStart);
+      const validTimestamps = timestamps.filter((t) => t > windowStart);
 
       if (validTimestamps.length === 0) {
         this.requests.delete(identifier);
@@ -74,12 +74,12 @@ class RateLimiter {
     const timestamps = this.requests.get(identifier) || [];
     const now = Date.now();
     const windowStart = now - this.windowMs;
-    const validTimestamps = timestamps.filter(t => t > windowStart);
+    const validTimestamps = timestamps.filter((t) => t > windowStart);
 
     return {
       count: validTimestamps.length,
       remaining: Math.max(0, this.maxRequests - validTimestamps.length),
-      resetAt: now + this.windowMs
+      resetAt: now + this.windowMs,
     };
   }
 }
@@ -105,8 +105,8 @@ export const rateLimitMiddleware = (
       const stats = rateLimiter.getStats(identifier);
 
       return res.status(429).json({
-         _error: 'Too many requests',
-        retryAfter: Math.ceil((stats.resetAt - Date.now()) / 1000)
+        _error: 'Too many requests',
+        retryAfter: Math.ceil((stats.resetAt - Date.now()) / 1000),
       });
     }
 
@@ -123,9 +123,7 @@ export const rateLimitMiddleware = (
 /**
  * API Key authentication middleware.
  */
-export const apiKeyAuthMiddleware = (
-  validApiKeys: Set<string> = new Set()
-) => {
+export const apiKeyAuthMiddleware = (validApiKeys: Set<string> = new Set()) => {
   // Add API key from environment if available
   if (process.env.API_KEY) {
     validApiKeys.add(process.env.API_KEY);
@@ -142,15 +140,15 @@ export const apiKeyAuthMiddleware = (
     // Check if API key is provided and valid
     if (!apiKey) {
       return res.status(401).json({
-         _error: 'API key required',
-        message: 'Please provide X-API-Key header'
+        _error: 'API key required',
+        message: 'Please provide X-API-Key header',
       });
     }
 
     if (!validApiKeys.has(apiKey)) {
       return res.status(403).json({
-         _error: 'Invalid API key',
-        message: 'The provided API key is not valid'
+        _error: 'Invalid API key',
+        message: 'The provided API key is not valid',
       });
     }
 
@@ -192,7 +190,7 @@ export const requestLoggingMiddleware = (logger: any = console) => {
       method: req.method,
       path: req.path,
       ip: req.ip,
-      userAgent: req.headers['user-agent']
+      userAgent: req.headers['user-agent'],
     });
 
     // Log response
@@ -202,7 +200,7 @@ export const requestLoggingMiddleware = (logger: any = console) => {
         method: req.method,
         path: req.path,
         statusCode: res.statusCode,
-        duration: `${duration}ms`
+        duration: `${duration}ms`,
       });
     });
 
@@ -243,24 +241,22 @@ export const securityHeadersMiddleware = (req: Request, res: Response, _next: Ne
 /**
  * Error handler middleware.
  */
-export const  _errorHandlerMiddleware = (
-  logger: any = console
-) => {
+export const _errorHandlerMiddleware = (logger: any = console) => {
   return (err: Error, req: Request, res: Response, _next: NextFunction) => {
-    logger. _error('API Error', {
-       _error: err.message,
+    logger._error('API Error', {
+      _error: err.message,
       stack: err.stack,
       path: req.path,
-      method: req.method
+      method: req.method,
     });
 
     // Don't leak  _error details in production
     const isDevelopment = process.env.NODE_ENV !== 'production';
 
     res.status(500).json({
-       _error: 'Internal server  _error',
+      _error: 'Internal server  _error',
       message: isDevelopment ? err.message : 'An unexpected  _error occurred',
-      ...(isDevelopment && { stack: err.stack })
+      ...(isDevelopment && { stack: err.stack }),
     });
   };
 };

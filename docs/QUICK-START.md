@@ -70,6 +70,7 @@ curl http://localhost:3000/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -92,6 +93,7 @@ curl -X POST http://localhost:3000/agent/execute \
 ```
 
 Expected response:
+
 ```json
 {
   "success": true,
@@ -175,10 +177,10 @@ myagent/
 
 ## Available Skills
 
-| Skill | Description |
-|-------|-------------|
-| `web-search` | Search the web for information |
-| `summarize` | Summarize text content |
+| Skill           | Description                       |
+| --------------- | --------------------------------- |
+| `web-search`    | Search the web for information    |
+| `summarize`     | Summarize text content            |
 | `code-analysis` | Analyze code quality and patterns |
 
 ---
@@ -333,6 +335,7 @@ Ensure the header is `X-API-Key` (not `Authorization`):
 ### Task Fails Immediately
 
 Check:
+
 1. API key is set correctly
 2. LLM service is accessible
 3. Logs for specific error messages

@@ -28,12 +28,14 @@ SKIP_TESTS=1 SKIP_TYPES=1 npm run pre-commit
 ## 完整使用流程
 
 1. **首次运行 - 安装依赖**
+
    ```bash
    # 使用 --ignore-scripts 跳过可能的编译问题
    npm install --ignore-scripts
    ```
 
 2. **运行预提交检查**
+
    ```bash
    # 完整检查(包括测试)
    npm run pre-commit

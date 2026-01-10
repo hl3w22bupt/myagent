@@ -46,7 +46,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['metadata-api']
+  flows: ['metadata-api'],
 };
 
 /**
@@ -78,7 +78,7 @@ function loadSkillsMetadata(): any[] {
               version: skillConfig.version || '1.0.0',
               description: skillConfig.description || '',
               tags: skillConfig.tags || [],
-              type: skillConfig.type || 'unknown'
+              type: skillConfig.type || 'unknown',
             });
           } catch (_error) {
             console.warn(`Failed to load skill.yaml for ${folder.name}:`, _error);
@@ -98,10 +98,7 @@ function loadSkillsMetadata(): any[] {
  *
  * Returns list of available skills with optional tag filtering.
  */
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler = async (request: any, { logger }: any) => {
   logger.info('Skills API: Received request');
 
   try {
@@ -131,10 +128,9 @@ export const handler = async (
       body: {
         success: true,
         count: skills.length,
-        skills
-      }
+        skills,
+      },
     };
-
   } catch (_error: any) {
     logger.error('Skills API: Error', { _error: _error.message });
 
@@ -143,8 +139,8 @@ export const handler = async (
       body: {
         success: false,
         message: 'Failed to retrieve skills',
-        _error: _error.message
-      }
+        _error: _error.message,
+      },
     };
   }
 };

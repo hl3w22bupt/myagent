@@ -17,7 +17,7 @@ export const pathParamsSchema = z.object({
   /**
    * Skill name.
    */
-  skillName: z.string().describe('Name of the skill')
+  skillName: z.string().describe('Name of the skill'),
 });
 
 /**
@@ -47,7 +47,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['metadata-api']
+  flows: ['metadata-api'],
 };
 
 /**
@@ -55,10 +55,7 @@ export const config: ApiRouteConfig = {
  *
  * Returns detailed information about a specific skill.
  */
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler = async (request: any, { logger }: any) => {
   // Extract skill name from path parameters
   const skillName = request.pathParams?.skillName;
 
@@ -67,8 +64,8 @@ export const handler = async (
       status: 400,
       body: {
         success: false,
-        message: 'Skill name is required'
-      }
+        message: 'Skill name is required',
+      },
     };
   }
 
@@ -83,8 +80,8 @@ export const handler = async (
         body: {
           success: false,
           message: `Skill '${skillName}' not found`,
-          availableSkills: ['web-search', 'code-analysis', 'summarize']
-        }
+          availableSkills: ['web-search', 'code-analysis', 'summarize'],
+        },
       };
     }
 
@@ -104,11 +101,10 @@ export const handler = async (
           input_schema: skillConfig.input_schema || null,
           output_schema: skillConfig.output_schema || null,
           prompt_template: skillConfig.prompt_template || null,
-          execution: skillConfig.execution || null
-        }
-      }
+          execution: skillConfig.execution || null,
+        },
+      },
     };
-
   } catch (error: any) {
     logger.error('Skill Details API: Error', { error: error.message, skillName });
 
@@ -117,8 +113,8 @@ export const handler = async (
       body: {
         success: false,
         message: 'Failed to retrieve skill details',
-        error: error.message
-      }
+        error: error.message,
+      },
     };
   }
 };

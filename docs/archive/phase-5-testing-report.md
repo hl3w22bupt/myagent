@@ -14,22 +14,24 @@
 **Root Cause**: API handler returned incorrect response format. Motia requires `{ status, body }` format.
 
 **Fix Applied**:
+
 ```typescript
 // Before (incorrect):
 return {
   success: true,
   message: 'Task submitted',
-  taskId: `task-${Date.now()}`
+  taskId: `task-${Date.now()}`,
 };
 
 // After (correct):
 return {
-  status: 200,  // Required HTTP status code
-  body: {       // Response body wrapped in 'body' property
+  status: 200, // Required HTTP status code
+  body: {
+    // Response body wrapped in 'body' property
     success: true,
     message: 'Task submitted',
-    taskId: `task-${Date.now()}`
-  }
+    taskId: `task-${Date.now()}`,
+  },
 };
 ```
 
@@ -46,12 +48,14 @@ return {
 **Root Cause**: Insufficient error handling and logging made it impossible to diagnose the issue.
 
 **Fix Applied**:
+
 1. Added detailed logging at each step
 2. Wrapped `state.set()` in try-catch (state operations can fail)
 3. Enhanced error serialization for better debugging
 4. Added null checks for optional dependencies
 
 **Improvements**:
+
 ```typescript
 // Added logging at each step
 logger.info('Master Agent: Emitting start event');
@@ -93,6 +97,7 @@ curl -X POST http://localhost:3002/agent/execute \
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -115,6 +120,7 @@ curl -X POST http://localhost:3002/agent/execute \
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -138,6 +144,7 @@ curl -X POST http://localhost:3002/agent/execute \
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -154,6 +161,7 @@ curl -X POST http://localhost:3002/agent/execute \
 ### Test 4: Master Agent Execution Flow ✅
 
 **Log Analysis**:
+
 ```
 [INFO] master-agent Master Agent: Starting task execution
 [INFO] master-agent Master Agent: Emitting start event
@@ -169,6 +177,7 @@ curl -X POST http://localhost:3002/agent/execute \
 ```
 
 **Analysis**:
+
 - ✅ Task execution started
 - ✅ Events emitted successfully
 - ✅ Task processed
@@ -187,6 +196,7 @@ bash scripts/test-motia-integration.sh
 ```
 
 **Output**:
+
 ```
 === Motia Integration Test ===
 
@@ -209,21 +219,21 @@ bash scripts/test-motia-integration.sh
 
 ### API Response Times
 
-| Test | Response Time | Status |
-|------|---------------|--------|
-| Basic task | < 100ms | ✅ Excellent |
-| With session | < 100ms | ✅ Excellent |
-| With skills | < 100ms | ✅ Excellent |
+| Test         | Response Time | Status       |
+| ------------ | ------------- | ------------ |
+| Basic task   | < 100ms       | ✅ Excellent |
+| With session | < 100ms       | ✅ Excellent |
+| With skills  | < 100ms       | ✅ Excellent |
 
 ### Master Agent Execution Times
 
-| Step | Time | Status |
-|------|------|--------|
-| Start event emission | < 10ms | ✅ Fast |
-| Task processing | 100ms (simulated) | ✅ Expected |
-| State storage | < 5ms | ⚠️ Failed (non-critical) |
-| Completion events | < 10ms | ✅ Fast |
-| **Total** | **~120ms** | ✅ Good |
+| Step                 | Time              | Status                   |
+| -------------------- | ----------------- | ------------------------ |
+| Start event emission | < 10ms            | ✅ Fast                  |
+| Task processing      | 100ms (simulated) | ✅ Expected              |
+| State storage        | < 5ms             | ⚠️ Failed (non-critical) |
+| Completion events    | < 10ms            | ✅ Fast                  |
+| **Total**            | **~120ms**        | ✅ Good                  |
 
 ---
 
@@ -234,6 +244,7 @@ bash scripts/test-motia-integration.sh
 **Command**: `npm run dev`
 
 **Output**:
+
 ```
 ➜ [INFO] Redis Memory Server started 127.0.0.1:46465
 ➜ [REGISTERED] Flow agent-workflow registered
@@ -253,12 +264,16 @@ bash scripts/test-motia-integration.sh
 ## Files Modified
 
 ### 1. `steps/agents/agent-api.step.ts`
+
 **Changes**: Fixed API response format
+
 - Added `status: 200` to response
 - Wrapped response data in `body` property
 
 ### 2. `steps/agents/master-agent.step.ts`
+
 **Changes**: Enhanced error handling and logging
+
 - Added detailed logging at each step
 - Wrapped state operations in try-catch
 - Enhanced error serialization
@@ -283,6 +298,7 @@ bash scripts/test-motia-integration.sh
 ### 2. Unsubscribed Events ⚠️
 
 **Observation**: Warnings about events with no subscribers:
+
 - `agent.task.completed`
 - `agent.task.failed`
 - `agent.step.started`
@@ -329,6 +345,7 @@ bash scripts/test-motia-integration.sh
 ✅ **Phase 5 is PRODUCTION-READY**
 
 All critical functionality works correctly:
+
 - ✅ API endpoint accepts requests
 - ✅ Master Agent executes tasks
 - ✅ Events are emitted correctly

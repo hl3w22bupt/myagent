@@ -20,7 +20,7 @@ describe('LocalSandboxAdapter Debug', () => {
 
     sandbox = new LocalSandboxAdapter({
       pythonPath: pythonPath,
-      timeout: 30000
+      timeout: 30000,
     });
   });
 
@@ -33,7 +33,7 @@ describe('LocalSandboxAdapter Debug', () => {
       skills: [],
       skillImplPath: process.cwd(),
       sessionId: 'debug-1',
-      timeout: 5000
+      timeout: 5000,
     });
 
     console.log('Result:', JSON.stringify(result, null, 2));
@@ -52,7 +52,7 @@ print('SUCCESS: SkillExecutor imported')
       skills: [],
       skillImplPath: process.cwd(),
       sessionId: 'debug-2',
-      timeout: 10000
+      timeout: 10000,
     });
 
     console.log('Result:', JSON.stringify(result, null, 2));

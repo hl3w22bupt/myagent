@@ -1,9 +1,9 @@
-import { defineConfig } from '@motiadev/core'
-import endpointPlugin from '@motiadev/plugin-endpoint/plugin'
-import logsPlugin from '@motiadev/plugin-logs/plugin'
-import observabilityPlugin from '@motiadev/plugin-observability/plugin'
-import statesPlugin from '@motiadev/plugin-states/plugin'
-import bullmqPlugin from '@motiadev/plugin-bullmq/plugin'
+import { defineConfig } from '@motiadev/core';
+import endpointPlugin from '@motiadev/plugin-endpoint/plugin';
+import logsPlugin from '@motiadev/plugin-logs/plugin';
+import observabilityPlugin from '@motiadev/plugin-observability/plugin';
+import statesPlugin from '@motiadev/plugin-states/plugin';
+import bullmqPlugin from '@motiadev/plugin-bullmq/plugin';
 
 // Note: We do NOT use Agent/Sandbox plugins in global configuration because:
 // 1. They are imported directly in individual steps that need them
@@ -17,6 +17,6 @@ export default defineConfig({
     statesPlugin,
     endpointPlugin,
     logsPlugin,
-    bullmqPlugin
-  ]
-})
+    bullmqPlugin,
+  ],
+});

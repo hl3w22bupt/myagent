@@ -39,24 +39,28 @@ A distributed, event-driven agent system built on Motia framework with support f
 ## Completed Phases
 
 ### Phase 1: Project Setup ✅
+
 - Initialized project with Motia
 - Configured TypeScript
 - Set up development environment
 - Created directory structure
 
 ### Phase 2: Skill Layer ✅
+
 - Implemented `web-search` skill
 - Implemented `summarize` skill
 - Implemented `code-analysis` skill
 - Created skill registration system
 
 ### Phase 3: Sandbox Layer ✅
+
 - Local Python sandbox adapter
 - Sandbox configuration system (YAML)
 - Process isolation and timeout handling
 - Multi-adapter support (extensible for Daytona, E2B, Modal)
 
 ### Phase 4: Agent Layer ✅
+
 - Base Agent class
 - PTC (Programmatic Tool Calling) Generator
 - LLM Abstraction Layer
@@ -64,12 +68,14 @@ A distributed, event-driven agent system built on Motia framework with support f
 - GLM-4 integration and testing
 
 ### Phase 4.5: GLM-4 Integration ✅
+
 - LLM Client with multi-provider support
 - GLM-4 API configuration
 - Dual code-block format support (```python and <code>)
 - Comprehensive testing and validation
 
 ### Phase 5: Motia Integration ✅
+
 - Motia configuration
 - Agent API Step (REST endpoint)
 - Master Agent Step (event-driven)
@@ -77,6 +83,7 @@ A distributed, event-driven agent system built on Motia framework with support f
 - State management integration
 
 ### Phase 6: Production Hardening ✅
+
 - **Monitoring**: Health check endpoint, execution metrics
 - **Security**: Rate limiting, API authentication, security headers
 - **Testing**: Comprehensive integration tests
@@ -86,29 +93,34 @@ A distributed, event-driven agent system built on Motia framework with support f
 ## Key Features
 
 ### 1. Multi-LLM Support
+
 - **Anthropic Claude**: Default provider, Sonnet 4.5
 - **GLM-4**: Zhipu AI's model, OpenAI-compatible API
 - **Extensible**: Easy to add more OpenAI-compatible providers
 
 ### 2. Programmatic Tool Calling (PTC)
+
 - Two-step generation: Planning → Implementation
 - Automatic skill selection
 - Code generation in Python
 - Sandbox execution
 
 ### 3. Event-Driven Architecture
+
 - Motia event system
 - Asynchronous task execution
 - State management
 - Observability and logging
 
 ### 4. REST API
+
 - Endpoint: `POST /agent/execute`
 - Request validation
 - Event emission
 - Immediate response
 
 ### 5. Multi-Turn Conversations
+
 - Session tracking
 - State persistence
 - Context management
@@ -284,18 +296,21 @@ npm run test:glm4
 ## Future Enhancements
 
 ### Short Term
+
 - [ ] Full Agent integration with Motia (plugin or service)
 - [ ] E2E tests for complete workflow
 - [ ] Error handling and recovery
 - [ ] Metrics and monitoring
 
 ### Medium Term
+
 - [ ] Multi-agent orchestration
 - [ ] Dynamic skill loading
 - [ ] Streaming responses
 - [ ] Remote sandbox adapters
 
 ### Long Term
+
 - [ ] Multi-modal support (images, audio, video)
 - [ ] Agent marketplace/skill store
 - [ ] Distributed execution across multiple servers

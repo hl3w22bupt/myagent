@@ -142,22 +142,26 @@ ${skillsBlock}
 ## Implementation Details
 
 ### History Limit
+
 - Only includes last 5 messages from history to avoid overwhelming the LLM
 - Uses `.slice(-5)` to get the most recent messages
 - Maintains chronological order (oldest to newest within the slice)
 
 ### Context Section
+
 - Added a clear `<context>` section at the beginning of prompts
 - Conversation history comes first (if available)
 - Variables come second (if available)
 - Both sections are optional and backward compatible
 
 ### Backward Compatibility
+
 - If `options` is not provided or has no history/variables, works exactly as before
 - Empty arrays/objects are handled gracefully (no context section added)
 - All existing tests continue to pass
 
 ### Variables Format
+
 - Variables are JSON-serialized using `JSON.stringify()` for clear representation
 - Each variable is on its own line with format: `key: value`
 - Works with any JSON-serializable value (strings, numbers, objects, arrays)
@@ -225,7 +229,7 @@ The Agent class (from Task 5.4) is already calling `ptcGenerator.generate()` wit
 ```typescript
 const ptcCode = await this.ptcGenerator.generate(task, {
   history: this.state.conversationHistory,
-  variables: Object.fromEntries(this.state.variables)
+  variables: Object.fromEntries(this.state.variables),
 });
 ```
 
@@ -244,8 +248,12 @@ Now the PTCGenerator will actually use this context when generating code, enabli
 const ptcCode = await ptcGenerator.generate('Summarize the previous search results', {
   history: [
     { role: 'user', content: 'Search for AI trends', timestamp: Date.now() - 10000 },
-    { role: 'assistant', content: 'I found several articles about AI trends...', timestamp: Date.now() - 5000 }
-  ]
+    {
+      role: 'assistant',
+      content: 'I found several articles about AI trends...',
+      timestamp: Date.now() - 5000,
+    },
+  ],
 });
 ```
 
@@ -256,8 +264,8 @@ const ptcCode = await ptcGenerator.generate('Process the user data', {
   variables: {
     apiKey: 'secret-key',
     userId: '12345',
-    preferences: { theme: 'dark', language: 'en' }
-  }
+    preferences: { theme: 'dark', language: 'en' },
+  },
 });
 ```
 
@@ -267,12 +275,16 @@ const ptcCode = await ptcGenerator.generate('Process the user data', {
 const ptcCode = await ptcGenerator.generate('Continue the analysis with the API key', {
   history: [
     { role: 'user', content: 'What data do we have?', timestamp: Date.now() - 10000 },
-    { role: 'assistant', content: 'We have user data and need an API key', timestamp: Date.now() - 5000 }
+    {
+      role: 'assistant',
+      content: 'We have user data and need an API key',
+      timestamp: Date.now() - 5000,
+    },
   ],
   variables: {
     apiKey: 'secret-key',
-    userId: '12345'
-  }
+    userId: '12345',
+  },
 });
 ```
 
@@ -296,11 +308,13 @@ const ptcCode = await ptcGenerator.generate('Continue the analysis with the API 
 ## Next Steps
 
 The Agent system now has full context support:
+
 - Agent maintains conversation history and variables (Task 5.4)
 - PTCGenerator uses this context when generating code (Task 5.5)
 - Multi-turn conversations are now possible
 
 Future enhancements could include:
+
 - Configurable history limit (currently fixed at 5)
 - Variable scoping/namespace support
 - Context summarization for long conversations

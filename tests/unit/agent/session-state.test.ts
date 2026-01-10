@@ -9,17 +9,20 @@ describe('Agent Session State', () => {
   let agent: Agent;
 
   beforeEach(() => {
-    agent = new Agent({
-      systemPrompt: 'You are a helpful assistant.',
-      availableSkills: ['summarize', 'code-analysis'],
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5'
+    agent = new Agent(
+      {
+        systemPrompt: 'You are a helpful assistant.',
+        availableSkills: ['summarize', 'code-analysis'],
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5',
+        },
+        sandbox: {
+          type: 'local',
+        },
       },
-      sandbox: {
-        type: 'local'
-      }
-    }, 'test-session-state');
+      'test-session-state'
+    );
   });
 
   afterEach(async () => {

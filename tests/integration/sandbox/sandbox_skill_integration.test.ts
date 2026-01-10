@@ -12,7 +12,7 @@ describe('Sandbox Skill Integration', () => {
   beforeAll(() => {
     sandbox = new LocalSandboxAdapter({
       pythonPath: 'python3',
-      workspace: '/tmp/motia-sandbox-integration'
+      workspace: '/tmp/motia-sandbox-integration',
     });
   });
 
@@ -33,7 +33,7 @@ print(result)
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 10000
+      timeout: 10000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -56,7 +56,7 @@ print({"result1_type": result1.get("type"), "result2_type": result2.get("type")}
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 15000
+      timeout: 15000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -78,8 +78,8 @@ print(f"Trace ID: {trace_id}")
       skillImplPath: process.cwd(),
       timeout: 5000,
       metadata: {
-        traceId: 'test-trace-123'
-      }
+        traceId: 'test-trace-123',
+      },
     };
 
     const result = await sandbox.execute(code, options);
@@ -98,7 +98,7 @@ print('done')
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 5000  // 5 second timeout
+      timeout: 5000, // 5 second timeout
     };
 
     const result = await sandbox.execute(code, options);
@@ -116,7 +116,7 @@ print(result)
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 5000
+      timeout: 5000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -142,7 +142,7 @@ print(f"Result: {result}")
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 5000
+      timeout: 5000,
     };
 
     const result = await sandbox.execute(code, options);

@@ -38,7 +38,7 @@ export class MasterAgent extends Agent {
         type: 'planning',
         content: 'Creating delegation plan',
         timestamp: Date.now(),
-        metadata: { task }
+        metadata: { task },
       });
 
       const plan = await this.planWithDelegation(task);
@@ -49,8 +49,8 @@ export class MasterAgent extends Agent {
         timestamp: Date.now(),
         metadata: {
           steps: plan.steps.length,
-          delegates: plan.steps.filter(s => s.delegateTo).map(s => s.delegateTo)
-        }
+          delegates: plan.steps.filter((s) => s.delegateTo).map((s) => s.delegateTo),
+        },
       });
 
       // Step 2: Execute plan
@@ -63,7 +63,7 @@ export class MasterAgent extends Agent {
           steps.push({
             type: 'delegation',
             content: `Delegating to ${step.delegateTo}: ${step.task}`,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
 
           const subagent = await this.getOrCreateSubagent(step.delegateTo);
@@ -71,7 +71,7 @@ export class MasterAgent extends Agent {
 
           results.push({
             subagent: step.delegateTo,
-            result
+            result,
           });
 
           totalSkillCalls += result.metadata.skillCalls;
@@ -80,14 +80,14 @@ export class MasterAgent extends Agent {
           steps.push({
             type: 'execution',
             content: `Executing self: ${step.task}`,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
 
           const result = await super.run(step.task);
 
           results.push({
             self: true,
-            result
+            result,
           });
 
           totalSkillCalls += result.metadata.skillCalls;
@@ -107,10 +107,9 @@ export class MasterAgent extends Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: totalSkillCalls,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
-
     } catch (error: any) {
       return {
         success: false,
@@ -120,8 +119,8 @@ export class MasterAgent extends Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
     }
   }
@@ -130,10 +129,12 @@ export class MasterAgent extends Agent {
    * Plan task execution with delegation decisions.
    */
   private async planWithDelegation(task: string): Promise<DelegationPlan> {
-    const subagentsList = Array.from(this.subagentConfigs.keys()).map(name => {
-      const config = this.subagentConfigs.get(name);
-      return `- ${name}: ${config?.description || 'No description'}`;
-    }).join('\n');
+    const subagentsList = Array.from(this.subagentConfigs.keys())
+      .map((name) => {
+        const config = this.subagentConfigs.get(name);
+        return `- ${name}: ${config?.description || 'No description'}`;
+      })
+      .join('\n');
 
     const prompt = `You are a master agent planning task execution with delegation.
 
@@ -160,16 +161,29 @@ Output format (JSON):
 }
 </plan>`;
 
-    const response = await this.llm.messagesCreate([
-      { role: 'user', content: prompt }
-    ]);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
     const jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
     if (!jsonMatch) {
       throw new Error('Failed to parse plan from LLM response');
     }
 
-    return JSON.parse(jsonMatch[1]);
+    // Validate JSON string before parsing
+    const jsonString = jsonMatch[1];
+    if (!jsonString || jsonString.trim() === '' || jsonString.includes('undefined')) {
+      console.error('[Master Agent] Invalid JSON string:', jsonString);
+      throw new Error('Invalid JSON in LLM response: contains undefined or is empty');
+    }
+
+    try {
+      return JSON.parse(jsonString);
+    } catch (error: any) {
+      console.error('[Master Agent] JSON parse failed:', {
+        error: error.message,
+        jsonString: jsonString.substring(0, 500),
+      });
+      throw new Error(`Failed to parse plan JSON: ${error.message}`);
+    }
   }
 
   /**
@@ -187,12 +201,15 @@ Output format (JSON):
     // Create unique sessionId for subagent: masterSessionId-subagentName
     const subagentSessionId = `${this.sessionId}-${name}`;
 
-    const subagent = new Agent({
-      systemPrompt: config?.systemPrompt || `You are ${name}.`,
-      availableSkills: config?.availableSkills || [],
-      llm: this.config.llm,
-      sandbox: this.config.sandbox
-    }, subagentSessionId);
+    const subagent = new Agent(
+      {
+        systemPrompt: config?.systemPrompt || `You are ${name}.`,
+        availableSkills: config?.availableSkills || [],
+        llm: this.config.llm,
+        sandbox: this.config.sandbox,
+      },
+      subagentSessionId
+    );
 
     this.subagents.set(name, subagent);
 
@@ -211,8 +228,8 @@ Output format (JSON):
       details: results.map((r, i) => ({
         step: i + 1,
         type: r.self ? 'self' : `delegated to ${r.subagent}`,
-        success: r.result.success
-      }))
+        success: r.result.success,
+      })),
     };
   }
 
@@ -226,18 +243,18 @@ Output format (JSON):
       'code-reviewer': {
         description: 'Specialized agent for code review',
         systemPrompt: 'You are a code review expert.',
-        availableSkills: ['code-analysis', 'read-file', 'git-diff']
+        availableSkills: ['code-analysis', 'read-file', 'git-diff'],
       },
       'data-analyst': {
         description: 'Specialized agent for data analysis',
         systemPrompt: 'You are a data analysis expert.',
-        availableSkills: ['data-processing', 'visualization']
+        availableSkills: ['data-processing', 'visualization'],
       },
       'security-auditor': {
         description: 'Specialized agent for security auditing',
         systemPrompt: 'You are a security expert.',
-        availableSkills: ['security-scan', 'dependency-check']
-      }
+        availableSkills: ['security-scan', 'dependency-check'],
+      },
     };
 
     for (const name of subagentNames) {
@@ -255,7 +272,7 @@ Output format (JSON):
     return {
       ...baseInfo,
       type: 'MasterAgent',
-      subagents: Array.from(this.subagentConfigs.keys())
+      subagents: Array.from(this.subagentConfigs.keys()),
     };
   }
 }

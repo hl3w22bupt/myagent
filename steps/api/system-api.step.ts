@@ -37,7 +37,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['metadata-api']
+  flows: ['metadata-api'],
 };
 
 /**
@@ -69,7 +69,7 @@ function loadSkillsMetadata(): any[] {
               version: skillConfig.version || '1.0.0',
               description: skillConfig.description || '',
               tags: skillConfig.tags || [],
-              type: skillConfig.type || 'unknown'
+              type: skillConfig.type || 'unknown',
             });
           } catch {
             // Skip invalid skills
@@ -97,7 +97,7 @@ function loadSubagentsMetadata(): any[] {
       description: 'Specialized agent for code review',
       type: 'subagent',
       status: 'active',
-      availableSkills: ['code-analysis', 'read-file', 'git-diff']
+      availableSkills: ['code-analysis', 'read-file', 'git-diff'],
     },
     {
       id: 'data-analyst',
@@ -105,7 +105,7 @@ function loadSubagentsMetadata(): any[] {
       description: 'Specialized agent for data analysis',
       type: 'subagent',
       status: 'active',
-      availableSkills: ['data-processing', 'visualization']
+      availableSkills: ['data-processing', 'visualization'],
     },
     {
       id: 'security-auditor',
@@ -113,8 +113,8 @@ function loadSubagentsMetadata(): any[] {
       description: 'Specialized agent for security auditing',
       type: 'subagent',
       status: 'active',
-      availableSkills: ['security-scan', 'dependency-check']
-    }
+      availableSkills: ['security-scan', 'dependency-check'],
+    },
   ];
 }
 
@@ -123,10 +123,7 @@ function loadSubagentsMetadata(): any[] {
  *
  * Returns system overview including skills, agents, and statistics.
  */
-export const handler = async (
-  request: any,
-  { logger, state }: any
-) => {
+export const handler = async (request: any, { logger, state }: any) => {
   logger.info('System API: Received request');
 
   try {
@@ -175,7 +172,7 @@ export const handler = async (
         system: {
           name: 'Motia Agent Dashboard',
           version,
-          uptime: process.uptime()
+          uptime: process.uptime(),
         },
         stats: {
           totalSkills: skills.length,
@@ -183,13 +180,12 @@ export const handler = async (
           totalTasks,
           successfulTasks,
           failedTasks,
-          activeSessions
+          activeSessions,
         },
         skills,
-        agents
-      }
+        agents,
+      },
     };
-
   } catch (error: any) {
     logger.error('System API: Error', { error: error.message });
 
@@ -198,8 +194,8 @@ export const handler = async (
       body: {
         success: false,
         message: 'Failed to retrieve system information',
-        error: error.message
-      }
+        error: error.message,
+      },
     };
   }
 };

@@ -19,14 +19,16 @@ const healthResponseSchema = z.object({
     api: z.boolean(),
     agent: z.boolean(),
     sandbox: z.boolean(),
-    llm: z.boolean()
+    llm: z.boolean(),
   }),
-  metrics: z.object({
-    totalTasks: z.number(),
-    successfulTasks: z.number(),
-    failedTasks: z.number(),
-    averageExecutionTime: z.number()
-  }).optional()
+  metrics: z
+    .object({
+      totalTasks: z.number(),
+      successfulTasks: z.number(),
+      failedTasks: z.number(),
+      averageExecutionTime: z.number(),
+    })
+    .optional(),
 });
 void healthResponseSchema; // Mark as used
 
@@ -52,7 +54,7 @@ export const config: ApiRouteConfig = {
   /**
    * No flow assignment.
    */
-  flows: []
+  flows: [],
 };
 
 /**
@@ -60,11 +62,9 @@ export const config: ApiRouteConfig = {
  *
  * Returns system health status and metrics.
  */
-export const handler = async (
-  request: any,
-  { logger, state }: any
-) => {
-  const _startTime = Date.now();  void _startTime; // Mark as used
+export const handler = async (request: any, { logger, state }: any) => {
+  const _startTime = Date.now();
+  void _startTime; // Mark as used
 
   try {
     // Get basic system info
@@ -74,17 +74,17 @@ export const handler = async (
 
     // Check service health
     const services = {
-      api: true,  // If we're here, API is healthy
+      api: true, // If we're here, API is healthy
       agent: true,
       sandbox: true,
-      llm: process.env.ANTHROPIC_API_KEY ? true : false
+      llm: process.env.ANTHROPIC_API_KEY ? true : false,
     };
 
     // Get metrics from state if available
     let metrics;
     try {
       // Use Motia state API with groupId and key
-      const history = await state.get('agent:execution', 'history') || [];
+      const history = (await state.get('agent:execution', 'history')) || [];
 
       const successfulTasks = history.filter((entry: any) => entry.success).length;
       const failedTasks = history.filter((entry: any) => !entry.success).length;
@@ -94,15 +94,16 @@ export const handler = async (
         .filter((entry: any) => entry.metadata?.executionTime)
         .map((entry: any) => entry.metadata.executionTime);
 
-      const averageExecutionTime = execTimes.length > 0
-        ? execTimes.reduce((a: number, b: number) => a + b, 0) / execTimes.length
-        : 0;
+      const averageExecutionTime =
+        execTimes.length > 0
+          ? execTimes.reduce((a: number, b: number) => a + b, 0) / execTimes.length
+          : 0;
 
       metrics = {
         totalTasks: history.length,
         successfulTasks,
         failedTasks,
-        averageExecutionTime: Math.round(averageExecutionTime)
+        averageExecutionTime: Math.round(averageExecutionTime),
       };
     } catch {
       // State not available, return empty metrics
@@ -110,18 +111,18 @@ export const handler = async (
         totalTasks: 0,
         successfulTasks: 0,
         failedTasks: 0,
-        averageExecutionTime: 0
+        averageExecutionTime: 0,
       };
     }
 
     // Determine overall health status
-    const allServicesHealthy = Object.values(services).every(v => v === true);
+    const allServicesHealthy = Object.values(services).every((v) => v === true);
     const status = allServicesHealthy ? 'healthy' : services.api ? 'degraded' : 'unhealthy';
 
     logger.info('Health check performed', {
       status,
       uptime: Math.round(uptime),
-      services
+      services,
     });
 
     return {
@@ -132,12 +133,12 @@ export const handler = async (
         uptime: Math.round(uptime),
         timestamp,
         services,
-        metrics
-      }
+        metrics,
+      },
     };
   } catch (error: any) {
     logger.error('Health check failed', {
-      error: error.message
+      error: error.message,
     });
 
     return {
@@ -152,9 +153,9 @@ export const handler = async (
           api: false,
           agent: false,
           sandbox: false,
-          llm: false
-        }
-      }
+          llm: false,
+        },
+      },
     };
   }
 };

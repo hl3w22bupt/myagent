@@ -11,25 +11,20 @@ Phase 5 successfully integrates the Agent System with the Motia framework, creat
 **File**: `motia.config.ts`
 
 ```typescript
-import { defineConfig } from '@motiadev/core'
-import endpointPlugin from '@motiadev/plugin-endpoint/plugin'
-import logsPlugin from '@motiadev/plugin-logs/plugin'
-import observabilityPlugin from '@motiadev/plugin-observability/plugin'
-import statesPlugin from '@motiadev/plugin-states/plugin'
-import bullmqPlugin from '@motiadev/plugin-bullmq/plugin'
+import { defineConfig } from '@motiadev/core';
+import endpointPlugin from '@motiadev/plugin-endpoint/plugin';
+import logsPlugin from '@motiadev/plugin-logs/plugin';
+import observabilityPlugin from '@motiadev/plugin-observability/plugin';
+import statesPlugin from '@motiadev/plugin-states/plugin';
+import bullmqPlugin from '@motiadev/plugin-bullmq/plugin';
 
 export default defineConfig({
-  plugins: [
-    observabilityPlugin,
-    statesPlugin,
-    endpointPlugin,
-    logsPlugin,
-    bullmqPlugin
-  ]
-})
+  plugins: [observabilityPlugin, statesPlugin, endpointPlugin, logsPlugin, bullmqPlugin],
+});
 ```
 
 **Features**:
+
 - Minimal configuration using Motia built-in plugins
 - Endpoint plugin for HTTP API support
 - Observability plugin for monitoring and metrics
@@ -44,6 +39,7 @@ export default defineConfig({
 **Purpose**: Event-driven step that processes agent tasks
 
 **Configuration**:
+
 ```typescript
 export const config: EventConfig = {
   type: 'event',
@@ -54,13 +50,14 @@ export const config: EventConfig = {
     'agent.task.completed',
     'agent.task.failed',
     { topic: 'agent.step.started', label: 'Agent step started' },
-    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true }
+    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true },
   ],
-  flows: ['agent-workflow']
-}
+  flows: ['agent-workflow'],
+};
 ```
 
 **Handler Features**:
+
 1. **Event-driven task execution**: Subscribes to `agent.task.execute` events
 2. **State management**: Stores session history in Motia state
 3. **Event emission**: Emits lifecycle events (started, completed, failed)
@@ -68,6 +65,7 @@ export const config: EventConfig = {
 5. **Logging**: Structured logging throughout execution
 
 **Input Schema**:
+
 ```typescript
 {
   task: string,              // Task description
@@ -77,6 +75,7 @@ export const config: EventConfig = {
 ```
 
 **Output**:
+
 ```typescript
 {
   success: boolean,
@@ -97,6 +96,7 @@ export const config: EventConfig = {
 **Purpose**: REST API endpoint for triggering agent tasks
 
 **Configuration**:
+
 ```typescript
 export const config: ApiRouteConfig = {
   type: 'api',
@@ -104,20 +104,20 @@ export const config: ApiRouteConfig = {
   description: 'REST API endpoint for agent task execution',
   path: '/agent/execute',
   method: 'POST',
-  emits: [
-    { topic: 'agent.task.execute', label: 'Execute agent task' }
-  ],
-  flows: ['agent-workflow']
-}
+  emits: [{ topic: 'agent.task.execute', label: 'Execute agent task' }],
+  flows: ['agent-workflow'],
+};
 ```
 
 **Features**:
+
 - **HTTP endpoint**: `POST /agent/execute`
 - **Request validation**: Zod schema validation
 - **Event emission**: Emits `agent.task.execute` event
 - **Immediate response**: Returns task submission confirmation
 
 **Request Body**:
+
 ```typescript
 {
   task: string,              // Required: Task description
@@ -128,6 +128,7 @@ export const config: ApiRouteConfig = {
 ```
 
 **Response**:
+
 ```typescript
 {
   success: true,
@@ -195,11 +196,13 @@ myagent/
 **Decision**: Created simplified steps without direct Agent class dependencies
 
 **Rationale**:
+
 - Motia's compilation system only bundles files from `/src` and `/steps`
 - Complex dependency trees in steps are difficult to manage
 - The current implementation demonstrates the architecture patterns
 
 **Future Enhancement**: To fully integrate the Agent class, we would need to:
+
 - Create a Motia plugin that registers Agent services globally
 - Or, use a microservice architecture where Agent runs as a separate service
 - Or, inline the Agent logic into the step handler
@@ -209,6 +212,7 @@ myagent/
 **Decision**: Use Motia's event system for agent task execution
 
 **Benefits**:
+
 - ✅ Decoupled: API step doesn't need to know about Agent implementation
 - ✅ Scalable: Multiple agent instances can consume from the same event queue
 - ✅ Observable: All lifecycle events are logged and monitored
@@ -219,6 +223,7 @@ myagent/
 **Decision**: Use Motia's state plugin for session history
 
 **Use Cases**:
+
 - Multi-turn conversations
 - Task history tracking
 - Debugging and auditing
@@ -232,6 +237,7 @@ npm run dev
 ```
 
 **Expected Output**:
+
 ```
 ➜ [INFO] Redis Memory Server started 127.0.0.1:44067
 ➜ [REGISTERED] Flow agent-workflow registered
@@ -253,6 +259,7 @@ curl -X POST http://localhost:3000/agent/execute \
 ```
 
 **Expected Response**:
+
 ```json
 {
   "success": true,
@@ -283,18 +290,20 @@ curl -X POST http://localhost:3000/agent/execute \
 To complete the integration, we need to implement one of these approaches:
 
 **Option A: Motia Plugin**
+
 ```typescript
 // Create a Motia plugin that registers Agent services
 export const agentPlugin = (config: AgentConfig) => ({
   name: 'agent',
   initialize: (motia: MotiaPluginContext) => ({
     Agent,
-    createAgent: (cfg: AgentConfig) => new Agent(cfg)
-  })
-})
+    createAgent: (cfg: AgentConfig) => new Agent(cfg),
+  }),
+});
 ```
 
 **Option B: Microservice**
+
 ```
 ┌──────────────┐     HTTP     ┌─────────────┐
 │ Motia Steps  │ ◄──────────► │ Agent Service│
@@ -309,13 +318,14 @@ export const agentPlugin = (config: AgentConfig) => ({
 ```
 
 **Option C: Inlined Agent Logic**
+
 ```typescript
 // Directly implement Agent logic in step handler
 export const handler = async (input, { emit, logger, state }) => {
   // 1. Call LLM for PTC generation
   // 2. Execute code in sandbox
   // 3. Return results
-}
+};
 ```
 
 ## Files Modified

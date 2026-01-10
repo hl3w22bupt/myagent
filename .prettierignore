@@ -1,0 +1,8 @@
+# Auto-generated files
+types.d.ts
+dist/
+node_modules/
+
+# Build outputs
+*.js
+*.d.ts.map

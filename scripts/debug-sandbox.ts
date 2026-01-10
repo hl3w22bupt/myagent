@@ -18,8 +18,8 @@ async function main() {
     type: 'local',
     config: {
       pythonPath: process.env.PYTHON_PATH || 'python3',
-      timeout: 30000
-    }
+      timeout: 30000,
+    },
   });
 
   console.log('Sandbox created:', sandbox.getInfo());
@@ -31,7 +31,7 @@ async function main() {
     skills: [],
     skillImplPath: process.cwd(),
     sessionId: 'debug-test-1',
-    timeout: 5000
+    timeout: 5000,
   });
   console.log('  Success:', test1.success);
   console.log('  Output:', test1.stdout);
@@ -57,7 +57,7 @@ except Exception as e:
     skills: [],
     skillImplPath: process.cwd(),
     sessionId: 'debug-test-2',
-    timeout: 10000
+    timeout: 10000,
   });
   console.log('  Success:', test2.success);
   console.log('  Output:', test2.stdout);

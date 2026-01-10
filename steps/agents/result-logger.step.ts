@@ -56,21 +56,25 @@ export const inputSchema = z.object({
     /**
      * State information.
      */
-    state: z.object({
-      conversationLength: z.number().optional(),
-      executionCount: z.number().optional(),
-      variablesCount: z.number().optional()
-    }).optional(),
+    state: z
+      .object({
+        conversationLength: z.number().optional(),
+        executionCount: z.number().optional(),
+        variablesCount: z.number().optional(),
+      })
+      .optional(),
 
     /**
      * Execution metadata.
      */
-    metadata: z.object({
-      llmCalls: z.number(),
-      skillCalls: z.number(),
-      totalTokens: z.number()
-    }).optional()
-  })
+    metadata: z
+      .object({
+        llmCalls: z.number(),
+        skillCalls: z.number(),
+        totalTokens: z.number(),
+      })
+      .optional(),
+  }),
 });
 
 /**
@@ -94,7 +98,7 @@ export const config: EventConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -102,10 +106,7 @@ export const config: EventConfig = {
  *
  * Logs agent execution results to console and optionally to file/database.
  */
-export const handler = async (
-  input: z.infer<typeof inputSchema>,
-  { logger, state }: any
-) => {
+export const handler = async (input: z.infer<typeof inputSchema>, { logger, state }: any) => {
   const timestamp = new Date().toISOString();
   const { result } = input;
 
@@ -116,7 +117,7 @@ export const handler = async (
     sessionId: input.sessionId,
     timestamp,
     executionTime: result.executionTime,
-    metadata: result.metadata
+    metadata: result.metadata,
   });
 
   if (result.success) {
@@ -124,14 +125,14 @@ export const handler = async (
       output: result.output?.substring(0, 200) + ((result.output?.length ?? 0) > 200 ? '...' : ''),
       llmCalls: result.metadata?.llmCalls,
       skillCalls: result.metadata?.skillCalls,
-      totalTokens: result.metadata?.totalTokens
+      totalTokens: result.metadata?.totalTokens,
     });
   } else {
     logger.warn('❌ Task Execution Failed', {
       task: input.task,
       sessionId: input.sessionId,
       error: result.error,
-      stderr: result.output?.substring(0, 500)
+      stderr: result.output?.substring(0, 500),
     });
   }
 
@@ -155,7 +156,7 @@ export const handler = async (
       error: result.error,
       executionTime: result.executionTime,
       metadata: result.metadata,
-      sessionId: input.sessionId
+      sessionId: input.sessionId,
     });
 
     // Keep only last 100 entries
@@ -167,18 +168,18 @@ export const handler = async (
     await state.set(groupId, key, history);
 
     logger.info('Execution history updated', {
-      totalEntries: history.length
+      totalEntries: history.length,
     });
   } catch (error: any) {
     logger.warn('Failed to update execution history', {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
   }
 
   return {
     logged: true,
     timestamp,
-    task: input.task
+    task: input.task,
   };
 };

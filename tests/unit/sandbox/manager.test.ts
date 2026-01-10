@@ -16,15 +16,15 @@ describe('SandboxManager', () => {
       local: {
         pythonPath: 'python3',
         timeout: 30000,
-        workspace: '/tmp/test-sandbox'
-      }
+        workspace: '/tmp/test-sandbox',
+      },
     };
 
     // Create manager with short timeouts for testing
     manager = new SandboxManager({
       sessionTimeout: 5000, // 5 seconds
       maxSessions: 3,
-      sandboxConfig: config
+      sandboxConfig: config,
     });
   });
 
@@ -67,7 +67,7 @@ describe('SandboxManager', () => {
       await manager.acquire('session-1');
 
       // Wait a bit
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Acquire again - should update activity time
       await manager.acquire('session-1');
@@ -97,14 +97,14 @@ describe('SandboxManager', () => {
         manager.acquire('session-2'),
         manager.acquire('session-3'),
         manager.acquire('session-4'),
-        manager.acquire('session-5')
+        manager.acquire('session-5'),
       ];
 
       const sandboxes = await Promise.all(promises);
 
       // All acquires should complete successfully
       expect(sandboxes).toHaveLength(5);
-      expect(sandboxes.every(s => s !== undefined)).toBe(true);
+      expect(sandboxes.every((s) => s !== undefined)).toBe(true);
 
       // Final count should be at most maxSessions (after evictions complete)
       // Note: During concurrent execution, it may temporarily exceed maxSessions
@@ -201,7 +201,7 @@ describe('SandboxManager', () => {
       const shortTimeoutManager = new SandboxManager({
         sessionTimeout: 100, // 100ms
         maxSessions: 10,
-        sandboxConfig: config
+        sandboxConfig: config,
       });
 
       await shortTimeoutManager.acquire('session-1');
@@ -210,7 +210,7 @@ describe('SandboxManager', () => {
       expect(shortTimeoutManager.getSessionCount()).toBe(2);
 
       // Wait for expiration + cleanup interval
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Trigger cleanup manually (since it runs on interval)
       await shortTimeoutManager.shutdown();
@@ -249,7 +249,7 @@ describe('SandboxManager', () => {
       await manager.shutdown();
 
       // Wait a bit - no errors should occur
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(manager.getSessionCount()).toBe(0);
     });
@@ -276,7 +276,7 @@ describe('SandboxManager', () => {
         manager.acquire('session-2'),
         manager.acquire('session-3'),
         manager.release('session-1'),
-        manager.acquire('session-4')
+        manager.acquire('session-4'),
       ]);
 
       // Should not throw and handle concurrent operations safely
@@ -292,7 +292,7 @@ describe('SandboxManager', () => {
       await Promise.all([
         manager.release('session-1'),
         manager.release('session-2'),
-        manager.release('session-3')
+        manager.release('session-3'),
       ]);
 
       expect(manager.getSessionCount()).toBe(0);

@@ -18,13 +18,13 @@
 
 ## 🎯 优化策略总览
 
-| 策略 | 内存减少 | 性能提升 | 复杂度 | 优先级 |
-|------|---------|---------|--------|--------|
-| 分离重型资源和轻量状态 | 90% | 100x（创建） | ⭐⭐ | 🔥 高 |
-| Session 状态压缩 | 70-90% | - | ⭐⭐⭐ | 🔥 高 |
-| 惰性加载和按需初始化 | 50% | 10x（启动） | ⭐⭐ | 中 |
-| 分层存储 | 95% | - | ⭐⭐⭐⭐ | 低 |
-| Session 共享和借用 | - | 2x（并发） | ⭐⭐ | 中 |
+| 策略                   | 内存减少 | 性能提升     | 复杂度   | 优先级 |
+| ---------------------- | -------- | ------------ | -------- | ------ |
+| 分离重型资源和轻量状态 | 90%      | 100x（创建） | ⭐⭐     | 🔥 高  |
+| Session 状态压缩       | 70-90%   | -            | ⭐⭐⭐   | 🔥 高  |
+| 惰性加载和按需初始化   | 50%      | 10x（启动）  | ⭐⭐     | 中     |
+| 分层存储               | 95%      | -            | ⭐⭐⭐⭐ | 低     |
+| Session 共享和借用     | -        | 2x（并发）   | ⭐⭐     | 中     |
 
 ---
 
@@ -65,7 +65,7 @@ class AgentResourcePool {
 // 轻量 SessionContext
 class SessionContext {
   sessionId: string;
-  state: SessionState;  // 只包含状态，不包含资源
+  state: SessionState; // 只包含状态，不包含资源
 
   async execute(task: string, resources: AgentResources) {
     // 使用共享资源执行
@@ -105,10 +105,7 @@ if (history.length > maxHistoryItems) {
   const toCompress = history.slice(0, -keepCount);
   const summary = await generateSummary(toCompress);
 
-  history = [
-    { role: 'system', content: `[Summary]: ${summary}` },
-    ...history.slice(-keepCount)
-  ];
+  history = [{ role: 'system', content: `[Summary]: ${summary}` }, ...history.slice(-keepCount)];
 }
 ```
 
@@ -139,8 +136,8 @@ if (estimatedTokens > maxHistoryTokens) {
 
 ```typescript
 interface CompressionConfig {
-  maxHistoryItems: number;      // 最多保留 N 条消息
-  maxHistoryTokens: number;     // 最多保留 N 个 tokens
+  maxHistoryItems: number; // 最多保留 N 条消息
+  maxHistoryTokens: number; // 最多保留 N 个 tokens
   compressionThreshold: number; // 达到阈值时触发压缩
   summarizeOldMessages: boolean; // 是否生成摘要
 }
@@ -162,8 +159,8 @@ interface CompressionConfig {
 
 ```typescript
 class Agent {
-  llm: LLMClient;           // 总是需要
-  sandbox: SandboxAdapter;  // 只在执行代码时需要
+  llm: LLMClient; // 总是需要
+  sandbox: SandboxAdapter; // 只在执行代码时需要
   vectorStore: VectorStore; // 只在 RAG 查询时需要
 }
 ```
@@ -198,7 +195,7 @@ class LazyAgentResources {
 
 ```typescript
 // 应用启动时预热（可选）
-await resources.warmup();  // 预创建常用资源
+await resources.warmup(); // 预创建常用资源
 ```
 
 ### 效果
@@ -354,6 +351,7 @@ class SessionPool {
 ```
 
 **对比**：
+
 - 内存：150GB → 35MB（减少 99.97%）
 - 创建速度：100ms → 1ms（提升 100x）
 

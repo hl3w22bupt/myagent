@@ -12,18 +12,21 @@ describe('Agent Integration', () => {
 
     beforeAll(() => {
       const sessionId = 'test-agent-integration-session';
-      agent = new Agent({
-        systemPrompt: 'You are a helpful assistant.',
-        availableSkills: ['summarize', 'code-analysis'],
-        llm: {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-5'
+      agent = new Agent(
+        {
+          systemPrompt: 'You are a helpful assistant.',
+          availableSkills: ['summarize', 'code-analysis'],
+          llm: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-5',
+          },
+          sandbox: {
+            type: 'local',
+            config: {},
+          },
         },
-        sandbox: {
-          type: 'local',
-          config: {}
-        }
-      }, sessionId);
+        sessionId
+      );
     });
 
     afterAll(async () => {
@@ -49,19 +52,22 @@ describe('Agent Integration', () => {
 
     beforeAll(() => {
       const sessionId = 'test-master-agent-integration-session';
-      masterAgent = new MasterAgent({
-        systemPrompt: 'You are a helpful assistant.',
-        availableSkills: ['*'],
-        llm: {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-5'
+      masterAgent = new MasterAgent(
+        {
+          systemPrompt: 'You are a helpful assistant.',
+          availableSkills: ['*'],
+          llm: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-5',
+          },
+          sandbox: {
+            type: 'local',
+            config: {},
+          },
+          subagents: ['code-reviewer', 'data-analyst'],
         },
-        sandbox: {
-          type: 'local',
-          config: {}
-        },
-        subagents: ['code-reviewer', 'data-analyst']
-      }, sessionId);
+        sessionId
+      );
     });
 
     afterAll(async () => {

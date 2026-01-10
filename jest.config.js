@@ -13,16 +13,13 @@ export default {
       },
     ],
   },
-  testMatch: [
-    '**/tests/**/*.test.ts',
-    '**/__tests__/**/*.test.ts'
-  ],
+  testMatch: ['**/tests/**/*.test.ts', '**/__tests__/**/*.test.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
     'steps/**/*.ts',
     '!**/*.test.ts',
     '!**/node_modules/**',
-    '!**/dist/**'
+    '!**/dist/**',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],

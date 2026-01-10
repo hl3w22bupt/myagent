@@ -114,6 +114,7 @@ myagent/
 ```
 
 **执行命令**:
+
 ```bash
 # 创建所有必需的目录
 mkdir -p steps/agents steps/workflows
@@ -176,6 +177,7 @@ mkdir -p config tests/{unit,integration,e2e} docs
 ```
 
 **执行命令**:
+
 ```bash
 npm install
 ```
@@ -210,6 +212,7 @@ mypy==1.7.1
 ```
 
 **执行命令**:
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -243,15 +246,8 @@ pip install -r requirements.txt
       "@/skills": ["skills"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "types.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts"
-  ]
+  "include": ["**/*.ts", "types.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
 ```
 
@@ -322,6 +318,7 @@ REDIS_URL=redis://localhost:6379
 ```
 
 **执行命令**:
+
 ```bash
 cp .env.example .env
 # Edit .env with your API keys
@@ -879,13 +876,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  SandboxAdapter,
-  SandboxOptions,
-  SandboxResult,
-  SandboxError,
-  SandboxInfo
-} from '../types';
+import { SandboxAdapter, SandboxOptions, SandboxResult, SandboxError, SandboxInfo } from '../types';
 
 export class LocalSandboxAdapter implements SandboxAdapter {
   private pythonPath: string;
@@ -916,9 +907,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           ...process.env,
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_SKILL_PATH: options.skillImplPath || process.cwd(),
-          PYTHONPATH: options.skillImplPath || process.cwd()
+          PYTHONPATH: options.skillImplPath || process.cwd(),
         },
-        timeout: options.timeout || 30000
+        timeout: options.timeout || 30000,
       });
 
       this.activeSessions.set(sessionId, process);
@@ -935,26 +926,28 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       return {
         success: result.exitCode === 0,
         output: result.stdout,
-        error: result.exitCode !== 0 ? {
-          type: 'execution',
-          message: result.stderr || 'Unknown error'
-        } : undefined,
+        error:
+          result.exitCode !== 0
+            ? {
+                type: 'execution',
+                message: result.stderr || 'Unknown error',
+              }
+            : undefined,
         executionTime,
         sessionId,
         stdout: result.stdout,
-        stderr: result.stderr
+        stderr: result.stderr,
       };
-
     } catch (error: any) {
       return {
         success: false,
         error: {
           type: 'unknown',
           message: error.message,
-          stack: error.stack
+          stack: error.stack,
         },
         executionTime: Date.now() - startTime,
-        sessionId
+        sessionId,
       };
     }
   }
@@ -976,7 +969,10 @@ from core.skill.executor import SkillExecutor
 async def main():
     executor = SkillExecutor()
     try:
-${code.split('\n').map(line => '        ' + line).join('\n')}
+${code
+  .split('\n')
+  .map((line) => '        ' + line)
+  .join('\n')}
     except Exception as e:
         print(json.dumps({"error": str(e), "success": False}))
 
@@ -1043,7 +1039,7 @@ asyncio.run(main())
     return {
       type: 'local',
       version: '1.0.0',
-      capabilities: ['python-execution', 'skill-execution', 'file-io']
+      capabilities: ['python-execution', 'skill-execution', 'file-io'],
     };
   }
 }
@@ -1168,7 +1164,9 @@ export interface FullSandboxConfig {
   adapters: Record<string, SandboxConfig>;
 }
 
-export function loadSandboxConfig(configPath: string = './config/sandbox.config.yaml'): FullSandboxConfig {
+export function loadSandboxConfig(
+  configPath: string = './config/sandbox.config.yaml'
+): FullSandboxConfig {
   const fileContent = readFileSync(configPath, 'utf8');
   const config = yaml.load(fileContent) as FullSandboxConfig;
 
@@ -1297,9 +1295,7 @@ export class PTCGenerator {
 
   private async planSkills(task: string): Promise<{ selectedSkills: string[]; reasoning: string }> {
     const skills = await this.skillRegistry.listAll();
-    const skillsList = skills.map(s =>
-      `- ${s.name}: ${s.description}`
-    ).join('\n');
+    const skillsList = skills.map((s) => `- ${s.name}: ${s.description}`).join('\n');
 
     const prompt = `You are an agent that plans task execution by selecting skills.
 
@@ -1326,7 +1322,7 @@ Output format (JSON):
     const response = await this.llm.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     const content = response.content[0];
@@ -1352,16 +1348,19 @@ Output format (JSON):
         return {
           name: skillName,
           inputSchema: skill.inputSchema,
-          outputSchema: skill.outputSchema
+          outputSchema: skill.outputSchema,
         };
       })
     );
 
-    const skillsBlock = skillsInfo.map(s =>
-      `${s.name}:
+    const skillsBlock = skillsInfo
+      .map(
+        (s) =>
+          `${s.name}:
   Input Schema: ${JSON.stringify(s.inputSchema, null, 2)}
   Output Schema: ${JSON.stringify(s.outputSchema, null, 2)}`
-    ).join('\n\n');
+      )
+      .join('\n\n');
 
     const prompt = `<task>
 ${task}
@@ -1393,7 +1392,7 @@ Important:
     const response = await this.llm.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     const content = response.content[0];
@@ -1444,12 +1443,13 @@ export class Agent {
 
     // Initialize LLM
     this.llm = new Anthropic({
-      apiKey: config.llm?.apiKey || process.env.ANTHROPIC_API_KEY
+      apiKey: config.llm?.apiKey || process.env.ANTHROPIC_API_KEY,
     });
 
     // Initialize Sandbox
     const sandboxConfig = loadSandboxConfig();
-    const adapterConfig = sandboxConfig.adapters[config.sandbox?.type || sandboxConfig.default_adapter];
+    const adapterConfig =
+      sandboxConfig.adapters[config.sandbox?.type || sandboxConfig.default_adapter];
     this.sandbox = SandboxFactory.create(adapterConfig);
 
     // Initialize Skill Registry and PTC Generator
@@ -1468,7 +1468,7 @@ export class Agent {
       steps.push({
         type: 'planning',
         content: 'Generating PTC code for task',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const ptcCode = await this.ptcGenerator.generate(task);
@@ -1476,14 +1476,14 @@ export class Agent {
       steps.push({
         type: 'ptc-generation',
         content: ptcCode,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       // Step 2: Execute in Sandbox
       steps.push({
         type: 'execution',
         content: 'Executing PTC code in sandbox',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const sandboxResult = await this.sandbox.execute(ptcCode, {
@@ -1493,8 +1493,8 @@ export class Agent {
         timeout: this.config.constraints?.timeout || 60000,
         metadata: {
           traceId: this.sessionId,
-          task
-        }
+          task,
+        },
       });
 
       // Step 3: Process result
@@ -1509,8 +1509,8 @@ export class Agent {
           metadata: {
             llmCalls: 1,
             skillCalls: 0,
-            totalTokens: 0
-          }
+            totalTokens: 0,
+          },
         };
       }
 
@@ -1522,15 +1522,14 @@ export class Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: this.extractSkillCalls(ptcCode),
-          totalTokens: 0 // TODO: Track actual token usage
-        }
+          totalTokens: 0, // TODO: Track actual token usage
+        },
       };
-
     } catch (error: any) {
       steps.push({
         type: 'error',
         content: error.message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       return {
@@ -1541,8 +1540,8 @@ export class Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
     }
   }
@@ -1612,7 +1611,7 @@ export class MasterAgent extends Agent {
       steps.push({
         type: 'planning',
         content: 'Creating delegation plan',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const plan = await this.planWithDelegation(task);
@@ -1643,10 +1642,9 @@ export class MasterAgent extends Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
-
     } catch (error: any) {
       return {
         success: false,
@@ -1656,17 +1654,19 @@ export class MasterAgent extends Agent {
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
     }
   }
 
   private async planWithDelegation(task: string): Promise<DelegationPlan> {
-    const subagentsList = Array.from(this.subagentConfigs.keys()).map(name => {
-      const config = this.subagentConfigs.get(name);
-      return `- ${name}: ${config?.description || 'No description'}`;
-    }).join('\n');
+    const subagentsList = Array.from(this.subagentConfigs.keys())
+      .map((name) => {
+        const config = this.subagentConfigs.get(name);
+        return `- ${name}: ${config?.description || 'No description'}`;
+      })
+      .join('\n');
 
     const prompt = `You are a master agent planning task execution with delegation.
 
@@ -1696,7 +1696,7 @@ Output format (JSON):
     const response = await this.llm.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
 
     const content = response.content[0];
@@ -1722,7 +1722,7 @@ Output format (JSON):
     const config = {
       systemPrompt: `You are ${name}.`,
       availableSkills: [],
-      llm: this.config.llm
+      llm: this.config.llm,
     };
 
     const subagent = new Agent(config);
@@ -1736,7 +1736,7 @@ Output format (JSON):
     // In production, use LLM to intelligently merge results
     return {
       results,
-      summary: `Executed ${results.length} steps successfully`
+      summary: `Executed ${results.length} steps successfully`,
     };
   }
 }
@@ -1753,12 +1753,14 @@ Output format (JSON):
 ### ⚠️ 重要说明
 
 **这是一个关键的验证阶段**，在集成到 Motia 之前，我们需要确保：
+
 1. Agent 能够正确生成和执行 PTC 代码
 2. Skills 能够在 Sandbox 中正确执行
 3. 端到端流程（Agent → PTC → Sandbox → Skills）正常工作
 4. 性能满足基本要求
 
 这样做的好处：
+
 - ✅ 更早发现核心逻辑问题
 - ✅ 更容易调试（没有 Motia 复杂性）
 - ✅ 确保核心 API 稳定后再集成
@@ -1806,15 +1808,17 @@ describe('Agent + Skill Integration (Standalone)', () => {
       systemPrompt: 'You are a helpful assistant.',
       availableSkills: ['web-search', 'summarize', 'code-analysis'],
       sandbox: {
-        type: 'local'
-      }
+        type: 'local',
+      },
     });
 
     expect(agent).toBeDefined();
   });
 
   it('should execute a simple skill call', async () => {
-    const result = await agent.run('Summarize the following: This is a test document for summarization.');
+    const result = await agent.run(
+      'Summarize the following: This is a test document for summarization.'
+    );
 
     console.log('Result:', JSON.stringify(result, null, 2));
 
@@ -1869,7 +1873,7 @@ describe('PTC Generation and Execution', () => {
 
   beforeAll(() => {
     llm = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     skillRegistry = new SkillRegistry();
@@ -1946,7 +1950,7 @@ describe('Sandbox Execution with Skills', () => {
   beforeAll(() => {
     sandbox = new LocalSandboxAdapter({
       pythonPath: 'python3',
-      workspace: '/tmp/motia-sandbox-test'
+      workspace: '/tmp/motia-sandbox-test',
     });
   });
 
@@ -1966,7 +1970,7 @@ print(result)
     const result = await sandbox.execute(code, {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 30000
+      timeout: 30000,
     });
 
     console.log('Sandbox Result:', JSON.stringify(result, null, 2));
@@ -1994,7 +1998,7 @@ print({"result1": result1, "result2": result2})
     const result = await sandbox.execute(code, {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 30000
+      timeout: 30000,
     });
 
     expect(result.success).toBe(true);
@@ -2009,7 +2013,7 @@ print(result)
     const result = await sandbox.execute(code, {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 30000
+      timeout: 30000,
     });
 
     console.log('Error Result:', result);
@@ -2029,7 +2033,7 @@ print('done')
     const result = await sandbox.execute(code, {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 30000  // 30 seconds
+      timeout: 30000, // 30 seconds
     });
 
     expect(result.success).toBe(false);
@@ -2062,8 +2066,8 @@ describe('End-to-End Agent Flow', () => {
       systemPrompt: 'You are a helpful assistant with access to various skills.',
       availableSkills: ['web-search', 'summarize', 'code-analysis'],
       sandbox: {
-        type: 'local'
-      }
+        type: 'local',
+      },
     });
   });
 
@@ -2072,7 +2076,8 @@ describe('End-to-End Agent Flow', () => {
   });
 
   it('should execute complete workflow: planning → PTC generation → execution', async () => {
-    const task = 'Summarize the text: Artificial intelligence is transforming industries worldwide.';
+    const task =
+      'Summarize the text: Artificial intelligence is transforming industries worldwide.';
 
     const result = await agent.run(task);
 
@@ -2088,7 +2093,7 @@ describe('End-to-End Agent Flow', () => {
     expect(result.steps.length).toBeGreaterThan(0);
 
     // Verify step types
-    const stepTypes = result.steps.map(s => s.type);
+    const stepTypes = result.steps.map((s) => s.type);
     expect(stepTypes).toContain('planning');
     expect(stepTypes).toContain('ptc-generation');
     expect(stepTypes).toContain('execution');
@@ -2124,7 +2129,7 @@ describe('End-to-End Agent Flow', () => {
     });
 
     expect(result.steps.length).toBeGreaterThan(0);
-    expect(result.steps.every(s => s.timestamp)).toBe(true);
+    expect(result.steps.every((s) => s.timestamp)).toBe(true);
   }, 60000);
 });
 ```
@@ -2153,8 +2158,8 @@ describe('Performance Benchmarks', () => {
       systemPrompt: 'You are a helpful assistant.',
       availableSkills: ['summarize', 'code-analysis'],
       sandbox: {
-        type: 'local'
-      }
+        type: 'local',
+      },
     });
   });
 
@@ -2206,23 +2211,17 @@ describe('Performance Benchmarks', () => {
   }, 120000);
 
   it('should handle concurrent requests', async () => {
-    const tasks = [
-      'Summarize: Task 1',
-      'Summarize: Task 2',
-      'Summarize: Task 3'
-    ];
+    const tasks = ['Summarize: Task 1', 'Summarize: Task 2', 'Summarize: Task 3'];
 
     const startTime = Date.now();
 
-    const results = await Promise.all(
-      tasks.map(task => agent.run(task))
-    );
+    const results = await Promise.all(tasks.map((task) => agent.run(task)));
 
     const executionTime = Date.now() - startTime;
 
     console.log(`Concurrent execution time: ${executionTime}ms`);
 
-    expect(results.every(r => r.success)).toBe(true);
+    expect(results.every((r) => r.success)).toBe(true);
     expect(executionTime).toBeLessThan(60000); // Should be faster than sequential
   }, 65000);
 });
@@ -2317,7 +2316,7 @@ fi
 
 **文件**: `docs/TROUBLESHOOTING_STANDALONE.md`
 
-```markdown
+````markdown
 # Agent + Skill 独立测试故障排查指南
 
 ## 常见问题
@@ -2327,11 +2326,13 @@ fi
 **症状**: PTC 生成测试失败，LLM 返回无效代码
 
 **可能原因**:
+
 - ANTHROPIC_API_KEY 未设置或无效
 - LLM 响应格式不符合预期
 - Skill schema 加载失败
 
 **排查步骤**:
+
 ```bash
 # 检查 API key
 echo $ANTHROPIC_API_KEY
@@ -2342,6 +2343,7 @@ npm test -- tests/unit/skill/registry.test.ts
 # 查看详细日志
 DEBUG=* npm test -- tests/integration/ptc-generation.test.ts
 ```
+````
 
 ---
 
@@ -2350,11 +2352,13 @@ DEBUG=* npm test -- tests/integration/ptc-generation.test.ts
 **症状**: Sandbox 执行测试失败，Python 进程错误
 
 **可能原因**:
+
 - Python 未安装或版本不兼容
 - Skill executor 路径错误
 - Python 依赖缺失
 
 **排查步骤**:
+
 ```bash
 # 检查 Python
 python3 --version  # Should be 3.8+
@@ -2374,11 +2378,13 @@ python3 -c "from core.skill.executor import SkillExecutor; print('OK')"
 **症状**: Skill 执行时间过长导致超时
 
 **可能原因**:
+
 - Skill 实现效率低
 - 外部 API 调用慢
 - 网络问题
 
 **排查步骤**:
+
 ```bash
 # 检查 Skill 实现
 cat skills/web-search/handler.py
@@ -2397,11 +2403,13 @@ curl -I https://api.example.com
 **症状**: 多次执行后内存持续增长
 
 **可能原因**:
+
 - Sandbox session 未清理
 - Python 进程未终止
 - LLM 客户端未释放
 
 **排查步骤**:
+
 ```bash
 # 运行内存测试
 npm test -- tests/performance/benchmark.test.ts
@@ -2420,11 +2428,13 @@ npm test -- tests/unit/sandbox/cleanup.test.ts
 **症状**: 执行时间超过预期
 
 **可能原因**:
+
 - LLM API 延迟高
 - Sandbox 启动慢
 - Skill 实现效率低
 
 **排查步骤**:
+
 ```bash
 # 运行性能基准
 npm run test:benchmark
@@ -2437,7 +2447,8 @@ npm run test:benchmark
 # - 预热 Sandbox
 # - 优化 Skill 实现
 ```
-```
+
+````
 
 **依赖**: 实际测试经验
 **产出**: 故障排查文档
@@ -2469,9 +2480,10 @@ npm run test:standalone
 # ✓ End-to-End Flow PASSED
 # ✓ Performance Benchmarks PASSED
 # All standalone tests passed!
-```
+````
 
 **如果测试失败**:
+
 1. 查看具体失败的测试用例
 2. 参考 `docs/TROUBLESHOOTING_STANDALONE.md` 排查
 3. 修复问题后重新测试
@@ -2484,12 +2496,14 @@ npm run test:standalone
 ## Phase 5: Motia 集成层实现
 
 **架构设计原则**：
+
 - ✅ **框架解耦**: Manager 层不依赖 Motia，可在其他框架使用
 - ✅ **Session 独立**: 每个 session 有独立的 Agent 和 Sandbox 实例
 - ✅ **状态管理**: Agent 维护 session 状态（对话历史、变量等）
 - ✅ **并发安全**: 不同 session 之间完全隔离
 
 **架构分层**：
+
 ```
 Motia Steps (框架层)
     ↓
@@ -2521,15 +2535,16 @@ export default defineConfig({
     statesPlugin,
     endpointPlugin,
     logsPlugin,
-    bullmqPlugin
+    bullmqPlugin,
 
     // ❌ 不需要 Agent/Sandbox Plugin
     // Agent 和 Sandbox 由独立的 Manager 管理
-  ]
+  ],
 });
 ```
 
 **说明**：
+
 - ✅ **简化配置** - Motia 只负责事件流转和插件
 - ✅ **Manager 独立** - AgentManager 和 SandboxManager 在应用层管理
 - ✅ **框架解耦** - Manager 可以在任何框架中使用
@@ -2550,9 +2565,9 @@ import { Agent } from './agent';
 import { AgentConfig } from './types';
 
 export interface AgentManagerConfig {
-  sessionTimeout: number;      // Session 过期时间（毫秒）
-  maxSessions: number;          // 最大 session 数量
-  agentConfig: AgentConfig;     // Agent 配置
+  sessionTimeout: number; // Session 过期时间（毫秒）
+  maxSessions: number; // 最大 session 数量
+  agentConfig: AgentConfig; // Agent 配置
 }
 
 export class AgentManager {
@@ -2652,9 +2667,7 @@ export class AgentManager {
       clearInterval(this.cleanupTimer);
     }
 
-    await Promise.all(
-      Array.from(this.sessions.keys()).map(id => this.release(id))
-    );
+    await Promise.all(Array.from(this.sessions.keys()).map((id) => this.release(id)));
   }
 }
 ```
@@ -2775,9 +2788,7 @@ export class SandboxManager {
       clearInterval(this.cleanupTimer);
     }
 
-    await Promise.all(
-      Array.from(this.sessions.keys()).map(id => this.release(id))
-    );
+    await Promise.all(Array.from(this.sessions.keys()).map((id) => this.release(id)));
   }
 }
 ```
@@ -2850,7 +2861,7 @@ export class Agent {
       lastActivityAt: Date.now(),
       conversationHistory: [],
       executionHistory: [],
-      variables: new Map()
+      variables: new Map(),
     };
   }
 
@@ -2862,7 +2873,7 @@ export class Agent {
     this.state.conversationHistory.push({
       role: 'user',
       content: task,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     const startTime = Date.now();
@@ -2872,13 +2883,13 @@ export class Agent {
       // Step 1: 生成 PTC（可以访问历史上下文）
       const ptcCode = await this.ptcGenerator.generate(task, {
         history: this.state.conversationHistory,
-        variables: Object.fromEntries(this.state.variables)
+        variables: Object.fromEntries(this.state.variables),
       });
 
       // Step 2: 执行
       const sandboxResult = await this.sandbox.execute(ptcCode, {
         sessionId: this.sessionId,
-        variables: Object.fromEntries(this.state.variables)
+        variables: Object.fromEntries(this.state.variables),
       });
 
       // Step 3: 更新状态
@@ -2888,14 +2899,14 @@ export class Agent {
           task,
           result: sandboxResult.output,
           timestamp: Date.now(),
-          executionTime: Date.now() - startTime
+          executionTime: Date.now() - startTime,
         });
 
         // 记录助手回复
         this.state.conversationHistory.push({
           role: 'assistant',
           content: sandboxResult.output,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
 
         // 保存变量（如果有）
@@ -2914,8 +2925,8 @@ export class Agent {
           state: {
             conversationLength: this.state.conversationHistory.length,
             executionCount: this.state.executionHistory.length,
-            variablesCount: this.state.variables.size
-          }
+            variablesCount: this.state.variables.size,
+          },
         };
       }
 
@@ -2925,7 +2936,7 @@ export class Agent {
       this.state.conversationHistory.push({
         role: 'assistant',
         content: `Error: ${error.message}`,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
       throw error;
     }
@@ -2984,20 +2995,20 @@ import { SandboxManager } from '@/core/sandbox/manager';
 
 // ✅ 全局 Manager 实例（应用启动时创建）
 const agentManager = new AgentManager({
-  sessionTimeout: 30 * 60 * 1000,  // 30 分钟
+  sessionTimeout: 30 * 60 * 1000, // 30 分钟
   maxSessions: 1000,
   agentConfig: {
     llm: {
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY
+      apiKey: process.env.ANTHROPIC_API_KEY,
     },
     availableSkills: ['web-search', 'summarize', 'code-analysis'],
     constraints: {
       timeout: 60000,
-      maxIterations: 5
-    }
-  }
+      maxIterations: 5,
+    },
+  },
 });
 
 const sandboxManager = new SandboxManager({
@@ -3007,8 +3018,8 @@ const sandboxManager = new SandboxManager({
     type: 'local',
     pythonPath: process.env.PYTHON_PATH || 'python3',
     workspace: '/tmp/motia-sandbox',
-    timeout: 60000
-  }
+    timeout: 60000,
+  },
 });
 
 // ✅ 应用关闭时清理
@@ -3020,8 +3031,8 @@ process.on('SIGTERM', async () => {
 
 export const inputSchema = z.object({
   task: z.string(),
-  sessionId: z.string().optional(),  // 可选：继续已有 session
-  continue: z.boolean().optional()   // 是否继续之前的对话
+  sessionId: z.string().optional(), // 可选：继续已有 session
+  continue: z.boolean().optional(), // 是否继续之前的对话
 });
 
 export const config: EventConfig = {
@@ -3033,21 +3044,18 @@ export const config: EventConfig = {
     'agent.task.completed',
     'agent.task.failed',
     { topic: 'agent.step.started', label: 'Agent step started' },
-    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true }
+    { topic: 'agent.step.completed', label: 'Agent step completed', conditional: true },
   ],
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
-export const handler = async (
-  input: z.infer<typeof inputSchema>,
-  { emit, logger, state }: any
-) => {
+export const handler = async (input: z.infer<typeof inputSchema>, { emit, logger, state }: any) => {
   // ✅ 获取或创建 sessionId
   const sessionId = input.sessionId || uuidv4();
 
   logger.info('Master Agent: Starting task execution', {
     task: input.task,
-    sessionId
+    sessionId,
   });
 
   try {
@@ -3062,7 +3070,7 @@ export const handler = async (
       const history = agent.getConversationHistory();
       logger.info('Continuing conversation', {
         sessionId,
-        historyLength: history.length
+        historyLength: history.length,
       });
     }
 
@@ -3072,7 +3080,7 @@ export const handler = async (
     logger.info('Task execution completed', {
       sessionId,
       success: result.success,
-      executionTime: result.executionTime
+      executionTime: result.executionTime,
     });
 
     // ✅ 发送完成事件
@@ -3085,23 +3093,22 @@ export const handler = async (
           success: result.success,
           output: result.output,
           executionTime: result.executionTime,
-          state: result.state
-        }
-      }
+          state: result.state,
+        },
+      },
     });
 
     return {
       success: true,
-      sessionId,  // ✅ 返回 sessionId，客户端可以继续
+      sessionId, // ✅ 返回 sessionId，客户端可以继续
       output: result.output,
-      state: result.state
+      state: result.state,
     };
-
   } catch (error: any) {
     logger.error('Agent execution failed', {
       error: error.message,
       stack: error.stack,
-      sessionId
+      sessionId,
     });
 
     // ✅ 发送失败事件
@@ -3111,12 +3118,11 @@ export const handler = async (
         sessionId,
         task: input.task,
         error: error.message,
-        stack: error.stack
-      }
+        stack: error.stack,
+      },
     });
 
     throw error;
-
   } finally {
     // ✅ 不释放！让 session 持续存在
     // Manager 会自动清理过期 session
@@ -3127,6 +3133,7 @@ export const handler = async (
 ```
 
 **说明**：
+
 - ✅ **每个 session 独立** - Agent 和 Sandbox 实例绑定到 session
 - ✅ **状态维护** - Agent 维护对话历史和变量
 - ✅ **自动清理** - Manager 自动清理过期 session
@@ -3148,24 +3155,24 @@ import { SandboxManager } from '@/core/sandbox/manager';
 
 // ✅ 导出全局 Manager（供 Step 使用）
 export const agentManager = new AgentManager({
-  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'),  // 30 分钟
+  sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 分钟
   maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
   agentConfig: {
     llm: {
-      provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible' || 'anthropic',
+      provider: (process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible') || 'anthropic',
       model: process.env.LLM_MODEL || 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY
+      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY,
     },
     availableSkills: ['web-search', 'summarize', 'code-analysis'],
     sandbox: {
       type: 'local',
-      pythonPath: process.env.PYTHON_PATH || 'python3'
+      pythonPath: process.env.PYTHON_PATH || 'python3',
     },
     constraints: {
       timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
-      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5')
-    }
-  }
+      maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
+    },
+  },
 });
 
 export const sandboxManager = new SandboxManager({
@@ -3175,8 +3182,8 @@ export const sandboxManager = new SandboxManager({
     type: 'local',
     pythonPath: process.env.PYTHON_PATH || 'python3',
     workspace: process.env.SANDBOX_WORKSPACE || '/tmp/motia-sandbox',
-    timeout: parseInt(process.env.TASK_TIMEOUT || '60000')
-  }
+    timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
+  },
 });
 
 // ✅ 优雅关闭
@@ -3228,6 +3235,7 @@ npm test -- tests/integration/e2e-agent-flow.test.ts
 ```
 
 **应该看到**:
+
 ```
 ✓ AgentManager manages sessions correctly
 ✓ SandboxManager manages sessions correctly
@@ -3247,11 +3255,13 @@ npm test -- tests/integration/e2e-agent-flow.test.ts
 **注意**: 当前版本优先保证正确性，性能优化见 `docs/PERFORMANCE_OPTIMIZATION.md`
 
 预期性能（未优化）:
+
 - Session 创建: ~100ms
 - 内存占用: 每个 session ~10-15MB
 - 并发能力: 支持 ~100 并发 session
 
 **如果测试失败**:
+
 1. 查看具体失败的测试用例
 2. 参考 `docs/TROUBLESHOOTING_STANDALONE.md` 排查
 3. 修复问题后重新测试
@@ -3437,7 +3447,7 @@ describe('Agent', () => {
   beforeEach(() => {
     agent = new Agent({
       systemPrompt: 'You are a helpful assistant.',
-      availableSkills: ['web-search', 'summarize']
+      availableSkills: ['web-search', 'summarize'],
     });
   });
 
@@ -3471,7 +3481,7 @@ describe('Sandbox Integration', () => {
   it('should execute PTC code', async () => {
     const sandbox = new LocalSandboxAdapter({
       pythonPath: 'python3',
-      workspace: '/tmp/motia-test'
+      workspace: '/tmp/motia-test',
     });
 
     const code = `
@@ -3484,7 +3494,7 @@ print(result)
 
     const result = await sandbox.execute(code, {
       skills: [],
-      skillImplPath: process.cwd()
+      skillImplPath: process.cwd(),
     });
 
     expect(result.success).toBe(true);
@@ -3508,7 +3518,7 @@ describe('Master Agent E2E', () => {
     const masterAgent = new MasterAgent({
       systemPrompt: 'You are a helpful assistant.',
       availableSkills: ['*'],
-      subagents: ['code-reviewer']
+      subagents: ['code-reviewer'],
     });
 
     const result = await masterAgent.run('Review the code in src/utils.ts');
@@ -3531,6 +3541,7 @@ describe('Master Agent E2E', () => {
 ### 8.1 性能优化
 
 **任务**:
+
 - [ ] 实现 Skill 预加载缓存
 - [ ] 添加 LLM 响应缓存
 - [ ] 优化 Sandbox 启动时间
@@ -3544,6 +3555,7 @@ describe('Master Agent E2E', () => {
 ### 8.2 可观测性增强
 
 **任务**:
+
 - [ ] 集成 OpenTelemetry 追踪
 - [ ] 添加 Agent 思考链可视化
 - [ ] 实现 Skill 调用追踪
@@ -3557,6 +3569,7 @@ describe('Master Agent E2E', () => {
 ### 8.3 错误处理完善
 
 **任务**:
+
 - [ ] 添加详细错误分类
 - [ ] 实现自动重试机制
 - [ ] 添加降级策略
@@ -3570,6 +3583,7 @@ describe('Master Agent E2E', () => {
 ### 8.4 生产就绪检查
 
 **清单**:
+
 - [ ] 所有测试通过
 - [ ] 代码覆盖率 > 80%
 - [ ] 性能基准达标
@@ -3595,6 +3609,7 @@ describe('Master Agent E2E', () => {
 6. **生产就绪**: 完整的测试和监控
 
 **下一步**:
+
 - 从 Phase 1 开始执行
 - 每完成一个 Phase，进行验证
 - 根据实际情况调整实施顺序
@@ -3604,5 +3619,5 @@ describe('Master Agent E2E', () => {
 
 ---
 
-*工作流版本: v1.0*
-*最后更新: 2026-01-06*
+_工作流版本: v1.0_
+_最后更新: 2026-01-06_

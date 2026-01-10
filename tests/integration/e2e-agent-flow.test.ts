@@ -14,21 +14,24 @@ describe('End-to-End Agent Flow', () => {
   beforeEach(() => {
     // Initialize agent with required configuration
     const sessionId = 'test-e2e-session';
-    agent = new Agent({
-      systemPrompt: 'You are a helpful assistant with access to various skills.',
-      availableSkills: ['web-search', 'summarize', 'code-analysis'],
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5'
+    agent = new Agent(
+      {
+        systemPrompt: 'You are a helpful assistant with access to various skills.',
+        availableSkills: ['web-search', 'summarize', 'code-analysis'],
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5',
+        },
+        sandbox: {
+          type: 'local',
+        },
+        constraints: {
+          timeout: 60000,
+          maxIterations: 5,
+        },
       },
-      sandbox: {
-        type: 'local'
-      },
-      constraints: {
-        timeout: 60000,
-        maxIterations: 5
-      }
-    }, sessionId);
+      sessionId
+    );
   });
 
   afterEach(async () => {
@@ -39,7 +42,8 @@ describe('End-to-End Agent Flow', () => {
 
   describe('Complete Workflow', () => {
     it('should execute complete workflow: planning → PTC generation → execution', async () => {
-      const task = 'Summarize the text: Artificial intelligence is transforming industries worldwide.';
+      const task =
+        'Summarize the text: Artificial intelligence is transforming industries worldwide.';
 
       const result = await agent.run(task);
 
@@ -82,14 +86,14 @@ describe('End-to-End Agent Flow', () => {
       expect(result.steps.length).toBeGreaterThan(0);
 
       // Check that steps have required fields
-      result.steps.forEach(step => {
+      result.steps.forEach((step) => {
         expect(step.type).toBeDefined();
         expect(step.timestamp).toBeDefined();
         expect(step.content).toBeDefined();
       });
 
       // Should have at least planning and execution steps
-      const stepTypes = result.steps.map(s => s.type);
+      const stepTypes = result.steps.map((s) => s.type);
       expect(stepTypes).toContain('planning');
       expect(stepTypes).toContain('execution');
     }, 90000);
@@ -136,7 +140,7 @@ describe('End-to-End Agent Flow', () => {
       }
 
       // Should have planning steps
-      expect(result.steps.some(s => s.type === 'planning')).toBe(true);
+      expect(result.steps.some((s) => s.type === 'planning')).toBe(true);
     }, 120000);
 
     it('should chain skill outputs correctly', async () => {
@@ -153,7 +157,7 @@ describe('End-to-End Agent Flow', () => {
       expect(result.executionTime).toBeGreaterThan(0);
 
       // Should have execution steps showing skill usage
-      const executionSteps = result.steps.filter(s => s.type === 'execution');
+      const executionSteps = result.steps.filter((s) => s.type === 'execution');
       expect(executionSteps.length).toBeGreaterThan(0);
     }, 90000);
   });
@@ -195,7 +199,7 @@ describe('End-to-End Agent Flow', () => {
       expect(result).toBeDefined();
 
       // Check that error steps are recorded if any
-      const errorSteps = result.steps.filter(s => s.type === 'error');
+      const errorSteps = result.steps.filter((s) => s.type === 'error');
       if (errorSteps.length > 0) {
         console.log('\n=== Error Steps Found ===');
         errorSteps.forEach((step, i) => {
@@ -243,7 +247,7 @@ describe('End-to-End Agent Flow', () => {
       console.log('=== End of Performance ===\n');
 
       // All runs should complete
-      results.forEach(r => {
+      results.forEach((r) => {
         expect(r).toBeDefined();
         expect(r.executionTime).toBeGreaterThan(0);
       });
@@ -305,7 +309,7 @@ describe('End-to-End Agent Flow', () => {
       // Verify detailed information is available
       expect(result.steps.length).toBeGreaterThan(0);
 
-      result.steps.forEach(step => {
+      result.steps.forEach((step) => {
         expect(step.type).toBeDefined();
         expect(step.timestamp).toBeDefined();
         expect(typeof step.content).toBe('string');

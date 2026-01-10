@@ -39,7 +39,7 @@ export const inputSchema = _z.object({
   /**
    * Optional: Whether to continue previous conversation.
    */
-  continue: _z.boolean().optional()
+  continue: _z.boolean().optional(),
 });
 
 /**
@@ -50,11 +50,8 @@ export const config: EventConfig = {
   name: 'master-agent',
   description: 'Master agent that orchestrates task execution using PTC',
   subscribes: ['agent.task.execute'],
-  emits: [
-    'agent.task.completed',
-    'agent.task.failed'
-  ],
-  flows: ['agent-workflow']
+  emits: ['agent.task.completed', 'agent.task.failed'],
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -77,7 +74,7 @@ export const handler = async (
   logger.info('Master Agent: Starting task execution', {
     task: input.task,
     sessionId,
-    taskId
+    taskId,
   });
 
   // Helper function to update stream
@@ -89,7 +86,7 @@ export const handler = async (
         status,
         sessionId,
         timestamp: new Date().toISOString(),
-        ...data
+        ...data,
       });
     } catch (error) {
       logger.warn('Failed to update stream', { error });
@@ -114,10 +111,10 @@ export const handler = async (
       const agentState = agent.getState();
       logger.info('Continuing conversation', {
         sessionId,
-        conversationLength: agentState.conversationHistory.length
+        conversationLength: agentState.conversationHistory.length,
       });
       await updateStream('running', {
-        currentStep: `Continuing conversation (${agentState.conversationHistory.length} messages)`
+        currentStep: `Continuing conversation (${agentState.conversationHistory.length} messages)`,
       });
     }
 
@@ -128,7 +125,7 @@ export const handler = async (
     logger.info('Task execution completed', {
       sessionId,
       success: result.success,
-      executionTime: result.executionTime
+      executionTime: result.executionTime,
     });
 
     // Update stream with completed status
@@ -137,7 +134,7 @@ export const handler = async (
       error: result.error,
       executionTime: result.executionTime,
       currentStep: 'Task completed',
-      metadata: result.metadata
+      metadata: result.metadata,
     });
 
     // Emit completion event
@@ -153,9 +150,9 @@ export const handler = async (
           error: result.error,
           executionTime: result.executionTime,
           state: result.state,
-          metadata: result.metadata
-        }
-      }
+          metadata: result.metadata,
+        },
+      },
     });
 
     // Return sessionId so client can continue conversation
@@ -164,20 +161,19 @@ export const handler = async (
       sessionId,
       taskId,
       output: result.output,
-      state: result.state
+      state: result.state,
     };
-
   } catch (error: any) {
     logger.error('Agent execution failed', {
       error: error.message,
       stack: error.stack,
-      sessionId
+      sessionId,
     });
 
     // Update stream with failed status
     await updateStream('failed', {
       error: error.message,
-      currentStep: 'Task failed'
+      currentStep: 'Task failed',
     });
 
     // Emit failure event
@@ -188,12 +184,11 @@ export const handler = async (
         sessionId,
         task: input.task,
         error: error.message,
-        stack: error.stack
-      }
+        stack: error.stack,
+      },
     });
 
     throw error;
-
   } finally {
     // Keep session alive - don't release!
     // Manager will automatically cleanup expired sessions

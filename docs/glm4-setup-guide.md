@@ -44,6 +44,7 @@ DEFAULT_LLM_MODEL=glm-4
 ```
 
 **注意**：
+
 - 环境变量名保持 `ANTHROPIC_API_KEY`，但实际值是智谱的 API key
 - `DEFAULT_LLM_PROVIDER` 设置为 `openai-compatible` 以使用 OpenAI SDK
 - `LLM_BASE_URL` 默认为智谱的 API 地址，可选
@@ -62,6 +63,7 @@ DEFAULT_LLM_MODEL=glm-4
 ```
 
 **可用模型**：
+
 - `glm-4` - GLM-4 主模型
 - `glm-4-flash` - GLM-4 Flash（快速版）
 - `glm-4-plus` - GLM-4 Plus（增强版）
@@ -77,6 +79,7 @@ DEFAULT_LLM_MODEL=claude-sonnet-4-5
 ```
 
 **可用模型**：
+
 - `claude-sonnet-4-5` - Claude Sonnet 4.5
 - `claude-opus-4-5` - Claude Opus 4.5
 - `claude-haiku-4-5` - Claude Haiku 4.5
@@ -102,16 +105,14 @@ LLM_BASE_URL=https://your-api-endpoint
 import { LLMClient } from '@/core/agent/llm-client';
 
 const client = new LLMClient({
-  provider: 'openai-compatible',  // 或 'anthropic'
+  provider: 'openai-compatible', // 或 'anthropic'
   apiKey: process.env.ANTHROPIC_API_KEY,
   baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
-  model: 'glm-4'
+  model: 'glm-4',
 });
 
 // 统一的调用接口
-const response = await client.messagesCreate([
-  { role: 'user', content: 'Hello!' }
-]);
+const response = await client.messagesCreate([{ role: 'user', content: 'Hello!' }]);
 
 console.log(response.content);
 ```
@@ -153,15 +154,15 @@ npm test -- tests/performance/agent-performance.test.ts
 
 ## 📊 GLM-4 vs Claude 对比
 
-| 特性 | GLM-4 | Claude Sonnet 4.5 |
-|------|-------|-------------------|
-| **上下文长度** | 128K tokens | 200K tokens |
-| **响应速度** | 更快 | 快 |
-| **中文支持** | 优秀 | 良好 |
-| **代码生成** | 优秀 | 优秀 |
-| **推理能力** | 良好 | 优秀 |
-| **API 价格** | 更低 | 较高 |
-| **API 兼容性** | OpenAI 格式 | Anthropic 格式 |
+| 特性           | GLM-4       | Claude Sonnet 4.5 |
+| -------------- | ----------- | ----------------- |
+| **上下文长度** | 128K tokens | 200K tokens       |
+| **响应速度**   | 更快        | 快                |
+| **中文支持**   | 优秀        | 良好              |
+| **代码生成**   | 优秀        | 优秀              |
+| **推理能力**   | 良好        | 优秀              |
+| **API 价格**   | 更低        | 较高              |
+| **API 兼容性** | OpenAI 格式 | Anthropic 格式    |
 
 ---
 
@@ -172,7 +173,7 @@ npm test -- tests/performance/agent-performance.test.ts
 ```typescript
 const agent = new Agent({
   systemPrompt: '你是一个中文助手。',
-  availableSkills: ['summarize']
+  availableSkills: ['summarize'],
 });
 
 const result = await agent.run('请总结以下内容：...');
@@ -201,10 +202,10 @@ const agent = new Agent({
   availableSkills: ['web-search'],
   llm: {
     provider: 'openai-compatible',
-    model: 'glm-4-flash',  // 使用快速版
+    model: 'glm-4-flash', // 使用快速版
     apiKey: process.env.ANTHROPIC_API_KEY,
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4/'
-  }
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+  },
 });
 ```
 
@@ -217,6 +218,7 @@ const agent = new Agent({
 **症状**: `Error: 401 Unauthorized` 或 `Error: Incorrect API key provided`
 
 **解决方案**:
+
 1. 检查 `ANTHROPIC_API_KEY` 是否正确
 2. 确认 API key 有效且有足够配额
 3. 检查 `DEFAULT_LLM_PROVIDER` 是否为 `openai-compatible`
@@ -226,6 +228,7 @@ const agent = new Agent({
 **症状**: 请求超时或返回空响应
 
 **解决方案**:
+
 1. 检查网络连接到 `open.bigmodel.cn`
 2. 验证 `LLM_BASE_URL` 配置
 3. 尝试使用不同的模型（如 `glm-4-flash`）
@@ -235,6 +238,7 @@ const agent = new Agent({
 **症状**: `Error: Failed to parse plan from LLM response`
 
 **解决方案**:
+
 1. GLM-4 的输出格式可能与 Claude 略有不同
 2. 调整 prompt 模板以适应 GLM-4
 3. 使用更明确的输出格式要求

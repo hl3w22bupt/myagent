@@ -10,17 +10,20 @@ describe('Agent', () => {
   let agent: Agent;
 
   beforeAll(() => {
-    agent = new Agent({
-      systemPrompt: 'You are a helpful assistant.',
-      availableSkills: ['summarize', 'code-analysis'],
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5'
+    agent = new Agent(
+      {
+        systemPrompt: 'You are a helpful assistant.',
+        availableSkills: ['summarize', 'code-analysis'],
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5',
+        },
+        sandbox: {
+          type: 'local',
+        },
       },
-      sandbox: {
-        type: 'local'
-      }
-    }, 'test-session-1');
+      'test-session-1'
+    );
   });
 
   afterAll(async () => {
@@ -51,15 +54,18 @@ describe('MasterAgent', () => {
   let masterAgent: MasterAgent;
 
   beforeAll(() => {
-    masterAgent = new MasterAgent({
-      systemPrompt: 'You are a helpful assistant.',
-      availableSkills: ['*'],
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5'
+    masterAgent = new MasterAgent(
+      {
+        systemPrompt: 'You are a helpful assistant.',
+        availableSkills: ['*'],
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5',
+        },
+        subagents: ['code-reviewer'],
       },
-      subagents: ['code-reviewer']
-    }, 'test-session-master-1');
+      'test-session-master-1'
+    );
   });
 
   afterAll(async () => {

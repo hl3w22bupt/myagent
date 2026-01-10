@@ -85,13 +85,13 @@ graph TB
 
 ### 1.2 核心设计原则
 
-| 原则 | 说明 | 实现阶段 |
-|------|------|---------|
+| 原则         | 说明                           | 实现阶段  |
+| ------------ | ------------------------------ | --------- |
 | **分层解耦** | 每层有清晰职责，易于维护和扩展 | Phase 1-5 |
-| **框架无关** | Manager 层独立于 Motia，可移植 | Phase 5 |
-| **会话隔离** | 每个会话独立状态，并发安全 | Phase 5 |
-| **可观测性** | 完整的日志、追踪、错误处理 | Phase 1-5 |
-| **测试驱动** | 每个阶段都有完整测试覆盖 | Phase 1-5 |
+| **框架无关** | Manager 层独立于 Motia，可移植 | Phase 5   |
+| **会话隔离** | 每个会话独立状态，并发安全     | Phase 5   |
+| **可观测性** | 完整的日志、追踪、错误处理     | Phase 1-5 |
+| **测试驱动** | 每个阶段都有完整测试覆盖       | Phase 1-5 |
 
 ---
 
@@ -102,6 +102,7 @@ graph TB
 **目标**: 搭建项目结构和开发环境
 
 **交付物**:
+
 - ✅ 完整的目录结构 (steps/, skills/, core/, tests/, docs/)
 - ✅ TypeScript 配置 (tsconfig.json, jest.config.js)
 - ✅ Python 配置 (requirements.txt)
@@ -110,6 +111,7 @@ graph TB
 - ✅ 代码质量工具 (ESLint, Prettier, black, pylint)
 
 **关键文件**:
+
 ```
 motia.config.ts
 package.json
@@ -126,12 +128,14 @@ config/sandbox.config.yaml
 **目标**: 实现可复用的能力单元
 
 **交付物**:
+
 - ✅ Skill 类型定义 (SkillType, SkillMetadata, SkillDefinition)
 - ✅ Skill Registry (自动发现、两级加载)
 - ✅ Skill Executor (统一执行接口)
 - ✅ 三个示例 Skills (web-search, summarize, code-analysis)
 
 **核心设计**:
+
 ```python
 # 两级加载策略
 Level 1: SkillMetadata (启动时加载，轻量级)
@@ -144,6 +148,7 @@ HYBRID: 代码 + prompt 混合
 ```
 
 **关键文件**:
+
 ```
 core/skill/types.py
 core/skill/registry.py
@@ -162,19 +167,21 @@ skills/code-analysis/
 **目标**: 实现隔离的 Python 代码执行环境
 
 **交付物**:
+
 - ✅ SandboxAdapter 接口定义
 - ✅ LocalSandboxAdapter (本地进程隔离)
 - ✅ SandboxFactory (工厂模式)
 - ✅ Sandbox 配置系统 (YAML + 环境变量)
 
 **核心设计**:
+
 ```typescript
 // 统一的 Sandbox 接口
 interface SandboxAdapter {
-  execute(code: string, options: SandboxOptions): Promise<SandboxResult>
-  cleanup(sessionId: string): Promise<void>
-  healthCheck(): Promise<boolean>
-  getInfo(): AdapterInfo
+  execute(code: string, options: SandboxOptions): Promise<SandboxResult>;
+  cleanup(sessionId: string): Promise<void>;
+  healthCheck(): Promise<boolean>;
+  getInfo(): AdapterInfo;
 }
 
 // 代码自动包装
@@ -196,6 +203,7 @@ asyncio.run(main())
 ```
 
 **关键文件**:
+
 ```
 core/sandbox/types.ts
 core/sandbox/adapters/local.ts
@@ -213,6 +221,7 @@ config/sandbox.config.yaml
 **目标**: 实现通用智能体和 PTC 代码生成
 
 **交付物**:
+
 - ✅ Agent 基类 (PTC 生成、Sandbox 执行)
 - ✅ PTCGenerator (两步生成：规划 → 实现)
 - ✅ LLMClient (Anthropic/OpenAI 抽象)
@@ -220,6 +229,7 @@ config/sandbox.config.yaml
 - ✅ Agent 类型系统 (AgentConfig, AgentResult, SessionState)
 
 **核心设计**:
+
 ```typescript
 // PTC 生成流程
 Task → LLM规划(选择Skills) → LLM实现(生成Python代码) → Sandbox执行
@@ -246,6 +256,7 @@ interface SessionState {
 ```
 
 **关键文件**:
+
 ```
 core/agent/types.ts
 core/agent/agent.ts
@@ -263,6 +274,7 @@ core/agent/llm-client.ts
 **目标**: 端到端验证 Agent + Skill + Sandbox 集成
 
 **交付物**:
+
 - ✅ 独立测试脚本 (test-phase-4.5.sh)
 - ✅ Agent + Skill 端到端测试
 - ✅ PTC 生成与执行验证
@@ -270,6 +282,7 @@ core/agent/llm-client.ts
 - ✅ 性能基准测试
 
 **测试结果**:
+
 ```
 ✅ 30/30 核心测试通过
 ✅ PTC 生成正常
@@ -285,6 +298,7 @@ core/agent/llm-client.ts
 **目标**: 框架无关的 Manager 层 + Motia 事件集成
 
 **交付物**:
+
 - ✅ AgentManager (会话 → Agent 映射)
 - ✅ SandboxManager (会话 → Sandbox 映射)
 - ✅ Master-Agent Step (Motia 事件处理)
@@ -292,14 +306,15 @@ core/agent/llm-client.ts
 - ✅ 完整测试验证 (59/60 通过)
 
 **核心设计**:
+
 ```typescript
 // Manager 模式 - 框架无关
 class AgentManager {
-  async acquire(sessionId: string): Promise<Agent>
-  async release(sessionId: string): Promise<void>
-  private cleanupExpiredSessions(): Promise<void>
-  private evictOldestSession(): Promise<void>
-  async shutdown(): Promise<void>
+  async acquire(sessionId: string): Promise<Agent>;
+  async release(sessionId: string): Promise<void>;
+  private cleanupExpiredSessions(): Promise<void>;
+  private evictOldestSession(): Promise<void>;
+  async shutdown(): Promise<void>;
 }
 
 // Motia 事件集成
@@ -307,17 +322,18 @@ export const config: EventConfig = {
   type: 'event',
   name: 'master-agent',
   subscribes: ['agent.task.execute'],
-  emits: ['agent.task.completed', 'agent.task.failed']
-}
+  emits: ['agent.task.completed', 'agent.task.failed'],
+};
 
 // 每个会话独立
-const sessionId = input.sessionId || uuidv4()
-const agent = await agentManager.acquire(sessionId)
-const result = await agent.run(input.task)
+const sessionId = input.sessionId || uuidv4();
+const agent = await agentManager.acquire(sessionId);
+const result = await agent.run(input.task);
 // 会话保持活跃，不释放 (Manager 自动清理过期会话)
 ```
 
 **关键文件**:
+
 ```
 core/agent/manager.ts
 core/sandbox/manager.ts
@@ -424,17 +440,17 @@ graph TB
 
 ### 3.2 模块职责矩阵
 
-| 层级 | 模块 | 职责 | 输入 | 输出 |
-|------|------|------|------|------|
-| **Motia 集成** | Master-Agent Step | 事件处理、会话管理 | Events | AgentResult |
-| **Manager** | AgentManager | Agent 生命周期 | sessionId | Agent |
-| **Manager** | SandboxManager | Sandbox 生命周期 | sessionId | SandboxAdapter |
-| **Agent** | Agent | 任务编排、PTC 生成 | task | AgentResult |
-| **Agent** | PTCGenerator | Python 代码生成 | task, context | PTC code |
-| **Agent** | LLMClient | LLM API 抽象 | prompt | LLM response |
-| **Sandbox** | LocalSandboxAdapter | Python 代码执行 | PTC code | SandboxResult |
-| **Skill** | SkillExecutor | Skill 统一执行 | skillName, params | SkillResult |
-| **Skill** | SkillRegistry | Skill 发现和加载 | directory | SkillMetadata |
+| 层级           | 模块                | 职责               | 输入              | 输出           |
+| -------------- | ------------------- | ------------------ | ----------------- | -------------- |
+| **Motia 集成** | Master-Agent Step   | 事件处理、会话管理 | Events            | AgentResult    |
+| **Manager**    | AgentManager        | Agent 生命周期     | sessionId         | Agent          |
+| **Manager**    | SandboxManager      | Sandbox 生命周期   | sessionId         | SandboxAdapter |
+| **Agent**      | Agent               | 任务编排、PTC 生成 | task              | AgentResult    |
+| **Agent**      | PTCGenerator        | Python 代码生成    | task, context     | PTC code       |
+| **Agent**      | LLMClient           | LLM API 抽象       | prompt            | LLM response   |
+| **Sandbox**    | LocalSandboxAdapter | Python 代码执行    | PTC code          | SandboxResult  |
+| **Skill**      | SkillExecutor       | Skill 统一执行     | skillName, params | SkillResult    |
+| **Skill**      | SkillRegistry       | Skill 发现和加载   | directory         | SkillMetadata  |
 
 ---
 
@@ -971,16 +987,16 @@ graph TB
 
 ### 7.1 整体评分
 
-| 维度 | Phase 1-5 评分 | 说明 |
-|------|---------------|------|
-| **分层架构** | ⭐⭐⭐⭐⭐ | 四层架构清晰，职责分离明确 |
-| **框架解耦** | ⭐⭐⭐⭐⭐ | Manager 层完全独立于 Motia |
-| **并发安全** | ⭐⭐⭐⭐⭐ | 会话隔离，无共享状态 |
-| **可测试性** | ⭐⭐⭐⭐⭐ | 98.3% 测试通过率 |
-| **可扩展性** | ⭐⭐⭐⭐⭐ | 易于添加新 Skill、Agent、Sandbox |
-| **性能** | ⭐⭐⭐⭐☆ | 功能优先，性能优化待实施 |
-| **可维护性** | ⭐⭐⭐⭐⭐ | 代码结构清晰，文档完善 |
-| **生产就绪** | ⭐⭐⭐⭐☆ | 核心功能完整，监控待增强 |
+| 维度         | Phase 1-5 评分 | 说明                             |
+| ------------ | -------------- | -------------------------------- |
+| **分层架构** | ⭐⭐⭐⭐⭐     | 四层架构清晰，职责分离明确       |
+| **框架解耦** | ⭐⭐⭐⭐⭐     | Manager 层完全独立于 Motia       |
+| **并发安全** | ⭐⭐⭐⭐⭐     | 会话隔离，无共享状态             |
+| **可测试性** | ⭐⭐⭐⭐⭐     | 98.3% 测试通过率                 |
+| **可扩展性** | ⭐⭐⭐⭐⭐     | 易于添加新 Skill、Agent、Sandbox |
+| **性能**     | ⭐⭐⭐⭐☆      | 功能优先，性能优化待实施         |
+| **可维护性** | ⭐⭐⭐⭐⭐     | 代码结构清晰，文档完善           |
+| **生产就绪** | ⭐⭐⭐⭐☆      | 核心功能完整，监控待增强         |
 
 **总体评分：4.8/5.0** ⭐⭐⭐⭐⭐
 
@@ -988,14 +1004,14 @@ graph TB
 
 ### 7.2 各阶段完成度
 
-| 阶段 | 状态 | 完成度 | 关键交付物 |
-|------|------|--------|----------|
-| **Phase 1** | ✅ 完成 | 100% | 项目结构、依赖配置、开发环境 |
-| **Phase 2** | ✅ 完成 | 100% | Skill Registry、Executor、3个示例Skills |
-| **Phase 3** | ✅ 完成 | 100% | SandboxAdapter、LocalSandbox、Factory |
-| **Phase 4** | ✅ 完成 | 100% | Agent、PTCGenerator、LLMClient、SessionState |
-| **Phase 4.5** | ✅ 完成 | 100% | 集成测试、端到端验证 |
-| **Phase 5** | ✅ 完成 | 100% | Manager层、Motia集成、测试验证 |
+| 阶段          | 状态    | 完成度 | 关键交付物                                   |
+| ------------- | ------- | ------ | -------------------------------------------- |
+| **Phase 1**   | ✅ 完成 | 100%   | 项目结构、依赖配置、开发环境                 |
+| **Phase 2**   | ✅ 完成 | 100%   | Skill Registry、Executor、3个示例Skills      |
+| **Phase 3**   | ✅ 完成 | 100%   | SandboxAdapter、LocalSandbox、Factory        |
+| **Phase 4**   | ✅ 完成 | 100%   | Agent、PTCGenerator、LLMClient、SessionState |
+| **Phase 4.5** | ✅ 完成 | 100%   | 集成测试、端到端验证                         |
+| **Phase 5**   | ✅ 完成 | 100%   | Manager层、Motia集成、测试验证               |
 
 **总体完成度：100%** ✅
 
@@ -1018,6 +1034,7 @@ Skill Layer (可复用能力单元)
 ```
 
 **优点**：
+
 - 每层有明确职责
 - 易于理解和维护
 - 层间依赖单向（上层依赖下层）
@@ -1030,6 +1047,7 @@ Skill Layer (可复用能力单元)
 **核心决策**：Manager 层不依赖 Motia
 
 **实现**：
+
 ```typescript
 // src/index.ts - 纯 TypeScript，无 Motia 依赖
 export const agentManager = new AgentManager({...})
@@ -1040,6 +1058,7 @@ export const sandboxManager = new SandboxManager({...})
 ```
 
 **优点**：
+
 - 易于迁移到其他框架
 - 可以独立于 Motia 测试
 - Manager 可复用于其他项目
@@ -1052,6 +1071,7 @@ export const sandboxManager = new SandboxManager({...})
 **设计**：每个 sessionId → 独立的 Agent 实例
 
 **实现**：
+
 ```typescript
 // AgentManager
 private sessions: Map<string, Agent>
@@ -1067,6 +1087,7 @@ async acquire(sessionId: string): Promise<Agent> {
 ```
 
 **优点**：
+
 - SessionState 完全封装在 Agent 内部
 - 不同会话无共享状态
 - 天然并发安全
@@ -1077,25 +1098,27 @@ async acquire(sessionId: string): Promise<Agent> {
 #### ✅ 4. 自动化资源管理
 
 **实现**：
+
 ```typescript
 // 1. 定时清理过期会话
 this.cleanupTimer = setInterval(() => {
-  this.cleanupExpiredSessions()
-}, 60000) // 每60秒
+  this.cleanupExpiredSessions();
+}, 60000); // 每60秒
 
 // 2. LRU 驱逐会话限制
 if (this.sessions.size > this.config.maxSessions) {
-  await this.evictOldestSession()
+  await this.evictOldestSession();
 }
 
 // 3. 优雅关闭
 process.on('SIGTERM', async () => {
-  await agentManager.shutdown()
-  await sandboxManager.shutdown()
-})
+  await agentManager.shutdown();
+  await sandboxManager.shutdown();
+});
 ```
 
 **优点**：
+
 - 无需手动管理会话生命周期
 - 防止内存泄漏
 - 生产环境可靠的关闭流程
@@ -1105,19 +1128,22 @@ process.on('SIGTERM', async () => {
 #### ✅ 5. 状态持久化设计
 
 **SessionState 包含**：
+
 - `conversationHistory`：多轮对话上下文
 - `executionHistory`：任务执行历史
 - `variables`：中间变量存储
 
 **自动传递到 PTC 生成**：
+
 ```typescript
 const ptcCode = await this.ptcGenerator.generate(task, {
   history: this.state.conversationHistory,
-  variables: Object.fromEntries(this.state.variables)
-})
+  variables: Object.fromEntries(this.state.variables),
+});
 ```
 
 **优点**：
+
 - 多轮对话自然支持
 - LLM 可以访问历史上下文
 - 变量可以跨请求传递
@@ -1130,11 +1156,13 @@ const ptcCode = await this.ptcGenerator.generate(task, {
 #### ⚠️ 1. SandboxManager 未使用（高优先级）
 
 **问题**：
+
 - `src/index.ts` 创建了 `sandboxManager`
 - Agent 类在构造函数中自己创建 Sandbox
 - `sandboxManager` 未被使用
 
 **建议**：
+
 ```typescript
 // 选项 A：移除未使用的 SandboxManager
 // 从 src/index.ts 移除 export const sandboxManager
@@ -1151,11 +1179,13 @@ const ptcCode = await this.ptcGenerator.generate(task, {
 #### ⚠️ 2. 配置重复（高优先级）
 
 **问题**：
+
 - `src/index.ts` 配置了 AgentManager
 - `steps/agents/master-agent.step.ts` 也配置了 AgentManager
 - 配置可能不一致
 
 **建议**：
+
 ```typescript
 // master-agent.step.ts 改为：
 import { agentManager } from '../../src/index';
@@ -1173,17 +1203,17 @@ import { agentManager } from '../../src/index';
 #### ⚠️ 3. 类型安全问题（中优先级）
 
 **问题**：
+
 ```typescript
 // src/index.ts line 65
-provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible'
+provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible';
 ```
 
 **建议**：
+
 ```typescript
 // 更安全的写法：
-provider: (process.env.LLM_PROVIDER === 'openai-compatible'
-  ? 'openai-compatible'
-  : 'anthropic')
+provider: process.env.LLM_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'anthropic';
 ```
 
 **优先级**：中
@@ -1195,21 +1225,23 @@ provider: (process.env.LLM_PROVIDER === 'openai-compatible'
 #### ⚠️ 4. 历史记录无界增长（低优先级）
 
 **问题**：
+
 - `conversationHistory` 无上限
 - 长时间会话可能消耗大量内存
 - 每条消息约 1KB
 
 **建议**：
+
 ```typescript
 // 在 AgentConfig 中添加：
 interface AgentConfig {
-  maxConversationHistory?: number // 默认 100
-  maxExecutionHistory?: number // 默认 50
+  maxConversationHistory?: number; // 默认 100
+  maxExecutionHistory?: number; // 默认 50
 }
 
 // 在 Agent.run() 中限制大小
 if (this.state.conversationHistory.length > this.config.maxConversationHistory) {
-  this.state.conversationHistory.shift()
+  this.state.conversationHistory.shift();
 }
 ```
 
@@ -1224,31 +1256,31 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 
 #### 当前未优化版本的性能
 
-| 操作 | 耗时 | 说明 |
-|------|------|------|
-| **首次会话创建** | ~100ms | Agent + Sandbox 初始化 |
-| **后续请求** | <10ms | 会话复用，仅状态更新 |
-| **PTC 生成** | 2-5秒 | LLM API 调用（主要耗时） |
-| **Sandbox 执行** | 100-500ms | Python 代码执行 |
-| **Skill 调用** | 50-200ms | 取决于 Skill 类型 |
+| 操作             | 耗时      | 说明                     |
+| ---------------- | --------- | ------------------------ |
+| **首次会话创建** | ~100ms    | Agent + Sandbox 初始化   |
+| **后续请求**     | <10ms     | 会话复用，仅状态更新     |
+| **PTC 生成**     | 2-5秒     | LLM API 调用（主要耗时） |
+| **Sandbox 执行** | 100-500ms | Python 代码执行          |
+| **Skill 调用**   | 50-200ms  | 取决于 Skill 类型        |
 
 #### 内存占用（每个会话）
 
-| 组件 | 内存占用 | 说明 |
-|------|---------|------|
-| **Agent 实例** | ~1MB | 包含 PTCGenerator、LLMClient |
-| **Sandbox 实例** | ~5MB | Python 子进程 + IPC |
-| **SessionState** | ~100KB | 100条对话历史 + 变量 |
-| **总计** | ~6MB/会话 | 未优化版本 |
+| 组件             | 内存占用  | 说明                         |
+| ---------------- | --------- | ---------------------------- |
+| **Agent 实例**   | ~1MB      | 包含 PTCGenerator、LLMClient |
+| **Sandbox 实例** | ~5MB      | Python 子进程 + IPC          |
+| **SessionState** | ~100KB    | 100条对话历史 + 变量         |
+| **总计**         | ~6MB/会话 | 未优化版本                   |
 
 #### 并发能力
 
-| 指标 | 当前值 | 说明 |
-|------|--------|------|
-| **最大并发会话** | 1000 | 可配置 |
-| **会话超时** | 30分钟 | 自动清理 |
-| **清理间隔** | 60秒 | 定时器触发 |
-| **LRU 驱逐** | 启用 | 超过限制时自动清理 |
+| 指标             | 当前值 | 说明               |
+| ---------------- | ------ | ------------------ |
+| **最大并发会话** | 1000   | 可配置             |
+| **会话超时**     | 30分钟 | 自动清理           |
+| **清理间隔**     | 60秒   | 定时器触发         |
+| **LRU 驱逐**     | 启用   | 超过限制时自动清理 |
 
 **注意**：这些是当前未优化版本的性能数据。优化策略见 `docs/PERFORMANCE_OPTIMIZATION.md`。
 
@@ -1293,6 +1325,7 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 4. **Motia 集成层** (TypeScript) - 事件驱动和 Manager 模式 ✅
 
 **核心特性**：
+
 - ✅ 会话隔离和状态持久化
 - ✅ 多轮对话支持
 - ✅ 框架无关的 Manager 设计
@@ -1306,12 +1339,14 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 **高优先级（建议本周完成）**：
 
 1. **移除未使用的 SandboxManager** (5分钟)
+
    ```bash
    # 编辑 src/index.ts
    # 移除 export const sandboxManager
    ```
 
 2. **统一配置来源** (10分钟)
+
    ```typescript
    // 编辑 steps/agents/master-agent.step.ts
    import { agentManager } from '../../src/index';
@@ -1321,8 +1356,7 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 3. **提升类型安全** (5分钟)
    ```typescript
    // 编辑 src/index.ts line 65
-   provider: (process.env.LLM_PROVIDER === 'openai-compatible'
-     ? 'openai-compatible' : 'anthropic')
+   provider: process.env.LLM_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'anthropic';
    ```
 
 **中优先级（可以稍后）**：
@@ -1338,12 +1372,14 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 根据 `IMPLEMENTATION_WORKFLOW.md`，下一阶段是：
 
 **Phase 6: Master Agent 实现**
+
 - 两步规划器
 - 委派逻辑
 - 结果整合
 - 示例 Subagents
 
 或者，根据业务需求，可以直接进入：
+
 - **Phase 7**: 示例与测试
 - **Phase 8**: 优化与扩展
 - **生产部署**: 监控、运维、性能优化
@@ -1355,6 +1391,7 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 ### A. 关键文件清单
 
 #### 配置文件
+
 - `motia.config.ts` - Motia 框架配置
 - `config/sandbox.config.yaml` - Sandbox 配置
 - `tsconfig.json` - TypeScript 配置
@@ -1362,6 +1399,7 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 - `.env.example` - 环境变量模板
 
 #### 核心代码
+
 - `src/core/agent/agent.ts` - Agent 基类
 - `src/core/agent/manager.ts` - AgentManager
 - `src/core/agent/ptc-generator.ts` - PTC 代码生成器
@@ -1376,12 +1414,14 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 - `src/index.ts` - 应用入口
 
 #### 测试文件
+
 - `tests/unit/agent/*.test.ts` - Agent 单元测试
 - `tests/unit/sandbox/*.test.ts` - Sandbox 单元测试
 - `tests/unit/skill/*.py` - Skill 单元测试
 - `tests/integration/*.test.ts` - 集成测试
 
 #### 文档
+
 - `IMPLEMENTATION_WORKFLOW.md` - 完整实施工作流
 - `docs/PHASE1_COMPLETE.md` - Phase 1 总结
 - `docs/PHASE2_COMPLETE.md` - Phase 2 总结
@@ -1396,6 +1436,7 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 ### B. 技术栈总结
 
 #### TypeScript 依赖
+
 ```
 @motiadev/core: ^0.17.11-beta.193
 @motiadev/orchestrator: ^0.17.11-beta.193
@@ -1406,6 +1447,7 @@ axios: ^1.6.2
 ```
 
 #### Python 依赖
+
 ```
 pydantic: 2.5.2
 pyyaml: 6.0.1
@@ -1417,6 +1459,7 @@ pylint: 3.0.3
 ```
 
 #### 开发工具
+
 ```
 TypeScript: 5.3.3
 Jest: 29.7.0

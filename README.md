@@ -46,11 +46,11 @@ curl http://localhost:3000/hello
 
 Every Step has a `type` that defines how it triggers:
 
-| Type | When it runs | Use case |
-|------|--------------|----------|
-| **`api`** | HTTP request | REST APIs, webhooks |
-| **`event`** | Event emitted | Background jobs, workflows |
-| **`cron`** | Schedule | Cleanup, reports, reminders |
+| Type        | When it runs  | Use case                    |
+| ----------- | ------------- | --------------------------- |
+| **`api`**   | HTTP request  | REST APIs, webhooks         |
+| **`event`** | Event emitted | Background jobs, workflows  |
+| **`cron`**  | Schedule      | Cleanup, reports, reminders |
 
 ## Development Commands
 

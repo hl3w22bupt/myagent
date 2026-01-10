@@ -5,11 +5,7 @@
  * Supports multiple adapter types with a unified interface.
  */
 
-import {
-  SandboxAdapter,
-  SandboxAdapterConfig,
-  LocalSandboxConfig
-} from './types';
+import { SandboxAdapter, SandboxAdapterConfig, LocalSandboxConfig } from './types';
 import { LocalSandboxAdapter } from './adapters/local';
 
 // Lazy load remote adapters (to be implemented)
@@ -47,7 +43,7 @@ export class SandboxFactory {
     if (!factory) {
       throw new Error(
         `Unknown sandbox type: ${config.type}. ` +
-        `Available types: ${Array.from(this.adapters.keys()).join(', ')}`
+          `Available types: ${Array.from(this.adapters.keys()).join(', ')}`
       );
     }
 

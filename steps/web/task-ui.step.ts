@@ -34,7 +34,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -1084,9 +1084,9 @@ export const handler = async (request: any, { logger }: any) => {
   return {
     status: 200,
     headers: {
-      'Content-Type': 'text/html; charset=utf-8'
+      'Content-Type': 'text/html; charset=utf-8',
     },
-    body: html
+    body: html,
   };
 };
 void _z; // Mark as unused

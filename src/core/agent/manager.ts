@@ -126,7 +126,6 @@ export class AgentManager {
     // Release expired sessions
     for (const sessionId of expired) {
       await this.release(sessionId);
-      console.log(`Cleaned up expired session: ${sessionId}`);
     }
   }
 
@@ -149,7 +148,6 @@ export class AgentManager {
 
     if (oldestSession) {
       await this.release(oldestSession);
-      console.log(`Evicted oldest session: ${oldestSession}`);
     }
   }
 
@@ -163,9 +161,7 @@ export class AgentManager {
     }
 
     // Release all sessions
-    await Promise.all(
-      Array.from(this.sessions.keys()).map(id => this.release(id))
-    );
+    await Promise.all(Array.from(this.sessions.keys()).map((id) => this.release(id)));
   }
 
   /**

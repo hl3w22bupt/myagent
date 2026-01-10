@@ -13,7 +13,7 @@ describe('LocalSandboxAdapter', () => {
     sandbox = new LocalSandboxAdapter({
       pythonPath: 'python3',
       workspace: '/tmp/motia-sandbox-test',
-      maxSessions: 5
+      maxSessions: 5,
     });
   });
 
@@ -47,7 +47,7 @@ print('Hello from sandbox!')
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 5000
+      timeout: 5000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -65,7 +65,7 @@ raise ValueError("Test error")
     const options: SandboxOptions = {
       skills: [],
       skillImplPath: process.cwd(),
-      timeout: 5000
+      timeout: 5000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -84,7 +84,7 @@ print('test')
       skills: [],
       skillImplPath: process.cwd(),
       sessionId: 'test-session-123',
-      timeout: 5000
+      timeout: 5000,
     };
 
     const result = await sandbox.execute(code, options);
@@ -103,7 +103,7 @@ print('done')
       skills: [],
       skillImplPath: process.cwd(),
       sessionId: 'cleanup-test',
-      timeout: 5000
+      timeout: 5000,
     };
 
     await sandbox.execute(code, options);

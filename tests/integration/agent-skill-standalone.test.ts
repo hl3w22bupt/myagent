@@ -38,28 +38,31 @@ describe('Agent + Skill Standalone Integration', () => {
       type: 'local',
       local: {
         pythonPath: pythonPath,
-        timeout: 30000
-      }
+        timeout: 30000,
+      },
     }) as LocalSandboxAdapter;
 
     // Create agent with sandbox
     const sessionId = 'test-skill-standalone-session';
-    agent = new Agent({
-      systemPrompt: 'You are a helpful assistant with access to various skills.',
-      availableSkills: ['summarize', 'code-analysis', 'web-search'],
-      llm: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5',
-        apiKey: process.env.ANTHROPIC_API_KEY
+    agent = new Agent(
+      {
+        systemPrompt: 'You are a helpful assistant with access to various skills.',
+        availableSkills: ['summarize', 'code-analysis', 'web-search'],
+        llm: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5',
+          apiKey: process.env.ANTHROPIC_API_KEY,
+        },
+        sandbox: {
+          type: 'local',
+          config: {
+            pythonPath: pythonPath,
+            timeout: 30000,
+          },
+        },
       },
-      sandbox: {
-        type: 'local',
-        config: {
-          pythonPath: pythonPath,
-          timeout: 30000
-        }
-      }
-    }, sessionId);
+      sessionId
+    );
   });
 
   afterAll(async () => {
@@ -135,7 +138,7 @@ except Exception as e:
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-env-check',
-        timeout: 10000
+        timeout: 10000,
       });
 
       // Use original console.log to output
@@ -158,7 +161,7 @@ print("SUCCESS: SkillExecutor imported")
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-skill-executor-import',
-        timeout: 10000
+        timeout: 10000,
       });
 
       expect(result.success).toBe(true);
@@ -184,7 +187,7 @@ for name, meta in skills.items():
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-skill-registry',
-        timeout: 10000
+        timeout: 10000,
       });
 
       expect(result.success).toBe(true);
@@ -214,16 +217,18 @@ print(f"SUCCESS: Summary: {str(summary_content)[:50]}")
 `;
 
       const result = await sandbox.execute(testCode, {
-        skills: [{
-          name: 'summarize',
-          version: '1.0.0',
-          type: 'pure-prompt',
-          inputSchema: { type: 'object' },
-          outputSchema: { type: 'object' }
-        }],
+        skills: [
+          {
+            name: 'summarize',
+            version: '1.0.0',
+            type: 'pure-prompt',
+            inputSchema: { type: 'object' },
+            outputSchema: { type: 'object' },
+          },
+        ],
         skillImplPath: process.cwd(),
         sessionId: 'test-summarize-skill',
-        timeout: 15000
+        timeout: 15000,
       });
 
       expect(result.success).toBe(true);
@@ -246,16 +251,18 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
 `;
 
       const result = await sandbox.execute(testCode, {
-        skills: [{
-          name: 'code-analysis',
-          version: '1.0.0',
-          type: 'pure-script',
-          inputSchema: { type: 'object' },
-          outputSchema: { type: 'object' }
-        }],
+        skills: [
+          {
+            name: 'code-analysis',
+            version: '1.0.0',
+            type: 'pure-script',
+            inputSchema: { type: 'object' },
+            outputSchema: { type: 'object' },
+          },
+        ],
         skillImplPath: process.cwd(),
         sessionId: 'test-code-analysis-skill',
-        timeout: 10000
+        timeout: 10000,
       });
 
       expect(result.success).toBe(true);
@@ -287,20 +294,23 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
 
     beforeAll(() => {
       const sessionId = 'test-master-agent-session';
-      masterAgent = new MasterAgent({
-        systemPrompt: 'You are a master coordinator agent.',
-        availableSkills: ['*'],
-        llm: {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY
+      masterAgent = new MasterAgent(
+        {
+          systemPrompt: 'You are a master coordinator agent.',
+          availableSkills: ['*'],
+          llm: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-5',
+            apiKey: process.env.ANTHROPIC_API_KEY,
+          },
+          sandbox: {
+            type: 'local',
+            config: {},
+          },
+          subagents: ['code-reviewer', 'data-analyst'],
         },
-        sandbox: {
-          type: 'local',
-          config: {}
-        },
-        subagents: ['code-reviewer', 'data-analyst']
-      }, sessionId);
+        sessionId
+      );
     });
 
     afterAll(async () => {
@@ -341,7 +351,7 @@ except Exception as e:
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-missing-skill',
-        timeout: 10000
+        timeout: 10000,
       });
 
       expect(result.success).toBe(true);
@@ -365,16 +375,18 @@ else:
 `;
 
       const result = await sandbox.execute(testCode, {
-        skills: [{
-          name: 'summarize',
-          version: '1.0.0',
-          type: 'pure-prompt',
-          inputSchema: { type: 'object' },
-          outputSchema: { type: 'object' }
-        }],
+        skills: [
+          {
+            name: 'summarize',
+            version: '1.0.0',
+            type: 'pure-prompt',
+            inputSchema: { type: 'object' },
+            outputSchema: { type: 'object' },
+          },
+        ],
         skillImplPath: process.cwd(),
         sessionId: 'test-invalid-input',
-        timeout: 10000
+        timeout: 10000,
       });
 
       expect(result.success).toBe(true);
@@ -387,7 +399,7 @@ else:
       const start = Date.now();
       const testSandbox = SandboxFactory.create({
         type: 'local',
-        config: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 }
+        config: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 },
       });
       const elapsed = Date.now() - start;
 
@@ -405,7 +417,7 @@ else:
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-perf-simple',
-        timeout: 5000
+        timeout: 5000,
       });
       const elapsed = Date.now() - start;
 
@@ -430,7 +442,7 @@ print("SUCCESS")
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: 'test-perf-registry',
-        timeout: 10000
+        timeout: 10000,
       });
       const elapsed = Date.now() - start;
 

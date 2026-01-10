@@ -30,11 +30,11 @@ describe('Agent Context Integration', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY || 'test-key'
+          apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
         },
         sandbox: {
-          type: 'local'
-        }
+          type: 'local',
+        },
       },
       sessionId
     );
@@ -67,7 +67,9 @@ describe('Agent Context Integration', () => {
       expect(result2.sessionId).toBe('test-context-session');
 
       // Conversation history should have grown
-      expect(result2.state?.conversationLength ?? 0).toBeGreaterThan(result1.state?.conversationLength ?? 0);
+      expect(result2.state?.conversationLength ?? 0).toBeGreaterThan(
+        result1.state?.conversationLength ?? 0
+      );
 
       console.log('After second task:');
       console.log(`  Conversation length: ${result2.state?.conversationLength}`);
@@ -262,11 +264,11 @@ describe('Agent Context Integration', () => {
           llm: {
             provider: 'anthropic',
             model: 'claude-sonnet-4-5',
-            apiKey: process.env.ANTHROPIC_API_KEY || 'test-key'
+            apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
           },
           sandbox: {
-            type: 'local'
-          }
+            type: 'local',
+          },
         },
         'fresh-session'
       );

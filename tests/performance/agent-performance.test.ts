@@ -28,8 +28,8 @@ describe('Agent Performance Benchmarks', () => {
       type: 'local',
       config: {
         pythonPath: process.env.PYTHON_PATH || 'python3',
-        timeout: 30000
-      }
+        timeout: 30000,
+      },
     });
   });
 
@@ -43,7 +43,7 @@ describe('Agent Performance Benchmarks', () => {
     let passed = 0;
     let failed = 0;
 
-    results.forEach(result => {
+    results.forEach((result) => {
       const status = result.passed ? '✓' : '✗';
       const within = result.duration <= result.threshold;
       const statusText = within ? 'PASS' : 'FAIL';
@@ -81,7 +81,7 @@ describe('Agent Performance Benchmarks', () => {
         duration,
         success,
         passed,
-        threshold
+        threshold,
       });
 
       expect(success).toBe(true);
@@ -90,30 +90,33 @@ describe('Agent Performance Benchmarks', () => {
   }
 
   describe('Sandbox Performance', () => {
-    it('should initialize sandbox in < 1s',
+    it(
+      'should initialize sandbox in < 1s',
       benchmark('Sandbox Initialization', 1000, async () => {
         const testSandbox = SandboxFactory.create({
           type: 'local',
-          config: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 }
+          config: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 },
         });
         expect(testSandbox).toBeDefined();
         await testSandbox.cleanup();
       })
     );
 
-    it('should execute simple code in < 500ms',
+    it(
+      'should execute simple code in < 500ms',
       benchmark('Simple Code Execution', 500, async () => {
         const result = await sandbox.execute('print("test")', {
           skills: [],
           skillImplPath: process.cwd(),
           sessionId: 'perf-simple',
-          timeout: 5000
+          timeout: 5000,
         });
         expect(result.success).toBe(true);
       })
     );
 
-    it('should execute SkillExecutor import in < 2s',
+    it(
+      'should execute SkillExecutor import in < 2s',
       benchmark('SkillExecutor Import', 2000, async () => {
         const code = `
 import sys
@@ -125,7 +128,7 @@ print("OK")
           skills: [],
           skillImplPath: process.cwd(),
           sessionId: 'perf-import',
-          timeout: 10000
+          timeout: 10000,
         });
         expect(result.success).toBe(true);
       })
@@ -133,7 +136,8 @@ print("OK")
   });
 
   describe('Skill Registry Performance', () => {
-    it('should scan skills directory in < 3s',
+    it(
+      'should scan skills directory in < 3s',
       benchmark('Skill Registry Scan', 3000, async () => {
         const code = `
 import sys
@@ -148,13 +152,14 @@ print(f"OK: {len(skills)}")
           skills: [],
           skillImplPath: process.cwd(),
           sessionId: 'perf-scan',
-          timeout: 10000
+          timeout: 10000,
         });
         expect(result.success).toBe(true);
       })
     );
 
-    it('should load skill definition in < 1s',
+    it(
+      'should load skill definition in < 1s',
       benchmark('Load Skill Definition', 1000, async () => {
         const code = `
 import sys
@@ -169,7 +174,7 @@ print(f"OK: {skill.name}")
           skills: [],
           skillImplPath: process.cwd(),
           sessionId: 'perf-load',
-          timeout: 10000
+          timeout: 10000,
         });
         expect(result.success).toBe(true);
       })
@@ -177,7 +182,8 @@ print(f"OK: {skill.name}")
   });
 
   describe('Skill Execution Performance', () => {
-    it('should execute pure-prompt skill in < 5s',
+    it(
+      'should execute pure-prompt skill in < 5s',
       benchmark('Pure-Prompt Skill Execution', 5000, async () => {
         const code = `
 import sys
@@ -195,13 +201,14 @@ print(f"OK")
           skills: ['summarize'],
           skillImplPath: process.cwd(),
           sessionId: 'perf-pure-prompt',
-          timeout: 15000
+          timeout: 15000,
         });
         expect(result.success).toBe(true);
       })
     );
 
-    it('should execute pure-script skill in < 2s',
+    it(
+      'should execute pure-script skill in < 2s',
       benchmark('Pure-Script Skill Execution', 2000, async () => {
         const code = `
 import sys
@@ -218,7 +225,7 @@ print(f"OK")
           skills: ['code-analysis'],
           skillImplPath: process.cwd(),
           sessionId: 'perf-pure-script',
-          timeout: 10000
+          timeout: 10000,
         });
         expect(result.success).toBe(true);
       })
@@ -230,46 +237,54 @@ print(f"OK")
 
     beforeAll(() => {
       const sessionId = 'test-performance-session';
-      agent = new Agent({
-        systemPrompt: 'You are a helpful assistant.',
-        availableSkills: ['summarize', 'code-analysis'],
-        llm: {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY
+      agent = new Agent(
+        {
+          systemPrompt: 'You are a helpful assistant.',
+          availableSkills: ['summarize', 'code-analysis'],
+          llm: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-5',
+            apiKey: process.env.ANTHROPIC_API_KEY,
+          },
+          sandbox: {
+            type: 'local',
+            config: {
+              pythonPath: process.env.PYTHON_PATH || 'python3',
+              timeout: 30000,
+            },
+          },
         },
-        sandbox: {
-          type: 'local',
-          config: {
-            pythonPath: process.env.PYTHON_PATH || 'python3',
-            timeout: 30000
-          }
-        }
-      }, sessionId);
+        sessionId
+      );
     });
 
     afterAll(async () => {
       await agent.cleanup();
     });
 
-    it('should initialize agent in < 500ms',
+    it(
+      'should initialize agent in < 500ms',
       benchmark('Agent Initialization', 500, async () => {
         const sessionId = `test-benchmark-${Date.now()}`;
-        const testAgent = new Agent({
-          systemPrompt: 'Test',
-          availableSkills: [],
-          llm: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
-          sandbox: {
-            type: 'local',
-            config: {}
-          }
-        }, sessionId);
+        const testAgent = new Agent(
+          {
+            systemPrompt: 'Test',
+            availableSkills: [],
+            llm: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+            sandbox: {
+              type: 'local',
+              config: {},
+            },
+          },
+          sessionId
+        );
         expect(testAgent).toBeDefined();
         await testAgent.cleanup();
       })
     );
 
-    it('should get agent info in < 50ms',
+    it(
+      'should get agent info in < 50ms',
       benchmark('Get Agent Info', 50, async () => {
         const start = Date.now();
         const info = agent.getInfo();
@@ -290,7 +305,7 @@ print(f"OK")
           skills: [],
           skillImplPath: process.cwd(),
           sessionId: `perf-session-${i}`,
-          timeout: 5000
+          timeout: 5000,
         });
         expect(result.success).toBe(true);
         sessions.push(`perf-session-${i}`);

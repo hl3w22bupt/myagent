@@ -31,7 +31,7 @@ export function createLLM(config: LLMConfig): Anthropic | OpenAI {
     case 'anthropic':
       return new Anthropic({
         apiKey,
-        baseURL: baseURL || 'https://api.anthropic.com'
+        baseURL: baseURL || 'https://api.anthropic.com',
       });
 
     case 'openai-compatible':
@@ -39,7 +39,7 @@ export function createLLM(config: LLMConfig): Anthropic | OpenAI {
       return new OpenAI({
         apiKey,
         baseURL: baseURL || 'https://open.bigmodel.cn/api/paas/v4/',
-        defaultQuery: { model: model || 'glm-4' }
+        defaultQuery: { model: model || 'glm-4' },
       });
 
     default:
@@ -64,6 +64,6 @@ export function getLLMConfigFromEnv(): LLMConfig {
     provider,
     apiKey,
     baseURL,
-    model
+    model,
   };
 }

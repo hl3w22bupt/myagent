@@ -37,6 +37,7 @@ Executes a task using the Agent system with PTC code generation.
 **Endpoint**: `POST /agent/execute`
 
 **Request Headers**:
+
 ```
 Content-Type: application/json
 X-API-Key: your-api-key (optional, if auth enabled)
@@ -79,36 +80,39 @@ curl -X POST http://localhost:3000/agent/execute \
 
 **Error Responses**:
 
-*   **400 Bad Request**: Invalid request body
-    ```json
-    {
-      "error": "Invalid request: Task is required"
-    }
-    ```
+- **400 Bad Request**: Invalid request body
 
-*   **401 Unauthorized**: Missing API key (if auth enabled)
-    ```json
-    {
-      "error": "API key required",
-      "message": "Please provide X-API-Key header"
-    }
-    ```
+  ```json
+  {
+    "error": "Invalid request: Task is required"
+  }
+  ```
 
-*   **403 Forbidden**: Invalid API key (if auth enabled)
-    ```json
-    {
-      "error": "Invalid API key",
-      "message": "The provided API key is not valid"
-    }
-    ```
+- **401 Unauthorized**: Missing API key (if auth enabled)
 
-*   **429 Too Many Requests**: Rate limit exceeded
-    ```json
-    {
-      "error": "Too many requests",
-      "retryAfter": 60
-    }
-    ```
+  ```json
+  {
+    "error": "API key required",
+    "message": "Please provide X-API-Key header"
+  }
+  ```
+
+- **403 Forbidden**: Invalid API key (if auth enabled)
+
+  ```json
+  {
+    "error": "Invalid API key",
+    "message": "The provided API key is not valid"
+  }
+  ```
+
+- **429 Too Many Requests**: Rate limit exceeded
+  ```json
+  {
+    "error": "Too many requests",
+    "retryAfter": 60
+  }
+  ```
 
 ---
 
@@ -148,6 +152,7 @@ curl http://localhost:3000/health
 ```
 
 **Status Values**:
+
 - `healthy`: All services operational
 - `degraded`: Some services degraded but system functional
 - `unhealthy`: Critical failures
@@ -194,11 +199,11 @@ When you submit a task via `/agent/execute`, the following event flow occurs:
 
 API requests are rate limited to prevent abuse:
 
-*   **Default Limit**: 100 requests per minute per IP
-*   **Rate Limit Headers**:
-    *   `X-RateLimit-Limit`: Maximum requests per window
-    *   `X-RateLimit-Remaining`: Remaining requests in current window
-    *   `X-RateLimit-Reset`: Unix timestamp when limit resets
+- **Default Limit**: 100 requests per minute per IP
+- **Rate Limit Headers**:
+  - `X-RateLimit-Limit`: Maximum requests per window
+  - `X-RateLimit-Remaining`: Remaining requests in current window
+  - `X-RateLimit-Reset`: Unix timestamp when limit resets
 
 **Example**:
 
@@ -235,9 +240,10 @@ curl -X POST http://localhost:3000/agent/execute \
 ```
 
 Session history is stored in Motia state and includes:
-*   Task history
-*   Execution results
-*   Metadata (LLM calls, skill calls, tokens)
+
+- Task history
+- Execution results
+- Metadata (LLM calls, skill calls, tokens)
 
 ---
 
@@ -245,10 +251,10 @@ Session history is stored in Motia state and includes:
 
 The agent can use the following skills:
 
-| Skill Name | Description |
-|------------|-------------|
-| `web-search` | Search the web for information |
-| `summarize` | Summarize text content |
+| Skill Name      | Description                       |
+| --------------- | --------------------------------- |
+| `web-search`    | Search the web for information    |
+| `summarize`     | Summarize text content            |
 | `code-analysis` | Analyze code quality and patterns |
 
 To specify which skills the agent should use:
@@ -277,13 +283,13 @@ All errors follow this format:
 
 ### Common Errors
 
-| Error | Status Code | Description |
-|-------|-------------|-------------|
-| `Invalid request` | 400 | Request body validation failed |
-| `API key required` | 401 | Missing API key |
-| `Invalid API key` | 403 | API key authentication failed |
-| `Too many requests` | 429 | Rate limit exceeded |
-| `Internal server error` | 500 | Unexpected server error |
+| Error                   | Status Code | Description                    |
+| ----------------------- | ----------- | ------------------------------ |
+| `Invalid request`       | 400         | Request body validation failed |
+| `API key required`      | 401         | Missing API key                |
+| `Invalid API key`       | 403         | API key authentication failed  |
+| `Too many requests`     | 429         | Rate limit exceeded            |
+| `Internal server error` | 500         | Unexpected server error        |
 
 ---
 
@@ -297,9 +303,9 @@ async function executeTask(task: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': process.env.API_KEY // Optional
+      'X-API-Key': process.env.API_KEY, // Optional
     },
-    body: JSON.stringify({ task })
+    body: JSON.stringify({ task }),
   });
 
   const data = await response.json();
@@ -343,10 +349,10 @@ curl -X POST http://localhost:3000/agent/execute \
 
 The system tracks the following metrics:
 
-*   **Total Tasks**: Total number of tasks executed
-*   **Successful Tasks**: Number of successful executions
-*   **Failed Tasks**: Number of failed executions
-*   **Average Execution Time**: Mean execution time in milliseconds
+- **Total Tasks**: Total number of tasks executed
+- **Successful Tasks**: Number of successful executions
+- **Failed Tasks**: Number of failed executions
+- **Average Execution Time**: Mean execution time in milliseconds
 
 ### Logs
 
@@ -410,7 +416,7 @@ Check rate limit headers and implement backoff:
 const remaining = response.headers.get('X-RateLimit-Remaining');
 if (parseInt(remaining) < 10) {
   // Implement backoff
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 ```
 
@@ -420,21 +426,21 @@ if (parseInt(remaining) < 10) {
 
 ### Task Takes Too Long
 
-*   Check if the LLM API is responsive
-*   Verify sandbox is working: `curl http://localhost:3000/health`
-*   Check logs for errors
+- Check if the LLM API is responsive
+- Verify sandbox is working: `curl http://localhost:3000/health`
+- Check logs for errors
 
 ### Rate Limited
 
-*   Wait for the rate limit window to reset
-*   Implement exponential backoff in your client
-*   Contact admin to increase rate limit
+- Wait for the rate limit window to reset
+- Implement exponential backoff in your client
+- Contact admin to increase rate limit
 
 ### Authentication Failed
 
-*   Verify API key is correct
-*   Check `X-API-Key` header is set
-*   Ensure API key hasn't expired
+- Verify API key is correct
+- Check `X-API-Key` header is set
+- Ensure API key hasn't expired
 
 ---
 
@@ -442,14 +448,14 @@ if (parseInt(remaining) < 10) {
 
 ### Version 1.0.0 (2026-01-08)
 
-*   Initial release
-*   `/agent/execute` endpoint
-*   `/health` endpoint
-*   Event-driven architecture
-*   Rate limiting
-*   API key authentication (optional)
-*   Session management
-*   Result logging
+- Initial release
+- `/agent/execute` endpoint
+- `/health` endpoint
+- Event-driven architecture
+- Rate limiting
+- API key authentication (optional)
+- Session management
+- Result logging
 
 ---
 
@@ -457,9 +463,9 @@ if (parseInt(remaining) < 10) {
 
 For issues, questions, or contributions:
 
-*   **Documentation**: See `/docs` directory
-*   **Issues**: Create issue in repository
-*   **Tests**: Run `npm test`
+- **Documentation**: See `/docs` directory
+- **Issues**: Create issue in repository
+- **Tests**: Run `npm test`
 
 ---
 

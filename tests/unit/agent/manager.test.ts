@@ -16,19 +16,19 @@ describe('AgentManager', () => {
       availableSkills: ['web-search', 'summarize'],
       llm: {
         provider: 'anthropic',
-        model: 'claude-3-haiku-20240307'
+        model: 'claude-3-haiku-20240307',
       },
       sandbox: {
         type: 'local',
-        config: {}  // Empty config uses defaults
-      }
+        config: {}, // Empty config uses defaults
+      },
     };
 
     // Create manager with short timeouts for testing
     manager = new AgentManager({
       sessionTimeout: 5000, // 5 seconds
       maxSessions: 3,
-      agentConfig: config
+      agentConfig: config,
     });
   });
 

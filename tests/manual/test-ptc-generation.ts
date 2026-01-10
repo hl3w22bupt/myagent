@@ -30,10 +30,13 @@ async function testPTCGeneration() {
   try {
     console.log('Creating Agent...');
     const sessionId = `test-${Date.now()}`;
-    const agent = new Agent({
-      systemPrompt: '你是一个代码生成助手。',
-      availableSkills: ['summarize', 'code-analysis']
-    }, sessionId);
+    const agent = new Agent(
+      {
+        systemPrompt: '你是一个代码生成助手。',
+        availableSkills: ['summarize', 'code-analysis'],
+      },
+      sessionId
+    );
 
     console.log('✓ Agent created\n');
     console.log('Testing PTC code generation...\n');
@@ -73,12 +76,10 @@ async function testPTCGeneration() {
       console.log('  2. PTC code was generated');
       console.log('  3. Code was executed in Sandbox');
       console.log('  4. Skills were invoked');
-
     } else {
       console.error('❌ Execution failed');
       console.error('Error:', result.error);
     }
-
   } catch (error: any) {
     console.error('\n❌ Error:', error.message);
     if (error.response?.data) {

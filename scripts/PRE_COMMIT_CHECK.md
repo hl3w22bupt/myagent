@@ -89,14 +89,18 @@ npx husky add .husky/pre-commit "npm run pre-commit"
 ## 常见问题
 
 ### Q: motia: command not found
+
 **A**: 需要重新安装依赖
+
 ```bash
 rm -rf node_modules package-lock.json
 npm install
 ```
 
 ### Q: TypeScript 编译失败
+
 **A**: 清理并重新构建
+
 ```bash
 npm run clean
 npm install
@@ -104,7 +108,9 @@ npm run pre-commit
 ```
 
 ### Q: Redis 编译超时
+
 **A**: 跳过测试或使用外部 Redis
+
 ```bash
 # 使用外部 Redis
 brew services start redis
@@ -115,10 +121,10 @@ SKIP_TESTS=1 npm run pre-commit
 
 ## 快速参考
 
-| 命令 | 说明 |
-|------|------|
-| `npm run pre-commit` | 运行完整检查 |
-| `SKIP_TESTS=1 npm run pre-commit` | 跳过测试 |
-| `npm run lint` | 仅运行 ESLint |
-| `npx tsc --noEmit` | 仅运行类型检查 |
-| `npm run build:ts` | 仅编译 TypeScript |
+| 命令                              | 说明              |
+| --------------------------------- | ----------------- |
+| `npm run pre-commit`              | 运行完整检查      |
+| `SKIP_TESTS=1 npm run pre-commit` | 跳过测试          |
+| `npm run lint`                    | 仅运行 ESLint     |
+| `npx tsc --noEmit`                | 仅运行类型检查    |
+| `npm run build:ts`                | 仅编译 TypeScript |

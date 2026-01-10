@@ -30,7 +30,7 @@ export const bodySchema = z.object({
   /**
    * Optional: Available skills.
    */
-  availableSkills: z.array(z.string()).optional().describe('List of available skills')
+  availableSkills: z.array(z.string()).optional().describe('List of available skills'),
 });
 
 /**
@@ -50,9 +50,7 @@ export const config: ApiRouteConfig = {
   /**
    * Emit agent task execution event.
    */
-  emits: [
-    { topic: 'agent.task.execute', label: 'Execute agent task' }
-  ],
+  emits: [{ topic: 'agent.task.execute', label: 'Execute agent task' }],
 
   /**
    * Virtual connections.
@@ -62,7 +60,7 @@ export const config: ApiRouteConfig = {
   /**
    * Flow assignment.
    */
-  flows: ['agent-workflow']
+  flows: ['agent-workflow'],
 };
 
 /**
@@ -70,10 +68,7 @@ export const config: ApiRouteConfig = {
  *
  * Receives HTTP requests and emits agent task events.
  */
-export const handler = async (
-  request: any,
-  { emit, logger }: any
-) => {
+export const handler = async (request: any, { emit, logger }: any) => {
   // Validate request body
   const validationResult = bodySchema.safeParse(request.body);
   if (!validationResult.success) {
@@ -89,7 +84,7 @@ export const handler = async (
     task,
     sessionId,
     taskId,
-    skills: availableSkills
+    skills: availableSkills,
   });
 
   // Emit agent task execution event
@@ -101,8 +96,8 @@ export const handler = async (
       task,
       sessionId,
       systemPrompt,
-      availableSkills
-    }
+      availableSkills,
+    },
   });
 
   // Return immediate response
@@ -114,7 +109,7 @@ export const handler = async (
       message: 'Task submitted for execution',
       taskId,
       task,
-      sessionId
-    }
+      sessionId,
+    },
   };
 };

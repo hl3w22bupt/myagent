@@ -38,7 +38,7 @@ async function testGLM4() {
       provider: provider as 'anthropic' | 'openai-compatible',
       apiKey,
       baseURL,
-      model
+      model,
     });
 
     console.log('✅ LLM client created\n');
@@ -47,8 +47,8 @@ async function testGLM4() {
     const response = await client.messagesCreate([
       {
         role: 'user',
-        content: '你好！请用一句话介绍你自己。'
-      }
+        content: '你好！请用一句话介绍你自己。',
+      },
     ]);
 
     console.log('\n✅ Message sent successfully!\n');
@@ -66,7 +66,6 @@ async function testGLM4() {
 
     console.log('\n✅ GLM-4 is working correctly!');
     console.log('\nYou can now use the Agent system with GLM-4.\n');
-
   } catch (error: any) {
     console.error('\n❌ Error:', error.message);
     if (error.response?.data) {

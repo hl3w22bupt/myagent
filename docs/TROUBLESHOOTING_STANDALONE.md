@@ -20,10 +20,12 @@ This guide helps diagnose and fix issues in the Agent → PTC → Sandbox → Sk
 ### Issue: `PYTHON_PATH not found`
 
 **Symptoms:**
+
 - Sandbox fails to start with "Python executable not found"
 - Error: `Error: spawn python3 ENOENT`
 
 **Diagnosis:**
+
 ```bash
 # Check if Python is available
 which python3
@@ -36,11 +38,13 @@ echo $PYTHON_PATH
 **Solutions:**
 
 1. **Option 1: Use system Python**
+
 ```bash
 export PYTHON_PATH=$(which python3)
 ```
 
 2. **Option 2: Use virtual environment**
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -48,6 +52,7 @@ export PYTHON_PATH=$(which python3)
 ```
 
 3. **Option 3: Specify in .env file**
+
 ```env
 PYTHON_PATH=/usr/bin/python3
 ```
@@ -57,10 +62,12 @@ PYTHON_PATH=/usr/bin/python3
 ### Issue: `ModuleNotFoundError: No module named 'core'`
 
 **Symptoms:**
+
 - SkillExecutor import fails
 - Error: `ModuleNotFoundError: No module named 'core.skill.executor'`
 
 **Diagnosis:**
+
 ```bash
 # Check project structure
 ls -la core/
@@ -73,20 +80,23 @@ python3 -c "import sys; sys.path.insert(0, '.'); from core.skill.executor import
 **Solutions:**
 
 1. **Ensure you're in the project root**
+
 ```bash
 cd /path/to/myagent
 pwd  # Should show project root
 ```
 
 2. **Verify PYTHONPATH includes current directory**
+
 ```bash
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 ```
 
 3. **Check skillImplPath is correctly set**
+
 ```typescript
 await sandbox.execute(code, {
-  skillImplPath: process.cwd(),  // Should be absolute path
+  skillImplPath: process.cwd(), // Should be absolute path
   // ...
 });
 ```
@@ -98,10 +108,12 @@ await sandbox.execute(code, {
 ### Issue: Sandbox timeout
 
 **Symptoms:**
+
 - Execution hangs and times out
 - Error: `Sandbox execution timeout`
 
 **Diagnosis:**
+
 ```bash
 # Check if timeout is too short
 # In tests, look for:
@@ -114,14 +126,16 @@ time python3 -c "from core.skill.executor import SkillExecutor; ..."
 **Solutions:**
 
 1. **Increase timeout**
+
 ```typescript
 await sandbox.execute(code, {
-  timeout: 60000,  // 60 seconds instead of 10
+  timeout: 60000, // 60 seconds instead of 10
   // ...
 });
 ```
 
 2. **Check for infinite loops in skill code**
+
 ```python
 # Make sure async functions properly await
 async def execute(self, input_data):
@@ -129,6 +143,7 @@ async def execute(self, input_data):
 ```
 
 3. **Check LLM API rate limits**
+
 ```bash
 # If using pure-prompt skills, LLM might be slow
 # Check API status
@@ -140,10 +155,12 @@ curl -I https://api.anthropic.com
 ### Issue: Python process crashes
 
 **Symptoms:**
+
 - Sandbox returns `success: false` with `error` field
 - Error: `Python process exited with code 1`
 
 **Diagnosis:**
+
 ```bash
 # Run the code directly to see the error
 python3 << 'EOF'
@@ -156,6 +173,7 @@ EOF
 **Solutions:**
 
 1. **Check stderr in sandbox result**
+
 ```typescript
 const result = await sandbox.execute(code, options);
 if (!result.success) {
@@ -165,6 +183,7 @@ if (!result.success) {
 ```
 
 2. **Add error handling in Python code**
+
 ```python
 try:
     result = await executor.execute('skill-name', input)
@@ -177,6 +196,7 @@ except Exception as e:
 ```
 
 3. **Check Python dependencies**
+
 ```bash
 # Install required packages
 pip3 install -r requirements.txt
@@ -192,10 +212,12 @@ python3 -c "import pydantic; import anthropic"
 ### Issue: Skill not found in registry
 
 **Symptoms:**
+
 - Error: `Skill 'xyz' not found`
 - Registry scan returns empty or incomplete results
 
 **Diagnosis:**
+
 ```python
 # Test registry directly
 python3 << 'EOF'
@@ -214,6 +236,7 @@ EOF
 **Solutions:**
 
 1. **Check skill directory structure**
+
 ```bash
 # Verify structure:
 skills/
@@ -226,6 +249,7 @@ skills/
 ```
 
 2. **Verify skill.yaml format**
+
 ```yaml
 # Required fields:
 name: summarize
@@ -236,6 +260,7 @@ tags: [text, summarization]
 ```
 
 3. **Check for YAML syntax errors**
+
 ```bash
 # Validate YAML
 python3 -c "import yaml; yaml.safe_load(open('skills/summarize/skill.yaml'))"
@@ -246,10 +271,12 @@ python3 -c "import yaml; yaml.safe_load(open('skills/summarize/skill.yaml'))"
 ### Issue: Skill execution fails
 
 **Symptoms:**
+
 - Skill loads but execution fails
 - Error: `ValidationError` or `AttributeError`
 
 **Diagnosis:**
+
 ```python
 # Test skill execution directly
 python3 << 'EOF'
@@ -268,6 +295,7 @@ EOF
 **Solutions:**
 
 1. **Check input schema**
+
 ```yaml
 # In skill.yaml, verify input_schema:
 input_schema:
@@ -280,6 +308,7 @@ input_schema:
 ```
 
 2. **Verify input matches schema**
+
 ```python
 # Make sure to provide all required fields
 input_data = {
@@ -289,6 +318,7 @@ input_data = {
 ```
 
 3. **Check handler function signature**
+
 ```python
 # Pure-script skills:
 async def execute(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -308,10 +338,12 @@ async def handler(input_data: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
 ### Issue: Agent fails to generate PTC code
 
 **Symptoms:**
+
 - Agent.run() fails
 - Error: `Failed to generate PTC code`
 
 **Diagnosis:**
+
 ```typescript
 // Check LLM configuration
 const agentInfo = agent.getInfo();
@@ -322,18 +354,21 @@ console.log('Available Skills:', agentInfo.availableSkills);
 **Solutions:**
 
 1. **Verify ANTHROPIC_API_KEY is set**
+
 ```bash
 echo $ANTHROPIC_API_KEY
 # Should show a valid API key
 ```
 
 2. **Check API key format**
+
 ```env
 # Should start with sk-ant-
 ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
 3. **Test LLM connection**
+
 ```typescript
 import { Anthropic } from '@anthropic-ai/sdk';
 
@@ -341,7 +376,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const response = await anthropic.messages.create({
   model: 'claude-sonnet-4-5',
   max_tokens: 100,
-  messages: [{ role: 'user', content: 'Hello' }]
+  messages: [{ role: 'user', content: 'Hello' }],
 });
 console.log(response.content);
 ```
@@ -351,11 +386,13 @@ console.log(response.content);
 ### Issue: Sandbox not executing PTC code
 
 **Symptoms:**
+
 - PTC code generates successfully
 - Sandbox execution fails
 - Error: `Python execution failed`
 
 **Diagnosis:**
+
 ```typescript
 // Check sandbox configuration
 const agentInfo = agent.getInfo();
@@ -369,6 +406,7 @@ console.log('Sandbox Healthy:', isHealthy);
 **Solutions:**
 
 1. **Verify sandbox adapter is registered**
+
 ```typescript
 import { SandboxFactory } from '@/core/sandbox/factory';
 import { LocalSandboxAdapter } from '@/core/sandbox/adapters/local';
@@ -380,6 +418,7 @@ SandboxFactory.register('local', (config) => {
 ```
 
 2. **Check sandbox configuration**
+
 ```typescript
 {
   type: 'local',
@@ -391,13 +430,14 @@ SandboxFactory.register('local', (config) => {
 ```
 
 3. **Test sandbox directly**
+
 ```typescript
 const testCode = 'print("Hello from sandbox")';
 const result = await sandbox.execute(testCode, {
   skills: [],
   skillImplPath: process.cwd(),
   sessionId: 'test-direct',
-  timeout: 5000
+  timeout: 5000,
 });
 console.log('Result:', result);
 ```
@@ -409,10 +449,12 @@ console.log('Result:', result);
 ### Issue: Slow skill execution
 
 **Symptoms:**
+
 - Skills take > 5 seconds to execute
 - Tests timeout frequently
 
 **Diagnosis:**
+
 ```bash
 # Profile skill execution
 time python3 << 'EOF'
@@ -433,12 +475,14 @@ EOF
 **Solutions:**
 
 1. **Use pure-script skills when possible**
+
 ```yaml
 # Pure-script is faster than pure-prompt
-type: pure-script  # No LLM call
+type: pure-script # No LLM call
 ```
 
 2. **Cache LLM results**
+
 ```python
 # Add caching to handler
 from functools import lru_cache
@@ -450,6 +494,7 @@ def cached_llm_call(prompt):
 ```
 
 3. **Optimize Python code**
+
 ```python
 # Use list comprehensions
 result = [process(x) for x in items]
@@ -468,10 +513,12 @@ await asyncio.gather(*[process(item) for item in items])  # Parallel
 ### Issue: High memory usage
 
 **Symptoms:**
+
 - Memory usage grows over time
 - Tests fail with out-of-memory errors
 
 **Diagnosis:**
+
 ```bash
 # Monitor memory usage
 python3 -m memory_profiler script.py
@@ -483,6 +530,7 @@ python3 -m tracemalloc
 **Solutions:**
 
 1. **Clean up resources**
+
 ```typescript
 afterAll(async () => {
   await agent.cleanup();
@@ -491,6 +539,7 @@ afterAll(async () => {
 ```
 
 2. **Limit skill registry cache**
+
 ```python
 class SkillRegistry:
     def __init__(self, max_cache_size: int = 10):
@@ -499,6 +548,7 @@ class SkillRegistry:
 ```
 
 3. **Use weak references for subagents**
+
 ```typescript
 import { WeakMap } from 'weak-map';
 
@@ -514,6 +564,7 @@ private subagents: WeakMap<string, Agent> = new WeakMap();
 **Cause:** Anthropic SDK not installed
 
 **Fix:**
+
 ```bash
 pip3 install anthropic
 # or

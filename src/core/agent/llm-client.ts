@@ -47,7 +47,7 @@ export class LLMPresets {
       provider: 'anthropic',
       apiKey,
       baseURL: 'https://api.anthropic.com',
-      model
+      model,
     };
   }
 
@@ -59,7 +59,7 @@ export class LLMPresets {
       provider: 'anthropic',
       apiKey,
       baseURL: 'https://open.bigmodel.cn/api/anthropic',
-      model
+      model,
     };
   }
 
@@ -71,7 +71,7 @@ export class LLMPresets {
       provider: 'openai-compatible',
       apiKey,
       baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
-      model
+      model,
     };
   }
 
@@ -83,7 +83,7 @@ export class LLMPresets {
       provider: 'openai-compatible',
       apiKey,
       baseURL: 'https://api.openai.com/v1',
-      model
+      model,
     };
   }
 
@@ -95,7 +95,7 @@ export class LLMPresets {
       provider: 'openai-compatible',
       apiKey,
       baseURL,
-      model
+      model,
     };
   }
 
@@ -107,7 +107,7 @@ export class LLMPresets {
       provider: 'anthropic',
       apiKey,
       baseURL,
-      model
+      model,
     };
   }
 }
@@ -129,14 +129,14 @@ export class LLMClient {
       case 'anthropic':
         this.anthropic = new Anthropic({
           apiKey: config.apiKey,
-          baseURL: config.baseURL || 'https://api.anthropic.com'
+          baseURL: config.baseURL || 'https://api.anthropic.com',
         });
         break;
 
       case 'openai-compatible':
         this.openai = new OpenAI({
           apiKey: config.apiKey,
-          baseURL: config.baseURL || 'https://open.bigmodel.cn/api/paas/v4/'
+          baseURL: config.baseURL || 'https://open.bigmodel.cn/api/paas/v4/',
         });
         break;
 
@@ -182,18 +182,18 @@ export class LLMClient {
     model: string
   ): Promise<LLMResponse> {
     // Filter out system messages for Anthropic (they go in a separate param)
-    const systemMessage = messages.find(m => m.role === 'system');
-    const chatMessages = messages.filter(m => m.role !== 'system');
+    const systemMessage = messages.find((m) => m.role === 'system');
+    const chatMessages = messages.filter((m) => m.role !== 'system');
 
     const response = await this.anthropic!.messages.create({
       model,
       max_tokens,
       temperature,
       system: systemMessage?.content,
-      messages: chatMessages.map(m => ({
+      messages: chatMessages.map((m) => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content
-      }))
+        content: m.content,
+      })),
     });
 
     const content = response.content[0];
@@ -207,8 +207,8 @@ export class LLMClient {
       usage: {
         prompt_tokens: response.usage.input_tokens,
         completion_tokens: response.usage.output_tokens,
-        total_tokens: response.usage.input_tokens + response.usage.output_tokens
-      }
+        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+      },
     };
   }
 
@@ -223,12 +223,12 @@ export class LLMClient {
   ): Promise<LLMResponse> {
     const response = await this.openai!.chat.completions.create({
       model,
-      messages: messages.map(m => ({
+      messages: messages.map((m) => ({
         role: m.role,
-        content: m.content
+        content: m.content,
       })),
       max_tokens,
-      temperature
+      temperature,
     });
 
     const choice = response.choices[0];
@@ -242,8 +242,8 @@ export class LLMClient {
       usage: {
         prompt_tokens: response.usage?.prompt_tokens || 0,
         completion_tokens: response.usage?.completion_tokens || 0,
-        total_tokens: response.usage?.total_tokens || 0
-      }
+        total_tokens: response.usage?.total_tokens || 0,
+      },
     };
   }
 
@@ -274,7 +274,7 @@ export class LLMClient {
   getInfo(): { provider: LLMProvider; model: string } {
     return {
       provider: this.provider,
-      model: this.model
+      model: this.model,
     };
   }
 }

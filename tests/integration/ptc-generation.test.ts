@@ -23,7 +23,7 @@ describe('PTC Generation and Execution', () => {
     llm = new LLMClient({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || 'test-key'
+      apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
     });
 
     // Define available skills
@@ -31,18 +31,18 @@ describe('PTC Generation and Execution', () => {
       {
         name: 'summarize',
         description: 'Summarize text content',
-        tags: ['text', 'summarization', 'nlp']
+        tags: ['text', 'summarization', 'nlp'],
       },
       {
         name: 'code-analysis',
         description: 'Analyze code quality and patterns',
-        tags: ['code', 'analysis', 'quality']
+        tags: ['code', 'analysis', 'quality'],
       },
       {
         name: 'web-search',
         description: 'Search the web for information',
-        tags: ['web', 'research', 'search']
-      }
+        tags: ['web', 'research', 'search'],
+      },
     ];
 
     // Initialize PTC generator
@@ -252,7 +252,8 @@ describe('PTC Generation and Execution', () => {
         return;
       }
 
-      const task = 'Search for "Python async programming", summarize the top 3 results, and analyze the code quality';
+      const task =
+        'Search for "Python async programming", summarize the top 3 results, and analyze the code quality';
 
       const ptcCode = await ptcGenerator.generate(task);
 

@@ -10,12 +10,7 @@
 import { LLMClient } from './llm-client';
 import { SandboxFactory } from '../sandbox/factory';
 import { PTCGenerator } from './ptc-generator';
-import {
-  AgentConfig,
-  AgentResult,
-  AgentStep,
-  SessionState
-} from './types';
+import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
 
 /**
  * Base Agent class with core Agent capabilities.
@@ -33,18 +28,18 @@ export class Agent {
     {
       name: 'web-search',
       description: 'Search the web for information',
-      tags: ['web', 'search', 'research']
+      tags: ['web', 'search', 'research'],
     },
     {
       name: 'summarize',
       description: 'Summarize text content',
-      tags: ['text', 'summarization', 'nlp']
+      tags: ['text', 'summarization', 'nlp'],
     },
     {
       name: 'code-analysis',
       description: 'Analyze code quality and patterns',
-      tags: ['code', 'analysis', 'quality']
-    }
+      tags: ['code', 'analysis', 'quality'],
+    },
   ];
 
   constructor(config: AgentConfig, sessionId: string) {
@@ -52,7 +47,9 @@ export class Agent {
     this.sessionId = sessionId;
 
     // Determine LLM provider and configuration
-    const provider = (config.llm?.provider || process.env.DEFAULT_LLM_PROVIDER || 'anthropic') as 'anthropic' | 'openai-compatible';
+    const provider = (config.llm?.provider || process.env.DEFAULT_LLM_PROVIDER || 'anthropic') as
+      | 'anthropic'
+      | 'openai-compatible';
     const apiKey = config.llm?.apiKey || process.env.ANTHROPIC_API_KEY || '';
     const baseURL = config.llm?.baseURL || process.env.LLM_BASE_URL;
     const model = config.llm?.model || process.env.DEFAULT_LLM_MODEL;
@@ -62,7 +59,7 @@ export class Agent {
       provider,
       apiKey,
       baseURL,
-      model
+      model,
     });
 
     // Initialize Sandbox
@@ -74,10 +71,8 @@ export class Agent {
 
     const adapterConfig = {
       type: config.sandbox.type || 'local',
-      local: config.sandbox.config
+      local: config.sandbox.config,
     };
-
-    console.log('[Agent] Using sandbox config:', adapterConfig);
 
     this.sandbox = SandboxFactory.create(adapterConfig);
 
@@ -91,7 +86,7 @@ export class Agent {
       lastActivityAt: Date.now(),
       conversationHistory: [],
       executionHistory: [],
-      variables: new Map()
+      variables: new Map(),
     };
   }
 
@@ -112,7 +107,7 @@ export class Agent {
     this.state.conversationHistory.push({
       role: 'user',
       content: task,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     const startTime = Date.now();
@@ -124,13 +119,13 @@ export class Agent {
         type: 'planning',
         content: 'Generating PTC code for task',
         timestamp: Date.now(),
-        metadata: { task }
+        metadata: { task },
       });
 
       // Generate PTC code with conversation history and variables as context
       const ptcCode = await this.ptcGenerator.generate(task, {
         history: this.state.conversationHistory,
-        variables: Object.fromEntries(this.state.variables)
+        variables: Object.fromEntries(this.state.variables),
       });
 
       steps.push({
@@ -139,15 +134,15 @@ export class Agent {
         timestamp: Date.now(),
         metadata: {
           codeLength: ptcCode.length,
-          language: 'python'
-        }
+          language: 'python',
+        },
       });
 
       // Step 2: Execute in Sandbox
       steps.push({
         type: 'execution',
         content: 'Executing PTC code in sandbox',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const sandboxResult = await this.sandbox.execute(ptcCode, {
@@ -157,8 +152,8 @@ export class Agent {
         timeout: this.config.constraints?.timeout || 60000,
         metadata: {
           traceId: this.sessionId,
-          task
-        }
+          task,
+        },
       });
 
       // Step 3: Process result
@@ -169,7 +164,7 @@ export class Agent {
         this.state.conversationHistory.push({
           role: 'assistant',
           content: `Error: ${sandboxResult.error?.message || 'Execution failed'}`,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
 
         return {
@@ -181,13 +176,13 @@ export class Agent {
           state: {
             conversationLength: this.state.conversationHistory.length,
             executionCount: this.state.executionHistory.length,
-            variablesCount: this.state.variables.size
+            variablesCount: this.state.variables.size,
           },
           metadata: {
             llmCalls: 1,
             skillCalls: 0,
-            totalTokens: 0
-          }
+            totalTokens: 0,
+          },
         };
       }
 
@@ -196,14 +191,14 @@ export class Agent {
         task,
         result: sandboxResult.output,
         timestamp: Date.now(),
-        executionTime
+        executionTime,
       });
 
       // Record assistant response
       this.state.conversationHistory.push({
         role: 'assistant',
         content: sandboxResult.output,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       // Save variables if returned from sandbox
@@ -225,21 +220,20 @@ export class Agent {
         state: {
           conversationLength: this.state.conversationHistory.length,
           executionCount: this.state.executionHistory.length,
-          variablesCount: this.state.variables.size
+          variablesCount: this.state.variables.size,
         },
         metadata: {
           llmCalls: 1,
           skillCalls,
-          totalTokens: 0 // TODO: Track actual token usage
-        }
+          totalTokens: 0,
+        },
       };
-
     } catch (error: any) {
       // Record error in conversation history
       this.state.conversationHistory.push({
         role: 'assistant',
         content: `Error: ${error.message}`,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       steps.push({
@@ -247,8 +241,8 @@ export class Agent {
         content: error.message,
         timestamp: Date.now(),
         metadata: {
-          stack: error.stack
-        }
+          stack: error.stack,
+        },
       });
 
       return {
@@ -260,13 +254,13 @@ export class Agent {
         state: {
           conversationLength: this.state.conversationHistory.length,
           executionCount: this.state.executionHistory.length,
-          variablesCount: this.state.variables.size
+          variablesCount: this.state.variables.size,
         },
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
-          totalTokens: 0
-        }
+          totalTokens: 0,
+        },
       };
     }
   }
@@ -320,7 +314,7 @@ export class Agent {
       sessionId: this.sessionId,
       availableSkills: this.config.availableSkills,
       llmModel: this.config.llm?.model,
-      sandboxType: this.config.sandbox?.type
+      sandboxType: this.config.sandbox?.type,
     };
   }
 }

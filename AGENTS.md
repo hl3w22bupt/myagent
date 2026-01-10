@@ -7,8 +7,9 @@ This file provides context and instructions for AI coding assistants working on 
 ## Project Overview
 
 This is a **Motia** application - a framework for building event-driven, type-safe backend systems with:
+
 - HTTP API endpoints (API Steps)
-- Background event processing (Event Steps)  
+- Background event processing (Event Steps)
 - Scheduled tasks (Cron Steps)
 - Real-time streaming capabilities
 - Built-in state management
@@ -66,6 +67,7 @@ Architecture guides in `.cursor/architecture/`:
 Motia discovers steps from both `/src` and `/steps` folders. Modern projects typically use `/src`:
 
 **Recommended Structure (using `/src`):**
+
 ```
 project/
 ├── .cursor/rules/   # DETAILED GUIDES - Read these first!
@@ -89,6 +91,7 @@ project/
 ```
 
 **Alternative Structure (using `/steps`):**
+
 ```
 project/
 ├── steps/          # Step definitions
@@ -116,6 +119,7 @@ Every step needs two exports:
 2. **`handler`** - Async function with processing logic
 
 **For complete examples and type definitions, read:**
+
 - `.cursor/rules/motia/api-steps.mdc` - HTTP endpoints
 - `.cursor/rules/motia/event-steps.mdc` - Background tasks
 - `.cursor/rules/motia/cron-steps.mdc` - Scheduled tasks
@@ -125,6 +129,7 @@ Every step needs two exports:
 > **📖 Read the cursor rules for complete information**
 
 ### Step Types
+
 - **API Steps** → Read `.cursor/rules/motia/api-steps.mdc`
   - HTTP endpoints, schemas, middleware, emits
   - Complete TypeScript and Python examples
@@ -141,6 +146,7 @@ Every step needs two exports:
   - Integration with event emits
 
 ### Architecture
+
 - **Project Structure** → Read `.cursor/architecture/architecture.mdc`
   - File organization, naming conventions
   - Domain-Driven Design patterns (services, repositories)
@@ -152,6 +158,7 @@ Every step needs two exports:
   - HTTP status codes
 
 ### Advanced Features
+
 - **State Management** → Read `.cursor/rules/motia/state-management.mdc`
   - Caching strategies, TTL configuration
   - When to use state vs database
@@ -197,6 +204,7 @@ When working on Motia projects, follow this pattern:
    - Apply best practices
 
 4. **Generate types** after changes
+
    ```bash
    npx motia generate-types
    ```
