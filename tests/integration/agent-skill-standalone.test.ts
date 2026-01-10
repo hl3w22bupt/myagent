@@ -37,10 +37,18 @@ describe('Agent + Skill Standalone Integration', () => {
       searchPath = path.join(searchPath, '..');
     }
 
-    // Determine Python path - prefer python_modules over venv
+    // Determine Python path - prefer python_modules, then venv, then system python3
     const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
     const pythonModulesPython = path.join(projectRoot, 'python_modules', 'bin', 'python3');
-    pythonPath = fs.existsSync(pythonModulesPython) ? pythonModulesPython : venvPython;
+
+    if (fs.existsSync(pythonModulesPython)) {
+      pythonPath = pythonModulesPython;
+    } else if (fs.existsSync(venvPython)) {
+      pythonPath = venvPython;
+    } else {
+      // Use system python3 (for CI environments)
+      pythonPath = 'python3';
+    }
 
     // Suppress logs AFTER setup
     console.error = jest.fn();

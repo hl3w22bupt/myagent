@@ -27,8 +27,12 @@ describe('PYTHONPATH Debug', () => {
 
     const venvPython = join(projectRoot, 'venv', 'bin', 'python3');
     const pythonModulesPython = join(projectRoot, 'python_modules', 'bin', 'python3');
-    // Prefer python_modules over venv for tests
-    const pythonPath = existsSync(pythonModulesPython) ? pythonModulesPython : venvPython;
+    // Prefer python_modules, then venv, then system python3 (for CI)
+    const pythonPath = existsSync(pythonModulesPython)
+      ? pythonModulesPython
+      : existsSync(venvPython)
+        ? venvPython
+        : 'python3';
 
     sandbox = new LocalSandboxAdapter({
       pythonPath: pythonPath,

@@ -52,6 +52,7 @@ htmlcov/
 
 # Claude Code
 .claude/settings.local.json
+.claude/ralph-loop.local.md
 
 # Motia Workbench
 motia-workbench.json
@@ -61,7 +62,3 @@ motia-workbench.json
 
 # Backup files
 *.bak
-.claude/
-
-# Claude private config
-.claude/
