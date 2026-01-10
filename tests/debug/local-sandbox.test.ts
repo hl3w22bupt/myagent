@@ -15,7 +15,7 @@ describe('LocalSandboxAdapter Debug', () => {
     const pythonPath = process.env.PYTHON_PATH || venvPython;
 
     console.log('Python path:', pythonPath);
-    console.log('Exists:', require_('fs').existsSync(pythonPath));
+    console.log('Exists:', require('fs').existsSync(pythonPath));
 
     sandbox = new LocalSandboxAdapter({
       pythonPath: pythonPath,

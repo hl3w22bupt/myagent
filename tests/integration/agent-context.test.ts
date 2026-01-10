@@ -8,10 +8,8 @@
 
 import { describe, it, expect, beforeAll } from '@jest/globals';
 import { Agent } from '@/core/agent/agent';
-import { LocalSandboxAdapter } from '@/core/sandbox/local';
-import { AnthropicLLMClient } from '@/core/agent/llm-client';
+import { LocalSandboxAdapter } from '@/core/sandbox';
 void LocalSandboxAdapter; // Mark as used
-void AnthropicLLMClient; // Mark as used
 
 describe('Agent Context Integration', () => {
   let agent: Agent;
@@ -50,7 +48,7 @@ describe('Agent Context Integration', () => {
       }
 
       // First task
-      const result1 = await agent.execute('What is 2 + 2?');
+      const result1 = await agent.run('What is 2 + 2?');
 
       expect(result1.success).toBe(true);
       expect(result1.sessionId).toBe('test-context-session');
@@ -63,13 +61,13 @@ describe('Agent Context Integration', () => {
       console.log(`  Execution count: ${result1.state?.executionCount}`);
 
       // Second task (should have access to first task in history)
-      const result2 = await agent.execute('What was my previous question?');
+      const result2 = await agent.run('What was my previous question?');
 
       expect(result2.success).toBe(true);
       expect(result2.sessionId).toBe('test-context-session');
 
       // Conversation history should have grown
-      expect(result2.state?.conversationLength).toBeGreaterThan(result1.state?.conversationLength);
+      expect(result2.state?.conversationLength ?? 0).toBeGreaterThan(result1.state?.conversationLength ?? 0);
 
       console.log('After second task:');
       console.log(`  Conversation length: ${result2.state?.conversationLength}`);
@@ -83,7 +81,7 @@ describe('Agent Context Integration', () => {
       }
 
       // Execute a simple task
-      const result = await agent.execute('Say hello');
+      const result = await agent.run('Say hello');
 
       expect(result.success).toBe(true);
 
@@ -102,7 +100,7 @@ describe('Agent Context Integration', () => {
       }
 
       // Execute a task that might set variables
-      const result1 = await agent.execute('Store the value 42 in a variable named test_var');
+      const result1 = await agent.run('Store the value 42 in a variable named test_var');
 
       expect(result1.success).toBe(true);
 
@@ -110,7 +108,7 @@ describe('Agent Context Integration', () => {
       console.log(`  Variables count: ${result1.state?.variablesCount}`);
 
       // Execute another task that might use the variable
-      const result2 = await agent.execute('What is the value of test_var?');
+      const result2 = await agent.run('What is the value of test_var?');
 
       expect(result2.success).toBe(true);
 
@@ -124,7 +122,7 @@ describe('Agent Context Integration', () => {
         return;
       }
 
-      const result = await agent.execute('Create variables x=1, y=2, z=3');
+      const result = await agent.run('Create variables x=1, y=2, z=3');
 
       expect(result.success).toBe(true);
 
@@ -143,12 +141,12 @@ describe('Agent Context Integration', () => {
       }
 
       // First interaction
-      const result1 = await agent.execute('My name is Alice');
+      const result1 = await agent.run('My name is Alice');
 
       expect(result1.success).toBe(true);
 
       // Second interaction should remember the name
-      const result2 = await agent.execute('What is my name?');
+      const result2 = await agent.run('What is my name?');
 
       expect(result2.success).toBe(true);
       expect(result2.output).toBeDefined();
@@ -167,10 +165,10 @@ describe('Agent Context Integration', () => {
       }
 
       // Execute multiple tasks to build up history and variables
-      await agent.execute('Set x = 10');
-      await agent.execute('Set y = 20');
+      await agent.run('Set x = 10');
+      await agent.run('Set y = 20');
 
-      const result = await agent.execute('Add x and y');
+      const result = await agent.run('Add x and y');
 
       expect(result.success).toBe(true);
       expect(result.state).toBeDefined();
@@ -198,9 +196,9 @@ describe('Agent Context Integration', () => {
         return;
       }
 
-      const result1 = await agent.execute('Task 1');
-      const result2 = await agent.execute('Task 2');
-      const result3 = await agent.execute('Task 3');
+      const result1 = await agent.run('Task 1');
+      const result2 = await agent.run('Task 2');
+      const result3 = await agent.run('Task 3');
 
       expect(result1.sessionId).toBe('test-context-session');
       expect(result2.sessionId).toBe('test-context-session');
@@ -217,8 +215,8 @@ describe('Agent Context Integration', () => {
         return;
       }
 
-      await agent.execute('Task A');
-      const result = await agent.execute('Task B');
+      await agent.run('Task A');
+      const result = await agent.run('Task B');
 
       expect(result.state?.executionCount).toBeGreaterThan(1);
 
@@ -235,10 +233,10 @@ describe('Agent Context Integration', () => {
 
       // Execute many tasks
       for (let i = 0; i < 10; i++) {
-        await agent.execute(`Task ${i + 1}`);
+        await agent.run(`Task ${i + 1}`);
       }
 
-      const result = await agent.execute('Final task');
+      const result = await agent.run('Final task');
 
       // Should have tracked all conversations in state
       expect(result.state?.conversationLength).toBeGreaterThan(10);
@@ -273,7 +271,7 @@ describe('Agent Context Integration', () => {
         'fresh-session'
       );
 
-      const result = await freshAgent.execute('Hello');
+      const result = await freshAgent.run('Hello');
 
       // Should work fine even with no prior context
       expect(result.success).toBe(true);

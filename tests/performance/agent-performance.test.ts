@@ -229,6 +229,7 @@ print(f"OK")
     let agent: Agent;
 
     beforeAll(() => {
+      const sessionId = 'test-performance-session';
       agent = new Agent({
         systemPrompt: 'You are a helpful assistant.',
         availableSkills: ['summarize', 'code-analysis'],
@@ -244,7 +245,7 @@ print(f"OK")
             timeout: 30000
           }
         }
-      });
+      }, sessionId);
     });
 
     afterAll(async () => {
@@ -253,11 +254,16 @@ print(f"OK")
 
     it('should initialize agent in < 500ms',
       benchmark('Agent Initialization', 500, async () => {
+        const sessionId = `test-benchmark-${Date.now()}`;
         const testAgent = new Agent({
           systemPrompt: 'Test',
           availableSkills: [],
-          llm: { provider: 'anthropic', model: 'claude-sonnet-4-5' }
-        });
+          llm: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+          sandbox: {
+            type: 'local',
+            config: {}
+          }
+        }, sessionId);
         expect(testAgent).toBeDefined();
         await testAgent.cleanup();
       })

@@ -19,7 +19,8 @@ describe('AgentManager', () => {
         model: 'claude-3-haiku-20240307'
       },
       sandbox: {
-        type: 'local'
+        type: 'local',
+        config: {}  // Empty config uses defaults
       }
     };
 

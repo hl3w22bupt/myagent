@@ -43,6 +43,7 @@ describe('Agent + Skill Standalone Integration', () => {
     }) as LocalSandboxAdapter;
 
     // Create agent with sandbox
+    const sessionId = 'test-skill-standalone-session';
     agent = new Agent({
       systemPrompt: 'You are a helpful assistant with access to various skills.',
       availableSkills: ['summarize', 'code-analysis', 'web-search'],
@@ -53,12 +54,12 @@ describe('Agent + Skill Standalone Integration', () => {
       },
       sandbox: {
         type: 'local',
-        local: {
+        config: {
           pythonPath: pythonPath,
           timeout: 30000
         }
       }
-    });
+    }, sessionId);
   });
 
   afterAll(async () => {
@@ -285,6 +286,7 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
     let masterAgent: MasterAgent;
 
     beforeAll(() => {
+      const sessionId = 'test-master-agent-session';
       masterAgent = new MasterAgent({
         systemPrompt: 'You are a master coordinator agent.',
         availableSkills: ['*'],
@@ -293,8 +295,12 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
           model: 'claude-sonnet-4-5',
           apiKey: process.env.ANTHROPIC_API_KEY
         },
+        sandbox: {
+          type: 'local',
+          config: {}
+        },
         subagents: ['code-reviewer', 'data-analyst']
-      });
+      }, sessionId);
     });
 
     afterAll(async () => {

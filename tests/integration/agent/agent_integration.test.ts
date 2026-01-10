@@ -11,6 +11,7 @@ describe('Agent Integration', () => {
     let agent: Agent;
 
     beforeAll(() => {
+      const sessionId = 'test-agent-integration-session';
       agent = new Agent({
         systemPrompt: 'You are a helpful assistant.',
         availableSkills: ['summarize', 'code-analysis'],
@@ -19,9 +20,10 @@ describe('Agent Integration', () => {
           model: 'claude-sonnet-4-5'
         },
         sandbox: {
-          type: 'local'
+          type: 'local',
+          config: {}
         }
-      });
+      }, sessionId);
     });
 
     afterAll(async () => {
@@ -46,6 +48,7 @@ describe('Agent Integration', () => {
     let masterAgent: MasterAgent;
 
     beforeAll(() => {
+      const sessionId = 'test-master-agent-integration-session';
       masterAgent = new MasterAgent({
         systemPrompt: 'You are a helpful assistant.',
         availableSkills: ['*'],
@@ -53,8 +56,12 @@ describe('Agent Integration', () => {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5'
         },
+        sandbox: {
+          type: 'local',
+          config: {}
+        },
         subagents: ['code-reviewer', 'data-analyst']
-      });
+      }, sessionId);
     });
 
     afterAll(async () => {

@@ -13,6 +13,7 @@ describe('End-to-End Agent Flow', () => {
 
   beforeEach(() => {
     // Initialize agent with required configuration
+    const sessionId = 'test-e2e-session';
     agent = new Agent({
       systemPrompt: 'You are a helpful assistant with access to various skills.',
       availableSkills: ['web-search', 'summarize', 'code-analysis'],
@@ -27,7 +28,7 @@ describe('End-to-End Agent Flow', () => {
         timeout: 60000,
         maxIterations: 5
       }
-    });
+    }, sessionId);
   });
 
   afterEach(async () => {

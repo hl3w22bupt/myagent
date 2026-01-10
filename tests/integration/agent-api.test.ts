@@ -5,22 +5,15 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
-import { Agent } from '../../src/core/agent/agent.js';
+import { Agent } from '@/core/agent/agent';
 
 // Test configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const TEST_TIMEOUT = 30000;
 
 describe('Agent API Integration Tests', () => {
-  let testAgent: Agent;
-  void testAgent; // Mark as used
-
   beforeAll(async () => {
-    // Initialize test agent
-    testAgent = new Agent({
-      systemPrompt: 'You are a test assistant.',
-      availableSkills: ['summarize', 'web-search', 'code-analysis']
-    });
+    // Initialize test agent (if needed for future tests)
   });
 
   afterAll(async () => {
@@ -30,13 +23,13 @@ describe('Agent API Integration Tests', () => {
   describe('Health Check', () => {
     test('should return healthy status', async () => {
       const response = await fetch(`${API_BASE_URL}/health`);
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('healthy');
       expect(data.version).toBeDefined();
       expect(data.services).toBeDefined();
-      expect(data.services.api).toBe(true);
+      expect((data.services as Record<string, unknown>).api).toBe(true);
     }, TEST_TIMEOUT);
   });
 
@@ -52,7 +45,7 @@ describe('Agent API Integration Tests', () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -74,7 +67,7 @@ describe('Agent API Integration Tests', () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -93,7 +86,7 @@ describe('Agent API Integration Tests', () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -133,7 +126,7 @@ describe('Agent API Integration Tests', () => {
       });
 
       const submitTime = Date.now() - startTime;
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       // Task should be submitted quickly (< 500ms)
       expect(submitTime).toBeLessThan(500);
@@ -215,7 +208,7 @@ describe('Agent API Integration Tests', () => {
 
       // If authentication is enabled, should reject invalid keys
       // If authentication is disabled, request will succeed
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
 
       if (response.status === 401 || response.status === 403) {
         expect(data.error).toBeDefined();
@@ -234,10 +227,19 @@ describe('Agent Direct Execution Tests', () => {
   let agent: Agent;
 
   beforeAll(() => {
+    const sessionId = 'test-direct-execution-session';
     agent = new Agent({
       systemPrompt: 'You are a helpful assistant.',
-      availableSkills: ['summarize']
-    });
+      availableSkills: ['summarize'],
+      llm: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-5'
+      },
+      sandbox: {
+        type: 'local',
+        config: {}
+      }
+    }, sessionId);
   });
 
   test('should execute simple task directly', async () => {
