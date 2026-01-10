@@ -61,3 +61,7 @@ motia-workbench.json
 
 # Backup files
 *.bak
+.claude/
+
+# Claude private config
+.claude/
