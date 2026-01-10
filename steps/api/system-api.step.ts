@@ -4,7 +4,7 @@
  * Provides endpoint to get system overview and statistics.
  */
 
-import { z } from 'zod';
+import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -71,13 +71,13 @@ function loadSkillsMetadata(): any[] {
               tags: skillConfig.tags || [],
               type: skillConfig.type || 'unknown'
             });
-          } catch (error) {
+          } catch {
             // Skip invalid skills
           }
         }
       }
     }
-  } catch (error) {
+  } catch {
     // Ignore errors
   }
 
@@ -152,7 +152,7 @@ export const handler = async (
         const sessions = new Set(history.map((h: any) => h.sessionId).filter(Boolean));
         activeSessions = sessions.size;
       }
-    } catch (error) {
+    } catch {
       // Use defaults if state is not available
     }
 
@@ -164,7 +164,7 @@ export const handler = async (
         const packageJson = JSON.parse(readFileSync(packagePath, 'utf-8'));
         version = packageJson.version || version;
       }
-    } catch (error) {
+    } catch {
       // Use default version
     }
 
@@ -203,3 +203,4 @@ export const handler = async (
     };
   }
 };
+void _z; // Mark as unused

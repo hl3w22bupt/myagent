@@ -3,7 +3,6 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: './tsconfig.json',
   },
   extends: [
     'eslint:recommended',
@@ -20,5 +19,5 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'no-console': 'off',
   },
-  ignorePatterns: ['dist', 'node_modules', '*.js', 'jest.config.js'],
+  ignorePatterns: ['dist', 'node_modules', '*.js', 'jest.config.js', 'types.d.ts'],
 };

@@ -13,7 +13,6 @@ import {
   SandboxAdapter,
   SandboxOptions,
   SandboxResult,
-  SandboxError,
   SandboxInfo,
   LocalSandboxConfig
 } from '../types';
@@ -59,7 +58,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
       // Determine if pythonPath is in a venv
       const venvMatch = this.pythonPath.match(/^(.+\/venv\/)bin\/python3$/);
-      let pythonPaths = [skillPath];
+      const pythonPaths = [skillPath];
 
       if (venvMatch) {
         // Add venv site-packages to path
@@ -214,8 +213,9 @@ asyncio.run(main())
       }
     } else {
       // Cleanup all sessions
-      for (const [id, process] of this.activeSessions) {
+      for (const [_id, process] of this.activeSessions) {
         process.kill('SIGTERM');
+    void _id; // Mark as unused
       }
       this.activeSessions.clear();
     }

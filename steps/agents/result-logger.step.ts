@@ -121,7 +121,7 @@ export const handler = async (
 
   if (result.success) {
     logger.info('✅ Task Execution Successful', {
-      output: result.output?.substring(0, 200) + (result.output?.length > 200 ? '...' : ''),
+      output: result.output?.substring(0, 200) + ((result.output?.length ?? 0) > 200 ? '...' : ''),
       llmCalls: result.metadata?.llmCalls,
       skillCalls: result.metadata?.skillCalls,
       totalTokens: result.metadata?.totalTokens

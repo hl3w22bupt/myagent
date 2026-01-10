@@ -3,7 +3,6 @@
  *
  * Provides endpoints to query available skills and their details.
  */
-
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { readdirSync, readFileSync, existsSync } from 'fs';
@@ -81,14 +80,14 @@ function loadSkillsMetadata(): any[] {
               tags: skillConfig.tags || [],
               type: skillConfig.type || 'unknown'
             });
-          } catch (error) {
-            console.warn(`Failed to load skill.yaml for ${folder.name}:`, error);
+          } catch (_error) {
+            console.warn(`Failed to load skill.yaml for ${folder.name}:`, _error);
           }
         }
       }
     }
-  } catch (error) {
-    console.error('Error reading skills directory:', error);
+  } catch (_error) {
+    console.error('Error reading skills directory:', _error);
   }
 
   return skills;
@@ -136,15 +135,15 @@ export const handler = async (
       }
     };
 
-  } catch (error: any) {
-    logger.error('Skills API: Error', { error: error.message });
+  } catch (_error: any) {
+    logger.error('Skills API: Error', { _error: _error.message });
 
     return {
       status: 500,
       body: {
         success: false,
         message: 'Failed to retrieve skills',
-        error: error.message
+        _error: _error.message
       }
     };
   }

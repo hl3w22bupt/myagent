@@ -12,34 +12,34 @@
  */
 
 import type { EventConfig } from 'motia';
-import { z } from 'zod';
+import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
 
 /**
  * Input schema for Master Agent step.
  */
-export const inputSchema = z.object({
+export const inputSchema = _z.object({
   /**
    * Task ID for tracking.
    */
-  taskId: z.string().optional(),
+  taskId: _z.string().optional(),
 
   /**
    * Task description to execute.
    */
-  task: z.string(),
+  task: _z.string(),
 
   /**
    * Optional: Session ID for multi-turn conversations.
    * If not provided, a new session will be created.
    */
-  sessionId: z.string().optional(),
+  sessionId: _z.string().optional(),
 
   /**
    * Optional: Whether to continue previous conversation.
    */
-  continue: z.boolean().optional()
+  continue: _z.boolean().optional()
 });
 
 /**
@@ -67,8 +67,8 @@ export const config: EventConfig = {
  * - Maintains session state (no release in finally)
  */
 export const handler = async (
-  input: z.infer<typeof inputSchema>,
-  { emit, logger, state, streams }: any
+  input: _z.infer<typeof inputSchema>,
+  { emit, logger, state: _state, streams }: any
 ) => {
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();

@@ -28,6 +28,7 @@ describe('PTC Context Support', () => {
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);
+      void ptcGenerator; // Mark as used
 
       // Create options with history
       const options = {
@@ -349,6 +350,7 @@ describe('PTC Context Support', () => {
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);
+      void ptcGenerator; // Mark as used
 
       // Verify generator is created successfully
       expect(ptcGenerator).toBeDefined();
@@ -371,6 +373,7 @@ describe('PTC Context Support', () => {
       ];
 
       const ptcGenerator = new PTCGenerator(llm, skills);
+      void ptcGenerator; // Mark as used
 
       // Test with empty options
       const options: any = {};

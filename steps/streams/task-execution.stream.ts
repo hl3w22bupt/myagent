@@ -73,6 +73,6 @@ export type TaskExecution = z.infer<typeof taskExecutionSchema>;
  */
 export const config: StreamConfig = {
   name: 'taskExecution',
-  schema: taskExecutionSchema,
+  schema: taskExecutionSchema as any,
   baseConfig: { storageType: 'default' }
 };

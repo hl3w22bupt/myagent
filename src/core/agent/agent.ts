@@ -7,10 +7,8 @@
  * - Result processing
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import { LLMClient } from './llm-client';
 import { SandboxFactory } from '../sandbox/factory';
-import { loadSandboxConfig } from '../sandbox/config';
 import { PTCGenerator } from './ptc-generator';
 import {
   AgentConfig,

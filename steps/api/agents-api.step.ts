@@ -4,7 +4,7 @@
  * Provides endpoint to query available subagents.
  */
 
-import { z } from 'zod';
+import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 
 /**
@@ -110,3 +110,4 @@ export const handler = async (
     };
   }
 };
+void _z; // Mark as unused

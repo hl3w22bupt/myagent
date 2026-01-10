@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { LocalSandboxAdapter } from '@/core/sandbox/adapters/local';
 import * as path from 'path';
-import * as fs from 'fs';
 
 describe('PYTHONPATH Debug', () => {
   let sandbox: LocalSandboxAdapter;

@@ -123,10 +123,10 @@ Output format (JSON):
     // Fallback 2: Try to find JSON in code blocks
     if (!jsonMatch) {
       const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch) {
+      if (codeBlockMatch && codeBlockMatch[1]) {
         try {
-          jsonMatch = [null, codeBlockMatch[1]];
-        } catch (e) {
+          jsonMatch = ['', codeBlockMatch[1]] as unknown as RegExpExecArray;
+        } catch {
           // Continue to next fallback
         }
       }

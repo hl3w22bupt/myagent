@@ -13,6 +13,7 @@ const TEST_TIMEOUT = 30000;
 
 describe('Agent API Integration Tests', () => {
   let testAgent: Agent;
+  void testAgent; // Mark as used
 
   beforeAll(async () => {
     // Initialize test agent

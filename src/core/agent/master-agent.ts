@@ -7,7 +7,6 @@
 
 import { Agent } from './agent';
 import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
-import { Anthropic } from '@anthropic-ai/sdk';
 
 /**
  * Master Agent with delegation capabilities.

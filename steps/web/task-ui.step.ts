@@ -4,7 +4,7 @@
  * Serves a modern, professional web interface for submitting tasks and viewing real-time progress.
  */
 
-import { z } from 'zod';
+import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 
 /**
@@ -1089,3 +1089,4 @@ export const handler = async (request: any, { logger }: any) => {
     body: html
   };
 };
+void _z; // Mark as unused

@@ -5,21 +5,11 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { Agent } from '@/core/agent/agent';
 import { MasterAgent } from '@/core/agent/master-agent';
-import { Anthropic } from '@anthropic-ai/sdk';
-
-// Mock Anthropic for testing
-jest.mock('@anthropic-ai/sdk');
 
 describe('Agent', () => {
   let agent: Agent;
-  let mockLLM: any;
 
   beforeAll(() => {
-    // Create mock LLM
-    mockLLM = {
-      messages: jest.fn()
-    };
-
     agent = new Agent({
       systemPrompt: 'You are a helpful assistant.',
       availableSkills: ['summarize', 'code-analysis'],

@@ -5,8 +5,6 @@
  * which orchestrate Skills and execute tasks using PTC.
  */
 
-import { SandboxAdapter } from '../sandbox/types';
-
 // Export PTCGenerator class for type checking
 export { PTCGenerator } from './ptc-generator';
 

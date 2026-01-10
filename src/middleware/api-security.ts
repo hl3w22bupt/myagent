@@ -98,14 +98,14 @@ export const rateLimitMiddleware = (
   rateLimiter: RateLimiter,
   getIdentifier: (req: Request) => string = (req) => req.ip || 'unknown'
 ) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, _next: NextFunction) => {
     const identifier = getIdentifier(req);
 
     if (rateLimiter.isRateLimited(identifier)) {
       const stats = rateLimiter.getStats(identifier);
 
       return res.status(429).json({
-        error: 'Too many requests',
+         _error: 'Too many requests',
         retryAfter: Math.ceil((stats.resetAt - Date.now()) / 1000)
       });
     }
@@ -116,7 +116,7 @@ export const rateLimitMiddleware = (
     res.setHeader('X-RateLimit-Remaining', stats.remaining);
     res.setHeader('X-RateLimit-Reset', stats.resetAt);
 
-    next();
+    _next();
   };
 };
 
@@ -131,30 +131,30 @@ export const apiKeyAuthMiddleware = (
     validApiKeys.add(process.env.API_KEY);
   }
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, _next: NextFunction) => {
     const apiKey = req.headers['x-api-key'] as string;
 
     // If no valid API keys configured, skip authentication
     if (validApiKeys.size === 0) {
-      return next();
+      return _next();
     }
 
     // Check if API key is provided and valid
     if (!apiKey) {
       return res.status(401).json({
-        error: 'API key required',
+         _error: 'API key required',
         message: 'Please provide X-API-Key header'
       });
     }
 
     if (!validApiKeys.has(apiKey)) {
       return res.status(403).json({
-        error: 'Invalid API key',
+         _error: 'Invalid API key',
         message: 'The provided API key is not valid'
       });
     }
 
-    next();
+    _next();
   };
 };
 
@@ -162,7 +162,7 @@ export const apiKeyAuthMiddleware = (
  * CORS middleware.
  */
 export const corsMiddleware = (allowedOrigins: string[] = ['*']) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, _next: NextFunction) => {
     const origin = req.headers.origin;
 
     if (allowedOrigins.includes('*') || (origin && allowedOrigins.includes(origin))) {
@@ -176,7 +176,7 @@ export const corsMiddleware = (allowedOrigins: string[] = ['*']) => {
       return res.status(204).end();
     }
 
-    next();
+    _next();
   };
 };
 
@@ -184,7 +184,7 @@ export const corsMiddleware = (allowedOrigins: string[] = ['*']) => {
  * Request logging middleware.
  */
 export const requestLoggingMiddleware = (logger: any = console) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, _next: NextFunction) => {
     const startTime = Date.now();
 
     // Log request
@@ -206,14 +206,14 @@ export const requestLoggingMiddleware = (logger: any = console) => {
       });
     });
 
-    next();
+    _next();
   };
 };
 
 /**
  * Security headers middleware.
  */
-export const securityHeadersMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const securityHeadersMiddleware = (req: Request, res: Response, _next: NextFunction) => {
   // Prevent clickjacking
   res.setHeader('X-Frame-Options', 'DENY');
 
@@ -237,29 +237,29 @@ export const securityHeadersMiddleware = (req: Request, res: Response, next: Nex
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 
-  next();
+  _next();
 };
 
 /**
  * Error handler middleware.
  */
-export const errorHandlerMiddleware = (
+export const  _errorHandlerMiddleware = (
   logger: any = console
 ) => {
-  return (err: Error, req: Request, res: Response, next: NextFunction) => {
-    logger.error('API Error', {
-      error: err.message,
+  return (err: Error, req: Request, res: Response, _next: NextFunction) => {
+    logger. _error('API Error', {
+       _error: err.message,
       stack: err.stack,
       path: req.path,
       method: req.method
     });
 
-    // Don't leak error details in production
+    // Don't leak  _error details in production
     const isDevelopment = process.env.NODE_ENV !== 'production';
 
     res.status(500).json({
-      error: 'Internal server error',
-      message: isDevelopment ? err.message : 'An unexpected error occurred',
+       _error: 'Internal server  _error',
+      message: isDevelopment ? err.message : 'An unexpected  _error occurred',
       ...(isDevelopment && { stack: err.stack })
     });
   };

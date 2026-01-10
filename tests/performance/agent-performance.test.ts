@@ -19,7 +19,7 @@ interface BenchmarkResult {
 
 describe('Agent Performance Benchmarks', () => {
   let sandbox: any;
-  let results: BenchmarkResult[] = [];
+  const results: BenchmarkResult[] = [];
 
   beforeAll(() => {
     console.log('Setting up performance benchmarks...');

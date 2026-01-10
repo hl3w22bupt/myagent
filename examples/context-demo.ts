@@ -43,6 +43,7 @@ async function demonstrateContextSupport() {
   ];
 
   const ptcGenerator = new PTCGenerator(llm, skills);
+  void ptcGenerator; // Mark as used
 
   console.log('Available Skills:');
   skills.forEach(skill => {

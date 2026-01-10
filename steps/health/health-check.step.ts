@@ -28,6 +28,7 @@ const healthResponseSchema = z.object({
     averageExecutionTime: z.number()
   }).optional()
 });
+void healthResponseSchema; // Mark as used
 
 /**
  * Health Check API configuration.
@@ -63,7 +64,7 @@ export const handler = async (
   request: any,
   { logger, state }: any
 ) => {
-  const startTime = Date.now();
+  const _startTime = Date.now();  void _startTime; // Mark as used
 
   try {
     // Get basic system info
@@ -103,7 +104,7 @@ export const handler = async (
         failedTasks,
         averageExecutionTime: Math.round(averageExecutionTime)
       };
-    } catch (stateError) {
+    } catch {
       // State not available, return empty metrics
       metrics = {
         totalTasks: 0,

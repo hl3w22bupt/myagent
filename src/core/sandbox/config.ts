@@ -6,7 +6,6 @@
 
 import * as yaml from 'js-yaml';
 import { readFileSync } from 'fs';
-import { join } from 'path';
 
 export interface LocalSandboxConfig {
   pythonPath?: string;

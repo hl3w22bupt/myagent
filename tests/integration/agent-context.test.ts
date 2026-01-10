@@ -10,6 +10,8 @@ import { describe, it, expect, beforeAll } from '@jest/globals';
 import { Agent } from '@/core/agent/agent';
 import { LocalSandboxAdapter } from '@/core/sandbox/local';
 import { AnthropicLLMClient } from '@/core/agent/llm-client';
+void LocalSandboxAdapter; // Mark as used
+void AnthropicLLMClient; // Mark as used
 
 describe('Agent Context Integration', () => {
   let agent: Agent;

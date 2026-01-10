@@ -8,10 +8,7 @@
 import {
   SandboxAdapter,
   SandboxAdapterConfig,
-  LocalSandboxConfig,
-  DaytonaSandboxConfig,
-  E2BSandboxConfig,
-  ModalSandboxConfig
+  LocalSandboxConfig
 } from './types';
 import { LocalSandboxAdapter } from './adapters/local';
 

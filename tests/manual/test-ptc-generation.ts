@@ -29,10 +29,11 @@ async function testPTCGeneration() {
 
   try {
     console.log('Creating Agent...');
+    const sessionId = `test-${Date.now()}`;
     const agent = new Agent({
       systemPrompt: '你是一个代码生成助手。',
       availableSkills: ['summarize', 'code-analysis']
-    });
+    }, sessionId);
 
     console.log('✓ Agent created\n');
     console.log('Testing PTC code generation...\n');

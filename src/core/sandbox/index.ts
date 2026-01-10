@@ -28,7 +28,12 @@ export { SandboxManager, SandboxManagerConfig } from './manager';
 export { SandboxFactory } from './factory';
 
 // Config
-export { SandboxConfigManager } from './config';
+export {
+  loadSandboxConfig,
+  getAdapterConfig,
+  getDefaultAdapterConfig,
+  type SandboxSystemConfig
+} from './config';
 
 // Adapters
 export { LocalSandboxAdapter } from './adapters/local';
