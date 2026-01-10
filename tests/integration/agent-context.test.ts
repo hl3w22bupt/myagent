@@ -56,10 +56,6 @@ describe('Agent Context Integration', () => {
       // Check that conversation history is being tracked
       expect(result1.state?.conversationLength).toBeGreaterThan(0);
 
-      console.log('After first task:');
-      console.log(`  Conversation length: ${result1.state?.conversationLength}`);
-      console.log(`  Execution count: ${result1.state?.executionCount}`);
-
       // Second task (should have access to first task in history)
       const result2 = await agent.run('What was my previous question?');
 
@@ -70,10 +66,6 @@ describe('Agent Context Integration', () => {
       expect(result2.state?.conversationLength ?? 0).toBeGreaterThan(
         result1.state?.conversationLength ?? 0
       );
-
-      console.log('After second task:');
-      console.log(`  Conversation length: ${result2.state?.conversationLength}`);
-      console.log(`  Execution count: ${result2.state?.executionCount}`);
     }, 120000);
 
     it('should track both user and assistant messages', async () => {
@@ -89,8 +81,6 @@ describe('Agent Context Integration', () => {
 
       // Should have at least 2 messages: user task + assistant response
       expect(result.state?.conversationLength).toBeGreaterThanOrEqual(2);
-
-      console.log('Conversation history length:', result.state?.conversationLength);
     }, 120000);
   });
 
@@ -106,16 +96,10 @@ describe('Agent Context Integration', () => {
 
       expect(result1.success).toBe(true);
 
-      console.log('After setting variable:');
-      console.log(`  Variables count: ${result1.state?.variablesCount}`);
-
       // Execute another task that might use the variable
       const result2 = await agent.run('What is the value of test_var?');
 
       expect(result2.success).toBe(true);
-
-      console.log('After using variable:');
-      console.log(`  Variables count: ${result2.state?.variablesCount}`);
     }, 120000);
 
     it('should track variable count in state', async () => {
@@ -130,8 +114,6 @@ describe('Agent Context Integration', () => {
 
       // Should track variable count
       expect(result.state?.variablesCount).toBeDefined();
-
-      console.log('Variables count:', result.state?.variablesCount);
     }, 120000);
   });
 
@@ -152,9 +134,6 @@ describe('Agent Context Integration', () => {
 
       expect(result2.success).toBe(true);
       expect(result2.output).toBeDefined();
-
-      console.log('Agent response about name:');
-      console.log(result2.output);
 
       // The agent should ideally remember the name from context
       // (This depends on LLM capabilities and context quality)
@@ -182,12 +161,6 @@ describe('Agent Context Integration', () => {
       expect(result.state?.executionCount).toBeGreaterThan(0);
 
       // Might have variables (depends on PTC execution)
-      console.log('Final state:');
-      console.log(`  Conversation length: ${result.state?.conversationLength}`);
-      console.log(`  Execution count: ${result.state?.executionCount}`);
-      console.log(`  Variables count: ${result.state?.variablesCount}`);
-
-      console.log('Output:', result.output);
     }, 180000);
   });
 
@@ -221,8 +194,6 @@ describe('Agent Context Integration', () => {
       const result = await agent.run('Task B');
 
       expect(result.state?.executionCount).toBeGreaterThan(1);
-
-      console.log('Total executions in session:', result.state?.executionCount);
     }, 120000);
   });
 
@@ -245,9 +216,6 @@ describe('Agent Context Integration', () => {
 
       // But PTCGenerator should only use last 5 in context
       // (This is tested in ptc-context.test.ts)
-
-      console.log('Total conversation length:', result.state?.conversationLength);
-      console.log('(PTCGenerator uses last 5 messages for context)');
     }, 300000);
 
     it('should handle empty context gracefully', async () => {

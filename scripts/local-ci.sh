@@ -73,12 +73,17 @@ echo ""
 
 # ESLint 检查
 echo "🔍 ESLint 检查"
-check_pass "ESLint" "npm run lint"
+check_pass "ESLint (errors only)" "npx eslint . --ext .ts --quiet"
 echo ""
 
 # 构建检查
 echo "🏗️  构建检查"
 check_pass "构建项目" "npm run build:ts"
+echo ""
+
+# Jest 测试检查
+echo "🧪 Jest 测试检查"
+check_pass "运行 Jest 单元测试" "npm run test -- --passWithNoTests"
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

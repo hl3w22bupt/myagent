@@ -22,8 +22,6 @@ describe('Agent Performance Benchmarks', () => {
   const results: BenchmarkResult[] = [];
 
   beforeAll(() => {
-    console.log('Setting up performance benchmarks...');
-
     sandbox = SandboxFactory.create({
       type: 'local',
       config: {
@@ -36,10 +34,6 @@ describe('Agent Performance Benchmarks', () => {
   afterAll(async () => {
     await sandbox.cleanup();
 
-    console.log('\n' + '='.repeat(60));
-    console.log('PERFORMANCE BENCHMARK SUMMARY');
-    console.log('='.repeat(60));
-
     let passed = 0;
     let failed = 0;
 
@@ -48,17 +42,9 @@ describe('Agent Performance Benchmarks', () => {
       const within = result.duration <= result.threshold;
       const statusText = within ? 'PASS' : 'FAIL';
 
-      console.log(`${status} ${result.name}`);
-      console.log(`  Duration: ${result.duration}ms (threshold: ${result.threshold}ms)`);
-      console.log(`  Status: ${statusText}`);
-
       if (result.passed) passed++;
       else failed++;
     });
-
-    console.log('='.repeat(60));
-    console.log(`Total: ${passed} passed, ${failed} failed`);
-    console.log('='.repeat(60));
   });
 
   function benchmark(name: string, threshold: number, fn: () => Promise<void>) {
@@ -313,7 +299,6 @@ print(f"OK")
 
       // Cleanup all sessions
       await sandbox.cleanup();
-      console.log('  ✓ Successfully handled 5 concurrent sessions');
     });
   });
 });

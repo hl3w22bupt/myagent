@@ -20,6 +20,10 @@ describe('Agent', () => {
         },
         sandbox: {
           type: 'local',
+          config: {
+            pythonPath: 'python3',
+            timeout: 5000,
+          },
         },
       },
       'test-session-1'
@@ -61,6 +65,13 @@ describe('MasterAgent', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
+        },
+        sandbox: {
+          type: 'local',
+          config: {
+            pythonPath: 'python3',
+            timeout: 5000,
+          },
         },
         subagents: ['code-reviewer'],
       },

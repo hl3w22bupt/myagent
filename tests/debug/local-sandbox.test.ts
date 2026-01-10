@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { LocalSandboxAdapter } from '@/core/sandbox/adapters/local';
 import * as path from 'path';
-import * as fs from 'fs';
 
 describe('LocalSandboxAdapter Debug', () => {
   let sandbox: LocalSandboxAdapter;
@@ -14,9 +13,6 @@ describe('LocalSandboxAdapter Debug', () => {
     // Use absolute path to venv python
     const venvPython = path.join(process.cwd(), 'venv', 'bin', 'python3');
     const pythonPath = process.env.PYTHON_PATH || venvPython;
-
-    console.log('Python path:', pythonPath);
-    console.log('Exists:', fs.existsSync(pythonPath));
 
     sandbox = new LocalSandboxAdapter({
       pythonPath: pythonPath,
@@ -36,7 +32,6 @@ describe('LocalSandboxAdapter Debug', () => {
       timeout: 5000,
     });
 
-    console.log('Result:', JSON.stringify(result, null, 2));
     expect(result.success).toBe(true);
   });
 
@@ -55,7 +50,6 @@ print('SUCCESS: SkillExecutor imported')
       timeout: 10000,
     });
 
-    console.log('Result:', JSON.stringify(result, null, 2));
     expect(result.success).toBe(true);
     expect(result.stdout).toContain('SUCCESS');
   });

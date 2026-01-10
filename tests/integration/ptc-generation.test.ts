@@ -61,10 +61,6 @@ describe('PTC Generation and Execution', () => {
 
       const ptcCode = await ptcGenerator.generate(task);
 
-      console.log('Generated PTC Code:');
-      console.log(ptcCode);
-      console.log('\n--- End of PTC Code ---\n');
-
       // Verify it's valid Python code structure
       expect(ptcCode).toBeDefined();
       expect(typeof ptcCode).toBe('string');
@@ -88,9 +84,6 @@ describe('PTC Generation and Execution', () => {
 
       const ptcCode = await ptcGenerator.generate(task);
 
-      console.log('Generated PTC for summarize task:');
-      console.log(ptcCode);
-
       // Should use summarize skill
       const lowerCode = ptcCode.toLowerCase();
       expect(lowerCode).toContain('summarize');
@@ -113,9 +106,6 @@ describe('PTC Generation and Execution', () => {
 
       const ptcCode = await ptcGenerator.generate(task);
 
-      console.log('Generated PTC for multi-step task:');
-      console.log(ptcCode);
-
       // Should use multiple skills (at least 2 executor.execute calls)
       const executeCount = (ptcCode.match(/executor\.execute/g) || []).length;
       expect(executeCount).toBeGreaterThanOrEqual(2);
@@ -133,9 +123,6 @@ describe('PTC Generation and Execution', () => {
       const task = 'Execute web-search with query "test"';
 
       const ptcCode = await ptcGenerator.generate(task);
-
-      console.log('Generated PTC with error handling:');
-      console.log(ptcCode);
 
       // Generated code should have proper structure
       expect(ptcCode).toMatch(/async def main\(\)/);
@@ -179,9 +166,6 @@ describe('PTC Generation and Execution', () => {
       const task = 'Use the summarize skill';
 
       const ptcCode = await ptcGenerator.generate(task);
-
-      console.log('Generated PTC with skill names:');
-      console.log(ptcCode);
 
       // Should reference the skill correctly
       expect(ptcCode.toLowerCase()).toContain('summarize');
@@ -256,9 +240,6 @@ describe('PTC Generation and Execution', () => {
         'Search for "Python async programming", summarize the top 3 results, and analyze the code quality';
 
       const ptcCode = await ptcGenerator.generate(task);
-
-      console.log('Generated PTC for complex task:');
-      console.log(ptcCode);
 
       // Should use multiple skills
       const executeCount = (ptcCode.match(/executor\.execute/g) || []).length;

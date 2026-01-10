@@ -47,10 +47,6 @@ describe('End-to-End Agent Flow', () => {
 
       const result = await agent.run(task);
 
-      console.log('\n=== Complete Workflow Result ===');
-      console.log(JSON.stringify(result, null, 2));
-      console.log('=== End of Result ===\n');
-
       // Verify overall success
       expect(result).toBeDefined();
       expect(result.success).toBeDefined();
@@ -71,16 +67,6 @@ describe('End-to-End Agent Flow', () => {
       const task = 'Summarize: This is a test document for summarization.';
 
       const result = await agent.run(task);
-
-      console.log('\n=== Execution Steps ===');
-      result.steps.forEach((step, index) => {
-        console.log(`\nStep ${index + 1}:`);
-        console.log(`  Type: ${step.type}`);
-        console.log(`  Timestamp: ${step.timestamp}`);
-        const content = step.content || '';
-        console.log(`  Content: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`);
-      });
-      console.log('\n=== End of Steps ===\n');
 
       // Verify step types
       expect(result.steps.length).toBeGreaterThan(0);
@@ -103,13 +89,6 @@ describe('End-to-End Agent Flow', () => {
 
       const result = await agent.run(task);
 
-      console.log('\n=== Execution Metadata ===');
-      console.log(`LLM Calls: ${result.metadata.llmCalls}`);
-      console.log(`Skill Calls: ${result.metadata.skillCalls}`);
-      console.log(`Total Tokens: ${result.metadata.totalTokens}`);
-      console.log(`Execution Time: ${result.executionTime}ms`);
-      console.log('=== End of Metadata ===\n');
-
       // Verify metadata completeness
       expect(result.metadata).toBeDefined();
       expect(result.metadata.llmCalls).toBeGreaterThan(0);
@@ -124,12 +103,6 @@ describe('End-to-End Agent Flow', () => {
       const task = 'Search for "Python best practices" and summarize the top 3 results';
 
       const result = await agent.run(task);
-
-      console.log('\n=== Multi-Skill Task Result ===');
-      console.log(`Success: ${result.success}`);
-      console.log(`Skill Calls: ${result.metadata.skillCalls}`);
-      console.log(`Execution Time: ${result.executionTime}ms`);
-      console.log('=== End of Result ===\n');
 
       // Verify execution completed
       expect(result).toBeDefined();
@@ -148,10 +121,6 @@ describe('End-to-End Agent Flow', () => {
 
       const result = await agent.run(task);
 
-      console.log('\n=== Chained Skills Result ===');
-      console.log(JSON.stringify(result, null, 2));
-      console.log('=== End of Result ===\n');
-
       // Verify execution
       expect(result).toBeDefined();
       expect(result.executionTime).toBeGreaterThan(0);
@@ -168,13 +137,6 @@ describe('End-to-End Agent Flow', () => {
       const task = 'Execute non-existent-skill with some input';
 
       const result = await agent.run(task);
-
-      console.log('\n=== Error Handling Result ===');
-      console.log(`Success: ${result.success}`);
-      if (!result.success) {
-        console.log(`Error: ${result.error}`);
-      }
-      console.log('=== End of Result ===\n');
 
       // Should return a result even if it failed
       expect(result).toBeDefined();
@@ -201,11 +163,7 @@ describe('End-to-End Agent Flow', () => {
       // Check that error steps are recorded if any
       const errorSteps = result.steps.filter((s) => s.type === 'error');
       if (errorSteps.length > 0) {
-        console.log('\n=== Error Steps Found ===');
-        errorSteps.forEach((step, i) => {
-          console.log(`Error ${i + 1}: ${step.content}`);
-        });
-        console.log('=== End of Errors ===\n');
+        // Error steps found
       }
     }, 90000);
   });
@@ -217,11 +175,6 @@ describe('End-to-End Agent Flow', () => {
       const startTime = Date.now();
       const result = await agent.run(task);
       const totalTime = Date.now() - startTime;
-
-      console.log(`\n=== Performance Test ===`);
-      console.log(`Total Time: ${totalTime}ms`);
-      console.log(`Agent Execution Time: ${result.executionTime}ms`);
-      console.log('=== End of Performance ===\n');
 
       // Verify execution
       expect(result).toBeDefined();
@@ -240,11 +193,7 @@ describe('End-to-End Agent Flow', () => {
         results.push(result);
       }
 
-      console.log('\n=== Repeated Task Performance ===');
-      results.forEach((r, i) => {
-        console.log(`Run ${i + 1}: ${r.executionTime}ms`);
-      });
-      console.log('=== End of Performance ===\n');
+      results.forEach((r, i) => {});
 
       // All runs should complete
       results.forEach((r) => {
@@ -261,11 +210,6 @@ describe('End-to-End Agent Flow', () => {
 
       const task2 = 'Summarize: Second task';
       const result2 = await agent.run(task2);
-
-      console.log('\n=== Session State Test ===');
-      console.log(`Task 1: ${result1.executionTime}ms, ${result1.steps.length} steps`);
-      console.log(`Task 2: ${result2.executionTime}ms, ${result2.steps.length} steps`);
-      console.log('=== End of State Test ===\n');
 
       // Both should succeed independently
       expect(result1).toBeDefined();
@@ -297,15 +241,6 @@ describe('End-to-End Agent Flow', () => {
 
       const result = await agent.run(task);
 
-      console.log('\n=== Debugging Information ===');
-      console.log('Steps breakdown:');
-      result.steps.forEach((step, index) => {
-        console.log(`\n${index + 1}. ${step.type}`);
-        console.log(`   Time: ${new Date(step.timestamp).toISOString()}`);
-        console.log(`   Length: ${step.content?.length || 0} chars`);
-      });
-      console.log('\n=== End of Debug Info ===\n');
-
       // Verify detailed information is available
       expect(result.steps.length).toBeGreaterThan(0);
 
@@ -331,11 +266,6 @@ describe('End-to-End Agent Flow', () => {
         // Timestamps should be in ascending order
         expect(next).toBeGreaterThanOrEqual(current);
       }
-
-      console.log('\n=== Timeline Verification ===');
-      console.log(`Total steps: ${result.steps.length}`);
-      console.log(`Total duration: ${result.executionTime}ms`);
-      console.log('=== End of Timeline ===\n');
     }, 90000);
   });
 });

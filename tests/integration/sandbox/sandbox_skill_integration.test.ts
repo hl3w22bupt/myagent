@@ -38,8 +38,6 @@ print(result)
 
     const result = await sandbox.execute(code, options);
 
-    console.log('Sandbox Result:', result);
-
     expect(result.success).toBe(true);
     expect(result.stdout).toBeDefined();
   }, 20000);
@@ -60,8 +58,6 @@ print({"result1_type": result1.get("type"), "result2_type": result2.get("type")}
     };
 
     const result = await sandbox.execute(code, options);
-
-    console.log('Multi-call Result:', result);
 
     expect(result.success).toBe(true);
   }, 20000);
@@ -120,8 +116,6 @@ print(result)
     };
 
     const result = await sandbox.execute(code, options);
-
-    console.log('Non-existent skill result:', result);
 
     // Should handle the error gracefully
     expect(result).toBeDefined();

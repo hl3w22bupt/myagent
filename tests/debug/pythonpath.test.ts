@@ -56,7 +56,6 @@ except Exception as e:
       timeout: 10000,
     });
 
-    console.log('Result:', result);
     expect(result.success).toBe(true);
   });
 });

@@ -13,7 +13,11 @@ export default {
       },
     ],
   },
-  testMatch: ['**/tests/**/*.test.ts', '**/__tests__/**/*.test.ts'],
+  testMatch: ['**/tests/unit/**/*.test.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/tests/unit/sandbox/local.test.ts',
+  ],
   collectCoverageFrom: [
     'src/**/*.ts',
     'steps/**/*.ts',

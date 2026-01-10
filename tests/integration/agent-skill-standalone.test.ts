@@ -16,7 +16,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Suppress console output during tests
-const originalLog = console.log;
 const originalError = console.error;
 
 describe('Agent + Skill Standalone Integration', () => {
@@ -30,7 +29,6 @@ describe('Agent + Skill Standalone Integration', () => {
     pythonPath = fs.existsSync(venvPython) ? venvPython : 'python3';
 
     // Suppress logs AFTER setup
-    console.log = jest.fn();
     console.error = jest.fn();
 
     // Create sandbox
@@ -67,7 +65,6 @@ describe('Agent + Skill Standalone Integration', () => {
 
   afterAll(async () => {
     // Restore logs
-    console.log = originalLog;
     console.error = originalError;
 
     await agent.cleanup();
@@ -141,8 +138,6 @@ except Exception as e:
         timeout: 10000,
       });
 
-      // Use original console.log to output
-      originalLog('Environment check result:', result);
       expect(result.success).toBe(true);
     });
 
