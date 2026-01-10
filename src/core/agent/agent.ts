@@ -65,13 +65,16 @@ export class Agent {
     // Initialize Sandbox
     // IMPORTANT: Only use config passed in AgentConfig, ignore YAML files
     // This ensures configuration from src/index.ts is always used
-    if (!config.sandbox?.config) {
-      throw new Error('Sandbox config is required in AgentConfig. Please provide sandbox.config.');
+    if (!config.sandbox?.local && !config.sandbox?.config) {
+      throw new Error(
+        'Sandbox config is required in AgentConfig. Please provide sandbox.local or sandbox.config.'
+      );
     }
 
     const adapterConfig = {
       type: config.sandbox.type || 'local',
-      local: config.sandbox.config,
+      // Support both 'local' (preferred) and 'config' (legacy) properties
+      local: config.sandbox.local || config.sandbox.config || {},
     };
 
     this.sandbox = SandboxFactory.create(adapterConfig);

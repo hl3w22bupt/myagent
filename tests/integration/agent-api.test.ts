@@ -6,12 +6,17 @@
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { Agent } from '@/core/agent/agent';
+import * as path from 'path';
+import { existsSync } from 'fs';
 
 // Test configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const TEST_TIMEOUT = 30000;
 
-describe('Agent API Integration Tests', () => {
+// Helper to skip HTTP API tests if server is not running
+const withApiServer = process.env.RUN_HTTP_TESTS ? describe : describe.skip;
+
+withApiServer('Agent API Integration Tests', () => {
   beforeAll(async () => {
     // Initialize test agent (if needed for future tests)
   });
@@ -260,13 +265,33 @@ describe('Agent API Integration Tests', () => {
   });
 });
 
+// Helper to skip tests if no API key
+const withApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+
 /**
  * Agent Direct Execution Tests (without API)
  */
-describe('Agent Direct Execution Tests', () => {
+withApiKey('Agent Direct Execution Tests', () => {
   let agent: Agent;
 
   beforeAll(() => {
+    // Find the project root by searching upward for python_modules
+    let searchPath = process.cwd();
+    let projectRoot = process.cwd();
+
+    for (let i = 0; i < 5; i++) {
+      const testPath = path.join(searchPath, 'python_modules');
+      if (existsSync(testPath)) {
+        projectRoot = searchPath;
+        break;
+      }
+      searchPath = path.join(searchPath, '..');
+    }
+
+    // Use python_modules Python if available, otherwise use system python3
+    const pythonModulesPython = path.join(projectRoot, 'python_modules', 'bin', 'python3');
+    const pythonPath = existsSync(pythonModulesPython) ? pythonModulesPython : 'python3';
+
     const sessionId = 'test-direct-execution-session';
     agent = new Agent(
       {
@@ -275,10 +300,14 @@ describe('Agent Direct Execution Tests', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
+          apiKey: process.env.ANTHROPIC_API_KEY,
         },
         sandbox: {
           type: 'local',
-          config: {},
+          local: {
+            pythonPath: pythonPath,
+            timeout: 30000,
+          },
         },
       },
       sessionId
@@ -300,6 +329,11 @@ describe('Agent Direct Execution Tests', () => {
   test(
     'should handle errors gracefully',
     async () => {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
+        return;
+      }
+
       // Test with invalid task that might fail
       const result = await agent.run('');
 

@@ -36,7 +36,7 @@ jobs:
         continue-on-error: false
 
       - name: Run Jest tests
-        run: npm run test -- --passWithNoTests
+        run: npm run test -- --passWithNoTests --maxWorkers=1
         env:
           CI: true
 

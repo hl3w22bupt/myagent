@@ -20,7 +20,7 @@ describe('AgentManager', () => {
       },
       sandbox: {
         type: 'local',
-        config: {}, // Empty config uses defaults
+        local: {}, // Empty config uses defaults
       },
     };
 

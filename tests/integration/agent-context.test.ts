@@ -34,6 +34,10 @@ describe('Agent Context Integration', () => {
         },
         sandbox: {
           type: 'local',
+          local: {
+            pythonPath: process.env.PYTHON_PATH || 'python3',
+            timeout: 30000,
+          },
         },
       },
       sessionId
@@ -236,6 +240,10 @@ describe('Agent Context Integration', () => {
           },
           sandbox: {
             type: 'local',
+            local: {
+              pythonPath: process.env.PYTHON_PATH || 'python3',
+              timeout: 30000,
+            },
           },
         },
         'fresh-session'

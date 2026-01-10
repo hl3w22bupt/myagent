@@ -20,7 +20,7 @@ describe('Agent', () => {
         },
         sandbox: {
           type: 'local',
-          config: {
+          local: {
             pythonPath: 'python3',
             timeout: 5000,
           },
@@ -68,7 +68,7 @@ describe('MasterAgent', () => {
         },
         sandbox: {
           type: 'local',
-          config: {
+          local: {
             pythonPath: 'python3',
             timeout: 5000,
           },

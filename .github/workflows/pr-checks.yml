@@ -93,7 +93,7 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm run test:coverage -- --passWithNoTests
+        run: npm run test:coverage -- --passWithNoTests --maxWorkers=1
         continue-on-error: true
 
       - name: Check coverage threshold

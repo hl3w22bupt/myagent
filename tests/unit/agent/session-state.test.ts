@@ -19,7 +19,7 @@ describe('Agent Session State', () => {
         },
         sandbox: {
           type: 'local',
-          config: {
+          local: {
             pythonPath: 'python3',
             timeout: 5000,
           },

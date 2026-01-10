@@ -7,11 +7,33 @@
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { Agent } from '@/core/agent/agent';
+import * as path from 'path';
+import { existsSync } from 'fs';
 
-describe('End-to-End Agent Flow', () => {
+// Helper to skip tests if no API key
+const withApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+
+withApiKey('End-to-End Agent Flow', () => {
   let agent: Agent;
 
   beforeEach(() => {
+    // Find the project root by searching upward for python_modules
+    let searchPath = process.cwd();
+    let projectRoot = process.cwd();
+
+    for (let i = 0; i < 5; i++) {
+      const testPath = path.join(searchPath, 'python_modules');
+      if (existsSync(testPath)) {
+        projectRoot = searchPath;
+        break;
+      }
+      searchPath = path.join(searchPath, '..');
+    }
+
+    // Use python_modules Python if available, otherwise use system python3
+    const pythonModulesPython = path.join(projectRoot, 'python_modules', 'bin', 'python3');
+    const pythonPath = existsSync(pythonModulesPython) ? pythonModulesPython : 'python3';
+
     // Initialize agent with required configuration
     const sessionId = 'test-e2e-session';
     agent = new Agent(
@@ -21,9 +43,14 @@ describe('End-to-End Agent Flow', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
+          apiKey: process.env.ANTHROPIC_API_KEY,
         },
         sandbox: {
           type: 'local',
+          local: {
+            pythonPath: pythonPath,
+            timeout: 30000,
+          },
         },
         constraints: {
           timeout: 60000,

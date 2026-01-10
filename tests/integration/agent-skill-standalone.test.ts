@@ -24,9 +24,23 @@ describe('Agent + Skill Standalone Integration', () => {
   let pythonPath: string;
 
   beforeAll(() => {
-    // Determine Python path
-    const venvPython = path.join(process.cwd(), 'venv', 'bin', 'python3');
-    pythonPath = fs.existsSync(venvPython) ? venvPython : 'python3';
+    // Find the project root by searching upward for python_modules
+    let searchPath = process.cwd();
+    let projectRoot = process.cwd();
+
+    for (let i = 0; i < 5; i++) {
+      const testPath = path.join(searchPath, 'python_modules');
+      if (fs.existsSync(testPath)) {
+        projectRoot = searchPath;
+        break;
+      }
+      searchPath = path.join(searchPath, '..');
+    }
+
+    // Determine Python path - prefer python_modules over venv
+    const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
+    const pythonModulesPython = path.join(projectRoot, 'python_modules', 'bin', 'python3');
+    pythonPath = fs.existsSync(pythonModulesPython) ? pythonModulesPython : venvPython;
 
     // Suppress logs AFTER setup
     console.error = jest.fn();
@@ -53,7 +67,7 @@ describe('Agent + Skill Standalone Integration', () => {
         },
         sandbox: {
           type: 'local',
-          config: {
+          local: {
             pythonPath: pythonPath,
             timeout: 30000,
           },
@@ -300,7 +314,7 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
           },
           sandbox: {
             type: 'local',
-            config: {},
+            local: {},
           },
           subagents: ['code-reviewer', 'data-analyst'],
         },
@@ -389,12 +403,16 @@ else:
     });
   });
 
-  describe('Performance Benchmarks', () => {
+  // Performance tests are skipped by default because they are hardware-dependent
+  // Set RUN_PERFORMANCE_TESTS=1 to enable them
+  const withPerformanceTests = process.env.RUN_PERFORMANCE_TESTS ? describe : describe.skip;
+
+  withPerformanceTests('Performance Benchmarks', () => {
     it('should initialize sandbox quickly (< 2s)', async () => {
       const start = Date.now();
       const testSandbox = SandboxFactory.create({
         type: 'local',
-        config: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 },
+        local: { pythonPath: process.env.PYTHON_PATH || 'python3', timeout: 30000 },
       });
       const elapsed = Date.now() - start;
 

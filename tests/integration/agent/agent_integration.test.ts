@@ -22,7 +22,10 @@ describe('Agent Integration', () => {
           },
           sandbox: {
             type: 'local',
-            config: {},
+            local: {
+              pythonPath: process.env.PYTHON_PATH || 'python3',
+              timeout: 30000,
+            },
           },
         },
         sessionId
@@ -62,7 +65,7 @@ describe('Agent Integration', () => {
           },
           sandbox: {
             type: 'local',
-            config: {},
+            local: {},
           },
           subagents: ['code-reviewer', 'data-analyst'],
         },

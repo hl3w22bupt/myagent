@@ -5,14 +5,33 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { LocalSandboxAdapter } from '@/core/sandbox/adapters/local';
 import * as path from 'path';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 describe('PYTHONPATH Debug', () => {
   let sandbox: LocalSandboxAdapter;
 
   beforeAll(() => {
-    const venvPython = path.join(process.cwd(), 'venv', 'bin', 'python3');
+    // Find the project root by searching upward for python_modules
+    let searchPath = process.cwd();
+    let projectRoot = process.cwd();
+
+    for (let i = 0; i < 5; i++) {
+      const testPath = join(searchPath, 'python_modules');
+      if (existsSync(testPath)) {
+        projectRoot = searchPath;
+        break;
+      }
+      searchPath = join(searchPath, '..');
+    }
+
+    const venvPython = join(projectRoot, 'venv', 'bin', 'python3');
+    const pythonModulesPython = join(projectRoot, 'python_modules', 'bin', 'python3');
+    // Prefer python_modules over venv for tests
+    const pythonPath = existsSync(pythonModulesPython) ? pythonModulesPython : venvPython;
+
     sandbox = new LocalSandboxAdapter({
-      pythonPath: venvPython,
+      pythonPath: pythonPath,
       timeout: 30000,
     });
   });

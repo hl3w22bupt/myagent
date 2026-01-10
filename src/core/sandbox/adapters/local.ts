@@ -9,6 +9,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { existsSync } from 'fs';
 import {
   SandboxAdapter,
   SandboxOptions,
@@ -62,16 +63,51 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         const venvPath = venvMatch[1];
         const sitePackages = join(venvPath, 'lib', 'python3.11', 'site-packages');
         pythonPaths.push(sitePackages);
+      } else {
+        // Add python_modules site-packages for non-venv Python
+        // Search upward from skillPath to find python_modules
+        let searchPath = skillPath;
+        let foundSitePackages = false;
+
+        // Search up to 5 levels upward
+        for (let i = 0; i < 5 && !foundSitePackages; i++) {
+          // Check both python3.11 and python3.13
+          const sitePackages11 = join(
+            searchPath,
+            'python_modules',
+            'lib',
+            'python3.11',
+            'site-packages'
+          );
+          const sitePackages13 = join(
+            searchPath,
+            'python_modules',
+            'lib',
+            'python3.13',
+            'site-packages'
+          );
+
+          if (existsSync(sitePackages11)) {
+            pythonPaths.push(sitePackages11);
+            foundSitePackages = true;
+          } else if (existsSync(sitePackages13)) {
+            pythonPaths.push(sitePackages13);
+            foundSitePackages = true;
+          }
+
+          // Move up one directory
+          searchPath = join(searchPath, '..');
+        }
       }
 
-      const pythonPath = pythonPaths.join(':');
+      const pythonPathEnv = pythonPaths.join(':');
 
       const childProcess = spawn(this.pythonPath, [scriptPath], {
         env: {
           ...process.env,
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_SKILL_PATH: skillPath,
-          PYTHONPATH: pythonPath,
+          PYTHONPATH: pythonPathEnv,
           ...options.env,
         },
         timeout: options.timeout || 30000,
@@ -145,7 +181,7 @@ if os.path.exists(src_path) and src_path not in sys.path:
 
 # Also add python_modules to path (try both python3.11 and python3.13)
 import glob
-python_modules_paths = glob.glob(os.path.join(os.path.dirname(skill_path) if skill_path else '.', 'python_modules', 'lib', 'python3.*', 'site-packages'))
+python_modules_paths = glob.glob(os.path.join(skill_path if skill_path else '.', 'python_modules', 'lib', 'python3.*', 'site-packages'))
 for python_modules in python_modules_paths:
     if os.path.exists(python_modules) and python_modules not in sys.path:
         sys.path.insert(0, python_modules)
