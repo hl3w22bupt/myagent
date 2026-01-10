@@ -58,9 +58,10 @@ export function getAgentManager(): AgentManager {
     return _agentManager;
   }
 
-  // Try .venv (uv) first, then fall back to venv, then system python3
+  // Try .venv (uv) first, then python_modules, then system python3
   const venvPythonPath =
     process.env.PYTHON_PATH ||
+    resolve(process.cwd(), 'python_modules', 'bin', 'python3') ||
     resolve(process.cwd(), '.venv', 'bin', 'python3');
 
   console.log('[index.ts] Initializing AgentManager with config:');

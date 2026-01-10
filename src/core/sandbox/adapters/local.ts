@@ -124,11 +124,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
      *
      * The wrapper:
      * 1. Sets up Python path (including src/ directory)
-     * 2. Wraps user code in async main()
-     * 3. Handles exceptions
-     *
-     * Note: SkillExecutor should be imported by user code if needed.
-     * The wrapper provides the correct Python path.
+     * 2. Creates SkillExecutor instance for skill execution
+     * 3. Wraps user code in async main()
+     * 4. Handles exceptions
      */
     return `
 import asyncio
@@ -146,10 +144,16 @@ src_path = os.path.join(skill_path if skill_path else '.', 'src')
 if os.path.exists(src_path) and src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-# Also add python_modules to path
-python_modules = os.path.join(os.path.dirname(skill_path) if skill_path else '.', 'python_modules', 'lib', 'python3.11', 'site-packages')
-if os.path.exists(python_modules) and python_modules not in sys.path:
-    sys.path.insert(0, python_modules)
+# Also add python_modules to path (try both python3.11 and python3.13)
+import glob
+python_modules_paths = glob.glob(os.path.join(os.path.dirname(skill_path) if skill_path else '.', 'python_modules', 'lib', 'python3.*', 'site-packages'))
+for python_modules in python_modules_paths:
+    if os.path.exists(python_modules) and python_modules not in sys.path:
+        sys.path.insert(0, python_modules)
+
+# Import and create SkillExecutor instance for skill execution
+from core.skill.executor import SkillExecutor
+executor = SkillExecutor()
 
 async def main():
     try:

@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { LocalSandboxAdapter } from '@/core/sandbox/adapters/local';
 import * as path from 'path';
+import * as fs from 'fs';
 
 describe('LocalSandboxAdapter Debug', () => {
   let sandbox: LocalSandboxAdapter;
@@ -15,7 +16,7 @@ describe('LocalSandboxAdapter Debug', () => {
     const pythonPath = process.env.PYTHON_PATH || venvPython;
 
     console.log('Python path:', pythonPath);
-    console.log('Exists:', require('fs').existsSync(pythonPath));
+    console.log('Exists:', fs.existsSync(pythonPath));
 
     sandbox = new LocalSandboxAdapter({
       pythonPath: pythonPath,

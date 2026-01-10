@@ -58,3 +58,6 @@ motia-workbench.json
 
 # OrbStack
 .orbstack-id.yml
+
+# Backup files
+*.bak
