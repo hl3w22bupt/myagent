@@ -171,23 +171,35 @@ export class LocalSandboxAdapter implements SandboxAdapter {
      * 3. Wraps user code in async main()
      * 4. Handles exceptions
      */
-    // Normalize code indentation:
+    // Normalize code indentation while preserving relative indentation:
     // 1. Split into lines
-    // 2. Remove leading whitespace from each line (trimLeft)
-    // 3. Remove completely empty lines at the start
+    // 2. Find minimum indentation (excluding empty lines)
+    // 3. Remove that minimum indentation from all lines
     // 4. Add consistent 8-space indentation
-    const lines = code
-      .split('\n')
-      .map((line) => line.trimLeft()) // Remove leading whitespace
-      .filter((line) => line.trim().length > 0 || line === ''); // Keep empty lines but trim others
+    const lines = code.split('\n');
+
+    // Find minimum indentation (number of leading spaces/tabs)
+    const minIndent = lines
+      .filter((line) => line.trim().length > 0) // Skip empty lines
+      .reduce((min, line) => {
+        const match = line.match(/^(\s*)/);
+        const indent = match ? match[1].length : 0;
+        return Math.min(min, indent);
+      }, Infinity);
+
+    // Remove minimum indentation from all lines
+    const dedentedLines = lines.map((line) => {
+      if (line.trim().length === 0) return line; // Keep empty lines as-is
+      return line.substring(minIndent);
+    });
 
     // Ensure there's at least some content
-    if (lines.length === 0 || lines.every((l) => l.trim() === '')) {
+    if (dedentedLines.length === 0 || dedentedLines.every((l) => l.trim() === '')) {
       throw new Error('Generated code is empty or contains only whitespace');
     }
 
     // Add consistent 8-space indent to all lines
-    const normalizedCode = lines
+    const normalizedCode = dedentedLines
       .map((line) => '        ' + line)
       .join('\n');
 
