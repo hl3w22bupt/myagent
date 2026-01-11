@@ -198,8 +198,9 @@ export class SkillDiscovery {
   private skills: Map<string, SkillMetadata> = new Map();
   private skillsDir: string;
 
-  constructor(skillsDir: string = '/Users/leo/workspace/myagent/skills') {
-    this.skillsDir = skillsDir;
+  constructor(skillsDir?: string) {
+    // Default to skills/ directory in current working directory
+    this.skillsDir = skillsDir || join(process.cwd(), 'skills');
   }
 
   /**
