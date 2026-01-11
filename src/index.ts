@@ -84,7 +84,7 @@ export function getAgentManager(): AgentManager {
         },
       },
       constraints: {
-        timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
+        timeout: parseInt(process.env.TASK_TIMEOUT || '300000'), // 5 minutes for video rendering
         maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
       },
     },

@@ -98,6 +98,11 @@ Please output:
 1. Which skills to use (in order)
 2. Brief reasoning for each skill selection
 
+CRITICAL: Output MUST be valid JSON with proper quoting.
+- The "reasoning" value MUST be a string in double quotes
+- All string values MUST be enclosed in double quotes
+- Do NOT use unquoted strings
+
 Output format (JSON):
 <plan>
 {
@@ -250,7 +255,12 @@ result = await executor.execute('skill-name', {'param': 'value'})`
 Code requirements:
 - Use 'await' for any async operations (like skill execution)
 - Print the final result
-- Handle errors gracefully with try/except
+- DO NOT use try/except blocks (they are added automatically)
+- Use proper indentation for multi-line dicts/lists:
+  result = await executor.execute('skill-name', {
+      'param1': 'value1',
+      'param2': 'value2'
+  })
 - Only output the code logic, no function definitions or boilerplate
 
 Generate the code now:`;

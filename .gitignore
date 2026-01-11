@@ -38,6 +38,9 @@ Thumbs.db
 /tmp/motia-sandbox/
 /tmp/motia-sandbox-test/
 
+# Video output (project root)
+outputs/videos/
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -62,3 +65,5 @@ motia-workbench.json
 
 # Backup files
 *.bak
+
+.worktree/

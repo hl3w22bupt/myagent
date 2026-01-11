@@ -5,7 +5,7 @@ adapters:
   local:
     type: local
     pythonPath: /home/leo/projs/motia-demos/myagent/venv/bin/python3
-    timeout: 30000
+    timeout: 300000
     workspace: /tmp/motia-sandbox
     maxSessions: 10
 

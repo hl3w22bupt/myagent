@@ -110,15 +110,23 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           PYTHONPATH: pythonPathEnv,
           ...options.env,
         },
-        timeout: options.timeout || 30000,
+        timeout: options.timeout || 300000, // 5 minutes default for video rendering
       });
 
       this.activeSessions.set(sessionId, childProcess);
 
       // 4. Collect output
-      const result = await this.collectResult(childProcess);
+      const timeout = options.timeout || 300000;
+      const result = await this.collectResult(childProcess, timeout);
 
-      // 5. Cleanup
+      // 5. Cleanup or save for debugging
+      if (result.exitCode !== 0) {
+        // Save failed script for debugging
+        const debugPath = join(this.workspace, `debug_${sessionId}.py`);
+        await writeFile(debugPath, wrappedCode, 'utf-8')
+          .then(() => console.error(`[Sandbox] Failed script saved to: ${debugPath}`))
+          .catch(() => {});
+      }
       await unlink(scriptPath).catch(() => {});
       this.activeSessions.delete(sessionId);
 
@@ -163,6 +171,26 @@ export class LocalSandboxAdapter implements SandboxAdapter {
      * 3. Wraps user code in async main()
      * 4. Handles exceptions
      */
+    // Normalize code indentation:
+    // 1. Split into lines
+    // 2. Remove leading whitespace from each line (trimLeft)
+    // 3. Remove completely empty lines at the start
+    // 4. Add consistent 8-space indentation
+    const lines = code
+      .split('\n')
+      .map((line) => line.trimLeft()) // Remove leading whitespace
+      .filter((line) => line.trim().length > 0 || line === ''); // Keep empty lines but trim others
+
+    // Ensure there's at least some content
+    if (lines.length === 0 || lines.every((l) => l.trim() === '')) {
+      throw new Error('Generated code is empty or contains only whitespace');
+    }
+
+    // Add consistent 8-space indent to all lines
+    const normalizedCode = lines
+      .map((line) => '        ' + line)
+      .join('\n');
+
     return `
 import asyncio
 import sys
@@ -192,10 +220,7 @@ executor = SkillExecutor()
 
 async def main():
     try:
-${code
-  .split('\n')
-  .map((line) => '        ' + line)
-  .join('\n')}
+${normalizedCode}
     except Exception as e:
         print(json.dumps({
             "error": str(e),
@@ -207,7 +232,7 @@ asyncio.run(main())
 `;
   }
 
-  private collectResult(process: ChildProcess): Promise<{
+  private collectResult(process: ChildProcess, timeout: number): Promise<{
     exitCode: number | null;
     stdout: string;
     stderr: string;
@@ -224,7 +249,7 @@ asyncio.run(main())
           stdout,
           stderr: 'Execution timeout',
         });
-      }, 30000);
+      }, timeout);
 
       process.stdout?.on('data', (data) => {
         stdout += data.toString();

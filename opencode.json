@@ -1,8 +1,7 @@
 {
-  "name": "Motia Project",
-  "description": "Motia event-driven backend framework project",
-  "rules": ["AGENTS.md"],
-  "context": [
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
     ".cursor/rules/motia/motia-config.mdc",
     ".cursor/rules/motia/api-steps.mdc",
     ".cursor/rules/motia/event-steps.mdc",
@@ -14,6 +13,5 @@
     ".cursor/rules/motia/middlewares.mdc",
     ".cursor/architecture/architecture.mdc",
     ".cursor/architecture/error-handling.mdc"
-  ],
-  "notes": "Read AGENTS.md first - it references all detailed guides in .cursor/rules/ directory"
+  ]
 }

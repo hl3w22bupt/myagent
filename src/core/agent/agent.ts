@@ -11,6 +11,7 @@ import { LLMClient } from './llm-client';
 import { SandboxFactory } from '../sandbox/factory';
 import { PTCGenerator } from './ptc-generator';
 import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
+import { SkillDiscovery, getSkillDiscovery } from './skill-discovery';
 
 /**
  * Base Agent class with core Agent capabilities.
@@ -23,28 +24,16 @@ export class Agent {
   protected sessionId: string;
   private state: SessionState;
 
-  // Skill metadata registry (simplified version)
-  private static skillsRegistry = [
-    {
-      name: 'web-search',
-      description: 'Search the web for information',
-      tags: ['web', 'search', 'research'],
-    },
-    {
-      name: 'summarize',
-      description: 'Summarize text content',
-      tags: ['text', 'summarization', 'nlp'],
-    },
-    {
-      name: 'code-analysis',
-      description: 'Analyze code quality and patterns',
-      tags: ['code', 'analysis', 'quality'],
-    },
-  ];
+  // Dynamic skill discovery
+  private skillDiscovery: SkillDiscovery;
+  private static skillsRegistry: Array<{ name: string; description: string; tags: string[] }> = [];
 
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
     this.sessionId = sessionId;
+
+    // Initialize skill discovery
+    this.skillDiscovery = getSkillDiscovery();
 
     // Determine LLM provider and configuration
     const provider = (config.llm?.provider || process.env.DEFAULT_LLM_PROVIDER || 'anthropic') as
@@ -79,9 +68,6 @@ export class Agent {
 
     this.sandbox = SandboxFactory.create(adapterConfig);
 
-    // Initialize PTC Generator
-    this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
-
     // Initialize session state
     this.state = {
       sessionId,
@@ -91,6 +77,75 @@ export class Agent {
       executionHistory: [],
       variables: new Map(),
     };
+
+    // Initialize PTC Generator with dynamic skills registry
+    // Note: Skills will be loaded asynchronously, but we pass the current registry
+    // The PTCGenerator will have access to skills as they're discovered
+    this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
+
+    // Initialize skills registry asynchronously (non-blocking)
+    this.initializeSkillsRegistryAsync();
+  }
+
+  /**
+   * Initialize skills registry asynchronously.
+   * This runs in the background and updates the registry when complete.
+   */
+  private initializeSkillsRegistryAsync(): void {
+    Agent.initializeSkillsRegistry().then(() => {
+      // Update PTCGenerator with the loaded skills
+      this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
+    }).catch((error) => {
+      console.error('[Agent] Async skills initialization failed:', error);
+    });
+  }
+
+  /**
+   * Wait for skills to be initialized (for testing or when immediate access is needed).
+   */
+  static async awaitSkillsInitialized(): Promise<void> {
+    await Agent.initializeSkillsRegistry();
+  }
+
+  /**
+   * Initialize skills registry by discovering skills from filesystem.
+   * This is a one-time initialization on first Agent instantiation.
+   */
+  private static skillsInitialized = false;
+  private static skillsInitPromise: Promise<void> | null = null;
+
+  private static async initializeSkillsRegistry(): Promise<void> {
+    if (Agent.skillsInitialized) {
+      return;
+    }
+
+    // Return existing promise if initialization is in progress
+    if (Agent.skillsInitPromise) {
+      return Agent.skillsInitPromise;
+    }
+
+    Agent.skillsInitPromise = (async () => {
+      try {
+        const discovery = getSkillDiscovery();
+        const skills = await discovery.discover();
+        Agent.skillsRegistry = discovery.getSkillsRegistry();
+        Agent.skillsInitialized = true;
+
+        console.log(`[Agent] Initialized skills registry with ${skills.length} skills`);
+        skills.forEach((skill) => {
+          console.log(`[Agent]   - ${skill.name}: ${skill.description}`);
+        });
+      } catch (error: any) {
+        console.error('[Agent] Failed to initialize skills registry:', error.message);
+        console.warn('[Agent] Continuing with empty skills registry');
+        Agent.skillsRegistry = [];
+        Agent.skillsInitialized = true;
+      } finally {
+        Agent.skillsInitPromise = null;
+      }
+    })();
+
+    return Agent.skillsInitPromise;
   }
 
   /**
@@ -318,6 +373,38 @@ export class Agent {
       availableSkills: this.config.availableSkills,
       llmModel: this.config.llm?.model,
       sandboxType: this.config.sandbox?.type,
+      discoveredSkills: Agent.skillsRegistry.length,
     };
+  }
+
+  /**
+   * Get all discovered skills (static method).
+   */
+  static getDiscoveredSkills(): Array<{ name: string; description: string; tags: string[] }> {
+    return Agent.skillsRegistry;
+  }
+
+  /**
+   * Reload skills registry (useful for development/hot-reload).
+   */
+  static async reloadSkills(): Promise<void> {
+    const discovery = getSkillDiscovery();
+    const skills = await discovery.reload();
+    Agent.skillsRegistry = discovery.getSkillsRegistry();
+    Agent.skillsInitialized = true;
+
+    console.log(`[Agent] Reloaded skills registry with ${skills.length} skills`);
+  }
+
+  /**
+   * Get skill discovery stats.
+   */
+  static getSkillStats(): {
+    total: number;
+    byTag: Record<string, number>;
+    byType: Record<string, number>;
+  } {
+    const discovery = getSkillDiscovery();
+    return discovery.getStats();
   }
 }

@@ -1,0 +1,130 @@
+name: remotion-generator
+version: 1.0.0
+description: Generate videos using Remotion framework from natural language descriptions
+tags: [remotion, video, animation, media-generation]
+type: hybrid
+
+input_schema:
+  type: object
+  properties:
+    description:
+      type: string
+      description: Natural language description of the video to generate
+    duration:
+      type: number
+      default: 10
+      description: Video duration in seconds
+    fps:
+      type: number
+      default: 30
+      description: Frames per second
+    resolution:
+      type: string
+      default: "1920x1080"
+      description: Video resolution as WIDTHxHEIGHT
+    style:
+      type: string
+      default: "minimal"
+      enum: [minimal, corporate, animated, cinematic, presentation]
+      description: Video style template
+    output_format:
+      type: string
+      default: "mp4"
+      enum: [mp4, webm, gif]
+      description: Output video format
+    quality:
+      type: string
+      default: "medium"
+      enum: [low, medium, high, ultra]
+      description: Video quality/encoding preset
+  required: [description]
+
+output_schema:
+  type: object
+  properties:
+    success:
+      type: boolean
+      description: Whether video generation succeeded
+    video_path:
+      type: string
+      description: Local file path to generated video
+    video_url:
+      type: string
+      description: Accessible URL or path to the video file
+    thumbnail_path:
+      type: string
+      description: Local file path to the video thumbnail
+    thumbnail_url:
+      type: string
+      description: Accessible URL or path to the thumbnail
+    duration:
+      type: number
+      description: Actual video duration in seconds
+    fps:
+      type: number
+      description: Actual frames per second
+    resolution:
+      type: string
+      description: Actual video resolution
+    file_size:
+      type: number
+      description: Video file size in bytes
+    metadata:
+      type: object
+      description: Additional video metadata
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        style:
+          type: string
+        format:
+          type: string
+        quality:
+          type: string
+        generated_at:
+          type: string
+    error:
+      type: string
+      description: Error message if generation failed
+    error_type:
+      type: string
+      description: Error type for debugging
+
+prompt_template: |
+  You are a Remotion video generation expert. Create a complete Remotion video based on the description.
+  
+  Video Requirements:
+  Description: {{description}}
+  Duration: {{duration}} seconds
+  FPS: {{fps}}
+  Resolution: {{resolution}}
+  Style: {{style}}
+  Output Format: {{output_format}}
+  Quality: {{quality}}
+  
+  Generate a Remotion React component that:
+  - Uses TypeScript with proper types
+  - Follows Remotion best practices (deterministic, interpolated animations)
+  - Creates a {{style}} style video
+  - Renders for exactly {{duration}} seconds at {{fps}} fps
+  - Uses {{resolution}} resolution
+  - Exports proper Composition with durationInFrames = {{duration}} * {{fps}}
+  - Includes professional animations and transitions
+  - Is production-ready with error handling
+  - Focuses on creating visually appealing content that matches the description
+  
+  Specific style requirements:
+  - minimal: Clean, simple, focused on content
+  - corporate: Professional, branded, suitable for business
+  - animated: Dynamic, engaging, with motion graphics
+  - cinematic: Dramatic, film-like, with lighting effects
+  - presentation: Informational, clear, suitable for educational content
+  
+  Provide the complete Remotion component code below:
+
+execution:
+  handler: handler.py
+  function: generate_video
+  timeout: 180000

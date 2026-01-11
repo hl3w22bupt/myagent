@@ -10,6 +10,7 @@ jobs:
   lint:
     name: Quick Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -23,6 +24,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          CI: true
 
       - name: ESLint
         run: npm run lint

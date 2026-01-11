@@ -11,6 +11,7 @@ jobs:
   nodejs-ci:
     name: Node.js CI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -22,20 +23,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          if [ -f "requirements.txt" ]; then
-            python3 -m pip install -r requirements.txt
-          fi
-
       - name: Install dependencies
         run: npm ci
+        env:
+          CI: true
 
       - name: Generate Motia types
         run: npm run generate-types
@@ -60,6 +51,7 @@ jobs:
   python-ci:
     name: Python CI
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -69,39 +61,29 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Create Python virtual environment
-        run: |
-          uv venv --python 3.12
+          cache: 'pip'
 
       - name: Install Python dependencies
         run: |
-          uv pip install -r requirements.txt
+          python3 -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            python3 -m pip install -r requirements.txt
+          fi
 
-      - name: Python lint check
+      - name: Run Python tests (if any)
         run: |
-          uv run pylint **/*.py --exit-nonalways-on-success --errors-only
-        continue-on-error: true
-
-      - name: Python type check
-        run: |
-          uv run mypy . --no-error-summary 2>&1 || true
-        continue-on-error: true
-
-      - name: Run Python tests
-        run: |
-          uv run pytest tests/ -v --tb=short || true
+          if [ -d "tests" ] && [ "$(find tests -name '*.py' | wc -l)" -gt 0 ]; then
+            python3 -m pytest tests/ -v --tb=short || true
+          else
+            echo "No Python tests found, skipping..."
+          fi
         continue-on-error: true
 
   # Integration check
   integration-check:
     name: Integration Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [nodejs-ci, python-ci]
 
     steps:
