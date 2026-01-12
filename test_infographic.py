@@ -2,10 +2,10 @@
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / "skills" / "infographic-generator"))
+skill_dir = Path(__file__).parent / "infographic-generator"
+sys.path.insert(0, str(skill_dir))
 
 from handler import generate_infographic
 

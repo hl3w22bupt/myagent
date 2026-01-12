@@ -143,9 +143,32 @@ def recommend_template(content_type: str, content: str = "") -> str:
     if content_type not in TEMPLATES:
         return "list-column-vertical-icon-arrow"
 
+    type_dict = TEMPLATES[content_type]
+    if not type_dict:
+        return "list-column-vertical-icon-arrow"
+
+    first_category = list(type_dict.keys())[0]
+    template_list = type_dict[first_category]
+
+    if isinstance(template_list, list) and len(template_list) > 0:
+        return template_list[0]
+
+    return "list-column-vertical-icon-arrow"
+
     templates = TEMPLATES[content_type]
 
-    if len(templates) == 1:
-        return templates[0]
+    if not templates:
+        return "list-column-vertical-icon-arrow"
 
-    return templates[0]
+    if isinstance(templates, list):
+        return templates[0] if len(templates) > 0 else "list-column-vertical-icon-arrow"
+
+    if isinstance(templates, dict):
+        template_groups = list(templates.values())
+        if template_groups and template_groups[0]:
+            group = template_groups[0]
+            if isinstance(group, list) and len(group) > 0:
+                return group[0]
+        return "list-column-vertical-icon-arrow"
+
+    return "list-column-vertical-icon-arrow"
