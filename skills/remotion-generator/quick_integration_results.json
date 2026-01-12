@@ -1,0 +1,251 @@
+[
+  {
+    "test_id": 1,
+    "analyzer_version": "v2.0",
+    "generator_version": "v2.0",
+    "analysis": {
+      "topic": {
+        "name": "Pythagorean Theorem",
+        "category": "geometry",
+        "difficulty": "introductory"
+      },
+      "key_elements": {
+        "formulas": [
+          "a² + b² = c²"
+        ],
+        "visuals": [
+          "Right triangle with labeled sides",
+          "Square construction on each side",
+          "Area equivalence animation"
+        ],
+        "logic_steps": [
+          "Identify the right angle",
+          "Label the legs a and b",
+          "Label the hypotenuse c",
+          "Show area relationship"
+        ]
+      },
+      "scenes": [
+        {
+          "id": "scene_1",
+          "title": "Introduction to the Right Triangle",
+          "duration_percent": 15,
+          "content_type": "introduction",
+          "description": "Define the right triangle and its components (legs and hypotenuse).",
+          "visual_elements": [
+            "Right triangle diagram",
+            "Right angle highlight",
+            "Labels for sides a, b, and c"
+          ]
+        },
+        {
+          "id": "scene_2",
+          "title": "Visualizing the Theorem",
+          "duration_percent": 30,
+          "content_type": "demonstration",
+          "description": "Demonstrate the relationship a² + b² = c² by constructing squares on each side.",
+          "visual_elements": [
+            "Squares growing from sides",
+            "Color-coded areas",
+            "Equation a² + b² = c² appearing"
+          ]
+        },
+        {
+          "id": "scene_3",
+          "title": "Worked Example: 3-4-5 Triangle",
+          "duration_percent": 40,
+          "content_type": "example",
+          "description": "Apply the theorem to a classic 3-4-5 triangle to verify the relationship.",
+          "visual_elements": [
+            "Triangle with sides 3, 4, 5",
+            "Step-by-step calculation: 3² + 4² = 9 + 16 = 25 = 5²"
+          ]
+        },
+        {
+          "id": "scene_4",
+          "title": "Summary and Key Takeaways",
+          "duration_percent": 15,
+          "content_type": "summary",
+          "description": "Recap the theorem's conditions and its importance in geometry.",
+          "visual_elements": [
+            "Bullet points of key facts",
+            "Real-world application image (e.g., construction)"
+          ]
+        }
+      ],
+      "visualization": {
+        "primary_visual": "Geometric proof with animated squares on triangle sides",
+        "color_scheme": {
+          "primary": "#10B981",
+          "secondary": "#3B82F6",
+          "accent": "#EF4444"
+        },
+        "animation_style": "gradual_reveal"
+      },
+      "educational": {
+        "key_points": [
+          "Only applies to right triangles",
+          "c represents the hypotenuse (longest side)",
+          "a and b represent the two legs",
+          "Connects algebra and geometry"
+        ],
+        "emphasis": "Visual understanding of the area relationship"
+      }
+    },
+    "code": "import React, { useMemo, useState, useCallback } from 'react';\nimport {\n  AbsoluteFill,\n  interpolate,\n  spring,\n  useCurrentFrame,\n  useVideoConfig,\n  Sequence,\n  staticFile,\n} from 'remotion';\n\n// --- Types & Interfaces ---\n\ninterface TriangleProps {\n  width: number;\n  height: number;\n  a: number;\n  b: number;\n  c: number;\n  colorA: string;\n  colorB: string;\n  colorC: string;\n  showSquares?: boolean;\n  squareProgress?: number;\n  showLabels?: boolean;\n  labelA?: string;\n  labelB?: string;\n  labelC?: string;\n}\n\ninterface StepTextProps {\n  text: string;\n  frame: number;\n  startFrame: number;\n  endFrame?: number;\n  style?: React.CSSProperties;\n}\n\n// --- Constants ---\n\nconst COLORS = {\n  primary: '#10B981', // Emerald 500\n  secondary: '#3B82F6', // Blue 500\n  accent: '#EF4444', // Red 500\n  bg: '#1F2937', // Gray 800\n  text: '#F3F4F6', // Gray 100\n  textDim: '#9CA3AF', // Gray 400\n};\n\n// --- Helper Components ---\n\n/**\n * Displays text with a typewriter or fade-in effect.\n */\nconst StepText: React.FC<StepTextProps> = ({ text, frame, startFrame, endFrame, style }) => {\n  const opacity = interpolate(frame, [startFrame, startFrame + 15], [0, 1], {\n    extrapolateRight: 'clamp',\n  });\n  \n  // Fade out if endFrame is provided\n  const finalOpacity = endFrame \n    ? interpolate(frame, [endFrame - 15, endFrame], [opacity, 0], { extrapolateLeft: 'clamp' })\n    : opacity;\n\n  return (\n    <div\n      style={{\n        opacity: finalOpacity,\n        fontFamily: 'Arial, sans-serif',\n        fontSize: 32,\n        color: COLORS.text,\n        textAlign: 'center',\n        whiteSpace: 'pre-line',\n        ...style,\n      }}\n    >\n      {text}\n    </div>\n  );\n};\n\n/**\n * Geometric component to render the triangle and optional squares.\n * Uses SVG for precise geometric rendering.\n */\nconst PythagoreanVisual: React.FC<TriangleProps> = ({\n  width,\n  height,\n  a,\n  b,\n  c,\n  colorA,\n  colorB,\n  colorC,\n  showSquares = false,\n  squareProgress = 0,\n  showLabels = true,\n  labelA = 'a',\n  labelB = 'b',\n  labelC = 'c',\n}) => {\n  // Scale factor to fit triangle in view while maintaining aspect ratio\n  // Assuming a 3-4-5 triangle base, we scale it to fit roughly 60% of height\n  const scale = Math.min(width, height) / 8; \n  \n  // Coordinates calculation (Right angle at bottom-left relative to triangle center)\n  // Point A (Bottom, Right angle): (0, b)\n  // Point B (Top): (0, 0)\n  // Point C (Right): (a, b)\n  // We will center this shape in the SVG\n  \n  const triA = a * scale;\n  const triB = b * scale;\n  const triC = c * scale;\n\n  // Offsets to center the triangle + squares\n  const maxW = triA + triB; // Rough bounding box\n  const maxH = triB + triA;\n  const offsetX = (width - maxW) / 2;\n  const offsetY = (height - maxH) / 2;\n\n  // Triangle Points\n  // P1: Top (0,0) -> P2: Bottom-Right (a, 0) -> P3: Bottom-Left (0, b)\n  // Let's orient it: Right angle at bottom-left.\n  // x=0, y=b (Right Angle)\n  // x=a, y=b (Bottom Right)\n  // x=0, y=0 (Top Left)\n  \n  const pRightAngle = { x: offsetX, y: offsetY + triB };\n  const pBottom = { x: offsetX + triA, y: offsetY + triB };\n  const pTop = { x: offsetX, y: offsetY };\n\n  return (\n    <svg width={width} height={height} style={{ overflow: 'visible' }}>\n      <defs>\n        <marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\" refX=\"5\" refY=\"5\" orient=\"auto\">\n          <path d=\"M0,0 L0,10 L10,5 z\" fill={COLORS.textDim} />\n        </marker>\n      </defs>\n\n      {/* Square on A (Bottom Side) */}\n      {showSquares && (\n        <g opacity={squareProgress}>\n          <rect\n            x={pRightAngle.x}\n            y={pRightAngle.y}\n            width={triA}\n            height={triA}\n            fill={colorA}\n            fillOpacity={0.3}\n            stroke={colorA}\n            strokeWidth={4}\n          />\n          <text\n            x={pRightAngle.x + triA / 2}\n            y={pRightAngle.y + triA / 2 + 10}\n            fill=\"white\"\n            fontSize=\"24\"\n            textAnchor=\"middle\"\n            fontWeight=\"bold\"\n          >\n            a²\n          </text>\n        </g>\n      )}\n\n      {/* Square on B (Left Side) */}\n      {showSquares && (\n        <g opacity={squareProgress}>\n          <rect\n            x={pRightAngle.x - triB}\n            y={pRightAngle.y - triB}\n            width={triB}\n            height={triB}\n            fill={colorB}\n            fillOpacity={0.3}\n            stroke={colorB}\n            strokeWidth={4}\n          />\n          <text\n            x={pRightAngle.x - triB / 2}\n            y={pRightAngle.y - triB / 2 + 10}\n            fill=\"white\"\n            fontSize=\"24\"\n            textAnchor=\"middle\"\n            fontWeight=\"bold\"\n          >\n            b²\n          </text>\n        </g>\n      )}\n\n      {/* Square on C (Hypotenuse) - Rotated */}\n      {showSquares && (\n        <g opacity={squareProgress}>\n           {/* \n             To draw square on hypotenuse, we need rotation.\n             Angle is atan2(b, a).\n             Center of hypotenuse is (a/2, b/2) relative to right angle.\n             This is complex in raw SVG without transforms, simplified approach:\n             Just draw the triangle first, then overlay the square logic if needed.\n             For this demo, we will draw the square attached to the hypotenuse.\n           */}\n           <path\n             d={`\n                M ${pTop.x} ${pTop.y}\n                L ${pTop.x - triB} ${pTop.y + triA}\n                L ${pBottom.x - triB} ${pBottom.y + triA}\n                L ${pBottom.x} ${pBottom.y}\n                Z\n             `}\n             fill={colorC}\n             fillOpacity={0.3}\n             stroke={colorC}\n             strokeWidth={4}\n           />\n           <text\n             x={(pTop.x + pBottom.x) / 2 - triB/2}\n             y={(pTop.y + pBottom.y) / 2 + triA/2 + 10}\n             fill=\"white\"\n             fontSize=\"24\"\n             textAnchor=\"middle\"\n             fontWeight=\"bold\"\n           >\n             c²\n           </text>\n        </g>\n      )}\n\n      {/* The Triangle */}\n      <polygon\n        points={`${pTop.x},${pTop.y} ${pBottom.x},${pBottom.y} ${pRightAngle.x},${pRightAngle.y}`}\n        fill=\"none\"\n        stroke=\"white\"\n        strokeWidth={6}\n      />\n\n      {/* Right Angle Marker */}\n      <path\n        d={`M ${pRightAngle.x + 30} ${pRightAngle.y} L ${pRightAngle.x + 30} ${pRightAngle.y - 30} L ${pRightAngle.x} ${pRightAngle.y - 30}`}\n        stroke=\"white\"\n        strokeWidth={2}\n        fill=\"none\"\n      />\n\n      {/* Labels */}\n      {showLabels && (\n        <>\n          {/* Label A */}\n          <text\n            x={pRightAngle.x + triA / 2}\n            y={pRightAngle.y + 40}\n            fill={colorA}\n            fontSize=\"28\"\n            textAnchor=\"middle\"\n            fontWeight=\"bold\"\n          >\n            {labelA}\n          </text>\n          {/* Label B */}\n          <text\n            x={pRightAngle.x - 40}\n            y={pRightAngle.y - triB / 2}\n            fill={colorB}\n            fontSize=\"28\"\n            textAnchor=\"middle\"\n            fontWeight=\"bold\"\n          >\n            {labelB}\n          </text>\n          {/* Label C */}\n          <text\n            x={(pTop.x + pBottom.x) / 2 + 20}\n            y={(pTop.y + pBottom.y) / 2 - 20}\n            fill={colorC}\n            fontSize=\"28\"\n            textAnchor=\"middle\"\n            fontWeight=\"bold\"\n          >\n            {labelC}\n          </text>\n        </>\n      )}\n    </svg>\n  );\n};\n\n// --- Scene Components ---\n\n/**\n * Scene 1: Introduction\n * Defines the right triangle components.\n */\nconst Scene1: React.FC = () => {\n  const { width, height } = useVideoConfig();\n  const frame = useCurrentFrame();\n\n  const titleOpacity = interpolate(frame, [0, 20], [0, 1]);\n  const triangleScale = spring({ frame, fps: 30, config: { mass: 1, damping: 10 } });\n  \n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>\n      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>\n        \n        <StepText \n          text=\"The Pythagorean Theorem\" \n          frame={frame} \n          startFrame={0} \n          style={{ fontSize: 60, fontWeight: 'bold', marginBottom: 40, opacity: titleOpacity }}\n        />\n\n        <div style={{ transform: `scale(${triangleScale})`, opacity: titleOpacity }}>\n          <PythagoreanVisual\n            width={width}\n            height={height}\n            a={4}\n            b={3}\n            c={5}\n            colorA={COLORS.primary}\n            colorB={COLORS.secondary}\n            colorC={COLORS.accent}\n            showLabels={true}\n            labelA=\"Leg (a)\"\n            labelB=\"Leg (b)\"\n            labelC=\"Hypotenuse (c)\"\n          />\n        </div>\n\n        <div style={{ marginTop: 50, opacity: interpolate(frame, [30, 50], [0, 1], {extrapolateRight: 'clamp'}) }}>\n          <StepText\n            text=\"Only works for Right Triangles\"\n            frame={frame}\n            startFrame={30}\n            style={{ color: COLORS.accent, fontSize: 28 }}\n          />\n        </div>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 2: Visualizing the Theorem\n * Shows the squares growing on the sides.\n */\nconst Scene2: React.FC = () => {\n  const { width, height } = useVideoConfig();\n  const frame = useCurrentFrame();\n\n  // Animate squares growing\n  const squareGrowth = spring({ frame, fps: 30, config: { damping: 15 } });\n  \n  // Formula fade in\n  const formulaOpacity = interpolate(frame, [20, 40], [0, 1], { extrapolateRight: 'clamp' });\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>\n      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>\n        \n        <div style={{ height: '60%', width: '100%', position: 'relative' }}>\n           <PythagoreanVisual\n            width={width}\n            height={height}\n            a={4}\n            b={3}\n            c={5}\n            colorA={COLORS.primary}\n            colorB={COLORS.secondary}\n            colorC={COLORS.accent}\n            showSquares={true}\n            squareProgress={squareGrowth}\n            showLabels={true}\n          />\n        </div>\n\n        <div style={{ marginTop: 40, opacity: formulaOpacity, textAlign: 'center' }}>\n          <div style={{ fontSize: 48, fontFamily: 'Georgia, serif', color: 'white' }}>\n            <span style={{ color: COLORS.primary }}>a²</span> + \n            <span style={{ color: COLORS.secondary }}> b²</span> = \n            <span style={{ color: COLORS.accent }}> c²</span>\n          </div>\n          <div style={{ fontSize: 24, color: COLORS.textDim, marginTop: 10 }}>\n            Area of Square A + Area of Square B = Area of Square C\n          </div>\n        </div>\n\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 3: Worked Example (3-4-5)\n * Applies the math to specific numbers.\n */\nconst Scene3: React.FC = () => {\n  const { width, height } = useVideoConfig();\n  const frame = useCurrentFrame();\n\n  // Sequence of math steps\n  const step1 = interpolate(frame, [10, 30], [0, 1], { extrapolateRight: 'clamp' }); // Show 3, 4, 5\n  const step2 = interpolate(frame, [40, 60], [0, 1], { extrapolateRight: 'clamp' }); // Show squares\n  const step3 = interpolate(frame, [70, 90], [0, 1], { extrapolateRight: 'clamp' }); // Show calc 9 + 16\n  const step4 = interpolate(frame, [100, 120], [0, 1], { extrapolateRight: 'clamp' }); // Show result 25\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.bg }}>\n      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', height: '100%', padding: 100 }}>\n        \n        {/* Left: Visual Triangle */}\n        <div style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>\n          <PythagoreanVisual\n            width={width / 2}\n            height={height}\n            a={4}\n            b={3}\n            c={5}\n            colorA={COLORS.primary}\n            colorB={COLORS.secondary}\n            colorC={COLORS.accent}\n            showSquares={step2 > 0.5}\n            squareProgress={step2}\n            showLabels={true}\n            labelA=\"3\"\n            labelB=\"4\"\n            labelC=\"5\"\n          />\n        </div>\n\n        {/* Right: Calculation Steps */}\n        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 50 }}>\n          \n          <div style={{ fontSize: 36, color: 'white', marginBottom: 20, opacity: step1 }}>\n            Let a = 3, b = 4, c = 5\n          </div>\n\n          <div style={{ fontSize: 48, fontFamily: 'Georgia, serif', color: 'white', marginBottom: 20, opacity: step2 }}>\n            <span style={{ color: COLORS.primary }}>3²</span> + \n            <span style={{ color: COLORS.secondary }}> 4²</span> = \n            <span style={{ color: COLORS.accent }}> 5²</span>\n          </div>\n\n          <div style={{ fontSize: 48, fontFamily: 'Georgia, serif', color: 'white', marginBottom: 20, opacity: step3 }}>\n            <span style={{ color: COLORS.primary }}>9</span> + \n            <span style={{ color: COLORS.secondary }}> 16</span> = \n            <span style={{ color: COLORS.accent }}> 25</span>\n          </div>\n\n          <div style={{ fontSize: 36, color: COLORS.primary, opacity: step4, fontWeight: 'bold' }}>\n            ✓ Verified!\n          </div>\n        </div>\n\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 4: Summary\n * Bullet points and recap.\n */\nconst Scene4: React.FC = () => {\n  const frame = useCurrentFrame();\n  \n  const points = [\n    \"Only applies to Right Triangles\",\n    \"c is always the Hypotenuse (longest side)\",\n    \"Connects Algebra and Geometry\",\n    \"Used in construction, navigation, and physics\"\n  ];\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>\n      <h1 style={{ fontSize: 64, color: 'white', marginBottom: 60, fontWeight: 'bold' }}>Key Takeaways</h1>\n      \n      <div style={{ width: '60%' }}>\n        {points.map((point, index) => {\n          const start = index * 15;\n          const opacity = interpolate(frame, [start, start + 15], [0, 1], { extrapolateRight: 'clamp' });\n          const transform = `translateX(${interpolate(frame, [start, start + 15], [50, 0], { extrapolateRight: 'clamp' })}px)`;\n          \n          return (\n            <div key={index} style={{ \n              display: 'flex', \n              alignItems: 'center', \n              marginBottom: 30, \n              opacity, \n              transform \n            }}>\n              <div style={{ \n                width: 12, \n                height: 12, \n                backgroundColor: COLORS.primary, \n                borderRadius: '50%', \n                marginRight: 20 \n              }} />\n              <span style={{ fontSize: 32, color: COLORS.text }}>{point}</span>\n            </div>\n          );\n        })}\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n// --- Main Composition ---\n\nexport const PythagoreanTheoremVideo: React.FC = () => {\n  const { durationInFrames } = useVideoConfig();\n\n  // Scene Durations based on 300 frames total\n  // Scene 1: 15% -> 45 frames\n  // Scene 2: 30% -> 90 frames\n  // Scene 3: 40% -> 120 frames\n  // Scene 4: 15% -> 45 frames\n  const scene1End = 45;\n  const scene2End = scene1End + 90;\n  const scene3End = scene2End + 120;\n\n  return (\n    <AbsoluteFill>\n      {/* Scene 1: Intro */}\n      <Sequence from={0} durationInFrames={scene1End}>\n        <Scene1 />\n      </Sequence>\n\n      {/* Scene 2: Visual Proof */}\n      <Sequence from={scene1End} durationInFrames={90}>\n        <Scene2 />\n      </Sequence>\n\n      {/* Scene 3: Example */}\n      <Sequence from={scene2End} durationInFrames={120}>\n        <Scene3 />\n      </Sequence>\n\n      {/* Scene 4: Summary */}\n      <Sequence from={scene3End} durationInFrames={45}>\n        <Scene4 />\n      </Sequence>\n    </AbsoluteFill>\n  );\n};\n\n// --- Root Configuration (Remotion.tsx equivalent) ---\n// Usually this would be in Root.tsx, but including here for completeness\nexport const RemotionRoot: React.FC = () => {\n  return (\n    <>\n      <PythagoreanTheoremVideo />\n    </>\n  );\n};",
+    "analysis_score": 10,
+    "analysis_max": 10,
+    "analysis_details": [
+      "✓ 类别正确: geometry",
+      "✓ 场景数合理: 4",
+      "✓ 时间分配正确: 100%",
+      "✓ 主要可视化明确",
+      "✓ 动画风格: gradual_reveal"
+    ],
+    "code_score": 0,
+    "code_max": 10,
+    "code_details": [
+      "✗ 验证失败: 'tuple' object has no attribute 'get'"
+    ],
+    "total_score": 10,
+    "errors": [],
+    "success": true,
+    "timing": {
+      "analysis": 6.082473039627075,
+      "generation": 39.09514808654785
+    }
+  },
+  {
+    "test_id": 2,
+    "analyzer_version": "v2.0",
+    "generator_version": "v2.0",
+    "analysis": {
+      "topic": {
+        "name": "Taylor Series Expansion",
+        "category": "calculus",
+        "difficulty": "intermediate"
+      },
+      "key_elements": {
+        "formulas": [
+          "f(x) ≈ P_n(x) = c₀ + c₁(x-a) + c₂(x-a)² + ...",
+          "c_k = f^{(k)}(a) / k!",
+          "sin(x) ≈ x - x³/3! + x⁵/5! - ..."
+        ],
+        "visuals": [
+          "Function curve vs. polynomial curve",
+          "Tangent lines at expansion point",
+          "Higher order derivatives matching curvature",
+          "Error term visualization"
+        ],
+        "logic_steps": [
+          "Start with constant approximation (value at point)",
+          "Add linear term (first derivative/slope)",
+          "Add quadratic term (second derivative/curvature)",
+          "Generalize to infinite series"
+        ]
+      },
+      "scenes": [
+        {
+          "id": "scene_1",
+          "title": "The Power of Polynomials",
+          "duration_percent": 15,
+          "content_type": "introduction",
+          "description": "Introduce the challenge: complex functions like sin(x) or e^x are hard to calculate by hand. Polynomials are easy. How do we bridge the gap?",
+          "visual_elements": [
+            "Complex curve (e.g., sin(x))",
+            "Simple parabola/line",
+            "Question mark connecting them"
+          ]
+        },
+        {
+          "id": "scene_2",
+          "title": "Matching at a Single Point",
+          "duration_percent": 25,
+          "content_type": "demonstration",
+          "description": "Step-by-step construction of the approximation. Start with f(a), then match slope f'(a), then curvature f''(a). Show how the polynomial 'hugs' the function better at each step.",
+          "visual_elements": [
+            "Point a on x-axis",
+            "Tangent line animation",
+            "Curving line animation",
+            "Side-by-side value comparison"
+          ]
+        },
+        {
+          "id": "scene_3",
+          "title": "The General Formula",
+          "duration_percent": 20,
+          "content_type": "demonstration",
+          "description": "Reveal the Taylor Series formula. Explain the factorial denominator and the (x-a)^n term visually.",
+          "visual_elements": [
+            "Formula typesetting",
+            "Color-coded terms (derivative vs. power)",
+            "Graph showing radius of convergence"
+          ]
+        },
+        {
+          "id": "scene_4",
+          "title": "Visualizing Convergence",
+          "duration_percent": 25,
+          "content_type": "example",
+          "description": "Demonstrate with sin(x) or cos(x) around x=0. Show the interval of approximation growing as n increases.",
+          "visual_elements": [
+            "Animation of sin(x) being approximated by 1st, 3rd, 5th order polynomials",
+            "Error graph shrinking to zero"
+          ]
+        },
+        {
+          "id": "scene_5",
+          "title": "Why This Matters",
+          "duration_percent": 15,
+          "content_type": "summary",
+          "description": "Summary of applications: calculators, physics simulations, and solving differential equations.",
+          "visual_elements": [
+            "Calculator icon",
+            "Application icons",
+            "Key formula recap"
+          ]
+        }
+      ],
+      "visualization": {
+        "primary_visual": "Split screen: Left side showing derivatives being calculated, Right side showing the polynomial curve morphing to fit the target function.",
+        "color_scheme": {
+          "primary": "#3B82F6",
+          "secondary": "#F59E0B",
+          "accent": "#10B981"
+        },
+        "animation_style": "continuous_deformation"
+      },
+      "educational": {
+        "key_points": [
+          "Any smooth function can be approximated by a polynomial",
+          "The approximation is exact at the expansion point a",
+          "Higher derivatives give information about higher order behavior",
+          "Factorials grow fast, ensuring convergence for many functions"
+        ],
+        "emphasis": "The intuition that derivatives define the local shape, and summing them up reconstructs the global function."
+      }
+    },
+    "code": "```typescript\nimport React, { useMemo, useState, useCallback, useEffect } from 'react';\nimport {\n  AbsoluteFill,\n  interpolate,\n  spring,\n  useCurrentFrame,\n  useVideoConfig,\n  Sequence,\n  Audio,\n  staticFile,\n} from 'remotion';\nimport { z } from 'zod';\n\n// --- Configuration & Constants ---\n\nconst COLORS = {\n  background: '#111827', // Gray 900\n  text: '#F3F4F6', // Gray 100\n  primary: '#3B82F6', // Blue 500\n  secondary: '#F59E0B', // Amber 500\n  accent: '#10B981', // Emerald 500\n  grid: '#374151', // Gray 700\n  axis: '#9CA3AF', // Gray 400\n  error: '#EF4444', // Red 500\n};\n\nconst MATH = {\n  sin: (x: number) => Math.sin(x),\n  cos: (x: number) => Math.cos(x),\n  exp: (x: number) => Math.exp(x),\n  // Taylor Series for sin(x) around 0: x - x^3/3! + x^5/5! ...\n  taylorSin: (x: number, order: number) => {\n    let result = 0;\n    for (let n = 0; n <= order; n++) {\n      const k = 2 * n + 1; // 1, 3, 5, 7...\n      const sign = n % 2 === 0 ? 1 : -1;\n      const factorial = (num: number) => (num <= 1 ? 1 : num * factorial(num - 1));\n      result += sign * Math.pow(x, k) / factorial(k);\n    }\n    return result;\n  },\n};\n\n// --- Types & Interfaces ---\n\ninterface Point {\n  x: number;\n  y: number;\n}\n\ninterface GraphProps {\n  width: number;\n  height: number;\n  func: (x: number) => number;\n  range: number;\n  color: string;\n  strokeWidth?: number;\n  label?: string;\n}\n\n// --- Helper Components ---\n\n/**\n * Formula Component\n * Displays mathematical formulas with specific styling.\n */\nconst Formula: React.FC<{\n  children: React.ReactNode;\n  style?: React.CSSProperties;\n  highlight?: boolean;\n}> = ({ children, style, highlight = false }) => {\n  return (\n    <div\n      style={{\n        fontFamily: 'Georgia, serif',\n        fontSize: 48,\n        color: highlight ? COLORS.secondary : COLORS.text,\n        textAlign: 'center',\n        marginBottom: 20,\n        textShadow: highlight ? '0 0 20px rgba(245, 158, 11, 0.5)' : 'none',\n        ...style,\n      }}\n    >\n      {children}\n    </div>\n  );\n};\n\n/**\n * MathGraph Component\n * Renders a mathematical function on a coordinate system using SVG.\n */\nconst MathGraph: React.FC<GraphProps> = ({\n  width,\n  height,\n  func,\n  range,\n  color,\n  strokeWidth = 3,\n  label,\n}) => {\n  // Memoize path calculation to avoid re-renders\n  const pathData = useMemo(() => {\n    const points: Point[] = [];\n    const step = (range * 2) / 200; // Resolution\n    \n    for (let x = -range; x <= range; x += step) {\n      const y = func(x);\n      // Map math coordinates to screen coordinates\n      // Screen X: 0 to width. Math X: -range to range\n      // Screen Y: height to 0. Math Y: -1.5 to 1.5 (approx)\n      \n      const screenX = ((x + range) / (range * 2)) * width;\n      // Scale Y assuming range is roughly -2 to 2 for visualization\n      const screenY = height / 2 - (y * height) / 4; \n      \n      points.push({ x: screenX, y: screenY });\n    }\n\n    if (points.length === 0) return '';\n\n    // Start path\n    let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;\n    \n    // Connect points\n    for (let i = 1; i < points.length; i++) {\n      d += ` L ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)}`;\n    }\n    \n    return d;\n  }, [func, range, width, height]);\n\n  return (\n    <svg width={width} height={height} style={{ overflow: 'visible' }}>\n      {/* Grid Lines */}\n      <line x1={width / 2} y1={0} x2={width / 2} y2={height} stroke={COLORS.grid} strokeWidth={1} />\n      <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke={COLORS.grid} strokeWidth={1} />\n      \n      {/* Function Curve */}\n      <path d={pathData} fill=\"none\" stroke={color} strokeWidth={strokeWidth} strokeLinecap=\"round\" strokeLinejoin=\"round\" />\n      \n      {/* Label */}\n      {label && (\n        <text\n          x={width - 20}\n          y={height / 2 - 50}\n          fill={color}\n          fontSize={24}\n          fontFamily=\"sans-serif\"\n          textAnchor=\"end\"\n          fontWeight=\"bold\"\n        >\n          {label}\n        </text>\n      )}\n    </svg>\n  );\n};\n\n/**\n * Scene 1: The Power of Polynomials\n * Introduces the concept of approximating complex functions.\n */\nconst Scene1: React.FC = () => {\n  const { width, height } = useVideoConfig();\n  const frame = useCurrentFrame();\n  \n  const opacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' });\n  const slideUp = interpolate(frame, [0, 30], [100, 0], { extrapolateRight: 'clamp' });\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ opacity, transform: `translateY(${slideUp}px)`, textAlign: 'center' }}>\n        <h1 style={{ fontSize: 80, fontWeight: 'bold', color: COLORS.primary, marginBottom: 40 }}>\n          Taylor Series\n        </h1>\n        <div style={{ display: 'flex', gap: 40, justifyContent: 'center', alignItems: 'center' }}>\n          <div style={{ textAlign: 'center' }}>\n            <div style={{ fontSize: 32, color: COLORS.text, marginBottom: 10 }}>Complex Function</div>\n            <div style={{ fontSize: 60, color: COLORS.secondary }}>sin(x)</div>\n          </div>\n          \n          <div style={{ fontSize: 60, color: COLORS.text }}>≈</div>\n          \n          <div style={{ textAlign: 'center' }}>\n            <div style={{ fontSize: 32, color: COLORS.text, marginBottom: 10 }}>Polynomial</div>\n            <div style={{ fontSize: 60, color: COLORS.accent }}>x - x³/3! + ...</div>\n          </div>\n        </div>\n        \n        <div style={{ marginTop: 60, fontSize: 32, color: COLORS.grid }}>\n          How do we bridge the gap?\n        </div>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 2: Matching at a Single Point\n * Visualizes the step-by-step construction of the approximation.\n */\nconst Scene2: React.FC = () => {\n  const { width, height } = useVideoConfig();\n  const frame = useCurrentFrame();\n  \n  // Animation timing\n  const startFrame = 0;\n  const step1 = 30; // Constant\n  const step2 = 70; // Linear\n  const step3 = 110; // Quadratic\n\n  // Calculate current \"order\" of approximation based on frame\n  // 0: Nothing, 1: Constant, 2: Linear, 3: Quadratic\n  const getOrder = useCallback(() => {\n    if (frame < step1) return 0;\n    if (frame < step2) return 1;\n    if (frame < step3) return 2;\n    return 3;\n  }, [frame, step1, step2, step3]);\n\n  const order = getOrder();\n\n  // Define the target function (sin(x)) and approximations\n  // Center a = 0\n  const targetFunc = (x: number) => MATH.sin(x);\n  \n  const approxFunc = (x: number) => {\n    if (order === 0) return 0; // Start at 0\n    if (order === 1) return 0; // Constant f(0) = 0\n    if (order === 2) return x; // Linear f'(0)x = x\n    return x; // Quadratic f''(0)x^2/2 = 0 (sin is odd, so quadratic term is 0, effectively same as linear for sin)\n    // Note: For sin(x), the quadratic term is 0. To make visualization interesting, \n    // we usually jump to cubic. Let's adjust logic for visual flair.\n  };\n\n  // Custom logic for Sin(x) Taylor visualization\n  // Order 0: 0\n  // Order 1: x\n  // Order 2: x (Quadratic term is 0)\n  // Order 3: x - x^3/6\n  \n  const visualApproxFunc = (x: number) => {\n    if (order === 0) return 0;\n    if (order === 1) return x; // Linear\n    if (order === 2) return x; // Still Linear (Quadratic term is 0)\n    if (order === 3) return x - Math.pow(x, 3) / 6; // Cubic\n    return x - Math.pow(x, 3) / 6;\n  };\n\n  const labels = [\"Start\", \"Constant\", \"Linear (Slope)\", \"Cubic (Curvature)\"];\n  const currentLabel = labels[order];\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.background }}>\n      <div style={{ position: 'absolute', top: 100, left: 100, color: COLORS.text }}>\n        <h2 style={{ fontSize: 48, marginBottom: 20 }}>Matching Derivatives at x=0</h2>\n        <div style={{ fontSize: 32, color: COLORS.secondary }}>\n          Current Step: {currentLabel}\n        </div>\n      </div>\n\n      <div style={{ position: 'absolute', top: 100, right: 100, textAlign: 'right', color: COLORS.text }}>\n        <div style={{ fontSize: 24, marginBottom: 10 }}>Target: sin(x)</div>\n        <div style={{ fontSize: 24, color: COLORS.accent }}>Approx: P(x)</div>\n      </div>\n\n      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>\n        <div style={{ position: 'relative', width: 800, height: 600 }}>\n          {/* Target Function (Ghost) */}\n          <MathGraph \n            width={800} \n            height={600} \n            func={targetFunc} \n            range={Math.PI} \n            color={COLORS.grid} \n            strokeWidth={2} \n          />\n          \n          {/* Approximation Function */}\n          <MathGraph \n            width={800} \n            height={600} \n            func={visualApproxFunc} \n            range={Math.PI} \n            color={COLORS.accent} \n            strokeWidth={5} \n          />\n          \n          {/* Point at x=0 */}\n          <div style={{\n            position: 'absolute', \n            left: '50%', \n            top: '50%', \n            width: 10, \n            height: 10, \n            backgroundColor: COLORS.secondary, \n            borderRadius: '50%',\n            transform: 'translate(-50%, -50%)'\n          }} />\n        </div>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 3: The General Formula\n * Explains the mathematical notation.\n */\nconst Scene3: React.FC = () => {\n  const frame = useCurrentFrame();\n  const { width } = useVideoConfig();\n\n  const opacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' });\n  \n  // Highlight parts of the formula\n  const highlightC0 = frame > 30;\n  const highlightCk = frame > 60;\n  const highlightSum = frame > 90;\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ opacity, width: 1200 }}>\n        <h2 style={{ fontSize: 48, color: COLORS.primary, marginBottom: 60, textAlign: 'center' }}>\n          The General Formula\n        </h2>\n        \n        <div style={{ display: 'flex', flexDirection: 'column', gap: 40, alignItems: 'center' }}>\n          <Formula>\n            f(x) ≈ <span style={{ color: highlightSum ? COLORS.secondary : COLORS.text }}>Σ</span> cₖ(x-a)ᵏ\n          </Formula>\n          \n          <div style={{ display: 'flex', gap: 100, marginTop: 40 }}>\n            <div style={{ textAlign: 'center' }}>\n              <div style={{ fontSize: 32, color: COLORS.grid, marginBottom: 10 }}>Coefficient</div>\n              <Formula highlight={highlightCk}>\n                cₖ = f⁽ᵏ⁾(a) / k!\n              </Formula>\n              <div style={{ fontSize: 24, color: COLORS.text, opacity: highlightCk ? 1 : 0, transition: 'opacity 1s' }}>\n                Derivative at a / Factorial\n              </div>\n            </div>\n            \n            <div style={{ textAlign: 'center' }}>\n              <div style={{ fontSize: 32, color: COLORS.grid, marginBottom: 10 }}>Term</div>\n              <Formula highlight={highlightSum}>\n                (x-a)ᵏ\n              </Formula>\n              <div style={{ fontSize: 24, color: COLORS.text, opacity: highlightSum ? 1 : 0, transition: 'opacity 1s' }}>\n                Distance from a\n              </div>\n            </div>\n          </div>\n        </div>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 4: Visualizing Convergence\n * Shows the approximation getting better as n increases.\n */\nconst Scene4: React.FC = () => {\n  const frame = useCurrentFrame();\n  const { width, height } = useVideoConfig();\n  \n  // Cycle through orders: 1, 3, 5, 7\n  const cycleDuration = 60; // frames per order\n  const totalOrders = 4;\n  const progress = (frame % (cycleDuration * totalOrders)) / cycleDuration;\n  const currentOrderBase = Math.floor(frame / cycleDuration) % totalOrders;\n  \n  // Map 0..3 to 1, 3, 5, 7 (Odd numbers for Sin)\n  const order = (currentOrderBase * 2) + 1;\n  \n  // Smooth transition for the graph\n  const transition = spring({\n    frame: frame % cycleDuration,\n    fps: 30,\n    config: {\n      damping: 200,\n    },\n  });\n\n  const targetFunc = (x: number) => MATH.sin(x);\n  \n  // We use the order to determine the Taylor polynomial\n  const approxFunc = (x: number) => MATH.taylorSin(x, (order - 1) / 2);\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.background }}>\n      <div style={{ position: 'absolute', top: 80, left: 80, right: 80, display: 'flex', justifyContent: 'space-between' }}>\n        <div>\n          <h2 style={{ fontSize: 48, color: COLORS.primary }}>Convergence of sin(x)</h2>\n          <div style={{ fontSize: 32, color: COLORS.text, marginTop: 20 }}>\n            Polynomial Order: <span style={{ color: COLORS.accent, fontSize: 48, fontWeight: 'bold' }}>{order}</span>\n          </div>\n        </div>\n        <div style={{ textAlign: 'right' }}>\n           <div style={{ fontSize: 24, color: COLORS.grid }}>Target Function</div>\n           <div style={{ fontSize: 32, color: COLORS.secondary }}>sin(x)</div>\n        </div>\n      </div>\n\n      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>\n        <div style={{ position: 'relative', width: 1000, height: 600 }}>\n          {/* Target Function */}\n          <MathGraph \n            width={1000} \n            height={600} \n            func={targetFunc} \n            range={Math.PI * 2} \n            color={COLORS.secondary} \n            strokeWidth={4} \n            label=\"sin(x)\"\n          />\n          \n          {/* Approximation */}\n          <MathGraph \n            width={1000} \n            height={600} \n            func={approxFunc} \n            range={Math.PI * 2} \n            color={COLORS.accent} \n            strokeWidth={4} \n            label={`P_${order}(x)`}\n          />\n          \n          {/* Error Visualization (Shaded Area) */}\n          {/* Simplified: Just showing the curves diverging is usually enough for this level */}\n        </div>\n      </div>\n      \n      <div style={{ position: 'absolute', bottom: 80, width: '100%', textAlign: 'center' }}>\n        <div style={{ fontSize: 24, color: COLORS.grid }}>\n          As order increases, the \"hug\" lasts longer.\n        </div>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n/**\n * Scene 5: Why This Matters\n * Summary and applications.\n */\nconst Scene5: React.FC = () => {\n  const frame = useCurrentFrame();\n  const { width, height } = useVideoConfig();\n  \n  const opacity = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: 'clamp' });\n  const slideIn = interpolate(frame, [0, 40], [50, 0], { extrapolateRight: 'clamp' });\n\n  const items = [\n    { icon: '🧮', title: 'Calculators', desc: 'Computing sin(x) instantly' },\n    { icon: '⚛️', title: 'Physics', desc: 'Solving differential equations' },\n    { icon: '📈', title: 'Data Science', desc: 'Approximating complex trends' },\n  ];\n\n  return (\n    <AbsoluteFill style={{ backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' }}>\n      <div style={{ opacity, transform: `translateY(${slideIn}px)`, textAlign: 'center' }}>\n        <h2 style={{ fontSize: 64, color: COLORS.primary, marginBottom: 60 }}>Why This Matters</h2>\n        \n        <div style={{ display: 'flex', gap: 60, justifyContent: 'center', marginBottom: 80 }}>\n          {items.map((item, index) => (\n            <div \n              key={index} \n              style={{\n                backgroundColor: '#1F2937', \n                padding: 40, \n                borderRadius: 20, \n                width: 300,\n                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',\n                transform: `scale(${interpolate(frame, [index * 10 + 30, index * 10 + 60], [0.8, 1], { extrapolateRight: 'clamp' })})`\n              }}\n            >\n              <div style={{ fontSize: 60, marginBottom: 20 }}>{item.icon}</div>\n              <div style={{ fontSize: 32, fontWeight: 'bold', color: COLORS.text, marginBottom: 10 }}>{item.title}</div>\n              <div style={{ fontSize: 20, color: COLORS.grid }}>{item.desc}</div>\n            </div>\n          ))}\n        </div>\n\n        <Formula style={{ fontSize: 36 }}>\n          \"Polynomials are the building blocks of calculus.\"\n        </Formula>\n      </div>\n    </AbsoluteFill>\n  );\n};\n\n// --- Main Composition ---\n\nexport const TaylorSeriesVideo: React.FC = () => {\n  const { durationInFrames } = useVideoConfig();\n  \n  // Scene Durations based on 300 frames total (10 seconds @",
+    "analysis_score": 10,
+    "analysis_max": 10,
+    "analysis_details": [
+      "✓ 类别正确: calculus",
+      "✓ 场景数合理: 5",
+      "✓ 时间分配正确: 100%",
+      "✓ 主要可视化明确",
+      "✓ 动画风格: continuous_deformation"
+    ],
+    "code_score": 0,
+    "code_max": 10,
+    "code_details": [
+      "✗ 验证失败: 'tuple' object has no attribute 'get'"
+    ],
+    "total_score": 10,
+    "errors": [],
+    "success": true,
+    "timing": {
+      "analysis": 13.511542081832886,
+      "generation": 54.233256816864014
+    }
+  }
+]

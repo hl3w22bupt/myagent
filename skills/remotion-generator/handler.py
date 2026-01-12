@@ -10,12 +10,53 @@ import asyncio
 import subprocess
 import json
 import os
+import sys
 import tempfile
 import shutil
 import time
 import math
 from pathlib import Path
 from typing import Dict, Any, Optional
+import logging
+
+# Configure logging to show INFO level messages
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s: %(message)s'
+)
+
+# IMPORTANT: Add skill directory to sys.path for relative imports to work
+# This is needed when the module is imported via importlib (e.g., by Motia agent system)
+SKILL_DIR = Path(__file__).parent
+if str(SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(SKILL_DIR))
+    logging.info(f"Added {SKILL_DIR} to sys.path for imports")
+
+# Import LLM-based generators
+# Version control via environment variables
+USE_ANALYZER_V2 = os.getenv("USE_ANALYZER_V2", "true").lower() == "true"
+USE_CODE_GENERATOR_V2 = os.getenv("USE_CODE_GENERATOR_V2", "true").lower() == "true"
+
+try:
+    if USE_ANALYZER_V2:
+        from generators.llm_analyzer_v2 import ContentAnalyzerV2 as ContentAnalyzer
+        logging.info(f"✅ Using ContentAnalyzer v2.0")
+    else:
+        from generators.llm_analyzer import ContentAnalyzer
+        logging.info(f"Using ContentAnalyzer v1.0")
+
+    if USE_CODE_GENERATOR_V2:
+        from generators.code_generator_v2 import RemotionCodeGeneratorV2 as RemotionCodeGenerator
+        logging.info(f"✅ Using RemotionCodeGenerator v2.0")
+    else:
+        from generators.code_generator import RemotionCodeGenerator
+        logging.info(f"Using RemotionCodeGenerator v1.0")
+
+    from generators.validator import CodeValidator
+    GENERATORS_AVAILABLE = True
+except ImportError as e:
+    GENERATORS_AVAILABLE = False
+    logging.warning(f"LLM generators not available: {str(e)}. Using template-based generation only.")
 
 class RemotionVideoGenerator:
     """Specialized Remotion video generator."""
@@ -72,9 +113,21 @@ class RemotionVideoGenerator:
             composition_id = input_data.get('composition_id', 'MyComposition')
 
             # Default parameters
-            duration = input_data.get('duration', 10)
-            fps = input_data.get('fps', 30)
-            resolution = input_data.get('resolution', '1920x1080')
+            duration = int(input_data.get('duration', 10)) if isinstance(input_data.get('duration'), (int, str)) else 10
+            fps = int(input_data.get('fps', 30)) if isinstance(input_data.get('fps'), (int, str)) else 30
+
+            # Handle resolution - ensure it's a string
+            resolution_raw = input_data.get('resolution', '1920x1080')
+            if isinstance(resolution_raw, dict):
+                # If resolution is a dict, try to extract width and height
+                width = resolution_raw.get('width', resolution_raw.get('width', 1920))
+                height = resolution_raw.get('height', resolution_raw.get('height', 1080))
+                resolution = f"{width}x{height}"
+            elif isinstance(resolution_raw, str):
+                resolution = resolution_raw
+            else:
+                resolution = '1920x1080'
+
             style = input_data.get('style', 'minimal')
             output_format = input_data.get('output_format', 'mp4')
             quality = input_data.get('quality', 'medium')
@@ -152,24 +205,117 @@ class RemotionVideoGenerator:
         style: str,
         context: Dict[str, Any]
     ) -> str:
-        """Generate Remotion code using templates or LLM."""
+        """
+        Generate Remotion code using two-stage LLM generation with retry logic.
 
-        # Check if this is an educational/math content request
-        parsed_content = await self._parse_educational_content(description)
+        Strategy:
+        - Always use LLM code generator
+        - Retry up to 2 times if generation fails
+        - No fallback to templates
+        """
 
-        # Use educational template if detected
-        if parsed_content.get('is_educational'):
-            return self._template_educational(
-                parsed_content, duration, fps, resolution
-            )
+        if not GENERATORS_AVAILABLE:
+            raise RuntimeError("LLM generators not available. Please check the installation.")
 
-        # Try template-based generation first
-        template_code = self._get_template_code(style, description, duration, fps, resolution)
-        if template_code:
-            return template_code
+        # Retry up to 2 times (total 3 attempts)
+        max_attempts = 3
+        last_error = None
 
-        # Fall back to LLM generation
-        return await self._generate_with_llm(description, duration, fps, resolution, style, context)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"[DEBUG] Attempt {attempt}/{max_attempts}: LLM generation for: {description[:50]}...")
+                logging.info(f"Attempt {attempt}/{max_attempts}: LLM two-stage generation for: {description[:50]}...")
+
+                code = await self._generate_with_llm_two_stage(
+                    description, duration, fps, resolution, style,
+                    error_context=last_error  # Pass previous error for context
+                )
+
+                print(f"[DEBUG] LLM generation completed, code length: {len(code) if code else 0}")
+                logging.info(f"LLM generation completed, code length: {len(code) if code else 0}")
+
+                # Validate code
+                code_looks_valid = (
+                    code and
+                    len(code) > 500 and  # Reasonable length
+                    'import' in code and  # Has imports
+                    ('React.FC' in code or 'function' in code or 'const' in code)  # Has components
+                )
+
+                if code_looks_valid:
+                    # Post-process: Ensure complete Remotion structure
+                    code = self._ensure_complete_structure(code, duration, fps, resolution)
+                    logging.info(f"✅ LLM generation successful on attempt {attempt}")
+                    return code
+                else:
+                    last_error = "Generated code looks invalid (too short or missing required elements)"
+                    logging.warning(f"⚠️  Attempt {attempt} failed: {last_error}")
+                    if attempt < max_attempts:
+                        logging.info(f"Retrying...")
+                        # Wait before retry (exponential backoff)
+                        await asyncio.sleep(2 ** attempt)
+
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {str(e)}"
+                print(f"[DEBUG] ❌ Attempt {attempt} failed: {last_error}")
+                logging.error(f"❌ Attempt {attempt} failed: {last_error}")
+                if attempt < max_attempts:
+                    logging.info(f"Retrying in {2 ** attempt} seconds...")
+                    await asyncio.sleep(2 ** attempt)
+
+        # All attempts failed
+        error_msg = f"Failed to generate code after {max_attempts} attempts. Last error: {last_error}"
+        logging.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    async def _generate_with_llm_two_stage(
+        self,
+        description: str,
+        duration: int,
+        fps: int,
+        resolution: str,
+        style: str,
+        error_context: Optional[str] = None
+    ) -> str:
+        """
+        Generate Remotion code using two-stage LLM process.
+
+        Stage 1: Content Analysis
+        Stage 2: Code Generation
+
+        Args:
+            description: User's natural language description
+            duration: Video duration in seconds
+            fps: Frames per second
+            resolution: Video resolution (e.g., "1920x1080")
+            style: Video style (can inform visualization choices)
+            error_context: Optional error feedback for retry
+
+        Returns:
+            Complete TypeScript/Remotion code
+        """
+        if not GENERATORS_AVAILABLE:
+            raise RuntimeError("LLM generators not available")
+
+        # Stage 1: Analyze content
+        analyzer = ContentAnalyzer()
+        logging.info("Stage 1: Analyzing content...")
+        analysis = await analyzer.analyze(description)
+        logging.info(f"Analysis complete: {analysis['topic']['name']}")
+
+        # Stage 2: Generate code
+        code_generator = RemotionCodeGenerator()
+        logging.info("Stage 2: Generating Remotion code...")
+        code = await code_generator.generate(
+            analysis=analysis,
+            duration=duration,
+            fps=fps,
+            resolution=resolution,
+            error_context=error_context
+        )
+        logging.info("Code generation complete")
+
+        return code
 
     async def _parse_educational_content(self, description: str) -> Dict[str, Any]:
         """
@@ -227,6 +373,83 @@ class RemotionVideoGenerator:
             'visual_elements': visual_elements,
             'description': description
         }
+
+    def _ensure_complete_structure(
+        self,
+        code: str,
+        duration: int,
+        fps: int,
+        resolution: str
+    ) -> str:
+        """
+        Ensure the generated code has complete Remotion structure.
+
+        If Composition is missing, extract the main component and wrap it properly.
+        """
+        import re
+
+        # Check if Composition component (not just comment) already exists
+        # Look for actual JSX <Composition id=...
+        if re.search(r'<Composition\s+id=', code):
+            print("[DEBUG] Composition component already exists in code")
+            return code
+
+        print("[DEBUG] Composition component missing, adding it...")
+
+        # Try to find the main component
+        # Look for: export const SomethingVideo: React.FC
+        main_component_match = re.search(r'export\s+const\s+(\w+):\s*React\.FC', code)
+
+        if not main_component_match:
+            # Try alternative patterns
+            main_component_match = re.search(r'export\s+const\s+(\w+)\s*=\s*\(\)\s*=>', code)
+
+        if not main_component_match:
+            print("[WARNING] Could not find main component, leaving code as-is")
+            return code
+
+        component_name = main_component_match.group(1)
+        print(f"[DEBUG] Found main component: {component_name}")
+
+        # Extract parameters
+        width, height = resolution.split("x")
+        total_frames = duration * fps
+
+        # Add Composition at the end before registerRoot
+        composition_code = f"""
+
+// --- Root Composition ---
+<Composition
+  id="{component_name.replace('Video', '')}"
+  component={component_name}
+  durationInFrames={total_frames}
+  fps={fps}
+  width={width}
+  height={height}
+/>
+"""
+
+        # Insert before registerRoot call
+        if 'registerRoot(' in code:
+            # Find the registerRoot line
+            register_root_idx = code.find('registerRoot(')
+            if register_root_idx != -1:
+                # Find the newline before it
+                newline_before = code.rfind('\n', 0, register_root_idx)
+                if newline_before != -1:
+                    code = code[:newline_before + 1] + composition_code + '\n' + code[newline_before + 1:]
+                    print(f"[DEBUG] Added Composition before registerRoot")
+                else:
+                    # Append at the end
+                    code += composition_code
+                    print(f"[DEBUG] Appended Composition at the end")
+            else:
+                code += composition_code
+        else:
+            # No registerRoot, just append
+            code += composition_code
+
+        return code
 
     def _extract_composition_id(self, code: str) -> str:
         """Extract composition ID from generated Remotion code."""

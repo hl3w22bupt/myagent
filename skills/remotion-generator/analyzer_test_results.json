@@ -1,0 +1,29 @@
+[
+  {
+    "test_id": 1,
+    "description": "勾股定理：直角三角形的三边关系 a² + b² = c²",
+    "v1_score": 9,
+    "v2_score": 10,
+    "v1_success": true,
+    "v2_success": true,
+    "improvement": 1
+  },
+  {
+    "test_id": 2,
+    "description": "泰勒公式：如何用多项式逼近任意光滑函数",
+    "v1_score": 9,
+    "v2_score": 10,
+    "v1_success": true,
+    "v2_success": true,
+    "improvement": 1
+  },
+  {
+    "test_id": 3,
+    "description": "二次方程的求根公式推导和几何意义",
+    "v1_score": 10,
+    "v2_score": 10,
+    "v1_success": true,
+    "v2_success": true,
+    "improvement": 0
+  }
+]
