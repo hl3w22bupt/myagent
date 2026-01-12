@@ -67,6 +67,10 @@ class RemotionVideoGenerator:
             if not description and isinstance(input_data, str):
                 description = input_data
 
+            # Check if composition_code is provided (direct code rendering mode)
+            composition_code = input_data.get('composition_code', '')
+            composition_id = input_data.get('composition_id', 'MyComposition')
+
             # Default parameters
             duration = input_data.get('duration', 10)
             fps = input_data.get('fps', 30)
@@ -75,20 +79,30 @@ class RemotionVideoGenerator:
             output_format = input_data.get('output_format', 'mp4')
             quality = input_data.get('quality', 'medium')
 
-            # Validate inputs
-            if not description:
-                raise ValueError("Description is required. Please provide a description of the video you want to generate.")
-            if duration <= 0 or duration > 300:  # Max 5 minutes
-                raise ValueError("Duration must be between 1 and 300 seconds")
+            # Determine mode: direct code rendering or description-based generation
+            if composition_code:
+                # Direct code rendering mode - skip code generation
+                remotion_code = composition_code
+                # Use provided duration_frames if available, otherwise calculate from duration
+                duration_frames = input_data.get('duration_frames', duration * fps)
+            else:
+                # Description-based generation mode
+                if not description:
+                    raise ValueError("Description is required. Please provide a description of the video you want to generate.")
+                if duration <= 0 or duration > 300:  # Max 5 minutes
+                    raise ValueError("Duration must be between 1 and 300 seconds")
 
-            # Generate Remotion code
-            remotion_code = await self._generate_remotion_code(
-                description, duration, fps, resolution, style, input_data
-            )
+                # Generate Remotion code from description
+                remotion_code = await self._generate_remotion_code(
+                    description, duration, fps, resolution, style, input_data
+                )
+                duration_frames = duration * fps
 
             # Create Remotion project and render
+            # For direct code mode, calculate duration from duration_frames
+            render_duration = duration_frames / fps if composition_code else duration
             video_info = await self._render_video(
-                remotion_code, duration, fps, resolution, output_format, quality, input_data
+                remotion_code, render_duration, fps, resolution, output_format, quality, input_data
             )
 
             # Generate thumbnail
@@ -256,7 +270,7 @@ class RemotionVideoGenerator:
         # Escape double quotes in description for JavaScript string safety
         safe_description = description.replace('"', '\\"')
 
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, registerRoot } from 'remotion';
 
 interface MinimalVideoProps {
   title: string;
@@ -329,7 +343,9 @@ export const Root: React.FC = () => {
       }}
     />
   );
-};''' % (width, total_frames, width, height, fps, safe_description)
+};
+
+registerRoot(Root);''' % (width, total_frames, width, height, fps, safe_description)
 
     def _template_corporate(self, description: str, duration: int, fps: int, resolution: str) -> str:
         """Corporate style template - professional and branded."""
@@ -339,7 +355,7 @@ export const Root: React.FC = () => {
         safe_description = description.replace('"', '\\"')
         total_frames = duration * fps
 
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, registerRoot } from 'remotion';
 
 interface CorporateVideoProps {
   title: string;
@@ -444,7 +460,9 @@ export const Root: React.FC = () => {
       }}
     />
   );
-};''' % (fps, total_frames, width, total_frames, width, height, fps, safe_description)
+};
+
+registerRoot(Root);''' % (fps, total_frames, width, total_frames, width, height, fps, safe_description)
 
     def _template_presentation(self, description: str, duration: int, fps: int, resolution: str) -> str:
         """Presentation style template - clean and informational."""
@@ -454,7 +472,7 @@ export const Root: React.FC = () => {
         safe_description = description.replace('"', '\\"')
         total_frames = duration * fps
 
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, registerRoot } from 'remotion';
 
 interface PresentationVideoProps {
   title: string;
@@ -556,7 +574,9 @@ export const Root: React.FC = () => {
       }}
     />
   );
-};''' % (width, total_frames, width, height, fps, safe_description)
+};
+
+registerRoot(Root);''' % (width, total_frames, width, height, fps, safe_description)
 
     def _template_animated(self, description: str, duration: int, fps: int, resolution: str) -> str:
         """Animated style template - dynamic and engaging."""
@@ -566,7 +586,7 @@ export const Root: React.FC = () => {
         safe_description = description.replace('"', '\\"')
         total_frames = duration * fps
 
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, registerRoot } from 'remotion';
 
 interface AnimatedVideoProps {
   title: string;
@@ -658,7 +678,9 @@ export const Root: React.FC = () => {
       }}
     />
   );
-};''' % (fps, total_frames, width // 2, width, total_frames, width, height, fps, safe_description)
+};
+
+registerRoot(Root);''' % (fps, total_frames, width // 2, width, total_frames, width, height, fps, safe_description)
 
     def _template_cinematic(self, description: str, duration: int, fps: int, resolution: str) -> str:
         """Cinematic style template - dramatic and film-like."""
@@ -668,7 +690,7 @@ export const Root: React.FC = () => {
         safe_description = description.replace('"', '\\"')
         total_frames = duration * fps
 
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, registerRoot } from 'remotion';
 
 interface CinematicVideoProps {
   title: string;
@@ -761,7 +783,9 @@ export const Root: React.FC = () => {
       }}
     />
   );
-};''' % (total_frames, width, total_frames, width, height, fps, safe_description)
+};
+
+registerRoot(Root);''' % (total_frames, width, total_frames, width, height, fps, safe_description)
 
     def _template_educational(
         self,
@@ -786,7 +810,7 @@ export const Root: React.FC = () => {
         label_font = 28  # 增大标签字体
 
         # Build the educational video code with multiple scenes
-        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+        return '''import { Composition, AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, registerRoot } from 'remotion';
 import React from 'react';
 
 interface EducationalVideoProps {
@@ -1093,7 +1117,9 @@ export const Root: React.FC = () => {
       />
     </>
   );
-};''' % (svg_size, line_width, line_width, line_width, label_font, label_font, label_font, font_size, total_frames, width, height, fps, title, str(has_triangle).lower(), str(has_formula).lower())
+};
+
+registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_font, label_font, label_font, font_size, total_frames, width, height, fps, title, str(has_triangle).lower(), str(has_formula).lower())
 
     async def _generate_with_llm(
         self,
@@ -1185,7 +1211,21 @@ export const Root: React.FC = () => {
         if self.project_dir.exists():
             shutil.rmtree(self.project_dir)
 
-        shutil.copytree(self.template_dir, self.project_dir)
+        # Copy template but exclude node_modules for speed
+        shutil.copytree(self.template_dir, self.project_dir,
+                        ignore=shutil.ignore_patterns('node_modules'))
+
+        # Copy node_modules structure needed for Chrome
+        project_node_modules = self.project_dir / "node_modules"
+        project_node_modules.mkdir(parents=True, exist_ok=True)
+
+        # Copy .cache directory with chrome-headless-shell
+        src_cache = self.template_dir / "node_modules" / ".cache" / "remotion"
+        if src_cache.exists():
+            dst_cache = project_node_modules / ".cache" / "remotion"
+            dst_cache.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_cache / "chrome-headless-shell",
+                        dst_cache / "chrome-headless-shell")
 
         # DEBUG: Save generated code for debugging
         debug_code_path = Path("/tmp") / f"remotion_debug_code_{int(time.time())}.tsx"
@@ -1193,9 +1233,9 @@ export const Root: React.FC = () => {
             f.write(code)
         print(f"[DEBUG] Saved generated code to: {debug_code_path}")
 
-        # Overwrite Root.tsx with generated code
+        # Overwrite index.tsx with generated code (it contains Root component)
         src_dir = self.project_dir / "src"
-        with open(src_dir / "Root.tsx", "w") as f:
+        with open(src_dir / "index.tsx", "w") as f:
             f.write(code)
 
     async def _render_with_remotion(
@@ -1223,22 +1263,13 @@ export const Root: React.FC = () => {
         env = os.environ.copy()
         env['NODE_PATH'] = str(self.template_dir / "node_modules")
 
-        # Set Chrome browser cache path to use our fake chrome-headless-shell
-        fake_chrome_dir = self.template_dir / ".cache" / "remotion" / "chrome" / "chrome-headless-shell"
+        # Set Chrome browser cache path to use our chrome-headless-shell wrapper
+        chrome_wrapper = self.template_dir / ".cache" / "remotion" / "chrome" / "chrome-headless-shell" / "chrome-headless-shell"
 
         # Point Remotion to our wrapper script
-        env['CHROME_EXECUTABLE_PATH'] = str(fake_chrome_dir / "chrome-headless-shell")
-        env['BROWSER_EXECUTABLE_PATH'] = str(fake_chrome_dir / "chrome-headless-shell")
-        env['REMONITION_BROWSER_PATH'] = str(fake_chrome_dir / "chrome-headless-shell")
-
-        # Create a symlink in a location that Remotion might check
-        remotion_cache = self.template_dir / "node_modules" / ".cache" / "remotion"
-        remotion_cache.mkdir(parents=True, exist_ok=True)
-
-        chrome_symlink = remotion_cache / "chrome-headless-shell"
-        if chrome_symlink.exists():
-            chrome_symlink.unlink()
-        chrome_symlink.symlink_to(fake_chrome_dir / "chrome-headless-shell")
+        env['CHROME_EXECUTABLE_PATH'] = str(chrome_wrapper)
+        env['BROWSER_EXECUTABLE_PATH'] = str(chrome_wrapper)
+        env['REMONITION_BROWSER_PATH'] = str(chrome_wrapper)
 
         # Skip Chrome download
         env['PUPPETEER_SKIP_CHROMIUM_DOWNLOAD'] = 'true'
@@ -1253,6 +1284,7 @@ export const Root: React.FC = () => {
 
         # Make launcher executable
         os.chmod(chrome_launcher, 0o755)
+        os.chmod(chrome_wrapper, 0o755)
 
         env['PUPPETEER_EXECUTABLE_PATH'] = str(chrome_launcher)
 
@@ -1261,7 +1293,7 @@ export const Root: React.FC = () => {
         render_args = [
             str(remotion_cli),
             "render",
-            str(self.project_dir / "src" / "index.ts"),  # Entry point
+            str(self.project_dir / "src" / "index.tsx"),  # Entry point (must call registerRoot)
             composition_id,  # Dynamic composition ID
             str(self.project_dir / f"out/video.{output_format}"),  # Output file
             "--codec", "h264" if output_format == "mp4" else output_format,
@@ -1269,7 +1301,8 @@ export const Root: React.FC = () => {
             f"--frames=0-{duration * fps - 1}",  # Use frame range instead of duration
             "--jpeg-quality", quality_preset,
             "--concurrency=1",  # Use concurrency=1 to avoid bundler issues on macOS
-            "--browser=executable"  # Use executable browser mode
+            "--browser=executable",  # Use executable browser mode
+            "--chromium-mode=chrome-for-testing"  # Use chrome-for-testing mode for --headless=new
         ]
 
         # DEBUG: Log the render command

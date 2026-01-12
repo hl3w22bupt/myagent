@@ -1,0 +1,6 @@
+#!/bin/bash
+# Chrome headless shell wrapper
+# Uses system Google Chrome
+
+# Execute Chrome with all passed arguments (Remotion will add --headless flag)
+exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "$@"
