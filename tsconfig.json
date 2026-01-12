@@ -25,7 +25,13 @@
     }
   },
   "include": ["**/*.ts", "types.d.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "skills/remotion-generator/template",
+    "skills/remotion-generator/template/**"
+  ],
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"

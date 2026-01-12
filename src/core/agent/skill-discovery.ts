@@ -22,6 +22,7 @@ export interface SkillMetadata {
   version?: string;
   type?: string;
   path: string; // Path to skill directory
+  metadata?: Record<string, any>; // Full YAML data including input_schema, output_schema, etc.
 }
 
 /**
@@ -259,6 +260,7 @@ export class SkillDiscovery {
         version: parsed.version,
         type: parsed.type,
         path: skillPath,
+        metadata: parsed, // Store full YAML data including input_schema, output_schema, etc.
       };
 
       // Validate required fields

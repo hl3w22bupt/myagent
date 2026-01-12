@@ -181,18 +181,20 @@ export class Agent {
       });
 
       // Generate PTC code with conversation history and variables as context
-      const ptcCode = await this.ptcGenerator.generate(task, {
+      const ptcResult = await this.ptcGenerator.generateWithResult(task, {
         history: this.state.conversationHistory,
         variables: Object.fromEntries(this.state.variables),
       });
 
       steps.push({
         type: 'ptc-generation',
-        content: ptcCode,
+        content: ptcResult.code,
         timestamp: Date.now(),
         metadata: {
-          codeLength: ptcCode.length,
+          codeLength: ptcResult.code.length,
           language: 'python',
+          selectedSkills: ptcResult.selectedSkills,
+          reasoning: ptcResult.reasoning,
         },
       });
 
@@ -203,7 +205,7 @@ export class Agent {
         timestamp: Date.now(),
       });
 
-      const sandboxResult = await this.sandbox.execute(ptcCode, {
+      const sandboxResult = await this.sandbox.execute(ptcResult.code, {
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: this.sessionId,
@@ -267,7 +269,7 @@ export class Agent {
       }
 
       // Count skill calls from PTC code
-      const skillCalls = this.countSkillCalls(ptcCode);
+      const skillCalls = this.countSkillCalls(ptcResult.code);
 
       return {
         success: true,
@@ -284,6 +286,7 @@ export class Agent {
           llmCalls: 1,
           skillCalls,
           totalTokens: 0,
+          skillNames: ptcResult.selectedSkills,
         },
       };
     } catch (error: any) {

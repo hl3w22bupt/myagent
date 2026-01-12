@@ -107,6 +107,7 @@ export interface AgentResult {
     llmCalls: number;
     skillCalls: number;
     totalTokens: number;
+    skillNames?: string[];
   };
 
   /** Session ID (optional for backward compatibility) */

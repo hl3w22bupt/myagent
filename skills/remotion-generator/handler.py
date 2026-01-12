@@ -1211,21 +1211,52 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         if self.project_dir.exists():
             shutil.rmtree(self.project_dir)
 
-        # Copy template but exclude node_modules for speed
+        # Install dependencies if not already installed in template
+        template_node_modules = self.template_dir / "node_modules"
+        if not template_node_modules.exists():
+            print(f"[INFO] Template dependencies not found. Installing npm dependencies...")
+            try:
+                subprocess.run(
+                    ["npm", "install"],
+                    cwd=self.template_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minutes timeout
+                )
+                print(f"[INFO] Template dependencies installed successfully")
+            except subprocess.TimeoutExpired:
+                raise Exception("npm install timed out after 5 minutes")
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"npm install failed: {e.stderr}")
+
+        # Copy template (exclude node_modules initially for speed)
         shutil.copytree(self.template_dir, self.project_dir,
                         ignore=shutil.ignore_patterns('node_modules'))
 
-        # Copy node_modules structure needed for Chrome
+        # Copy node_modules separately (needed for runtime)
         project_node_modules = self.project_dir / "node_modules"
-        project_node_modules.mkdir(parents=True, exist_ok=True)
+        if template_node_modules.exists():
+            # Use copytree with ignore to speed up (exclude .cache, large build artifacts)
+            shutil.copytree(
+                template_node_modules,
+                project_node_modules,
+                ignore=shutil.ignore_patterns(
+                    '.cache',
+                    '*/test',
+                    '*/tests',
+                    '*.map',
+                    '*.test.*'
+                )
+            )
 
-        # Copy .cache directory with chrome-headless-shell
-        src_cache = self.template_dir / "node_modules" / ".cache" / "remotion"
-        if src_cache.exists():
-            dst_cache = project_node_modules / ".cache" / "remotion"
-            dst_cache.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_cache / "chrome-headless-shell",
-                        dst_cache / "chrome-headless-shell")
+            # Copy .cache directory with chrome-headless-shell
+            src_cache = self.template_dir / "node_modules" / ".cache" / "remotion"
+            if src_cache.exists():
+                dst_cache = project_node_modules / ".cache" / "remotion"
+                dst_cache.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_cache / "chrome-headless-shell",
+                            dst_cache / "chrome-headless-shell")
 
         # DEBUG: Save generated code for debugging
         debug_code_path = Path("/tmp") / f"remotion_debug_code_{int(time.time())}.tsx"

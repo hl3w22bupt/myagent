@@ -394,6 +394,73 @@ export const handler = async (request: any, { logger }: any) => {
       opacity: 0.8;
     }
 
+    .task-skills {
+      margin-bottom: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 0.5rem;
+    }
+
+    .task-skills-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--primary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .task-skills-header:hover {
+      color: var(--primary-dark);
+    }
+
+    .task-skills-header .expand-icon {
+      transition: transform 0.2s ease;
+      font-size: 0.65rem;
+    }
+
+    .task-skills-header.expanded .expand-icon {
+      transform: rotate(90deg);
+    }
+
+    .task-skills-list {
+      display: none;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+
+    .task-skills-list.show {
+      display: flex;
+    }
+
+    .skill-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.5rem;
+      background: var(--bg-tertiary);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 0.375rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .skill-badge:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--primary);
+    }
+
+    .no-skills {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
     .grid-2 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -924,6 +991,17 @@ export const handler = async (request: any, { logger }: any) => {
           <div class="task-description">\${escapeHtml(task.task)}</div>
           \${task.step ? \`<div class="task-step">⚡ \${escapeHtml(task.step)}</div>\` : ''}
           \${task.output ? \`<div class="task-output">\${escapeHtml(task.output)}</div>\` : ''}
+          \${task.metadata?.skillNames && task.metadata.skillNames.length > 0 ? \`
+            <div class="task-skills">
+              <div class="task-skills-header" onclick="toggleSkills('\${task.taskId}')">
+                <span class="expand-icon">▶</span>
+                <span>⚙️ Used Skills (\${task.metadata.skillNames.length})</span>
+              </div>
+              <div class="task-skills-list" id="skills-\${task.taskId}">
+                \${task.metadata.skillNames.map(skill => \`<span class="skill-badge">\${escapeHtml(skill)}</span>\`).join('')}
+              </div>
+            </div>
+          \` : ''}
           <div class="task-metadata">
             \${task.createdAt ? \`
               <div class="metadata-item">
@@ -1005,8 +1083,26 @@ export const handler = async (request: any, { logger }: any) => {
       return div.innerHTML;
     }
 
+    function toggleSkills(taskId) {
+      const skillsList = document.getElementById(\`skills-\${taskId}\`);
+      const header = skillsList.previousElementSibling;
+
+      if (skillsList.classList.contains('show')) {
+        skillsList.classList.remove('show');
+        header.classList.remove('expanded');
+      } else {
+        skillsList.classList.add('show');
+        header.classList.add('expanded');
+      }
+    }
+
     async function startStreaming(taskId) {
-      const pollInterval = setInterval(async () => {
+      let pollInterval = 2000; // Start with 2 seconds
+      const maxInterval = 10000; // Max 10 seconds
+      let currentAttempts = 0;
+      const maxFastAttempts = 5; // Use fast polling for first 5 attempts (10 seconds total)
+
+      const poll = async () => {
         try {
           const response = await fetch(\`\${API_BASE}/agent/results?taskId=\${taskId}\`);
           const data = await response.json();
@@ -1022,15 +1118,30 @@ export const handler = async (request: any, { logger }: any) => {
             });
 
             if (result.success || result.error) {
-              clearInterval(pollInterval);
+              return; // Stop polling
             }
           }
+
+          currentAttempts++;
+
+          // Exponential backoff: increase interval after fast attempts
+          if (currentAttempts > maxFastAttempts && pollInterval < maxInterval) {
+            pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+          }
+
+          setTimeout(poll, pollInterval);
         } catch (error) {
           console.error('Error polling for updates:', error);
+          setTimeout(poll, pollInterval);
         }
-      }, 1000);
+      };
 
-      setTimeout(() => clearInterval(pollInterval), 30000);
+      poll();
+
+      // Safety timeout: stop after 5 minutes
+      setTimeout(() => {
+        // Timeout handled by poll function
+      }, 300000);
     }
 
     async function loadRecentTasks() {

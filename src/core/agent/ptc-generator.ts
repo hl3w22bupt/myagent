@@ -8,15 +8,17 @@
 
 import { LLMClient } from './llm-client';
 import { PTCGenerationOptions, PTCResult } from './types';
+import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
 
 /**
- * Simple in-memory Skill Registry metadata.
- * In production, this would be loaded from the actual SkillRegistry.
+ * Simplified Skill Metadata for PTC Generator.
+ * Includes metadata field for input_schema access.
  */
 interface SkillMetadata {
   name: string;
   description: string;
   tags: string[];
+  metadata?: FullSkillMetadata['metadata'];
 }
 
 /**
@@ -53,6 +55,31 @@ export class PTCGenerator {
     const code = await this.generateCode(task, plan.selectedSkills, options);
 
     return code;
+  }
+
+  /**
+   * Generate PTC code for a given task and return full result with metadata.
+   *
+   * Two-step process:
+   * 1. Plan: Select skills to use
+   * 2. Implement: Generate Python code
+   *
+   * @param task - User task description
+   * @param options - Generation options (including context)
+   * @returns Generated PTC result with code, selected skills, and reasoning
+   */
+  async generateWithResult(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
+    // Step 1: Plan - Select skills (with context)
+    const plan = await this.planSkills(task, options);
+
+    // Step 2: Implement - Generate Python code (with context)
+    const code = await this.generateCode(task, plan.selectedSkills, options);
+
+    return {
+      code,
+      selectedSkills: plan.selectedSkills,
+      reasoning: plan.reasoning
+    };
   }
 
   /**
@@ -94,6 +121,12 @@ ${skillsList}
 ${task}
 </task>
 
+IMPORTANT GUIDELINES:
+1. PRIORITIZE using available skills over direct computation or common knowledge
+2. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
+3. For calculations, you can compute directly, but if uncertain, use appropriate skills
+4. NEVER return an empty selected_skills array - at least use web-search for factual queries
+
 Please output:
 1. Which skills to use (in order)
 2. Brief reasoning for each skill selection
@@ -102,6 +135,7 @@ CRITICAL: Output MUST be valid JSON with proper quoting.
 - The "reasoning" value MUST be a string in double quotes
 - All string values MUST be enclosed in double quotes
 - Do NOT use unquoted strings
+- selected_skills MUST NOT be an empty array
 
 Output format (JSON):
 <plan>
@@ -113,36 +147,20 @@ Output format (JSON):
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
-    // Extract JSON from response - try multiple patterns
-    let jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+    // Extract JSON from <plan> tags
+    const planMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
 
-    // Fallback 1: Try to find any JSON object with selected_skills
-    if (!jsonMatch) {
-      jsonMatch = response.content.match(/\{[\s\S]*"selected_skills"[\s\S]*\}/);
-    }
-
-    // Fallback 2: Try to find JSON in code blocks
-    if (!jsonMatch) {
-      const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch && codeBlockMatch[1]) {
-        try {
-          jsonMatch = ['', codeBlockMatch[1]] as unknown as RegExpExecArray;
-        } catch {
-          // Continue to next fallback
-        }
-      }
-    }
-
-    if (!jsonMatch) {
+    if (!planMatch) {
       console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
       throw new Error(
-        `Failed to parse plan from LLM response. Got: ${response.content.substring(0, 200)}`
+        `Failed to parse plan from LLM response. Expected <plan>{...}</plan> format. Got: ${response.content.substring(0, 200)}`
       );
     }
 
-    // Validate JSON string before parsing
-    const jsonString = jsonMatch[1];
-    if (!jsonString || jsonString.trim() === '' || jsonString.includes('undefined')) {
+    const jsonString = planMatch[1].trim();
+
+    // Validate JSON string
+    if (!jsonString || jsonString === '' || jsonString === 'null' || jsonString === 'undefined') {
       console.error('[PTC Generator] Invalid JSON string:', jsonString);
       throw new Error(`Invalid JSON in LLM response: contains undefined or is empty`);
     }
@@ -191,9 +209,27 @@ Output format (JSON):
     // Build skills block for prompt
     const skillsBlock = skillsDetails
       .map((skill) => {
-        return `${skill.name}:
+        let skillInfo = `${skill.name}:
   Description: ${skill.description}
   Tags: ${skill.tags.join(', ')}`;
+
+        // Add input schema if available
+        if (skill.metadata && skill.metadata.input_schema) {
+          const schema = skill.metadata.input_schema;
+          if (schema.properties && Object.keys(schema.properties).length > 0) {
+            skillInfo += '\n  Parameters:';
+            for (const [paramName, paramInfo] of Object.entries(schema.properties)) {
+              const info = paramInfo as { type?: string; description?: string; default?: any };
+              const required = schema.required?.includes(paramName);
+              const paramType = info.type || 'any';
+              const paramDesc = info.description || '';
+              const defaultValue = info.default !== undefined ? ` (default: ${info.default})` : '';
+              skillInfo += `\n    - ${paramName} (${paramType})${required ? ' [REQUIRED]' : ''}${defaultValue}: ${paramDesc}`;
+            }
+          }
+        }
+
+        return skillInfo;
       })
       .join('\n\n');
 
@@ -248,7 +284,11 @@ from core.skill.executor import SkillExecutor
 executor = SkillExecutor()
 
 # Use skills with await:
-result = await executor.execute('skill-name', {'param': 'value'})`
+# IMPORTANT: Pass the task description as the 'description' parameter
+result = await executor.execute('skill-name', {
+    'description': 'detailed task description',
+    'param2': 'value2'  # optional parameters
+})`
     : `No skills needed - solve the task directly with Python code.`
 }
 
@@ -263,28 +303,26 @@ Code requirements:
   })
 - Only output the code logic, no function definitions or boilerplate
 
+CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
+\`\`\`python
+result = await executor.execute('skill-name', {
+    'description': 'task description'
+})
+print(result)
+\`\`\`
+
 Generate the code now:`;
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
-    // Extract code from response
-    // Try multiple code block formats
-    let codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
-    if (!codeMatch) {
-      codeMatch = response.content.match(/```(\s*.*?)\s*```/s); // Generic code block
-    }
-    if (!codeMatch) {
-      codeMatch = response.content.match(/<code>\s*(.*?)\s*<\/code>/s);
-    }
-    if (!codeMatch) {
-      // Last resort: try to extract code after specific markers
-      codeMatch = response.content.match(
-        /(?:Generate the code now:?|Code:?\s*)([\s\S]*?)(?:\n\n|\n*$|$)/i
-      );
-    }
+    // Extract code from ```python code blocks (strict format as requested in prompt)
+    const codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
+
     if (!codeMatch) {
       console.error('[PTC Generator] Failed to parse code. Response:', response.content);
-      throw new Error('Failed to parse code from LLM response');
+      throw new Error(
+        `Failed to parse code from LLM response. Expected \`\`\`python code blocks. Got: ${response.content.substring(0, 200)}`
+      );
     }
 
     let code = codeMatch[1].trim();
