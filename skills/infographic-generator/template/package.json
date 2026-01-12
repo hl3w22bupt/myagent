@@ -1,0 +1,9 @@
+{
+  "name": "infographic-renderer",
+  "version": "1.0.0",
+  "description": "Infographic rendering utilities",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.57.0"
+  }
+}
