@@ -46,43 +46,112 @@ class InfographicRenderer:
 
         return None
 
-    async def render_to_svg(self, html_content: str, output_path: str) -> bool:
-        """Render HTML and extract SVG."""
+    async def render_to_svg(self, html_content: str, output_path: str) -> tuple[bool, str | None]:
+        """Render HTML and export to SVG or PNG (as fallback).
+
+        Returns:
+            (success, actual_path): success flag and path to exported file (SVG or PNG)
+        """
+        png_path = output_path.replace('.svg', '.png')
+
         try:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
+                page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
 
                 await page.set_content(html_content, wait_until="networkidle")
-                await page.wait_for_timeout(2000)
+                await page.wait_for_timeout(3000)
 
-                svg_content = await page.evaluate("""
-                    () => {
-                        const infographic = window.infographic;
-                        if (infographic && infographic.toSVG) {
-                            return infographic.toSVG();
+                # First, try to export SVG/PNG from rendered content
+                try:
+                    export_result = await page.evaluate("""
+                        () => {
+                            const infographic = window.infographic;
+                            if (!infographic) {
+                                return { type: 'error', message: 'No infographic instance' };
+                            }
+
+                            // Try toDataURL method for SVG
+                            if (typeof infographic.toDataURL === 'function') {
+                                try {
+                                    const result = infographic.toDataURL({type: 'svg'});
+                                    if (result && typeof result === 'string' && result.startsWith('data:image/svg+xml')) {
+                                        return { type: 'svg', dataUrl: result };
+                                    }
+                                } catch (e) {
+                                    console.error('toDataURL failed:', e.message);
+                                }
+                            }
+
+                            // Try canvas export
+                            const canvas = document.querySelector('canvas');
+                            if (canvas) {
+                                try {
+                                    const pngDataUrl = canvas.toDataURL('image/png');
+                                    return { type: 'canvas-png', dataUrl: pngDataUrl };
+                                } catch (e) {
+                                    console.error('Canvas export failed:', e.message);
+                                }
+                            }
+
+                            return { type: 'no-render', message: 'Nothing rendered yet' };
                         }
-                        return null;
-                    }
-                """)
+                    """)
 
-                if svg_content:
-                    with open(output_path, "w", encoding="utf-8") as f:
-                        f.write(svg_content)
+                    # Handle export result
+                    if export_result.get('type') == 'svg' and export_result.get('dataUrl'):
+                        # SVG export successful
+                        import base64
+                        svg_data = export_result['dataUrl']
+                        svg_bytes = base64.b64decode(svg_data.split(',')[1])
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            f.write(svg_bytes.decode('utf-8'))
+                        await browser.close()
+                        print(f"✅ SVG export successful: {output_path}")
+                        return True, output_path
+
+                    elif export_result.get('type') == 'canvas-png' and export_result.get('dataUrl'):
+                        # Canvas PNG export successful
+                        import base64
+                        png_data = export_result['dataUrl']
+                        png_bytes = base64.b64decode(png_data.split(',')[1])
+                        with open(png_path, "wb") as f:
+                            f.write(png_bytes)
+                        await browser.close()
+                        print(f"✅ Canvas PNG export successful: {png_path}")
+                        return True, png_path
+
+                except Exception as e:
+                    print(f"⚠️  Direct export failed: {e}, falling back to screenshot")
+
+                # Fallback: Use Playwright screenshot
+                print("📸 Using screenshot fallback...")
+                try:
+                    # Screenshot the entire page
+                    screenshot_bytes = await page.screenshot(type="png", full_page=False)
+
+                    with open(png_path, "wb") as f:
+                        f.write(screenshot_bytes)
+
                     await browser.close()
-                    return True
+                    print(f"✅ Screenshot export successful: {png_path}")
+                    return True, png_path
 
-                await browser.close()
-                return False
+                except Exception as e:
+                    print(f"❌ Screenshot failed: {e}")
+                    await browser.close()
+                    return False, None
 
         except ImportError:
-            print("Playwright not available, skipping SVG export")
-            return False
+            print("❌ Playwright not available, skipping export")
+            return False, None
         except Exception as e:
-            print(f"SVG export error: {e}")
-            return False
+            print(f"❌ Export error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, None
 
 
 class InfographicGenerator:
@@ -160,20 +229,37 @@ class InfographicGenerator:
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(html_content)
 
-            success_svg = False
+            export_success = False
+            actual_export_path = None
             if export_format in ["svg", "both"]:
-                success_svg = await self.renderer.render_to_svg(
+                export_success, actual_export_path = await self.renderer.render_to_svg(
                     html_content, str(svg_path)
                 )
+
+            # Determine actual export path and URL
+            if export_success and actual_export_path:
+                # If the actual path is PNG, use that; otherwise use SVG path
+                if actual_export_path.endswith('.png'):
+                    png_path = actual_export_path
+                    svg_path = None
+                    base_name = Path(png_path).stem
+                    export_url = f"/outputs/infographics/{base_name}.png"
+                else:
+                    png_path = None
+                    export_url = f"/outputs/infographics/{base_filename}.svg"
+            else:
+                png_path = None
+                svg_path = None
+                export_url = None
 
             result = {
                 "success": True,
                 "html_path": str(html_path),
-                "svg_path": str(svg_path) if success_svg else None,
+                "svg_path": svg_path,
+                "png_path": png_path,  # Add PNG path for fallback
                 "html_url": f"/outputs/infographics/{base_filename}.html",
-                "svg_url": f"/outputs/infographics/{base_filename}.svg"
-                if success_svg
-                else None,
+                "svg_url": export_url if svg_path else None,
+                "png_url": export_url if png_path else None,
                 "metadata": {
                     "title": title,
                     "template": template,
@@ -259,9 +345,21 @@ class InfographicGenerator:
     <div id="container" style="width: {width}px; height: {height}px;"></div>
     <script>
         const dsl = `{escaped_dsl}`;
-        const infographic = new Infographic({{
+        // AntV Infographic exports the constructor as AntVInfographic.Infographic
+        const infographic = new window.AntVInfographic.Infographic({{
             container: document.getElementById('container'),
             dsl: dsl
+        }});
+        // Make it globally accessible for SVG export
+        window.infographic = infographic;
+
+        // CRITICAL: Call render() to trigger rendering
+        infographic.render();
+
+        // Listen for render completion
+        infographic.on('rendered', (event) => {{
+            console.log('Infographic rendered successfully');
+            window.renderComplete = true;
         }});
     </script>
 </body>
