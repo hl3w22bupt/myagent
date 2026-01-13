@@ -106,6 +106,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         env: {
           ...process.env,
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
+          MOTIA_TASK_ID: options.metadata?.taskId || '',
           MOTIA_SKILL_PATH: skillPath,
           PYTHONPATH: pythonPathEnv,
           ...options.env,

@@ -112,8 +112,10 @@ class RemotionCodeGeneratorV2(BaseGenerator):
 
         except Exception as e:
             logger.error(f"Code generation failed: {str(e)}")
-            # Return minimal fallback code
-            return self._get_fallback_code(analysis, duration, fps, resolution)
+            # Do NOT use fallback - let the error propagate
+            raise
+
+    # _get_fallback_code removed as per user requirement
 
     def _get_system_prompt_v2(self) -> str:
         """Get enhanced system prompt for code generation (v2.0)."""
@@ -202,7 +204,8 @@ Your output must be a COMPLETE, RENDERABLE Remotion entry point file with:
 1. **Import Statements** (at the very top)
    - Must include: React from 'react'
    - Must include: Composition, registerRoot from 'remotion'
-   - Must include: AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring from 'remotion'
+   - Must include: AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence from 'remotion'
+   - Only import Video if you need to embed video files in your composition
 
 2. **Component Definitions** (after all imports)
    - Define TypeScript interfaces for your props
@@ -318,7 +321,7 @@ Create a component to render function graphs:
 
 **Format Requirements**:
 - Output ONLY the complete TypeScript code
-- Wrap code in \```typescript code blocks
+- Wrap code in \\```typescript code blocks
 - No explanations outside code blocks
 - No placeholders - provide complete, working code
 - Ensure code is ready to run without modifications
@@ -450,101 +453,6 @@ Generate the complete, production-ready Remotion code now.""".format(
 - Animate smoothly to avoid jarring movements
 """)
 
-    def _get_fallback_code(self, analysis: Dict[str, Any], duration: int, fps: int, resolution: str) -> str:
-        """Get fallback code when generation fails."""
-        # Same as v1
-        width, height = resolution.split("x")
-        total_frames = duration * fps
-        topic_name = analysis.get("topic", {}).get("name", "Topic")
-        composition_id = self._sanitize_composition_id(topic_name)
-
-        colors = analysis.get("visualization", {}).get("color_scheme", {})
-        primary = colors.get("primary", "#3B82F6")
-        bg_color = "#1F2937"
-
-        return f'''import {{
-  Composition,
-  AbsoluteFill,
-  useCurrentFrame,
-  useVideoConfig,
-  interpolate,
-  registerRoot
-}} from 'remotion';
-import React from 'react';
-
-interface Props {{
-  title: string;
-}}
-
-const Video: React.FC<Props> = ({{ title }}) => {{
-  const frame = useCurrentFrame();
-  const {{ durationInFrames }} = useVideoConfig();
-
-  // Fade in animation
-  const opacity = interpolate(frame, [0, 30], [0, 1], {{
-    extrapolateRight: 'clamp'
-  }});
-
-  // Fade out animation
-  const fadeOut = interpolate(frame, [durationInFrames - 30, durationInFrames], [1, 0], {{
-    extrapolateLeft: 'clamp'
-  }});
-
-  return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: '{bg_color}',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'column'
-      }}
-    >
-      <div
-        style={{
-          opacity: opacity * fadeOut,
-          color: '{primary}',
-          fontSize: 80,
-          fontWeight: 'bold',
-          textAlign: 'center',
-          fontFamily: 'Arial, sans-serif'
-        }}
-      >
-        {{title}}
-      </div>
-      <div
-        style={{
-          opacity: opacity * fadeOut,
-          color: '#ffffff',
-          fontSize: 40,
-          marginTop: 40,
-          textAlign: 'center',
-          fontFamily: 'Georgia, serif'
-        }}
-      >
-        Educational Video
-      </div>
-    </AbsoluteFill>
-  );
-}};
-
-export const Root: React.FC = () => {{
-  return (
-    <Composition
-      id="{composition_id}"
-      component={Video}
-      durationInFrames={total_frames}
-      width={width}
-      height={height}
-      fps={fps}
-      defaultProps={{ title: "{topic_name}" }}
-    />
-  );
-}};
-
-registerRoot(Root);
-'''
-
     async def generate_result(self, analysis: Dict[str, Any], **kwargs) -> GenerationResult:
         """Generate code with result metadata."""
         try:
@@ -562,8 +470,9 @@ registerRoot(Root);
 
         except Exception as e:
             logger.error(f"Code generation failed: {str(e)}")
+            # Return failed result without fallback code - let caller handle retries
             return GenerationResult(
-                code=self._get_fallback_code(analysis, **kwargs),
+                code="",  # No fallback code per user requirement
                 metadata={"type": "remotion_code_v2"},
                 success=False,
                 errors=[str(e)]

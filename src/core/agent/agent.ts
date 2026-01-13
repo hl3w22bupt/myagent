@@ -155,9 +155,12 @@ export class Agent {
    * Generates PTC code and executes it in Sandbox.
    *
    * @param task - User task description
+   * @param taskId - Optional task ID for tracking and naming outputs
    * @returns Execution result
    */
-  async run(task: string): Promise<AgentResult> {
+  async run(task: string, taskId?: string): Promise<AgentResult> {
+    console.log('[Agent] agent.run() called', { sessionId: this.sessionId, task, taskId });
+
     // Update activity time
     this.state.lastActivityAt = Date.now();
 
@@ -171,6 +174,8 @@ export class Agent {
     const startTime = Date.now();
     const steps: AgentStep[] = [];
 
+    console.log('[Agent] About to generate PTC code');
+
     try {
       // Step 1: Generate PTC code
       steps.push({
@@ -181,10 +186,12 @@ export class Agent {
       });
 
       // Generate PTC code with conversation history and variables as context
+      console.log('[Agent] Calling ptcGenerator.generateWithResult()');
       const ptcResult = await this.ptcGenerator.generateWithResult(task, {
         history: this.state.conversationHistory,
         variables: Object.fromEntries(this.state.variables),
       });
+      console.log('[Agent] PTC code generated', { codeLength: ptcResult.code.length, selectedSkills: ptcResult.selectedSkills });
 
       steps.push({
         type: 'ptc-generation',
@@ -205,6 +212,7 @@ export class Agent {
         timestamp: Date.now(),
       });
 
+      console.log('[Agent] Executing PTC code in sandbox');
       const sandboxResult = await this.sandbox.execute(ptcResult.code, {
         skills: [],
         skillImplPath: process.cwd(),
@@ -213,8 +221,10 @@ export class Agent {
         metadata: {
           traceId: this.sessionId,
           task,
+          taskId,
         },
       });
+      console.log('[Agent] Sandbox execution completed', { success: sandboxResult.success });
 
       // Step 3: Process result
       const executionTime = Date.now() - startTime;

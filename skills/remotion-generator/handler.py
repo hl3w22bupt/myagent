@@ -90,6 +90,8 @@ class RemotionVideoGenerator:
             print(f"[DEBUG] generate_video called with input_data type: {type(input_data)}")
             print(f"[DEBUG] input_data content: {input_data}")
             print(f"[DEBUG] input_data keys: {input_data.keys() if isinstance(input_data, dict) else 'N/A'}")
+            desc = input_data.get('description', 'N/A')
+            logging.info(f"[DEBUG] Starting generate_video with description: {str(desc)[:100]}")
 
             # Extract parameters with fallback for flexible input
             description = input_data.get('description', '')
@@ -146,9 +148,13 @@ class RemotionVideoGenerator:
                     raise ValueError("Duration must be between 1 and 300 seconds")
 
                 # Generate Remotion code from description
+                print(f"[DEBUG] About to call _generate_remotion_code...")
+                logging.info(f"[DEBUG] About to call _generate_remotion_code with description: {str(description)[:100]}")
                 remotion_code = await self._generate_remotion_code(
                     description, duration, fps, resolution, style, input_data
                 )
+                print(f"[DEBUG] _generate_remotion_code returned, code length: {len(remotion_code) if remotion_code else 0}")
+                logging.info(f"[DEBUG] _generate_remotion_code returned, code length: {len(remotion_code) if remotion_code else 0}")
                 duration_frames = duration * fps
 
             # Create Remotion project and render
@@ -186,6 +192,10 @@ class RemotionVideoGenerator:
             }
 
         except Exception as e:
+            print(f"[DEBUG] Exception in generate_video: {type(e).__name__}: {str(e)}")
+            logging.error(f"[DEBUG] Exception in generate_video: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
@@ -1388,9 +1398,11 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
 
             # Copy video to persistent output directory
             # Get task_id from input_data for better naming
+            # Priority: MOTIA_TASK_ID env var > input_data.task_id > metadata.taskId > sessionId > timestamp
             task_id = (
+                os.environ.get('MOTIA_TASK_ID') or  # Read taskId from environment variable set by sandbox
                 input_data.get('task_id') or
-                input_data.get('metadata', {}).get('traceId') or
+                input_data.get('metadata', {}).get('taskId') or
                 input_data.get('sessionId') or
                 f"task_{int(time.time())}"
             )

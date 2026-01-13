@@ -38,6 +38,10 @@
  * cleanup of all active sessions before process exit.
  */
 
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { AgentManager } from './core/agent/manager';
 import { resolve } from 'path';
 
@@ -84,7 +88,7 @@ export function getAgentManager(): AgentManager {
         },
       },
       constraints: {
-        timeout: parseInt(process.env.TASK_TIMEOUT || '300000'), // 5 minutes for video rendering
+        timeout: parseInt(process.env.TASK_TIMEOUT || '600000'), // 10 minutes for video rendering
         maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
       },
     },

@@ -120,7 +120,9 @@ export const handler = async (
 
     // Execute task (Agent maintains session state)
     await updateStream('running', { currentStep: 'Executing task' });
-    const result = await agent.run(input.task);
+    logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
+
+    const result = await agent.run(input.task, taskId);
 
     logger.info('Task execution completed', {
       sessionId,

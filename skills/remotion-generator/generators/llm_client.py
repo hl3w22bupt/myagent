@@ -7,6 +7,7 @@ for content analysis and code generation.
 
 import os
 import asyncio
+import json
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 import anthropic
@@ -128,9 +129,22 @@ class LLMClient:
                 f"LLM request timed out after {self.timeout} seconds"
             )
         except anthropic.APIError as e:
-            raise Exception(f"Anthropic API error: {str(e)}")
+            # 详细的错误信息
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "model": self.model,
+                "prompt_length": len(prompt),
+                "max_tokens": max_tokens,
+            }
+            raise Exception(f"Anthropic API error: {str(e)}\nDetails: {json.dumps(error_details, ensure_ascii=False)}")
         except Exception as e:
-            raise Exception(f"Unexpected error during LLM call: {str(e)}")
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "model": self.model,
+            }
+            raise Exception(f"Unexpected error during LLM call: {str(e)}\nDetails: {json.dumps(error_details, ensure_ascii=False)}")
 
     async def generate_with_retry(
         self,
