@@ -65,7 +65,7 @@ export const config: EventConfig = {
  */
 export const handler = async (
   input: _z.infer<typeof inputSchema>,
-  { emit, logger, state: _state, streams }: any
+  { emit, logger, state: _state, streams: _streams }: any
 ) => {
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
