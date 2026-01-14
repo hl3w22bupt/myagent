@@ -209,6 +209,15 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       .map((line) => '        ' + line)
       .join('\n');
 
+    // Only import SkillExecutor if skills are provided
+    const skillExecutorImports = options.skills && options.skills.length > 0 ? `
+# Import and create SkillExecutor instance for skill execution
+from core.skill.executor import SkillExecutor
+executor = SkillExecutor()
+` : `
+# No skills provided, skipping SkillExecutor import
+`;
+
     return `
 import asyncio
 import sys
@@ -231,11 +240,7 @@ python_modules_paths = glob.glob(os.path.join(skill_path if skill_path else '.',
 for python_modules in python_modules_paths:
     if os.path.exists(python_modules) and python_modules not in sys.path:
         sys.path.insert(0, python_modules)
-
-# Import and create SkillExecutor instance for skill execution
-from core.skill.executor import SkillExecutor
-executor = SkillExecutor()
-
+${skillExecutorImports}
 async def main():
     try:
 ${normalizedCode}

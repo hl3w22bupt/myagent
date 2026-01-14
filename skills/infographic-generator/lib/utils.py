@@ -51,18 +51,104 @@ def extract_description(content: str, max_length: int = 50) -> str:
 
 
 def parse_list_items(content: str) -> list:
-    """Parse content into list items."""
+    """Parse content into clean list items.
+
+    Handles formats like:
+    1. Item one - description
+    2. Item two - description
+    3. Item three - description
+
+    Or inline format:
+    The stages are: 1. Requirement Analysis: description; 2. System Design: description; 3. Coding...
+
+    Or:
+    - Item one
+    - Item two
+    - Item three
+    """
     items = []
 
-    separators = ["→", "->", ">", "•", "-", "*", "1.", "2.", "3.", "4.", "5."]
+    # Try inline numbered list first (e.g., "1. Item...; 2. Item...; 3. Item...")
+    # This handles cases where all items are on the same line or in a paragraph
+    # Pattern: "1. Label: description; 2. Label: description;" or "1. Label - description; 2. Label - description;"
+    inline_pattern = r'\d+\.\s*([^:：\-；;]+?)(?:[:：]| - |－)(?:[^;；]*?)(?=;\s*\d+\.|；\s*\d+\.|;\s*$|；\s*$|$)'
+    inline_matches = re.findall(inline_pattern, content)
 
-    for sep in separators:
-        if sep in content:
-            items = [item.strip() for item in content.split(sep) if item.strip()]
-            if len(items) > 1:
-                return items
+    if inline_matches and len(inline_matches) > 1:
+        items = [match.strip() for match in inline_matches]
+        if items:
+            return items
 
+    # Try multi-line numbered list pattern (e.g., "1. ", "2. ", etc.)
+    numbered_pattern = r'(?:^|\n)\s*\d+\.\s*([^\n]+?)(?:\s*-\s*[^\n]+)?(?=\n\s*\d+\.|\n*$|$)'
+    numbered_matches = re.findall(numbered_pattern, content, re.MULTILINE)
+
+    if numbered_matches and len(numbered_matches) > 1:
+        # Extract just the main label (before dash) or full line if no dash
+        items = []
+        for match in numbered_matches:
+            match = match.strip()
+            # If there's a dash, take only the part before it
+            if ' - ' in match:
+                label = match.split(' - ')[0].strip()
+            elif '－' in match:  # Full-width dash
+                label = match.split('－')[0].strip()
+            else:
+                label = match
+            items.append(label)
+        if items:
+            return items
+
+    # Try bullet points or hyphens
+    bullet_pattern = r'(?:^|\n)\s*[-•*]\s*([^\n]+?)(?:\s*-\s*[^\n]+)?(?=\n\s*[-•*]|\n*$|$)'
+    bullet_matches = re.findall(bullet_pattern, content, re.MULTILINE)
+
+    if bullet_matches and len(bullet_matches) > 1:
+        items = []
+        for match in bullet_matches:
+            match = match.strip()
+            if ' - ' in match:
+                label = match.split(' - ')[0].strip()
+            elif '－' in match:
+                label = match.split('－')[0].strip()
+            else:
+                label = match
+            items.append(label)
+        if items:
+            return items
+
+    # Try Chinese enumeration (一、二、三、等)
+    chinese_pattern = r'(?:^|\n)\s*[一二三四五六七八九十][、．.]\s*([^\n]+?)(?:\s*[-－—]\s*[^\n]+)?(?=\n|\n*$|$)'
+    chinese_matches = re.findall(chinese_pattern, content, re.MULTILINE)
+
+    if chinese_matches and len(chinese_matches) > 1:
+        items = []
+        for match in chinese_matches:
+            match = match.strip()
+            if ' - ' in match:
+                label = match.split(' - ')[0].strip()
+            elif '－' in match or ' — ' in match:
+                label = re.split(r'[－—]', match)[0].strip()
+            else:
+                label = match
+            items.append(label)
+        if items:
+            return items
+
+    # Fallback: split by newlines and clean up
     if "\n" in content:
         items = [line.strip() for line in content.split("\n") if line.strip()]
+        # Further clean items by removing colons and extra descriptions
+        cleaned_items = []
+        for item in items:
+            # Remove common prefixes like "阶段：", "步骤：" etc.
+            item = re.sub(r'^[阶段步骤步骤][：:]\s*', '', item)
+            # Split by dash and take first part if item is long
+            if ' - ' in item and len(item) > 20:
+                item = item.split(' - ')[0].strip()
+            elif '－' in item and len(item) > 20:
+                item = item.split('－')[0].strip()
+            cleaned_items.append(item)
+        return cleaned_items
 
     return items if items else [content]

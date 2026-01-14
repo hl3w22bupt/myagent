@@ -14,7 +14,10 @@ input_schema:
   properties:
     content:
       type: string
-      description: Natural language description of infographic to generate
+      description: "Natural language description of infographic to generate"
+    description:
+      type: string
+      description: "Alias for content parameter - use this instead of content"
     language:
       type: string
       default: "auto"
@@ -25,7 +28,7 @@ input_schema:
       description: Content language (auto-detect, Chinese, English)
     preferred_template:
       type: string
-      description: Optional: Specific template to use
+      description: "Optional: Specific template to use"
     theme:
       type: string
       default: "auto"
