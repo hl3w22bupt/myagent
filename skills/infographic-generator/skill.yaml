@@ -1,0 +1,131 @@
+name: infographic-generator
+version: 1.0.0
+description: Generate beautiful infographics using AntV Infographic from natural language descriptions
+tags:
+  - infographic
+  - visualization
+  - svg
+  - antv
+  - data-visualization
+type: hybrid
+
+input_schema:
+  type: object
+  properties:
+    content:
+      type: string
+      description: Natural language description of infographic to generate
+    language:
+      type: string
+      default: "auto"
+      enum:
+        - auto
+        - zh
+        - en
+      description: Content language (auto-detect, Chinese, English)
+    preferred_template:
+      type: string
+      description: Optional: Specific template to use
+    theme:
+      type: string
+      default: "auto"
+      enum:
+        - auto
+        - business
+        - tech
+        - nature
+        - warm
+        - cool
+        - monochrome
+      description: Theme color palette
+    style:
+      type: string
+      default: "auto"
+      enum:
+        - auto
+        - rough
+        - pattern
+        - linear-gradient
+        - radial-gradient
+      description: Visual style for infographic
+    width:
+      type: number
+      default: 1920
+      description: Canvas width in pixels
+    height:
+      type: number
+      default: 1080
+      description: Canvas height in pixels
+    export_format:
+      type: string
+      default: "both"
+      enum:
+        - html
+        - svg
+        - both
+      description: Output format(s) to generate
+  required:
+    - content
+
+output_schema:
+  type: object
+  properties:
+    success:
+      type: boolean
+      description: Whether infographic generation succeeded
+    html_path:
+      type: string
+      description: Local file path to generated HTML file
+    svg_path:
+      type: string
+      description: Local file path to generated SVG file
+    html_url:
+      type: string
+      description: Accessible URL to HTML file
+    svg_url:
+      type: string
+      description: Accessible URL to SVG file
+    metadata:
+      type: object
+      description: Additional metadata about generated infographic
+    error:
+      type: string
+      description: Error message if generation failed
+    error_type:
+      type: string
+      description: Error type for debugging
+
+prompt_template: |
+  You are an AntV Infographic generation expert. Create a complete infographic based on content description.
+
+  Content Requirements:
+  Description: {{content}}
+  Language: {{language}}
+  Preferred Template: {{preferred_template}}
+  Theme: {{theme}}
+  Style: {{style}}
+  Dimensions: {{width}}x{{height}}
+  Export Format: {{export_format}}
+
+  Generate an AntV Infographic DSL that:
+  - Analyzes content structure (sequence, list, compare, hierarchy, chart, quadrant, relation)
+  - Selects most appropriate template based on content type
+  - Creates visually appealing infographics with proper data hierarchy
+  - Uses appropriate icons and color schemes
+  - Produces valid AntV Infographic DSL syntax
+  - Supports the specified dimensions
+  - Includes proper styling (rough, pattern, gradient) if specified
+
+  The infographic should be:
+  - Professional and visually appealing
+  - Easy to understand
+  - Properly structured with clear hierarchy
+  - Using semantic icons where applicable
+  - Color-coordinated with the selected theme
+
+  Output the complete AntV Infographic DSL syntax below:
+
+execution:
+  handler: handler.py
+  function: generate_infographic
+  timeout: 180000
