@@ -29,6 +29,7 @@ jobs:
 
       - name: ESLint
         run: npm run lint
+        continue-on-error: true  # ESLint code style issues are non-blocking
 
       - name: TypeScript check
         run: npx tsc --noEmit

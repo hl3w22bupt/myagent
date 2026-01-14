@@ -11,71 +11,86 @@ import { EventConfig } from 'motia';
 /**
  * Input schema for result logger.
  *
- * Note: master-agent sends nested structure with result wrapper.
+ * Handles both successful completions (agent.task.completed)
+ * and failures (agent.task.failed) with different data structures.
  */
-export const inputSchema = z.object({
-  /**
-   * Task ID for tracking.
-   */
-  taskId: z.string().optional(),
-
-  /**
-   * Task that was executed.
-   */
-  task: z.string(),
-
-  /**
-   * Session ID.
-   */
-  sessionId: z.string().optional(),
-
-  /**
-   * Nested result object from Agent execution.
-   */
-  result: z.object({
+export const inputSchema = z
+  .object({
     /**
-     * Whether execution succeeded.
+     * Task ID for tracking.
      */
-    success: z.boolean(),
+    taskId: z.string().optional(),
 
     /**
-     * Output from agent execution.
+     * Task that was executed.
      */
-    output: z.string().optional(),
+    task: z.string().optional(),
 
     /**
-     * Error message if execution failed.
+     * Session ID.
+     */
+    sessionId: z.string().optional(),
+
+    /**
+     * Nested result object from Agent execution (present in completed events).
+     */
+    result: z
+      .object({
+        /**
+         * Whether execution succeeded.
+         */
+        success: z.boolean(),
+
+        /**
+         * Output from agent execution.
+         */
+        output: z.string().optional(),
+
+        /**
+         * Error message if execution failed.
+         */
+        error: z.string().optional(),
+
+        /**
+         * Execution time in ms.
+         */
+        executionTime: z.number().optional(),
+
+        /**
+         * State information.
+         */
+        state: z
+          .object({
+            conversationLength: z.number().optional(),
+            executionCount: z.number().optional(),
+            variablesCount: z.number().optional(),
+          })
+          .optional(),
+
+        /**
+         * Execution metadata.
+         */
+        metadata: z
+          .object({
+            llmCalls: z.number(),
+            skillCalls: z.number(),
+            totalTokens: z.number(),
+          })
+          .optional(),
+      })
+      .optional(),
+
+    /**
+     * Direct error field (present in failed events).
      */
     error: z.string().optional(),
 
     /**
-     * Execution time in ms.
+     * Stack trace (present in failed events).
      */
-    executionTime: z.number().optional(),
-
-    /**
-     * State information.
-     */
-    state: z
-      .object({
-        conversationLength: z.number().optional(),
-        executionCount: z.number().optional(),
-        variablesCount: z.number().optional(),
-      })
-      .optional(),
-
-    /**
-     * Execution metadata.
-     */
-    metadata: z
-      .object({
-        llmCalls: z.number(),
-        skillCalls: z.number(),
-        totalTokens: z.number(),
-      })
-      .optional(),
-  }),
-});
+    stack: z.string().optional(),
+  })
+  .passthrough();
 
 /**
  * Result Logger Step configuration.
@@ -86,9 +101,9 @@ export const config: EventConfig = {
   description: 'Logs agent task execution results for audit trail',
 
   /**
-   * Subscribe to agent task completion events.
+   * Subscribe to both successful and failed agent task events.
    */
-  subscribes: ['agent.task.completed'],
+  subscribes: ['agent.task.completed', 'agent.task.failed'],
 
   /**
    * Optionally emit analytics events.
@@ -105,34 +120,60 @@ export const config: EventConfig = {
  * Result Logger handler.
  *
  * Logs agent execution results to console and optionally to file/database.
+ * Handles both agent.task.completed and agent.task.failed events.
  */
 export const handler = async (input: z.infer<typeof inputSchema>, { logger, state }: any) => {
   const timestamp = new Date().toISOString();
-  const { result } = input;
 
-  logger.info('=== Agent Task Completed ===', {
-    taskId: input.taskId,
-    task: input.task,
-    success: result.success,
-    sessionId: input.sessionId,
+  // Determine if this is a completed or failed event
+  const isFailedEvent = !input.result && input.error;
+
+  // Normalize data structure
+  const normalizedResult = isFailedEvent
+    ? {
+        // Failed event: extract from direct fields
+        success: false,
+        error: input.error,
+        output: input.stack,
+        executionTime: undefined,
+        metadata: undefined,
+      }
+    : (input.result || {
+        // Fallback for completed event without result
+        success: true,
+        output: undefined,
+        error: undefined,
+        executionTime: undefined,
+        metadata: undefined,
+      }); // Completed event: use nested result
+
+  const taskId = input.taskId;
+  const task = input.task || 'Unknown task';
+  const sessionId = input.sessionId;
+
+  logger.info(isFailedEvent ? '=== Agent Task Failed ===' : '=== Agent Task Completed ===', {
+    taskId,
+    task,
+    success: normalizedResult.success,
+    sessionId,
     timestamp,
-    executionTime: result.executionTime,
-    metadata: result.metadata,
+    executionTime: normalizedResult.executionTime,
+    metadata: normalizedResult.metadata,
   });
 
-  if (result.success) {
+  if (normalizedResult.success) {
     logger.info('✅ Task Execution Successful', {
-      output: result.output?.substring(0, 200) + ((result.output?.length ?? 0) > 200 ? '...' : ''),
-      llmCalls: result.metadata?.llmCalls,
-      skillCalls: result.metadata?.skillCalls,
-      totalTokens: result.metadata?.totalTokens,
+      output: normalizedResult.output?.substring(0, 200) + ((normalizedResult.output?.length ?? 0) > 200 ? '...' : ''),
+      llmCalls: normalizedResult.metadata?.llmCalls,
+      skillCalls: normalizedResult.metadata?.skillCalls,
+      totalTokens: normalizedResult.metadata?.totalTokens,
     });
   } else {
     logger.warn('❌ Task Execution Failed', {
-      task: input.task,
-      sessionId: input.sessionId,
-      error: result.error,
-      stderr: result.output?.substring(0, 500),
+      task,
+      sessionId,
+      error: normalizedResult.error,
+      stderr: normalizedResult.output?.substring(0, 500),
     });
   }
 
@@ -146,17 +187,17 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     const existingHistory = await state.get(groupId, key);
     const history = existingHistory || [];
 
-    // Add new entry
+    // Add new entry with normalized structure
     history.unshift({
-      taskId: input.taskId,
+      taskId,
       timestamp,
-      task: input.task,
-      success: result.success,
-      output: result.output,
-      error: result.error,
-      executionTime: result.executionTime,
-      metadata: result.metadata,
-      sessionId: input.sessionId,
+      task,
+      success: normalizedResult.success,
+      output: normalizedResult.output,
+      error: normalizedResult.error,
+      executionTime: normalizedResult.executionTime,
+      metadata: normalizedResult.metadata,
+      sessionId,
     });
 
     // Keep only last 100 entries
@@ -180,6 +221,6 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   return {
     logged: true,
     timestamp,
-    task: input.task,
+    task,
   };
 };

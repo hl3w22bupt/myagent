@@ -10,11 +10,29 @@ import asyncio
 import json
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from project root
+# Try multiple possible locations for .env file
+project_root = Path(__file__).parent.parent.parent.parent
+env_paths = [
+    project_root / '.env',
+    Path.cwd() / '.env',
+    Path(os.getcwd()) / '.env',
+]
+
+loaded = False
+for env_path in env_paths:
+    if env_path.exists():
+        load_dotenv(env_path)
+        loaded = True
+        break
+
+if not loaded:
+    # Fallback to default behavior (searches for .env in current directory)
+    load_dotenv()
 
 
 @dataclass
@@ -37,15 +55,15 @@ class LLMClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
-        timeout: int = 60
+        model: Optional[str] = None,
+        timeout: int = 180
     ):
         """
         Initialize LLM client.
 
         Args:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-            model: Model identifier (default: claude-3-5-sonnet-20241022)
+            model: Model identifier (defaults to DEFAULT_LLM_MODEL env var or claude-3-5-sonnet-20241022)
             timeout: Request timeout in seconds
         """
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
@@ -55,9 +73,21 @@ class LLMClient:
                 "or pass api_key parameter."
             )
 
-        self.model = model
+        # Use model from param, env var, or fallback to default
+        self.model = model or os.getenv("DEFAULT_LLM_MODEL", "claude-3-5-sonnet-20241022")
         self.timeout = timeout
-        self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
+
+        # Get base URL from environment if available
+        base_url = os.getenv("LLM_BASE_URL")
+
+        # Create client with optional base_url
+        if base_url:
+            self.client = anthropic.AsyncAnthropic(
+                api_key=self.api_key,
+                base_url=base_url
+            )
+        else:
+            self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
     async def generate(
         self,
@@ -249,7 +279,11 @@ def get_llm_client(model: Optional[str] = None) -> LLMClient:
     """
     global _llm_client_instance
 
-    if _llm_client_instance is None or (model and model != _llm_client_instance.model):
-        _llm_client_instance = LLMClient(model=model or "claude-3-5-sonnet-20241022")
+    # Use model from param, env var, or fallback to default
+    default_model = os.getenv("DEFAULT_LLM_MODEL", "claude-3-5-sonnet-20241022")
+    effective_model = model or default_model
+
+    if _llm_client_instance is None or effective_model != _llm_client_instance.model:
+        _llm_client_instance = LLMClient(model=effective_model)
 
     return _llm_client_instance

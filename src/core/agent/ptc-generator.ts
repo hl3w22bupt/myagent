@@ -147,17 +147,38 @@ Output format (JSON):
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
-    // Extract JSON from <plan> tags
-    const planMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+    // Extract JSON - try multiple formats
+    let jsonString: string | null = null;
 
-    if (!planMatch) {
-      console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
-      throw new Error(
-        `Failed to parse plan from LLM response. Expected <plan>{...}</plan> format. Got: ${response.content.substring(0, 200)}`
-      );
+    // Try format 1: <plan>{...}</plan>
+    const planMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+    if (planMatch) {
+      jsonString = planMatch[1].trim();
     }
 
-    const jsonString = planMatch[1].trim();
+    // Try format 2: ```json{...}```
+    if (!jsonString) {
+      const codeBlockMatch = response.content.match(/```json\s*(\{.*?\})\s*```/s);
+      if (codeBlockMatch) {
+        jsonString = codeBlockMatch[1].trim();
+      }
+    }
+
+    // Try format 3: ```{...}``` (generic code block)
+    if (!jsonString) {
+      const genericMatch = response.content.match(/```\s*(\{.*?\})\s*```/s);
+      if (genericMatch) {
+        jsonString = genericMatch[1].trim();
+      }
+    }
+
+    // If still no match, throw error
+    if (!jsonString) {
+      console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
+      throw new Error(
+        `Failed to parse plan from LLM response. Expected <plan>{...}</plan> or \`\`\`json format. Got: ${response.content.substring(0, 200)}`
+      );
+    }
 
     // Validate JSON string
     if (!jsonString || jsonString === '' || jsonString === 'null' || jsonString === 'undefined') {

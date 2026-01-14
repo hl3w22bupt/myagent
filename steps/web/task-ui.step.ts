@@ -1104,7 +1104,7 @@ export const handler = async (request: any, { logger }: any) => {
 
       const poll = async () => {
         try {
-          const response = await fetch(\`\${API_BASE}/agent/results?taskId=\${taskId}\`);
+          const response = await fetch(\`\${API_BASE}/agent/result?id=\${taskId}\`);
           const data = await response.json();
 
           if (data.success && data.result) {

@@ -22,6 +22,7 @@ declare module 'motia' {
     'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
     'failure-handler': EventHandler<never, never>
     'agent-results-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     

@@ -126,7 +126,8 @@ class RemotionVideoGenerator:
                 height = resolution_raw.get('height', resolution_raw.get('height', 1080))
                 resolution = f"{width}x{height}"
             elif isinstance(resolution_raw, str):
-                resolution = resolution_raw
+                # Normalize resolution shorthand formats (e.g., '1080p' -> '1920x1080')
+                resolution = self._normalize_resolution(resolution_raw)
             else:
                 resolution = '1920x1080'
 
@@ -464,8 +465,8 @@ class RemotionVideoGenerator:
     def _extract_composition_id(self, code: str) -> str:
         """Extract composition ID from generated Remotion code."""
         import re
-        # Look for pattern: id="CompositionName"
-        match = re.search(r'id="([^"]+)"', code)
+        # Look for <Composition id="CompositionName" ... />
+        match = re.search(r'<Composition\s[^>]*id="([^"]+)"', code)
         if match:
             return match.group(1)
         # Fallback to MinimalVideo
@@ -1675,6 +1676,59 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         else:
             title = description
         return title
+
+    def _normalize_resolution(self, resolution: str) -> str:
+        """
+        Normalize resolution shorthand formats to standard 'WIDTHxHEIGHT' format.
+
+        Supports:
+        - '1080p' -> '1920x1080'
+        - '720p' -> '1280x720'
+        - '480p' -> '854x480'
+        - '360p' -> '640x360'
+        - '240p' -> '426x240'
+        - '144p' -> '256x144'
+        - '4K' -> '3840x2160'
+        - '1920x1080' -> '1920x1080' (already normalized)
+        """
+        # Common resolution mappings
+        resolution_map = {
+            '4k': '3840x2160',
+            '2160p': '3840x2160',
+            '1440p': '2560x1440',
+            '1080p': '1920x1080',
+            '720p': '1280x720',
+            '480p': '854x480',
+            '360p': '640x360',
+            '240p': '426x240',
+            '144p': '256x144',
+        }
+
+        # Convert to lowercase for case-insensitive matching
+        resolution_lower = resolution.lower().strip()
+
+        # Check if it's already in 'WIDTHxHEIGHT' format
+        if 'x' in resolution_lower:
+            # Validate it's a valid format (has exactly one 'x')
+            parts = resolution_lower.split('x')
+            if len(parts) == 2 and parts[0].strip().isdigit() and parts[1].strip().isdigit():
+                return resolution_lower
+
+        # Look up in mapping
+        if resolution_lower in resolution_map:
+            return resolution_map[resolution_lower]
+
+        # If not recognized, try to extract just the number (e.g., '1080' from '1080p')
+        import re
+        match = re.match(r'(\d+)p?', resolution_lower)
+        if match:
+            height = match.group(1)
+            # Common aspect ratio is 16:9
+            width = int(int(height) * 16 / 9)
+            return f"{width}x{height}"
+
+        # Fallback to default
+        return '1920x1080'
 
     def __del__(self):
         """Cleanup temporary directory."""

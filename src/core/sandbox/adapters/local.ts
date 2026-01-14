@@ -120,14 +120,19 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       const timeout = options.timeout || 300000;
       const result = await this.collectResult(childProcess, timeout);
 
-      // 5. Cleanup or save for debugging
-      if (result.exitCode !== 0) {
-        // Save failed script for debugging
-        const debugPath = join(this.workspace, `debug_${sessionId}.py`);
-        await writeFile(debugPath, wrappedCode, 'utf-8')
-          .then(() => console.error(`[Sandbox] Failed script saved to: ${debugPath}`))
-          .catch(() => {});
-      }
+      // 5. Save script for debugging and log path
+      const debugPath = join(this.workspace, `debug_${sessionId}.py`);
+      await writeFile(debugPath, wrappedCode, 'utf-8')
+        .then(() => {
+          if (result.exitCode === 0) {
+            console.log(`[Sandbox] Script saved to: ${debugPath}`);
+          } else {
+            console.error(`[Sandbox] Failed script saved to: ${debugPath}`);
+          }
+        })
+        .catch(() => {});
+
+      // Cleanup temporary script
       await unlink(scriptPath).catch(() => {});
       this.activeSessions.delete(sessionId);
 

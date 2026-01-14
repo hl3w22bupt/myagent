@@ -78,10 +78,9 @@ export class Agent {
       variables: new Map(),
     };
 
-    // Initialize PTC Generator with dynamic skills registry
-    // Note: Skills will be loaded asynchronously, but we pass the current registry
-    // The PTCGenerator will have access to skills as they're discovered
-    this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
+    // Initialize PTC Generator with empty registry initially
+    // Will be updated when skills are loaded
+    this.ptcGenerator = new PTCGenerator(this.llm, []);
 
     // Initialize skills registry asynchronously (non-blocking)
     this.initializeSkillsRegistryAsync();
@@ -160,6 +159,15 @@ export class Agent {
    */
   async run(task: string, taskId?: string): Promise<AgentResult> {
     console.log('[Agent] agent.run() called', { sessionId: this.sessionId, task, taskId });
+
+    // CRITICAL FIX: Wait for skills to be initialized before task execution
+    // This prevents "Skill not found" errors due to race conditions
+    await Agent.initializeSkillsRegistry();
+
+    // Update PTCGenerator with latest skills registry
+    // This ensures the PTCGenerator has access to all discovered skills
+    this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
+    console.log('[Agent] PTCGenerator ready with', Agent.skillsRegistry.length, 'skills');
 
     // Update activity time
     this.state.lastActivityAt = Date.now();

@@ -233,6 +233,11 @@ export const Root: React.FC = () => {{
   return (
     <Composition
       id="YourVideoId"
+      // CRITICAL: Composition id can ONLY contain:
+      // - Letters (a-z, A-Z), Numbers (0-9)
+      // - Hyphens (-), CJK characters
+      // NO UNDERSCORES (_) or special characters!
+      // Example: ✅ "MyVideo-Component", ❌ "My_Video_Component"
       component={{YourComponentName}}
       durationInFrames={{total_frames}}
       width={{width}}
@@ -291,11 +296,21 @@ Output ONLY the complete TypeScript code, wrapped in ```typescript code blocks.
 No explanations, no markdown outside the code block."""
 
     def _sanitize_composition_id(self, topic_name: str) -> str:
-        """Sanitize topic name for use as composition ID."""
-        # Remove special characters, replace spaces with underscores
-        sanitized = topic_name.replace(" ", "_").replace("-", "_")
-        sanitized = "".join(c for c in sanitized if c.isalnum() or c == "_")
-        return f"{sanitized}_Video"
+        """
+        Sanitize topic name for use as composition ID (fallback code only).
+
+        NOTE: This is only used for generating fallback/minimal code.
+        The LLM prompt already constrains composition ID format, so LLM-generated
+        code should always have correct IDs. This is just a safety measure for
+        our manually written fallback templates.
+        """
+        # Replace spaces and underscores with hyphens
+        sanitized = topic_name.replace(" ", "-").replace("_", "-")
+        # Keep only alphanumeric and hyphens
+        sanitized = "".join(c for c in sanitized if c.isalnum() or c == "-")
+        # Clean up consecutive/leading/trailing hyphens
+        sanitized = "-".join(filter(None, sanitized.split("-")))
+        return f"{sanitized}-Video"
 
     def _format_scene_breakdown(
         self,

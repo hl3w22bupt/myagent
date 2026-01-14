@@ -150,6 +150,8 @@ class RemotionCodeGeneratorV2(BaseGenerator):
         error_context: Optional[str] = None
     ) -> str:
         """Build enhanced code generation prompt with Few-Shot examples (v2.0)."""
+        logger.info(f"[DEBUG] _build_code_prompt_v2 called with analysis type: {type(analysis)}")
+        logger.info(f"[DEBUG] analysis keys: {list(analysis.keys()) if isinstance(analysis, dict) else 'N/A'}")
         width, height = resolution.split("x")
         total_frames = duration * fps
 
@@ -165,19 +167,26 @@ Please address these issues in your new implementation.""".format(error_context)
         # Get scene breakdown
         scene_breakdown = self._format_scene_breakdown_v2(analysis.get('scenes', []), total_frames)
 
-        # Build prompt using format() to avoid f-string brace escaping
-        prompt = """Generate complete Remotion TypeScript/React code based on the educational content analysis.
+        # Get topic category safely
+        topic_category = 'general'
+        if isinstance(analysis.get('topic'), dict):
+            topic_category = analysis.get('topic', {}).get('category', 'general')
+
+        # Build prompt using string concatenation to avoid f-string brace issues
+        analysis_json = json.dumps(analysis, indent=2, ensure_ascii=False)
+        
+        prompt = """Generate complete Remotion TypeScript/React code based on educational content analysis.
 
 ## Content Analysis
 ```json
-{}
+""" + analysis_json + """
 ```
 
 ## Video Parameters
-- Duration: {} seconds
-- FPS: {}
-- Resolution: {} ({}x{})
-- Total Frames: {}
+- Duration: """ + str(duration) + """ seconds
+- FPS: """ + str(fps) + """
+- Resolution: """ + resolution + """ (""" + width + """x""" + height + """)
+- Total Frames: """ + str(total_frames) + """
 
 ---
 
@@ -220,6 +229,13 @@ Your output must be a COMPLETE, RENDERABLE Remotion entry point file with:
 4. **Composition Component** (at the end, before registerRoot)
    - Create a Composition with these required props:
      - id: A unique string identifier for your composition
+       **CRITICAL**: Composition id can ONLY contain:
+       - Letters (a-z, A-Z)
+       - Numbers (0-9)
+       - Hyphens (-)
+       - CJK characters (Chinese, Japanese, Korean)
+       **NO UNDERSCORES (_) or other special characters allowed!**
+       Example: ✅ "MyVideo-Component", ❌ "My_Video_Component"
      - component: Your exported main component
      - durationInFrames: Total number of frames (use provided value)
      - fps: Frames per second (use provided value)
@@ -280,7 +296,7 @@ Only render components when needed:
 ### Formula Display
 Create a component to display mathematical formulas:
 - Use functional component with TypeScript props interface
-- Props should include the formula string
+- Props should include formula string
 - Style with Georgia font for mathematical look
 - Large font size (48px or larger) for readability
 
@@ -294,10 +310,10 @@ Create a component to render function graphs:
 ---
 
 ## Scene Breakdown
-{}
+""" + scene_breakdown + """
 
 ## Topic-Specific Guidelines
-{}
+""" + self._get_topic_guidelines_v2(topic_category) + """
 
 ## Code Quality Checklist
 - Valid TypeScript syntax
@@ -310,38 +326,105 @@ Create a component to render function graphs:
 
 ---
 
+## JSX Syntax CRITICAL Rules
+
+**Before generating code, verify these patterns:**
+
+1. **Curly Braces in Props**: ALL number/boolean props MUST have matching opening and closing braces
+   - CORRECT: `<div width={1920} />` or `strokeWidth={5}`
+   - WRONG: `strokeWidth={5)` or `width={1920}` or `width=1920`
+   - Check every prop: opening `{` and closing `}` must match!
+
+2. **Frame Offset Syntax**: Use subtraction operator, NOT function call syntax
+   - CORRECT: `spring({ frame: frame - 60, fps, config })`
+   - WRONG: `spring({ frame: frame(60, fps, config })` - This is invalid!
+   - All frame offsets use: `frame - N` where N is the offset
+
+3. **Variable Declarations**: End with single semicolon
+   - CORRECT: `const x = 5;` or `const y = Math.floor(z * 0.25);`
+   - WRONG: `const x = 5;);` or `const y = Math.floor(z * 0.25));`
+
+4. **JSX Prop Types**:
+   - Number/boolean props: `<div prop={value} />`
+   - String props: `<div title="text" />`
+   - Never mix: `prop=value` is wrong, `prop={value}` for non-strings
+
+5. **Component Names**: Always PascalCase
+   - CORRECT: `<MyComponent />` or `<Scene1Intro />`
+   - WRONG: `<myComponent />` or `<scene1Intro />`
+
+6. **Function Parameter Destructuring**: MUST be single-line
+   - CORRECT: `const MyComp: React.FC<Props> = ({ prop1, prop2 }) => {`
+   - WRONG:
+     ```typescript
+     const MyComp: React.FC<Props> = ({
+       prop1,
+       prop2,
+     }) => {  // This breaks esbuild!
+     ```
+   - Multi-line destructuring causes esbuild parsing errors - ALWAYS use single line!
+
+**Common Mistakes to AVOID**:
+- Missing closing brace: `strokeWidth={5)` → `strokeWidth={5}`
+- Function call syntax for offsets: `frame(60` → `frame - 60`
+- Extra semicolons: `const x = 5;);` → `const x = 5;`
+- Wrong brace matching: `width={1920}` → `width={1920}`
+- Multi-line parameter destructuring: breaks esbuild - use single line!
+
+---
+
 ## Output Requirements
 
 **CRITICAL** - Your code MUST include:
-1. ✅ All required imports (including Composition and registerRoot)
-2. ✅ All component definitions (interfaces, helper components, scenes)
-3. ✅ export statement for your main component (e.g., export const MyVideo)
-4. ✅ Composition component definition with all required props
-5. ✅ registerRoot(YourMainComponent) call as the very last line
+1. All required imports (including Composition and registerRoot)
+2. All component definitions (interfaces, helper components, scenes)
+3. export statement for your main component (e.g., export const MyVideo)
+4. Composition component definition with all required props
+5. registerRoot(YourMainComponent) call as the very last line
 
 **Format Requirements**:
 - Output ONLY the complete TypeScript code
-- Wrap code in \\```typescript code blocks
+- Wrap code in \`\`\`typescript code blocks
 - No explanations outside code blocks
 - No placeholders - provide complete, working code
 - Ensure code is ready to run without modifications
 - Code must pass `remotion render` without errors
 
-Generate the complete, production-ready Remotion code now.""".format(
-    json.dumps(analysis, indent=2, ensure_ascii=False),
-    duration, fps, resolution, width, height, total_frames,
-    scene_breakdown,
-    self._get_topic_guidelines_v2(analysis['topic'].get('category', 'general'))
-)
+---
+
+## FINAL SYNTAX CHECKLIST Before Outputting Code
+
+**Before writing your code, verify:**
+
+✓ Every JSX prop with {{ has matching closing }}
+✓ Every stroke/width/height prop is like: strokeWidth={5} NOT strokeWidth={5)
+✓ All frame offsets use subtraction: frame - 60 NOT frame(60
+✓ All variable declarations end with single semicolon: const x = 5;
+✓ All spring/interpolate calls have proper syntax
+✓ No function call syntax where subtraction should be used
+✓ All braces are properly matched throughout the code
+✓ All function parameter destructuring is SINGLE-LINE only
+✓ NO multi-line parameter destructuring like: ({\n  prop,\n}) =>
+
+**Common Error Patterns - DO NOT REPEAT THESE:**
+- stroke={5) → MUST be stroke={5}
+- spring({frame: frame(60,...}) → MUST be spring({frame: frame - 60,...})
+- const x = 5;); → MUST be const x = 5;
+- width={1920} → MUST be width={1920}
+- Multi-line destructuring:
+  ```typescript
+  const Comp: React.FC<Props> = ({
+    prop,
+  }) => {};  // WRONG!
+  ```
+  MUST be:
+  ```typescript
+  const Comp: React.FC<Props> = ({ prop }) => {};  // CORRECT!
+  ```
+
+Generate complete, production-ready Remotion code now."""
 
         return prompt
-
-    def _sanitize_composition_id(self, topic_name: str) -> str:
-        """Sanitize topic name for use as composition ID."""
-        # Remove special characters, replace spaces with underscores
-        sanitized = topic_name.replace(" ", "_").replace("-", "_")
-        sanitized = "".join(c for c in sanitized if c.isalnum() or c == "_")
-        return f"{sanitized}_Video"
 
     def _format_scene_breakdown_v2(
         self,
@@ -390,6 +473,7 @@ Generate the complete, production-ready Remotion code now.""".format(
 
     def _get_topic_guidelines_v2(self, category: str) -> str:
         """Get enhanced topic-specific guidelines (v2.0)."""
+        logger.info(f"[DEBUG] _get_topic_guidelines_v2 called with category: {category}")
         guidelines = {
             "calculus": """
 **Calculus-Specific Guidelines**:

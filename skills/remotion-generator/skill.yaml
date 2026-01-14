@@ -127,4 +127,4 @@ prompt_template: |
 execution:
   handler: handler.py
   function: generate_video
-  timeout: 180000
+  timeout: 600000

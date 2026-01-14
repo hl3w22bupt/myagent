@@ -135,6 +135,7 @@ class BaseGenerator(ABC):
         Returns:
             Generated text or fallback value
         """
+        logger.info(f"[DEBUG] _llm_call_with_fallback: kwargs keys: {list(llm_kwargs.keys())}")
         try:
             response = await self.llm.generate_with_retry(
                 prompt=prompt,

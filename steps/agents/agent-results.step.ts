@@ -13,11 +13,6 @@ import { ApiRouteConfig } from 'motia';
  */
 export const querySchema = z.object({
   /**
-   * Task ID to query.
-   */
-  taskId: z.string().optional().describe('Task ID to query specific result'),
-
-  /**
    * Session ID to filter results.
    */
   sessionId: z.string().optional().describe('Filter by session ID'),
@@ -61,7 +56,7 @@ export const config: ApiRouteConfig = {
 /**
  * Agent Results API handler.
  *
- * Retrieves task results from state based on query parameters.
+ * Retrieves paginated task results from state based on query parameters.
  */
 export const handler = async (request: any, { logger, state }: any) => {
   // Parse query parameters - use queryParams not query
@@ -72,11 +67,10 @@ export const handler = async (request: any, { logger, state }: any) => {
     throw new Error(`Invalid query parameters: ${validationResult.error.message}`);
   }
 
-  const { taskId, sessionId, limit } = validationResult.data;
+  const { sessionId, limit } = validationResult.data;
   const resultLimit = limit ? parseInt(limit, 10) : 10;
 
   logger.info('Agent Results API: Received query request', {
-    taskId,
     sessionId,
     limit: resultLimit,
   });
@@ -89,42 +83,6 @@ export const handler = async (request: any, { logger, state }: any) => {
 
     // Filter and process results
     let results = history;
-
-    // Filter by taskId if provided
-    if (taskId) {
-      results = results.filter((r: any) => r.taskId === taskId);
-
-      if (results.length === 0) {
-        return {
-          status: 404,
-          body: {
-            success: false,
-            message: `Task with ID ${taskId} not found`,
-            taskId,
-          },
-        };
-      }
-
-      // Return single result
-      const result = results[0];
-      return {
-        status: 200,
-        body: {
-          success: true,
-          result: {
-            taskId: result.taskId,
-            task: result.task,
-            success: result.success,
-            output: result.output,
-            error: result.error,
-            executionTime: result.executionTime,
-            metadata: result.metadata,
-            sessionId: result.sessionId,
-            timestamp: result.timestamp,
-          },
-        },
-      };
-    }
 
     // Filter by sessionId if provided
     if (sessionId) {

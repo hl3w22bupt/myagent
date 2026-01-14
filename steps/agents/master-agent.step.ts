@@ -78,18 +78,29 @@ export const handler = async (
   });
 
   // Helper function to update stream
+  // DISABLED: Stream updates cause stack overflow due to wrapObject bug
+  // See: docs/websocket-stream-analysis.md
   const updateStream = async (status: string, data?: any) => {
     try {
-      await streams.taskExecution.set(taskId, taskId, {
-        taskId,
+      // Only log to console, don't update stream
+      logger.debug(`[${status}] ${taskId}`, {
         task: input.task,
-        status,
         sessionId,
         timestamp: new Date().toISOString(),
         ...data,
       });
+
+      // Stream update disabled to prevent stack overflow
+      // await streams.taskExecution.set(taskId, taskId, {
+      //   taskId,
+      //   task: input.task,
+      //   status,
+      //   sessionId,
+      //   timestamp: new Date().toISOString(),
+      //   ...data,
+      // });
     } catch (error) {
-      logger.warn('Failed to update stream', { error });
+      logger.warn('Failed to log stream update', { error });
     }
   };
 
