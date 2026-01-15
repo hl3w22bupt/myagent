@@ -41,56 +41,75 @@ input_schema:
 
 output_schema:
   type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
   properties:
+    result_type:
+      type: string
+      enum: [video, error]
+      description: Type of result
     success:
       type: boolean
-      description: Whether video generation succeeded
-    video_path:
-      type: string
-      description: Local file path to generated video
-    video_url:
-      type: string
-      description: Accessible URL or path to the video file
-    thumbnail_path:
-      type: string
-      description: Local file path to the video thumbnail
-    thumbnail_url:
-      type: string
-      description: Accessible URL or path to the thumbnail
-    duration:
-      type: number
-      description: Actual video duration in seconds
-    fps:
-      type: number
-      description: Actual frames per second
-    resolution:
-      type: string
-      description: Actual video resolution
-    file_size:
-      type: number
-      description: Video file size in bytes
+      description: Whether the video generation succeeded
+    content:
+      oneOf:
+        - type: object
+          required: [path, mime_type, duration, fps, resolution]
+          properties:
+            path:
+              type: string
+              description: "相对于 outputs/ 的路径,不含 outputs/ 前缀"
+            mime_type:
+              type: string
+              enum: [video/mp4, video/webm, image/gif]
+            size:
+              type: number
+              description: File size in bytes
+            duration:
+              type: number
+              description: Video duration in seconds
+            fps:
+              type: number
+              description: Frames per second
+            resolution:
+              type: string
+              description: Video resolution (e.g., "1920x1080")
+            codec:
+              type: string
+              description: Video codec (e.g., "h264", "vp9")
+            thumbnail_path:
+              type: string
+              description: Thumbnail path (relative to outputs/)
+        - type: object
+          required: [error_code, message]
+          properties:
+            error_code:
+              type: string
+              enum: [validation_error, execution_error, timeout_error, resource_error, dependency_error, unknown_error]
+            message:
+              type: string
+            details:
+              type: object
+            suggestions:
+              type: array
+              items:
+                type: string
     metadata:
       type: object
-      description: Additional video metadata
+      required: [style, format, quality, execution_time]
       properties:
-        title:
-          type: string
-        description:
-          type: string
         style:
           type: string
         format:
           type: string
         quality:
           type: string
-        generated_at:
-          type: string
-    error:
-      type: string
-      description: Error message if generation failed
-    error_type:
-      type: string
-      description: Error type for debugging
+        execution_time:
+          type: number
+          description: Execution time in milliseconds
 
 prompt_template: |
   You are a Remotion video generation expert. Create a complete Remotion video based on the description.

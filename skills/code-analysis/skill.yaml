@@ -24,23 +24,77 @@ input_schema:
 
 output_schema:
   type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
   properties:
-    score:
-      type: number
-      description: Quality score (0-100)
-    issues:
-      type: array
-      items:
-        type: object
-      description: List of issues found
-    suggestions:
-      type: array
-      items:
-        type: string
-      description: Improvement suggestions
-    metrics:
+    result_type:
+      type: string
+      enum: [report, error]
+      description: Type of result
+    success:
+      type: boolean
+      description: Whether the analysis succeeded
+    content:
+      oneOf:
+        - type: object
+          required: [type, title, summary, data]
+          properties:
+            type:
+              type: string
+              enum: [code_analysis]
+            title:
+              type: string
+            summary:
+              type: string
+            data:
+              type: object
+              required: [score, issues, suggestions, metrics]
+              properties:
+                score:
+                  type: number
+                  description: Quality score (0-100)
+                issues:
+                  type: array
+                  items:
+                    type: object
+                  description: List of issues found
+                suggestions:
+                  type: array
+                  items:
+                    type: object
+                  description: Improvement suggestions
+                metrics:
+                  type: object
+                  description: Code metrics
+        - type: object
+          required: [error_code, message]
+          properties:
+            error_code:
+              type: string
+              enum: [validation_error, execution_error, timeout_error, resource_error, dependency_error, unknown_error]
+            message:
+              type: string
+            details:
+              type: object
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
       type: object
-      description: Code metrics
+      required: [language, checks_performed, execution_time]
+      properties:
+        language:
+          type: string
+        checks_performed:
+          type: array
+          items:
+            type: string
+        execution_time:
+          type: number
 
 execution:
   handler: analyzer.py
