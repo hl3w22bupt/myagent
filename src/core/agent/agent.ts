@@ -222,7 +222,7 @@ export class Agent {
 
       console.log('[Agent] Executing PTC code in sandbox');
       const sandboxResult = await this.sandbox.execute(ptcResult.code, {
-        skills: [],
+        skills: ptcResult.selectedSkills || [],
         skillImplPath: process.cwd(),
         sessionId: this.sessionId,
         timeout: this.config.constraints?.timeout || 60000,

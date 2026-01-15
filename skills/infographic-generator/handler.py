@@ -12,8 +12,18 @@ from datetime import datetime
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent / "generators"))
+# Add parent lib for OutputBuilder (absolute path to skills/lib)
+lib_dir = Path(__file__).parent.parent.parent / "lib"
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
 
 from palettes import PALETTES
+
+try:
+    from output_builder import OutputBuilder, get_relative_path, get_file_size
+    OUTPUT_BUILDER_AVAILABLE = True
+except ImportError:
+    OUTPUT_BUILDER_AVAILABLE = False
 from templates import identify_content_type, recommend_template
 from icons import suggest_icon_for_context
 from utils import (
@@ -174,11 +184,21 @@ class InfographicGenerator:
             # Support both 'content' and 'description' as parameter names
             content = input_data.get("content") or input_data.get("description", "")
             if not content:
-                return {
-                    "success": False,
-                    "error": "Content is required",
-                    "error_type": "ValidationError",
-                }
+                if OUTPUT_BUILDER_AVAILABLE:
+                    error_output = OutputBuilder() \
+                        .set_error(
+                            error=ValueError("Content is required"),
+                            suggestions=["请提供要生成信息图的内容描述"]
+                        ) \
+                        .add_skill("infographic-generator") \
+                        .build()
+                    return error_output
+                else:
+                    return {
+                        "success": False,
+                        "error": "Content is required",
+                        "error_type": "ValidationError",
+                    }
 
             language = input_data.get("language", "auto")
             preferred_template = input_data.get("preferred_template")
@@ -277,24 +297,67 @@ class InfographicGenerator:
                 svg_path = None
                 export_url = None
 
-            result = {
-                "success": True,
-                "html_path": str(html_path),
-                "svg_path": svg_path,
-                "png_path": png_path,  # Add PNG path for fallback
-                "html_url": f"/outputs/infographics/{html_filename}",
-                "svg_url": export_url if svg_path else None,
-                "png_url": export_url if png_path else None,
-                "metadata": {
-                    "title": title,
-                    "template": template,
-                    "content_type": content_type,
-                    "theme": palette,
-                    "style": style,
-                    "dimensions": {"width": width, "height": height},
-                    "generated_at": format_timestamp(),
-                },
-            }
+            # Build standardized output using OutputBuilder
+            if OUTPUT_BUILDER_AVAILABLE:
+                # Determine actual output file (prefer PNG)
+                actual_output_path = None
+                actual_mime_type = None
+
+                if png_path and png_path.exists():
+                    actual_output_path = png_path
+                    actual_mime_type = "image/png"
+                elif svg_path and svg_path.exists():
+                    actual_output_path = svg_path
+                    actual_mime_type = "image/svg+xml"
+                else:
+                    actual_output_path = html_path
+                    actual_mime_type = "text/html"
+
+                # Get file information
+                relative_path = get_relative_path(actual_output_path)
+                file_size = get_file_size(actual_output_path)
+
+                # Use OutputBuilder to build standardized output
+                result = OutputBuilder() \
+                    .set_infographic(
+                        path=relative_path,
+                        mime_type=actual_mime_type,
+                        size=file_size,
+                        width=width,
+                        height=height,
+                        template=template,
+                        chart_type=content_type,
+                        theme=theme_input if theme_input != "auto" else None,
+                        style=style
+                    ) \
+                    .set_title(title) \
+                    .add_skill("infographic-generator") \
+                    .add_standard_metadata("template", template) \
+                    .add_standard_metadata("content_type", content_type) \
+                    .add_standard_metadata("theme", palette) \
+                    .add_standard_metadata("style", style) \
+                    .add_standard_metadata("dimensions", {"width": width, "height": height}) \
+                    .build()
+            else:
+                # Fallback to old format if OutputBuilder not available
+                result = {
+                    "success": True,
+                    "html_path": str(html_path),
+                    "svg_path": svg_path,
+                    "png_path": png_path,
+                    "html_url": f"/outputs/infographics/{html_filename}",
+                    "svg_url": export_url if svg_path else None,
+                    "png_url": export_url if png_path else None,
+                    "metadata": {
+                        "title": title,
+                        "template": template,
+                        "content_type": content_type,
+                        "theme": palette,
+                        "style": style,
+                        "dimensions": {"width": width, "height": height},
+                        "generated_at": format_timestamp(),
+                    },
+                }
 
             return result
 
@@ -302,7 +365,23 @@ class InfographicGenerator:
             import traceback
 
             traceback.print_exc()
-            return {"success": False, "error": str(e), "error_type": type(e).__name__}
+
+            # Build standardized error output
+            if OUTPUT_BUILDER_AVAILABLE:
+                error_output = OutputBuilder() \
+                    .set_error(
+                        error=e,
+                        suggestions=[
+                            "检查输入内容格式是否正确",
+                            "尝试简化内容描述",
+                            "如果问题持续,请查看错误日志"
+                        ]
+                    ) \
+                    .add_skill("infographic-generator") \
+                    .build()
+                return error_output
+            else:
+                return {"success": False, "error": str(e), "error_type": type(e).__name__}
 
     def _generate_config_json(
         self,
