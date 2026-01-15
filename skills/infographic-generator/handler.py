@@ -12,8 +12,18 @@ from datetime import datetime
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent / "generators"))
+# Add parent lib for OutputBuilder (absolute path to skills/lib)
+lib_dir = Path(__file__).parent.parent.parent / "lib"
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
 
 from palettes import PALETTES
+
+try:
+    from output_builder import OutputBuilder, get_relative_path, get_file_size
+    OUTPUT_BUILDER_AVAILABLE = True
+except ImportError:
+    OUTPUT_BUILDER_AVAILABLE = False
 from templates import identify_content_type, recommend_template
 from icons import suggest_icon_for_context
 from utils import (
