@@ -68,6 +68,19 @@ def parse_list_items(content: str) -> list:
     """
     items = []
 
+    # Try numbered list with comma separator (e.g., "1. A, 2. B, 3. C" or "1. A、2. B、3. C")
+    # This handles AI-generated descriptions like "include these 5 stages: 1. A, 2. B, 3. C"
+    # Also handles ending with period: "1. A, 2. B, 3. C."
+    numbered_comma_pattern = r'\d+\.\s*([^,，.。]+?)(?=\s*[,，.。])'
+    numbered_comma_matches = re.findall(numbered_comma_pattern, content)
+
+    if numbered_comma_matches and len(numbered_comma_matches) > 1:
+        items = [match.strip() for match in numbered_comma_matches if match.strip()]
+        # Remove items that are too short or too long
+        items = [item for item in items if 2 <= len(item) <= 50]
+        if items and len(items) > 1:
+            return items
+
     # Try inline numbered list first (e.g., "1. Item...; 2. Item...; 3. Item...")
     # This handles cases where all items are on the same line or in a paragraph
     # Pattern: "1. Label: description; 2. Label: description;" or "1. Label - description; 2. Label - description;"
