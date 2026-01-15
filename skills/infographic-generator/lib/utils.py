@@ -68,6 +68,19 @@ def parse_list_items(content: str) -> list:
     """
     items = []
 
+    # Try numbered list with comma separator (e.g., "1. A, 2. B, 3. C" or "1. A、2. B、3. C")
+    # This handles AI-generated descriptions like "include these 5 stages: 1. A, 2. B, 3. C"
+    # Also handles ending with period: "1. A, 2. B, 3. C."
+    numbered_comma_pattern = r'\d+\.\s*([^,，.。]+?)(?=\s*[,，.。])'
+    numbered_comma_matches = re.findall(numbered_comma_pattern, content)
+
+    if numbered_comma_matches and len(numbered_comma_matches) > 1:
+        items = [match.strip() for match in numbered_comma_matches if match.strip()]
+        # Remove items that are too short or too long
+        items = [item for item in items if 2 <= len(item) <= 50]
+        if items and len(items) > 1:
+            return items
+
     # Try inline numbered list first (e.g., "1. Item...; 2. Item...; 3. Item...")
     # This handles cases where all items are on the same line or in a paragraph
     # Pattern: "1. Label: description; 2. Label: description;" or "1. Label - description; 2. Label - description;"
@@ -133,6 +146,36 @@ def parse_list_items(content: str) -> list:
                 label = match
             items.append(label)
         if items:
+            return items
+
+    # Try Chinese comma-separated list (e.g., "Item1、Item2、Item3" or "Item1,Item2,Item3")
+    # This handles common Chinese punctuation
+    # First, check if there's a colon with list indicator after it
+    list_start_pattern = r'[:：][：:\s]*(.*?)(?:$|\.|。|!|！)'
+    list_match = re.search(list_start_pattern, content)
+
+    if list_match:
+        # Only parse the part after the colon
+        content_to_parse = list_match.group(1)
+    else:
+        # Check for common list indicator keywords
+        indicator_pattern = r'(?:包括|包含|如下|为|有)[：:\s]+(.*?)(?:$|\.|。|!|！)'
+        indicator_match = re.search(indicator_pattern, content)
+        if indicator_match:
+            content_to_parse = indicator_match.group(1)
+        else:
+            # Use entire content
+            content_to_parse = content
+
+    comma_pattern = r'[^、,，]+(?=[、,，]|$)'
+    comma_matches = re.findall(comma_pattern, content_to_parse)
+
+    # Filter out common phrases that aren't actual items
+    if comma_matches and len(comma_matches) > 1:
+        items = [match.strip() for match in comma_matches if match.strip()]
+        # Remove items that are too short (likely noise) or too long (likely sentences)
+        items = [item for item in items if 2 <= len(item) <= 50]
+        if items and len(items) > 1:
             return items
 
     # Fallback: split by newlines and clean up
