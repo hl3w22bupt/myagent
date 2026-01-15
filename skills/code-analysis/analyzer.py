@@ -5,7 +5,21 @@ Analyzes code quality, complexity, and potential issues.
 """
 
 import re
-from typing import Dict, Any, List
+import sys
+import time
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+# Add parent lib for OutputBuilder (absolute path to skills/lib)
+lib_dir = Path(__file__).parent.parent / "lib"
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
+
+try:
+    from output_builder import OutputBuilder
+    OUTPUT_BUILDER_AVAILABLE = True
+except ImportError:
+    OUTPUT_BUILDER_AVAILABLE = False
 
 
 def analyze(input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -19,46 +33,113 @@ def analyze(input_data: Dict[str, Any]) -> Dict[str, Any]:
             - checks: List of checks to perform
 
     Returns:
-        Dictionary with analysis results
+        Dictionary with analysis results in unified format
     """
+    start_time = time.time()
+
     code = input_data.get('code', '')
     language = input_data.get('language', 'python')
     checks = input_data.get('checks', ['quality', 'complexity', 'security'])
+
+    # Input validation
+    if not code or not code.strip():
+        if OUTPUT_BUILDER_AVAILABLE:
+            return OutputBuilder() \
+                .set_error(
+                    error=ValueError("Code content is required for analysis"),
+                    suggestions=[
+                        "Provide source code to analyze",
+                        "Ensure code field is not empty"
+                    ]
+                ) \
+                .build()
+        else:
+            # Fallback to old format
+            return {
+                "error": "Code content is required",
+                "details": {"field": "code"}
+            }
 
     issues = []
     suggestions = []
     metrics = {}
 
-    # Language-specific analysis
-    if language == 'python':
-        issues_py, suggestions_py, metrics_py = _analyze_python(code)
-        issues.extend(issues_py)
-        suggestions.extend(suggestions_py)
-        metrics.update(metrics_py)
+    try:
+        # Language-specific analysis
+        if language == 'python':
+            issues_py, suggestions_py, metrics_py = _analyze_python(code)
+            issues.extend(issues_py)
+            suggestions.extend(suggestions_py)
+            metrics.update(metrics_py)
 
-    elif language in ['javascript', 'typescript']:
-        issues_js, suggestions_js, metrics_js = _analyze_javascript(code)
-        issues.extend(issues_js)
-        suggestions.extend(suggestions_js)
-        metrics.update(metrics_js)
+        elif language in ['javascript', 'typescript']:
+            issues_js, suggestions_js, metrics_js = _analyze_javascript(code)
+            issues.extend(issues_js)
+            suggestions.extend(suggestions_js)
+            metrics.update(metrics_js)
 
-    # Calculate quality score
-    base_score = 100
-    critical_count = 0
-    for s in suggestions:
-        if isinstance(s, dict) and 'critical' in str(s).lower():
-            critical_count += 1
+        # Calculate quality score
+        base_score = 100
+        critical_count = 0
+        for s in suggestions:
+            if isinstance(s, dict) and 'critical' in str(s).lower():
+                critical_count += 1
 
-    score = base_score - (len(issues) * 5) - (critical_count * 10)
-    score = max(0, min(100, score))
+        score = base_score - (len(issues) * 5) - (critical_count * 10)
+        score = max(0, min(100, score))
 
-    return {
-        "score": score,
-        "issues": issues,
-        "suggestions": suggestions,
-        "metrics": metrics,
-        "language": language
-    }
+        # Build summary
+        issue_count = len(issues)
+        suggestion_count = len(suggestions)
+        summary = f"Found {issue_count} issue{'s' if issue_count != 1 else ''}, {suggestion_count} suggestion{'s' if suggestion_count != 1 else ''}"
+
+        # Use OutputBuilder if available
+        if OUTPUT_BUILDER_AVAILABLE:
+            builder = OutputBuilder()
+            builder._result_type = "report"
+            builder._content = {
+                "type": "code_analysis",
+                "title": f"{language.upper()} Code Analysis",
+                "summary": summary,
+                "data": {
+                    "score": score,
+                    "issues": issues,
+                    "suggestions": suggestions,
+                    "metrics": metrics
+                }
+            }
+            builder.add_standard_metadata("language", language) \
+                   .add_standard_metadata("checks_performed", checks)
+            return builder.build()
+        else:
+            # Fallback to old format for backward compatibility
+            return {
+                "score": score,
+                "issues": issues,
+                "suggestions": suggestions,
+                "metrics": metrics,
+                "language": language
+            }
+
+    except Exception as e:
+        # Error handling with OutputBuilder
+        if OUTPUT_BUILDER_AVAILABLE:
+            return OutputBuilder() \
+                .set_error(
+                    error=e,
+                    suggestions=[
+                        "Check if the code syntax is valid",
+                        "Ensure the language is supported"
+                    ]
+                ) \
+                .add_standard_metadata("language", language) \
+                .build()
+        else:
+            # Fallback error format
+            return {
+                "error": str(e),
+                "language": language
+            }
 
 
 def _analyze_python(code: str) -> tuple:
