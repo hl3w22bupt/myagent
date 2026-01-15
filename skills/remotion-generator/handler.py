@@ -19,6 +19,17 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
 
+# Add parent lib for OutputBuilder (absolute path to skills/lib)
+lib_dir = Path(__file__).parent.parent / "lib"
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
+
+try:
+    from output_builder import OutputBuilder, get_relative_path, MediaInfo
+    OUTPUT_BUILDER_AVAILABLE = True
+except ImportError:
+    OUTPUT_BUILDER_AVAILABLE = False
+
 # Configure logging to show INFO level messages
 logging.basicConfig(
     level=logging.INFO,
@@ -83,8 +94,10 @@ class RemotionVideoGenerator:
             input_data: Video generation parameters
 
         Returns:
-            Structured result for downstream skill consumption
+            Structured result in unified output format
         """
+        start_time = time.time()
+
         try:
             # DEBUG: Log input_data to understand what's being passed
             print(f"[DEBUG] generate_video called with input_data type: {type(input_data)}")
@@ -171,41 +184,88 @@ class RemotionVideoGenerator:
             # Get file info
             file_size = video_info['video_path'].stat().st_size if video_info['video_path'].exists() else 0
 
-            # Return structured data for downstream skills
-            return {
-                "success": True,
-                "video_path": str(video_info['video_path']),
-                "video_url": str(video_info['video_path']),  # Use actual file path
-                "thumbnail_path": str(thumbnail_info['thumbnail_path']) if thumbnail_info else None,
-                "thumbnail_url": str(thumbnail_info['thumbnail_path']) if thumbnail_info else None,
-                "duration": video_info['actual_duration'],
-                "fps": video_info['actual_fps'],
-                "resolution": video_info['actual_resolution'],
-                "file_size": file_size,
-                "metadata": {
-                    "title": self._extract_title(description),
-                    "description": description[:200],  # Truncate for metadata
-                    "style": style,
-                    "format": output_format,
-                    "quality": quality,
-                    "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")
+            # Use OutputBuilder if available
+            if OUTPUT_BUILDER_AVAILABLE:
+                # Get relative path for output
+                relative_video_path = get_relative_path(video_info['video_path'])
+                relative_thumbnail_path = get_relative_path(thumbnail_info['thumbnail_path']) if thumbnail_info else None
+
+                # Determine mime type based on format
+                mime_type_map = {
+                    'mp4': 'video/mp4',
+                    'webm': 'video/webm',
+                    'gif': 'image/gif'
                 }
-            }
+                mime_type = mime_type_map.get(output_format, 'video/mp4')
+
+                # Create MediaInfo object
+                media_info = MediaInfo(
+                    path=relative_video_path,
+                    mime_type=mime_type,
+                    size=file_size,
+                    duration=video_info['actual_duration'],
+                    fps=int(video_info['actual_fps']) if video_info['actual_fps'] else None,
+                    thumbnail_path=relative_thumbnail_path
+                )
+
+                return OutputBuilder() \
+                    .set_media(media_info=media_info) \
+                    .add_standard_metadata("style", style) \
+                    .add_standard_metadata("format", output_format) \
+                    .add_standard_metadata("quality", quality) \
+                    .build()
+            else:
+                # Fallback to old format for backward compatibility
+                return {
+                    "success": True,
+                    "video_path": str(video_info['video_path']),
+                    "video_url": str(video_info['video_path']),  # Use actual file path
+                    "thumbnail_path": str(thumbnail_info['thumbnail_path']) if thumbnail_info else None,
+                    "thumbnail_url": str(thumbnail_info['thumbnail_path']) if thumbnail_info else None,
+                    "duration": video_info['actual_duration'],
+                    "fps": video_info['actual_fps'],
+                    "resolution": video_info['actual_resolution'],
+                    "file_size": file_size,
+                    "metadata": {
+                        "title": self._extract_title(description),
+                        "description": description[:200],  # Truncate for metadata
+                        "style": style,
+                        "format": output_format,
+                        "quality": quality,
+                        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                }
 
         except Exception as e:
             print(f"[DEBUG] Exception in generate_video: {type(e).__name__}: {str(e)}")
             logging.error(f"[DEBUG] Exception in generate_video: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
-            return {
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "video_path": None,
-                "video_url": None,
-                "thumbnail_path": None,
-                "thumbnail_url": None
-            }
+
+            # Use OutputBuilder for error handling if available
+            if OUTPUT_BUILDER_AVAILABLE:
+                return OutputBuilder() \
+                    .set_error(
+                        error=e,
+                        suggestions=[
+                            "Check if Remotion is properly installed",
+                            "Ensure the video description is clear and specific",
+                            "Verify output directory has write permissions",
+                            "Try reducing video duration or resolution"
+                        ]
+                    ) \
+                    .build()
+            else:
+                # Fallback to old error format
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "video_path": None,
+                    "video_url": None,
+                    "thumbnail_path": None,
+                    "thumbnail_url": None
+                }
 
     async def _generate_remotion_code(
         self,
