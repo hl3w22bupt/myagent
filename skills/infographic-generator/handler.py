@@ -184,11 +184,21 @@ class InfographicGenerator:
             # Support both 'content' and 'description' as parameter names
             content = input_data.get("content") or input_data.get("description", "")
             if not content:
-                return {
-                    "success": False,
-                    "error": "Content is required",
-                    "error_type": "ValidationError",
-                }
+                if OUTPUT_BUILDER_AVAILABLE:
+                    error_output = OutputBuilder() \
+                        .set_error(
+                            error=ValueError("Content is required"),
+                            suggestions=["请提供要生成信息图的内容描述"]
+                        ) \
+                        .add_skill("infographic-generator") \
+                        .build()
+                    return error_output
+                else:
+                    return {
+                        "success": False,
+                        "error": "Content is required",
+                        "error_type": "ValidationError",
+                    }
 
             language = input_data.get("language", "auto")
             preferred_template = input_data.get("preferred_template")
@@ -355,7 +365,23 @@ class InfographicGenerator:
             import traceback
 
             traceback.print_exc()
-            return {"success": False, "error": str(e), "error_type": type(e).__name__}
+
+            # Build standardized error output
+            if OUTPUT_BUILDER_AVAILABLE:
+                error_output = OutputBuilder() \
+                    .set_error(
+                        error=e,
+                        suggestions=[
+                            "检查输入内容格式是否正确",
+                            "尝试简化内容描述",
+                            "如果问题持续,请查看错误日志"
+                        ]
+                    ) \
+                    .add_skill("infographic-generator") \
+                    .build()
+                return error_output
+            else:
+                return {"success": False, "error": str(e), "error_type": type(e).__name__}
 
     def _generate_config_json(
         self,
