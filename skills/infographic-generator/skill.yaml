@@ -72,31 +72,140 @@ input_schema:
 
 output_schema:
   type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
   properties:
+    result_type:
+      type: string
+      enum: [infographic, error]
+      description: "结果类型: infographic(成功) 或 error(失败)"
+
     success:
       type: boolean
-      description: Whether infographic generation succeeded
-    html_path:
+      description: "是否成功"
+
+    content:
+      oneOf:
+        # 成功情况 - infographic 内容
+        - type: object
+          required: [path, mime_type]
+          properties:
+            path:
+              type: string
+              description: "相对于 outputs/ 的路径,不含 outputs/ 前缀"
+              example: "infographics/task_123_infographic_1.png"
+            mime_type:
+              type: string
+              enum: ["image/svg+xml", "image/png"]
+              description: "MIME 类型"
+            size:
+              type: integer
+              description: "文件大小(字节)"
+              example: 12345
+            width:
+              type: integer
+              description: "宽度(像素)"
+              example: 1920
+            height:
+              type: integer
+              description: "高度(像素)"
+              example: 1080
+            thumbnail_path:
+              type: string
+              description: "缩略图路径(相对于 outputs/)"
+              example: "thumbnails/infographics/task_123_infographic_1.jpg"
+            template:
+              type: string
+              description: "模板类型"
+              enum: [list, compare, sequence, hierarchy, quadrant, relation, geo, chart]
+            chart_type:
+              type: string
+              description: "图表类型"
+            theme:
+              type: string
+              description: "主题配色"
+              enum: [business, tech, nature, warm, cool, monochrome]
+            style:
+              type: string
+              description: "视觉风格"
+              enum: [rough, pattern, linear-gradient, radial-gradient]
+
+        # 失败情况 - error 内容
+        - type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+              enum: [validation, execution, timeout, network, resource, permission, dependency, unknown]
+              description: "错误类型"
+            message:
+              type: string
+              description: "用户友好的错误消息"
+            details:
+              type: string
+              description: "详细错误信息(技术细节)"
+            retryable:
+              type: boolean
+              description: "是否可重试"
+              default: false
+            suggestions:
+              type: array
+              items:
+                type: string
+              description: "建议的解决方案"
+            code:
+              type: string
+              description: "错误代码"
+
+    title:
       type: string
-      description: Local file path to generated HTML file
-    svg_path:
+      description: "输出标题"
+
+    description:
       type: string
-      description: Local file path to generated SVG file
-    html_url:
-      type: string
-      description: Accessible URL to HTML file
-    svg_url:
-      type: string
-      description: Accessible URL to SVG file
+      description: "输出描述"
+
     metadata:
       type: object
-      description: Additional metadata about generated infographic
-    error:
-      type: string
-      description: Error message if generation failed
-    error_type:
-      type: string
-      description: Error type for debugging
+      required: [execution_time, skills_used]
+      properties:
+        execution_time:
+          type: integer
+          description: "执行时间(毫秒)"
+          example: 45000
+        skills_used:
+          type: array
+          items:
+            type: string
+          description: "使用的 skill 列表"
+          example: ["infographic-generator"]
+        tags:
+          type: array
+          items:
+            type: string
+          description: "标签"
+        template:
+          type: string
+          description: "模板类型"
+        content_type:
+          type: string
+          description: "内容类型"
+        theme:
+          type: string
+          description: "主题"
+        style:
+          type: string
+          description: "风格"
+        dimensions:
+          type: object
+          properties:
+            width:
+              type: integer
+            height:
+              type: integer
 
 prompt_template: |
   You are an AntV Infographic generation expert. Create a complete infographic based on content description.
