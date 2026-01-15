@@ -135,6 +135,36 @@ def parse_list_items(content: str) -> list:
         if items:
             return items
 
+    # Try Chinese comma-separated list (e.g., "Item1、Item2、Item3" or "Item1,Item2,Item3")
+    # This handles common Chinese punctuation
+    # First, check if there's a colon with list indicator after it
+    list_start_pattern = r'[:：][：:\s]*(.*?)(?:$|\.|。|!|！)'
+    list_match = re.search(list_start_pattern, content)
+
+    if list_match:
+        # Only parse the part after the colon
+        content_to_parse = list_match.group(1)
+    else:
+        # Check for common list indicator keywords
+        indicator_pattern = r'(?:包括|包含|如下|为|有)[：:\s]+(.*?)(?:$|\.|。|!|！)'
+        indicator_match = re.search(indicator_pattern, content)
+        if indicator_match:
+            content_to_parse = indicator_match.group(1)
+        else:
+            # Use entire content
+            content_to_parse = content
+
+    comma_pattern = r'[^、,，]+(?=[、,，]|$)'
+    comma_matches = re.findall(comma_pattern, content_to_parse)
+
+    # Filter out common phrases that aren't actual items
+    if comma_matches and len(comma_matches) > 1:
+        items = [match.strip() for match in comma_matches if match.strip()]
+        # Remove items that are too short (likely noise) or too long (likely sentences)
+        items = [item for item in items if 2 <= len(item) <= 50]
+        if items and len(items) > 1:
+            return items
+
     # Fallback: split by newlines and clean up
     if "\n" in content:
         items = [line.strip() for line in content.split("\n") if line.strip()]
