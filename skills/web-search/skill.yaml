@@ -18,13 +18,69 @@ input_schema:
 
 output_schema:
   type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
   properties:
-    results:
-      type: array
-      items:
-        type: object
-    total:
-      type: number
+    result_type:
+      type: string
+      enum: [table, mixed, error]
+      description: Type of result
+    success:
+      type: boolean
+      description: Whether the search succeeded
+    content:
+      oneOf:
+        - type: object
+          required: [type, title, columns, rows]
+          properties:
+            type:
+              type: string
+              enum: [search_results]
+            title:
+              type: string
+            columns:
+              type: array
+              items:
+                type: string
+              description: Column headers
+            rows:
+              type: array
+              items:
+                type: array
+                description: Table rows (each row is an array of cell values)
+            total:
+              type: number
+              description: Total number of results
+        - type: object
+          required: [error_code, message]
+          properties:
+            error_code:
+              type: string
+              enum: [validation_error, execution_error, timeout_error, network_error, resource_error, unknown_error]
+            message:
+              type: string
+            details:
+              type: object
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
+      type: object
+      required: [query, search_engine, result_count, execution_time]
+      properties:
+        query:
+          type: string
+        search_engine:
+          type: string
+        result_count:
+          type: number
+        execution_time:
+          type: number
+          description: Execution time in milliseconds
 
 prompt_template: |
   You are a web search assistant. Search for "{{query}}" and return the top {{limit}} results.
