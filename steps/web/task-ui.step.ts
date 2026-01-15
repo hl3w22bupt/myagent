@@ -703,6 +703,840 @@ export const handler = async (request: any, { logger }: any) => {
         gap: 0.5rem;
       }
     }
+
+    /* ========================================
+       RESULT RENDERER STYLES
+       ======================================== */
+
+    /* Result Container */
+    .result-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .result-title {
+      margin-bottom: 1rem;
+    }
+
+    .result-title h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .result-description {
+      margin-bottom: 1rem;
+      padding: 0.75rem;
+      background: rgba(59, 130, 246, 0.08);
+      border-left: 3px solid var(--primary);
+      border-radius: 0.375rem;
+    }
+
+    .result-description p {
+      margin: 0;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    /* Text Renderer */
+    .text-content {
+      margin-bottom: 1rem;
+    }
+
+    .text-display {
+      background: var(--bg-tertiary);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text-primary);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    /* Table Renderer */
+    .table-controls {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .table-search {
+      flex: 1;
+      min-width: 200px;
+      padding: 0.625rem 0.875rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .table-search:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .table-export-btn {
+      padding: 0.625rem 1rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .table-export-btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .table-content {
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .data-table thead {
+      background: var(--bg-tertiary);
+    }
+
+    .data-table th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s ease;
+    }
+
+    .data-table th:hover {
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .data-table th.sortable {
+      position: relative;
+    }
+
+    .sort-indicator {
+      margin-left: 0.5rem;
+      opacity: 0.5;
+      font-size: 0.75rem;
+    }
+
+    .data-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .data-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tbody tr:hover {
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .table-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .row-count {
+      color: var(--text-secondary);
+    }
+
+    /* Infographic Renderer */
+    .infographic-container {
+      margin-bottom: 1rem;
+    }
+
+    .infographic-controls {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .fullscreen-btn,
+    .download-btn {
+      padding: 0.5rem 0.875rem;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .fullscreen-btn:hover,
+    .download-btn:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .infographic-wrapper {
+      background: var(--bg-tertiary);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .infographic-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 0.375rem;
+    }
+
+    .file-metadata {
+      display: flex;
+      gap: 1rem;
+      padding: 0.75rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .file-size,
+    .file-type {
+      color: var(--text-secondary);
+    }
+
+    /* Fullscreen Modal */
+    .fullscreen-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .fullscreen-content {
+      position: relative;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .fullscreen-close {
+      position: absolute;
+      top: -2.5rem;
+      right: 0;
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 2rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      line-height: 1;
+      transition: transform 0.2s ease;
+    }
+
+    .fullscreen-close:hover {
+      transform: scale(1.1);
+    }
+
+    .fullscreen-image {
+      max-width: 100%;
+      max-height: calc(100vh - 4rem);
+      object-fit: contain;
+    }
+
+    /* Video Renderer */
+    .video-container {
+      margin-bottom: 1rem;
+    }
+
+    .video-player {
+      width: 100%;
+      border-radius: 0.5rem;
+      background: var(--bg-tertiary);
+    }
+
+    .video-metadata {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.5rem;
+    }
+
+    .video-metadata-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+    }
+
+    .video-metadata-item .metadata-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .video-metadata-item .metadata-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .video-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    /* Report Renderer */
+    .report-summary {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: rgba(16, 185, 129, 0.08);
+      border-left: 3px solid var(--success);
+      border-radius: 0.375rem;
+    }
+
+    .report-summary p {
+      margin: 0;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .report-type-badge {
+      margin-bottom: 1rem;
+    }
+
+    .report-type-badge .badge {
+      display: inline-block;
+      padding: 0.375rem 0.75rem;
+      background: var(--primary);
+      color: white;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .report-sections {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .report-section {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .report-section:hover {
+      border-color: var(--primary);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.875rem 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .section-toggle {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      transition: transform 0.2s ease;
+    }
+
+    .section-content {
+      padding: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Score Display */
+    .score-display {
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .score-circle {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    .score-excellent .score-circle {
+      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    }
+
+    .score-good .score-circle {
+      background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+    }
+
+    .score-fair .score-circle {
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    }
+
+    .score-poor .score-circle {
+      background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+    }
+
+    .score-value {
+      font-size: 2rem;
+    }
+
+    /* Issues List */
+    .issues-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .issue-item {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+      border-left: 3px solid var(--error);
+    }
+
+    .issue-number {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--error);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .issue-content {
+      flex: 1;
+    }
+
+    .issue-message {
+      margin: 0 0 0.375rem 0;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+    }
+
+    .issue-severity {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .severity-high {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--error);
+    }
+
+    .severity-medium {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .severity-low {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--primary);
+    }
+
+    .issue-location {
+      margin: 0.375rem 0 0 0;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Suggestions List */
+    .suggestions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .suggestion-item {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+    }
+
+    .suggestion-bullet {
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+
+    .suggestion-text {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .metric-item {
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+    }
+
+    .metric-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .metric-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Generic Data List */
+    .generic-data-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .generic-data-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+    }
+
+    .data-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .data-value {
+      margin: 0;
+      padding: 0.5rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      overflow-x: auto;
+    }
+
+    /* Error Renderer */
+    .error-container {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem;
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .error-icon {
+      flex-shrink: 0;
+      font-size: 2rem;
+    }
+
+    .error-content {
+      flex: 1;
+    }
+
+    .error-title {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--error);
+    }
+
+    .error-code {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      background: var(--error);
+      color: white;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+
+    .error-message {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+    }
+
+    .error-suggestions {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.5rem;
+    }
+
+    .suggestions-title {
+      margin: 0 0 0.75rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .error-suggestions .suggestions-list {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+
+    .error-suggestions .suggestion-item {
+      margin-bottom: 0.375rem;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .retry-btn {
+      padding: 0.625rem 1rem;
+      background: var(--warning);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .retry-btn:hover {
+      background: #D97706;
+      transform: translateY(-1px);
+    }
+
+    .copy-error-btn {
+      padding: 0.625rem 1rem;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .copy-error-btn:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .copy-error-btn.copied {
+      background: var(--success);
+      color: white;
+      border-color: var(--success);
+    }
+
+    /* Result Metadata */
+    .result-metadata {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--bg-tertiary);
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .result-metadata .metadata-item {
+      display: flex;
+      gap: 0.375rem;
+    }
+
+    .result-metadata .metadata-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .result-metadata .metadata-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Unknown Result Type */
+    .unknown-type {
+      border-color: var(--warning);
+    }
+
+    .unknown-result {
+      padding: 1rem;
+      background: rgba(245, 158, 11, 0.08);
+      border-radius: 0.5rem;
+    }
+
+    .unknown-message {
+      margin: 0 0 0.75rem 0;
+      color: var(--warning);
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .unknown-data {
+      margin: 0;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      overflow-x: auto;
+      color: var(--text-secondary);
+    }
+
+    /* Render Error */
+    .render-error {
+      border-color: var(--error);
+    }
+
+    .render-error-content {
+      padding: 1rem;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 0.5rem;
+    }
+
+    .render-error-content h4 {
+      margin: 0 0 0.5rem 0;
+      color: var(--error);
+      font-size: 1rem;
+    }
+
+    .render-error-content .error-message {
+      margin-bottom: 0.75rem;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+    }
+
+    .render-error-content details {
+      margin-top: 0.75rem;
+    }
+
+    .render-error-content summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .render-error-content pre {
+      margin: 0.75rem 0 0 0;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 0.375rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      overflow-x: auto;
+      color: var(--text-secondary);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .table-controls {
+        flex-direction: column;
+      }
+
+      .table-search {
+        min-width: 100%;
+      }
+
+      .infographic-controls {
+        flex-direction: column;
+      }
+
+      .video-metadata {
+        grid-template-columns: 1fr;
+      }
+
+      .file-metadata {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -782,6 +1616,965 @@ export const handler = async (request: any, { logger }: any) => {
   </div>
 
   <script>
+    // Base Renderer
+    class BaseResultRenderer {
+      constructor(result) {
+        this.result = result;
+        this.element = null;
+      }
+
+      render() {
+        throw new Error('render() must be implemented by subclass');
+      }
+
+      getFileUrl(path) {
+        return \`/outputs/\${path}\`;
+      }
+
+      formatFileSize(bytes) {
+        if (!bytes) return '';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+          size /= 1024;
+          unitIndex++;
+        }
+        return \`\${size.toFixed(1)} \${units[unitIndex]}\`;
+      }
+
+      formatDuration(seconds) {
+        if (!seconds) return '';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return mins > 0 ? \`\${mins}m \${secs}s\` : \`\${secs}s\`;
+      }
+
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      createContainer() {
+        const container = document.createElement('div');
+        container.className = 'result-container';
+        return container;
+      }
+
+      createMetadata() {
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'result-metadata';
+        const metadata = this.result.metadata || {};
+        const entries = Object.entries(metadata);
+        if (entries.length === 0) {
+          metaDiv.style.display = 'none';
+          return metaDiv;
+        }
+        entries.forEach(([key, value]) => {
+          const item = document.createElement('div');
+          item.className = 'metadata-item';
+          item.innerHTML = \`
+            <span class="metadata-label">\${this.escapeHtml(key)}:</span>
+            <span class="metadata-value">\${this.escapeHtml(String(value))}</span>
+          \`;
+          metaDiv.appendChild(item);
+        });
+        return metaDiv;
+      }
+    }
+
+    // Text Renderer
+    class TextRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { text, title } = this.result.content;
+
+        let html = '';
+
+        if (title) {
+          html += \`
+            <div class="result-title">
+              <h3>\${this.escapeHtml(title)}</h3>
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="text-content">
+            <pre class="text-display">\${this.escapeHtml(text)}</pre>
+          </div>
+        \`;
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+        return container;
+      }
+    }
+
+    // Table Renderer
+    class TableRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { type, title, columns, rows } = this.result.content;
+
+        let html = '';
+
+        if (title) {
+          html += \`
+            <div class="result-title">
+              <h3>\${this.escapeHtml(title)}</h3>
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="table-controls">
+            <input
+              type="text"
+              class="table-search"
+              placeholder="Search table..."
+              data-table-id="\${this.getTableId()}"
+            />
+            <button class="table-export-btn" data-table-id="\${this.getTableId()}">
+              Export CSV
+            </button>
+          </div>
+        \`;
+
+        html += \`
+          <div class="table-content">
+            <table class="data-table" id="\${this.getTableId()}">
+              <thead>
+                <tr>
+                  \${columns.map((col, index) => \`
+                    <th class="sortable" data-column="\${index}">
+                      \${this.escapeHtml(col)}
+                      <span class="sort-indicator">↕</span>
+                    </th>
+                  \`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                \${rows.map((row, rowIndex) => \`
+                  <tr data-row="\${rowIndex}">
+                    \${row.map((cell, cellIndex) => \`
+                      <td data-column="\${cellIndex}">\${this.escapeHtml(String(cell))}</td>
+                    \`).join('')}
+                  </tr>
+                \`).join('')}
+              </tbody>
+            </table>
+          </div>
+        \`;
+
+        html += \`
+          <div class="table-info">
+            <span class="row-count">\${rows.length} rows</span>
+          </div>
+        \`;
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+
+        setTimeout(() => this.attachEventHandlers(), 0);
+        return container;
+      }
+
+      getTableId() {
+        return \`table-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
+      }
+
+      attachEventHandlers() {
+        const table = document.getElementById(this.getTableId());
+        if (!table) return;
+
+        table.querySelectorAll('th.sortable').forEach(th => {
+          th.addEventListener('click', () => {
+            const column = parseInt(th.dataset.column);
+            this.sortTable(column, th);
+          });
+        });
+
+        const searchInput = document.querySelector(\`.table-search[data-table-id="\${this.getTableId()}"]\`);
+        if (searchInput) {
+          searchInput.addEventListener('input', (e) => {
+            this.searchTable(e.target.value);
+          });
+        }
+
+        const exportBtn = document.querySelector(\`.table-export-btn[data-table-id="\${this.getTableId()}"]\`);
+        if (exportBtn) {
+          exportBtn.addEventListener('click', () => {
+            this.exportCSV();
+          });
+        }
+      }
+
+      sortTable(columnIndex, headerElement) {
+        const table = document.getElementById(this.getTableId());
+        if (!table) return;
+
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        const currentSort = headerElement.dataset.sort || 'none';
+        const newSort = currentSort === 'asc' ? 'desc' : 'asc';
+        headerElement.dataset.sort = newSort;
+
+        table.querySelectorAll('th.sortable').forEach(th => {
+          th.querySelector('.sort-indicator').textContent = '↕';
+        });
+        headerElement.querySelector('.sort-indicator').textContent = newSort === 'asc' ? '↑' : '↓';
+
+        rows.sort((a, b) => {
+          const aCell = a.querySelector(\`td[data-column="\${columnIndex}"]\`).textContent;
+          const bCell = b.querySelector(\`td[data-column="\${columnIndex}"]\`).textContent;
+
+          const comparison = aCell.localeCompare(bCell, undefined, { numeric: true });
+          return newSort === 'asc' ? comparison : -comparison;
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+      }
+
+      searchTable(query) {
+        const table = document.getElementById(this.getTableId());
+        if (!table) return;
+
+        const tbody = table.querySelector('tbody');
+        const rows = tbody.querySelectorAll('tr');
+        const lowerQuery = query.toLowerCase();
+
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          const isVisible = text.includes(lowerQuery);
+          row.style.display = isVisible ? '' : 'none';
+          if (isVisible) visibleCount++;
+        });
+
+        const rowCountSpan = table.parentElement.parentElement.querySelector('.row-count');
+        if (rowCountSpan) {
+          rowCountSpan.textContent = \`\${visibleCount} of \${rows.length} rows\`;
+        }
+      }
+
+      exportCSV() {
+        const { columns, rows } = this.result.content;
+
+        const csvLines = [
+          columns.map(col => this.escapeCSV(col)).join(','),
+          ...rows.map(row =>
+            row.map(cell => this.escapeCSV(String(cell))).join(',')
+          )
+        ];
+
+        const csvContent = csvLines.join('\\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = \`table-\${Date.now()}.csv\`;
+        link.click();
+
+        URL.revokeObjectURL(url);
+      }
+
+      escapeCSV(text) {
+        if (text.includes(',') || text.includes('"') || text.includes('\\n')) {
+          return \`"\${text.replace(/"/g, '""')}"\`;
+        }
+        return text;
+      }
+    }
+
+    // Infographic Renderer
+    class InfographicRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { path, mime_type, size, title, description } = this.result.content;
+
+        let html = '';
+
+        if (title) {
+          html += \`
+            <div class="result-title">
+              <h3>\${this.escapeHtml(title)}</h3>
+            </div>
+          \`;
+        }
+
+        if (description) {
+          html += \`
+            <div class="result-description">
+              <p>\${this.escapeHtml(description)}</p>
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="infographic-container">
+            <div class="infographic-controls">
+              <button class="fullscreen-btn" data-image-url="\${this.getFileUrl(path)}" title="View Fullscreen">
+                <span>⛶</span> Fullscreen
+              </button>
+              <button class="download-btn" data-image-url="\${this.getFileUrl(path)}" data-filename="\${this.getFilename(path)}" title="Download">
+                <span>⬇</span> Download
+              </button>
+            </div>
+            <div class="infographic-wrapper">
+              <img
+                src="\${this.getFileUrl(path)}"
+                alt="\${this.escapeHtml(title || 'Infographic')}"
+                class="infographic-image"
+                data-mime-type="\${mime_type}"
+              />
+            </div>
+          </div>
+        \`;
+
+        html += \`
+          <div class="file-metadata">
+            \${size ? \`<span class="file-size">\${this.formatFileSize(size)}</span>\` : ''}
+            <span class="file-type">\${mime_type}</span>
+          </div>
+        \`;
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+
+        setTimeout(() => this.attachEventHandlers(), 0);
+        return container;
+      }
+
+      getFilename(path) {
+        return path.split('/').pop();
+      }
+
+      attachEventHandlers() {
+        const fullscreenBtn = this.element.querySelector('.fullscreen-btn');
+        if (fullscreenBtn) {
+          fullscreenBtn.addEventListener('click', () => {
+            this.openFullscreen();
+          });
+        }
+
+        const downloadBtn = this.element.querySelector('.download-btn');
+        if (downloadBtn) {
+          downloadBtn.addEventListener('click', () => {
+            this.downloadImage();
+          });
+        }
+
+        const image = this.element.querySelector('.infographic-image');
+        if (image) {
+          image.addEventListener('click', () => {
+            this.openFullscreen();
+          });
+          image.style.cursor = 'pointer';
+        }
+      }
+
+      openFullscreen() {
+        const image = this.element.querySelector('.infographic-image');
+        if (!image) return;
+
+        const modal = document.createElement('div');
+        modal.className = 'fullscreen-modal';
+        modal.innerHTML = \`
+          <div class="fullscreen-content">
+            <button class="fullscreen-close">&times;</button>
+            <img src="\${image.src}" alt="\${image.alt}" class="fullscreen-image" />
+          </div>
+        \`;
+
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+
+        const closeBtn = modal.querySelector('.fullscreen-close');
+        closeBtn.addEventListener('click', () => {
+          this.closeFullscreen(modal);
+        });
+
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            this.closeFullscreen(modal);
+          }
+        });
+
+        const escapeHandler = (e) => {
+          if (e.key === 'Escape') {
+            this.closeFullscreen(modal);
+            document.removeEventListener('keydown', escapeHandler);
+          }
+        };
+        document.addEventListener('keydown', escapeHandler);
+      }
+
+      closeFullscreen(modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+      }
+
+      downloadImage() {
+        const { path, mime_type } = this.result.content;
+        const url = this.getFileUrl(path);
+        const filename = this.getFilename(path);
+
+        fetch(url)
+          .then(response => response.blob())
+          .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(blobUrl);
+          })
+          .catch(error => {
+            console.error('Failed to download image:', error);
+            window.open(url, '_blank');
+          });
+      }
+    }
+
+    // Video Renderer
+    class VideoRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { path, mime_type, size, duration, fps, resolution } = this.result.content;
+
+        let html = '';
+
+        html += \`
+          <div class="video-container">
+            <video
+              src="\${this.getFileUrl(path)}"
+              controls
+              class="video-player"
+              preload="metadata"
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        \`;
+
+        const metadataItems = [];
+
+        if (duration) {
+          metadataItems.push(\`
+            <div class="video-metadata-item">
+              <span class="metadata-label">Duration:</span>
+              <span class="metadata-value">\${this.formatDuration(duration)}</span>
+            </div>
+          \`);
+        }
+
+        if (resolution) {
+          metadataItems.push(\`
+            <div class="video-metadata-item">
+              <span class="metadata-label">Resolution:</span>
+              <span class="metadata-value">\${this.escapeHtml(resolution)}</span>
+            </div>
+          \`);
+        }
+
+        if (fps) {
+          metadataItems.push(\`
+            <div class="video-metadata-item">
+              <span class="metadata-label">Frame Rate:</span>
+              <span class="metadata-value">\${fps} FPS</span>
+            </div>
+          \`);
+        }
+
+        if (size) {
+          metadataItems.push(\`
+            <div class="video-metadata-item">
+              <span class="metadata-label">File Size:</span>
+              <span class="metadata-value">\${this.formatFileSize(size)}</span>
+            </div>
+          \`);
+        }
+
+        metadataItems.push(\`
+          <div class="video-metadata-item">
+            <span class="metadata-label">Format:</span>
+            <span class="metadata-value">\${this.escapeHtml(mime_type)}</span>
+          </div>
+        \`);
+
+        if (metadataItems.length > 0) {
+          html += \`
+            <div class="video-metadata">
+              \${metadataItems.join('')}
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="video-actions">
+            <button class="download-btn" data-video-url="\${this.getFileUrl(path)}" data-filename="\${this.getFilename(path)}">
+              <span>⬇</span> Download Video
+            </button>
+          </div>
+        \`;
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+
+        setTimeout(() => this.attachEventHandlers(), 0);
+        return container;
+      }
+
+      getFilename(path) {
+        return path.split('/').pop();
+      }
+
+      attachEventHandlers() {
+        const downloadBtn = this.element.querySelector('.download-btn');
+        if (downloadBtn) {
+          downloadBtn.addEventListener('click', () => {
+            this.downloadVideo();
+          });
+        }
+      }
+
+      downloadVideo() {
+        const { path } = this.result.content;
+        const url = this.getFileUrl(path);
+        const filename = this.getFilename(path);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+      }
+    }
+
+    // Report Renderer
+    class ReportRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { type, title, summary, data } = this.result.content;
+
+        let html = '';
+
+        if (title) {
+          html += \`
+            <div class="result-title">
+              <h3>\${this.escapeHtml(title)}</h3>
+            </div>
+          \`;
+        }
+
+        if (summary) {
+          html += \`
+            <div class="report-summary">
+              <p>\${this.escapeHtml(summary)}</p>
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="report-type-badge">
+            <span class="badge">\${this.escapeHtml(type)}</span>
+          </div>
+        \`;
+
+        const sections = this.generateSections(data);
+        if (sections.length > 0) {
+          html += \`
+            <div class="report-sections">
+              \${sections.join('')}
+            </div>
+          \`;
+        }
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+
+        setTimeout(() => this.attachEventHandlers(), 0);
+        return container;
+      }
+
+      generateSections(data) {
+        const sections = [];
+
+        if (data.score !== undefined) {
+          sections.push(this.createScoreSection(data.score));
+        }
+
+        if (data.issues && data.issues.length > 0) {
+          sections.push(this.createIssuesSection(data.issues));
+        }
+
+        if (data.suggestions && data.suggestions.length > 0) {
+          sections.push(this.createSuggestionsSection(data.suggestions));
+        }
+
+        if (data.metrics && Object.keys(data.metrics).length > 0) {
+          sections.push(this.createMetricsSection(data.metrics));
+        }
+
+        const otherData = this.filterKnownFields(data);
+        if (Object.keys(otherData).length > 0) {
+          sections.push(this.createGenericSection(otherData));
+        }
+
+        return sections;
+      }
+
+      filterKnownFields(data) {
+        const knownFields = ['score', 'issues', 'suggestions', 'metrics', 'type', 'title', 'summary'];
+        const filtered = {};
+
+        for (const [key, value] of Object.entries(data)) {
+          if (!knownFields.includes(key)) {
+            filtered[key] = value;
+          }
+        }
+
+        return filtered;
+      }
+
+      createScoreSection(score) {
+        const scoreNum = parseFloat(score);
+        const percentage = Math.round(scoreNum * 100);
+        const colorClass = this.getScoreColorClass(scoreNum);
+
+        return \`
+          <div class="report-section collapsed">
+            <div class="section-header">
+              <h4 class="section-title">Overall Score</h4>
+              <span class="section-toggle">▶</span>
+            </div>
+            <div class="section-content" style="display: none;">
+              <div class="score-display \${colorClass}">
+                <div class="score-circle">
+                  <span class="score-value">\${percentage}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        \`;
+      }
+
+      getScoreColorClass(score) {
+        if (score >= 0.8) return 'score-excellent';
+        if (score >= 0.6) return 'score-good';
+        if (score >= 0.4) return 'score-fair';
+        return 'score-poor';
+      }
+
+      createIssuesSection(issues) {
+        const items = issues.map((issue, index) => \`
+          <div class="issue-item">
+            <span class="issue-number">\${index + 1}</span>
+            <div class="issue-content">
+              <p class="issue-message">\${this.escapeHtml(issue.message || issue)}</p>
+              \${issue.severity ? \`<span class="issue-severity severity-\${issue.severity}">\${issue.severity}</span>\` : ''}
+              \${issue.location ? \`<p class="issue-location">📍 \${this.escapeHtml(issue.location)}</p>\` : ''}
+            </div>
+          </div>
+        \`).join('');
+
+        return \`
+          <div class="report-section collapsed">
+            <div class="section-header">
+              <h4 class="section-title">Issues (\${issues.length})</h4>
+              <span class="section-toggle">▶</span>
+            </div>
+            <div class="section-content" style="display: none;">
+              <div class="issues-list">
+                \${items}
+              </div>
+            </div>
+          </div>
+        \`;
+      }
+
+      createSuggestionsSection(suggestions) {
+        const items = suggestions.map((suggestion, index) => \`
+          <div class="suggestion-item">
+            <span class="suggestion-bullet">💡</span>
+            <p class="suggestion-text">\${this.escapeHtml(suggestion.text || suggestion)}</p>
+          </div>
+        \`).join('');
+
+        return \`
+          <div class="report-section collapsed">
+            <div class="section-header">
+              <h4 class="section-title">Suggestions (\${suggestions.length})</h4>
+              <span class="section-toggle">▶</span>
+            </div>
+            <div class="section-content" style="display: none;">
+              <div class="suggestions-list">
+                \${items}
+              </div>
+            </div>
+          </div>
+        \`;
+      }
+
+      createMetricsSection(metrics) {
+        const items = Object.entries(metrics).map(([key, value]) => \`
+          <div class="metric-item">
+            <span class="metric-label">\${this.escapeHtml(key)}:</span>
+            <span class="metric-value">\${this.escapeHtml(String(value))}</span>
+          </div>
+        \`).join('');
+
+        return \`
+          <div class="report-section collapsed">
+            <div class="section-header">
+              <h4 class="section-title">Metrics</h4>
+              <span class="section-toggle">▶</span>
+            </div>
+            <div class="section-content" style="display: none;">
+              <div class="metrics-grid">
+                \${items}
+              </div>
+            </div>
+          </div>
+        \`;
+      }
+
+      createGenericSection(data) {
+        const items = Object.entries(data).map(([key, value]) => {
+          const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+          return \`
+            <div class="generic-data-item">
+              <span class="data-label">\${this.escapeHtml(key)}:</span>
+              <pre class="data-value">\${this.escapeHtml(displayValue)}</pre>
+            </div>
+          \`;
+        }).join('');
+
+        return \`
+          <div class="report-section collapsed">
+            <div class="section-header">
+              <h4 class="section-title">Additional Data</h4>
+              <span class="section-toggle">▶</span>
+            </div>
+            <div class="section-content" style="display: none;">
+              <div class="generic-data-list">
+                \${items}
+              </div>
+            </div>
+          </div>
+        \`;
+      }
+
+      attachEventHandlers() {
+        const sections = this.element.querySelectorAll('.report-section');
+        sections.forEach(section => {
+          const header = section.querySelector('.section-header');
+          const toggle = section.querySelector('.section-toggle');
+          const content = section.querySelector('.section-content');
+
+          header.addEventListener('click', () => {
+            const isCollapsed = section.classList.contains('collapsed');
+
+            if (isCollapsed) {
+              section.classList.remove('collapsed');
+              section.classList.add('expanded');
+              toggle.textContent = '▼';
+              content.style.display = '';
+            } else {
+              section.classList.remove('expanded');
+              section.classList.add('collapsed');
+              toggle.textContent = '▶';
+              content.style.display = 'none';
+            }
+          });
+        });
+      }
+    }
+
+    // Error Renderer
+    class ErrorRenderer extends BaseResultRenderer {
+      render() {
+        const container = this.createContainer();
+        const { error, code, suggestions } = this.result.content;
+
+        let html = '';
+
+        html += \`
+          <div class="error-container">
+            <div class="error-icon">⚠️</div>
+            <div class="error-content">
+              <h4 class="error-title">Error</h4>
+              \${code ? \`<span class="error-code">\${this.escapeHtml(code)}</span>\` : ''}
+              <p class="error-message">\${this.escapeHtml(error)}</p>
+            </div>
+          </div>
+        \`;
+
+        if (suggestions && suggestions.length > 0) {
+          html += \`
+            <div class="error-suggestions">
+              <h5 class="suggestions-title">Suggestions:</h5>
+              <ul class="suggestions-list">
+                \${suggestions.map(suggestion => \`
+                  <li class="suggestion-item">\${this.escapeHtml(suggestion)}</li>
+                \`).join('')}
+              </ul>
+            </div>
+          \`;
+        }
+
+        html += \`
+          <div class="error-actions">
+            <button class="retry-btn" onclick="window.location.reload()">
+              <span>🔄</span> Retry
+            </button>
+            <button class="copy-error-btn" data-error="\${this.escapeHtml(error).replace(/"/g, '&quot;')}">
+              <span>📋</span> Copy Error
+            </button>
+          </div>
+        \`;
+
+        html += this.createMetadata().outerHTML;
+        container.innerHTML = html;
+
+        setTimeout(() => this.attachEventHandlers(), 0);
+        return container;
+      }
+
+      attachEventHandlers() {
+        const copyBtn = this.element.querySelector('.copy-error-btn');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', () => {
+            this.copyError();
+          });
+        }
+      }
+
+      copyError() {
+        const { error, code } = this.result.content;
+        const errorText = code ? \`[\${code}] \${error}\` : error;
+
+        navigator.clipboard.writeText(errorText).then(() => {
+          const copyBtn = this.element.querySelector('.copy-error-btn');
+          const originalText = copyBtn.innerHTML;
+
+          copyBtn.innerHTML = '<span>✓</span> Copied!';
+          copyBtn.classList.add('copied');
+
+          setTimeout(() => {
+            copyBtn.innerHTML = originalText;
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(err => {
+          console.error('Failed to copy error:', err);
+        });
+      }
+    }
+
+    // Result Renderer Registry
+    class ResultRendererRegistry {
+      constructor() {
+        this.renderers = new Map();
+        this.fallbackRenderer = null;
+      }
+
+      register(resultType, RendererClass) {
+        if (typeof RendererClass !== 'function') {
+          throw new Error(\`Renderer for "\${resultType}" must be a class constructor\`);
+        }
+        this.renderers.set(resultType, RendererClass);
+      }
+
+      registerFallback(RendererClass) {
+        if (typeof RendererClass !== 'function') {
+          throw new Error('Fallback renderer must be a class constructor');
+        }
+        this.fallbackRenderer = RendererClass;
+      }
+
+      getRenderer(result) {
+        const resultType = result.result_type || result.type;
+
+        if (!resultType) {
+          console.warn('Result missing result_type field, using fallback');
+          return this.fallbackRenderer ? new this.fallbackRenderer(result) : null;
+        }
+
+        const RendererClass = this.renderers.get(resultType);
+
+        if (!RendererClass) {
+          console.warn(\`No renderer registered for type "\${resultType}", using fallback\`);
+          return this.fallbackRenderer ? new this.fallbackRenderer(result) : null;
+        }
+
+        return new RendererClass(result);
+      }
+
+      render(result) {
+        const renderer = this.getRenderer(result);
+
+        if (!renderer) {
+          console.error('No renderer available for result:', result);
+          return this.createFallbackElement(result);
+        }
+
+        try {
+          return renderer.render();
+        } catch (error) {
+          console.error('Renderer error:', error);
+          return this.createErrorElement(result, error);
+        }
+      }
+
+      createFallbackElement(result) {
+        const div = document.createElement('div');
+        div.className = 'result-container unknown-type';
+        div.innerHTML = \`
+          <div class="unknown-result">
+            <p class="unknown-message">Unknown result type: \${this.escapeHtml(result.result_type || 'unknown')}</p>
+            <pre class="unknown-data">\${this.escapeHtml(JSON.stringify(result, null, 2))}</pre>
+          </div>
+        \`;
+        return div;
+      }
+
+      createErrorElement(result, error) {
+        const div = document.createElement('div');
+        div.className = 'result-container render-error';
+        div.innerHTML = \`
+          <div class="render-error-content">
+            <h4>Rendering Error</h4>
+            <p class="error-message">\${this.escapeHtml(error.message)}</p>
+            <details>
+              <summary>Result Data</summary>
+              <pre>\${this.escapeHtml(JSON.stringify(result, null, 2))}</pre>
+            </details>
+          </div>
+        \`;
+        return div;
+      }
+
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    }
+
+    // Initialize registry
+    const resultRegistry = new ResultRendererRegistry();
+    resultRegistry.register('text', TextRenderer);
+    resultRegistry.register('table', TableRenderer);
+    resultRegistry.register('infographic', InfographicRenderer);
+    resultRegistry.register('video', VideoRenderer);
+    resultRegistry.register('report', ReportRenderer);
+    resultRegistry.register('error', ErrorRenderer);
+    resultRegistry.registerFallback(ErrorRenderer);
+
     const API_BASE = window.location.origin;
     let tasks = new Map();
     let systemData = null;
@@ -945,6 +2738,12 @@ export const handler = async (request: any, { logger }: any) => {
         if ((data.status === 'completed' || data.status === 'failed') && !task.completedAt) {
           data.completedAt = Date.now();
         }
+
+        // Store the result object if it has result_type
+        if (data.result && data.result.result_type) {
+          data.result = data.result;
+        }
+
         Object.assign(task, data);
         renderTasks();
       }
@@ -972,70 +2771,104 @@ export const handler = async (request: any, { logger }: any) => {
       const endIndex = startIndex + tasksPerPage;
       const paginatedTasks = sortedTasks.slice(startIndex, endIndex);
 
-      list.innerHTML = paginatedTasks.map(task => \`
-        <div class="task-item">
-          <div class="task-header">
-            <span class="task-id">\${task.taskId}</span>
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-              \${task.createdAt ? \`
-                <span class="metadata-time" title="Created: \${formatAbsoluteTime(task.createdAt)}">
-                  🕐 \${formatRelativeTime(task.createdAt)}
+      list.innerHTML = paginatedTasks.map(task => {
+        // Prepare result object for renderer
+        let resultContent = '';
+
+        // Try to use result registry if task has structured output
+        if (task.result && task.result.result_type) {
+          try {
+            const renderedResult = resultRegistry.render(task.result);
+            if (renderedResult) {
+              resultContent = renderedResult.outerHTML;
+            }
+          } catch (error) {
+            console.error('Error rendering result:', error);
+            resultContent = \`<div class="task-output">\${escapeHtml(task.output || '')}</div>\`;
+          }
+        } else if (task.output) {
+          // Fallback to plain text output
+          resultContent = \`<div class="task-output">\${escapeHtml(task.output)}</div>\`;
+        }
+
+        return \`
+          <div class="task-item">
+            <div class="task-header">
+              <span class="task-id">\${task.taskId}</span>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                \${task.createdAt ? \`
+                  <span class="metadata-time" title="Created: \${formatAbsoluteTime(task.createdAt)}">
+                    🕐 \${formatRelativeTime(task.createdAt)}
+                  </span>
+                \` : ''}
+                <span class="task-status status-\${task.status}">
+                  <span class="status-dot"></span>
+                  \${task.status}
                 </span>
+              </div>
+            </div>
+            <div class="task-description">\${escapeHtml(task.task)}</div>
+            \${task.step ? \`<div class="task-step">⚡ \${escapeHtml(task.step)}</div>\` : ''}
+            \${resultContent}
+            \${task.metadata?.skillNames && task.metadata.skillNames.length > 0 ? \`
+              <div class="task-skills">
+                <div class="task-skills-header" onclick="toggleSkills('\${task.taskId}')">
+                  <span class="expand-icon">▶</span>
+                  <span>⚙️ Used Skills (\${task.metadata.skillNames.length})</span>
+                </div>
+                <div class="task-skills-list" id="skills-\${task.taskId}">
+                  \${task.metadata.skillNames.map(skill => \`<span class="skill-badge">\${escapeHtml(skill)}</span>\`).join('')}
+                </div>
+              </div>
+            \` : ''}
+            <div class="task-metadata">
+              \${task.createdAt ? \`
+                <div class="metadata-item">
+                  <span>🕐</span>
+                  <span class="metadata-time">\${formatAbsoluteTime(task.createdAt)}</span>
+                </div>
               \` : ''}
-              <span class="task-status status-\${task.status}">
-                <span class="status-dot"></span>
-                \${task.status}
-              </span>
+              \${task.completedAt && task.createdAt ? \`
+                <div class="metadata-item">
+                  <span>⏱️</span>
+                  <span class="metadata-time">\${formatDuration(task.completedAt - task.createdAt)}</span>
+                </div>
+              \` : ''}
+              \${task.executionTime ? \`
+                <div class="metadata-item">
+                  <span>⚡</span>
+                  <span>\${formatDuration(task.executionTime)}</span>
+                </div>
+              \` : ''}
+              \${task.metadata?.llmCalls !== undefined ? \`
+                <div class="metadata-item">
+                  <span>🔄</span>
+                  <span>LLM: \${task.metadata.llmCalls}</span>
+                </div>
+              \` : ''}
+              \${task.metadata?.skillCalls !== undefined ? \`
+                <div class="metadata-item">
+                  <span>⚙️</span>
+                  <span>Skills: \${task.metadata.skillCalls}</span>
+                </div>
+              \` : ''}
             </div>
           </div>
-          <div class="task-description">\${escapeHtml(task.task)}</div>
-          \${task.step ? \`<div class="task-step">⚡ \${escapeHtml(task.step)}</div>\` : ''}
-          \${task.output ? \`<div class="task-output">\${escapeHtml(task.output)}</div>\` : ''}
-          \${task.metadata?.skillNames && task.metadata.skillNames.length > 0 ? \`
-            <div class="task-skills">
-              <div class="task-skills-header" onclick="toggleSkills('\${task.taskId}')">
-                <span class="expand-icon">▶</span>
-                <span>⚙️ Used Skills (\${task.metadata.skillNames.length})</span>
-              </div>
-              <div class="task-skills-list" id="skills-\${task.taskId}">
-                \${task.metadata.skillNames.map(skill => \`<span class="skill-badge">\${escapeHtml(skill)}</span>\`).join('')}
-              </div>
-            </div>
-          \` : ''}
-          <div class="task-metadata">
-            \${task.createdAt ? \`
-              <div class="metadata-item">
-                <span>🕐</span>
-                <span class="metadata-time">\${formatAbsoluteTime(task.createdAt)}</span>
-              </div>
-            \` : ''}
-            \${task.completedAt && task.createdAt ? \`
-              <div class="metadata-item">
-                <span>⏱️</span>
-                <span class="metadata-time">\${formatDuration(task.completedAt - task.createdAt)}</span>
-              </div>
-            \` : ''}
-            \${task.executionTime ? \`
-              <div class="metadata-item">
-                <span>⚡</span>
-                <span>\${formatDuration(task.executionTime)}</span>
-              </div>
-            \` : ''}
-            \${task.metadata?.llmCalls !== undefined ? \`
-              <div class="metadata-item">
-                <span>🔄</span>
-                <span>LLM: \${task.metadata.llmCalls}</span>
-              </div>
-            \` : ''}
-            \${task.metadata?.skillCalls !== undefined ? \`
-              <div class="metadata-item">
-                <span>⚙️</span>
-                <span>Skills: \${task.metadata.skillCalls}</span>
-              </div>
-            \` : ''}
-          </div>
-        </div>
-      \`).join('');
+        \`;
+      }).join('');
+
+      // Re-attach event handlers for dynamic renderers after DOM update
+      setTimeout(() => {
+        paginatedTasks.forEach(task => {
+          if (task.result && task.result.result_type) {
+            // Attach handlers for tables, infographics, videos, etc.
+            const renderer = resultRegistry.getRenderer(task.result);
+            if (renderer && renderer.attachEventHandlers && renderer.element) {
+              renderer.attachEventHandlers();
+            }
+          }
+        });
+      }, 0);
 
       // Render pagination separately
       renderPaginationControl(totalPages);
@@ -1109,11 +2942,16 @@ export const handler = async (request: any, { logger }: any) => {
 
           if (data.success && data.result) {
             const result = data.result;
+
+            // Check if result uses new unified format
+            const isUnifiedFormat = result.result && result.result.result_type;
+
             updateTask(taskId, {
               status: result.success ? 'completed' : 'failed',
               output: result.output || result.error,
               executionTime: result.executionTime,
               metadata: result.metadata,
+              result: isUnifiedFormat ? result.result : undefined,
               step: result.success ? '✓ Completed' : '✗ Failed'
             });
 
@@ -1152,6 +2990,10 @@ export const handler = async (request: any, { logger }: any) => {
         if (data.success && data.results) {
           data.results.forEach(result => {
             const timestamp = result.timestamp ? new Date(result.timestamp).getTime() : Date.now();
+
+            // Check if result uses new unified format
+            const isUnifiedFormat = result.result && result.result.result_type;
+
             tasks.set(result.taskId || 'legacy-' + Date.now(), {
               taskId: result.taskId,
               task: result.task,
@@ -1159,6 +3001,7 @@ export const handler = async (request: any, { logger }: any) => {
               output: result.output || result.error,
               executionTime: result.executionTime,
               metadata: result.metadata,
+              result: isUnifiedFormat ? result.result : undefined,
               step: result.success ? '✓ Completed' : '✗ Failed',
               createdAt: timestamp,
               completedAt: timestamp + (result.executionTime || 0)
