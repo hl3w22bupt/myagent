@@ -117,6 +117,95 @@ export const config: EventConfig = {
 };
 
 /**
+ * Parse unified format result from output string.
+ *
+ * Skills return results in Python dict syntax embedded in output:
+ * output={'result_type': 'video', 'success': True, ...}
+ *
+ * This function extracts and parses that structured result.
+ */
+function parseUnifiedResult(output: string | undefined): any | null {
+  if (!output || typeof output !== 'string') {
+    return null;
+  }
+
+  try {
+    // Look for Python dict pattern: output={...}
+    const outputMatch = output.indexOf('output={');
+    if (outputMatch === -1) {
+      return null;
+    }
+
+    // Find the complete dict by counting braces
+    let braceCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    let dictEnd = -1;
+
+    for (let i = outputMatch + 7; i < output.length; i++) {
+      const char = output[i];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === "'" && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') {
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            dictEnd = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (dictEnd === -1) {
+      return null;
+    }
+
+    const pythonDict = output.substring(outputMatch + 7, dictEnd + 1);
+
+    // Convert Python syntax to JavaScript-compatible syntax
+    // Then use Function constructor to safely evaluate
+    const jsObjectStr = pythonDict
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      .replace(/\bNone\b/g, 'null')
+      // Replace single quotes with double quotes for strings
+      .replace(/'/g, '"');
+
+    // Safely evaluate the object literal
+    // We wrap in parentheses to ensure it's treated as an expression
+    const parsed = (new Function(`return (${jsObjectStr})`))();
+
+    // Verify it has required unified format fields
+    if (parsed && typeof parsed === 'object' &&
+        parsed.result_type && typeof parsed.success === 'boolean') {
+      return parsed;
+    }
+
+    return null;
+  } catch (error) {
+    // If parsing fails, return null - output is not in unified format
+    return null;
+  }
+}
+
+/**
  * Result Logger handler.
  *
  * Logs agent execution results to console and optionally to file/database.
@@ -151,6 +240,9 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const task = input.task || 'Unknown task';
   const sessionId = input.sessionId;
 
+  // Parse unified format result from output
+  const structuredResult = parseUnifiedResult(normalizedResult.output);
+
   logger.info(isFailedEvent ? '=== Agent Task Failed ===' : '=== Agent Task Completed ===', {
     taskId,
     task,
@@ -159,6 +251,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     timestamp,
     executionTime: normalizedResult.executionTime,
     metadata: normalizedResult.metadata,
+    ...(structuredResult && {
+      unifiedFormat: true,
+      resultType: structuredResult.result_type,
+    }),
   });
 
   if (normalizedResult.success) {
@@ -198,6 +294,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       executionTime: normalizedResult.executionTime,
       metadata: normalizedResult.metadata,
       sessionId,
+      // NEW: Store parsed unified format result if available
+      ...(structuredResult && { result: structuredResult }),
     });
 
     // Keep only last 100 entries
