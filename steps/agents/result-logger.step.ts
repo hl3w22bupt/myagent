@@ -122,6 +122,7 @@ export const config: EventConfig = {
  * Logs agent execution results to console and optionally to file/database.
  * Handles both agent.task.completed and agent.task.failed events.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handler = async (input: z.infer<typeof inputSchema>, { logger, state }: any) => {
   const timestamp = new Date().toISOString();
 
@@ -211,11 +212,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     logger.info('Execution history updated', {
       totalEntries: history.length,
     });
-  } catch (error: any) {
-    logger.warn('Failed to update execution history', {
-      error: error.message,
-      stack: error.stack,
-    });
+  } catch {
+    logger.warn('Failed to update execution history');
   }
 
   return {
