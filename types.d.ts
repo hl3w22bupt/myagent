@@ -12,7 +12,6 @@ declare module 'motia' {
   }
 
   interface Handlers {
-    'task-web-ui': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

@@ -39,7 +39,7 @@ Thumbs.db
 /tmp/motia-sandbox-test/
 
 # Video output (project root)
-outputs/videos/
+outputs/
 
 # Jupyter
 .ipynb_checkpoints/
