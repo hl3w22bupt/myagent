@@ -284,6 +284,13 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     const existingHistory = await state.get(groupId, key);
     const history = existingHistory || [];
 
+    // Remove any existing entry with the same taskId to prevent duplicates
+    const duplicateIndex = history.findIndex((entry: any) => entry.taskId === taskId);
+    if (duplicateIndex !== -1) {
+      history.splice(duplicateIndex, 1);
+      logger.info('Removed duplicate task entry', { taskId });
+    }
+
     // Add new entry with normalized structure
     history.unshift({
       taskId,
@@ -309,6 +316,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
     logger.info('Execution history updated', {
       totalEntries: history.length,
+      taskId,
+      removedDuplicate: duplicateIndex !== -1,
     });
   } catch {
     logger.warn('Failed to update execution history');
