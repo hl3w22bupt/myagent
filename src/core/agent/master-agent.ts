@@ -52,7 +52,9 @@ export class MasterAgent extends Agent {
         timestamp: Date.now(),
         metadata: {
           steps: plan.steps.length,
-          delegates: plan.steps.filter((s) => s.delegateTo).map((s) => s.delegateTo),
+          delegates: plan
+            .steps.filter((s) => s.delegateTo)
+            .map((s) => s.delegateTo),
         },
       });
 
@@ -130,39 +132,47 @@ export class MasterAgent extends Agent {
 
   /**
    * Plan task execution with delegation decisions.
+   * Uses LLM to intelligently delegate tasks to appropriate subagents.
    */
   private async planWithDelegation(task: string): Promise<DelegationPlan> {
-    const subagentsList = Array.from(this.subagentConfigs.keys())
-      .map((name) => {
-        const config = this.subagentConfigs.get(name);
-        return `- ${name}: ${config?.description || 'No description'}`;
+    const subagentsList = Array.from(this.subagentConfigs.entries())
+      .map(([name, config]) => {
+        const skills = config?.availableSkills?.join(', ') || 'No skills';
+        return `- ${name}: ${config?.description || 'No description'}
+  Available skills: ${skills}`;
       })
       .join('\n');
 
-    const prompt = `You are a master agent planning task execution with delegation.
+    const prompt = `You are a master agent planning task execution with intelligent delegation.
 
-<available_subagents>
+<available_subagents
 ${subagentsList}
 </available_subagents>
 
-<task>
+<task
 ${task}
 </task>
 
-Create a plan breaking down the task into steps. For each step, decide:
-1. Should this be delegated to a subagent? If yes, which one?
-2. Or should the master agent handle it directly?
+Analyze the task and break it down into execution steps. For each step:
+1. Determine if it matches a subagent's specialty (based on description and skills)
+2. Delegate to the most appropriate subagent if there's a good match
+3. Otherwise, handle it directly with the master agent
 
 Output format (JSON):
 <plan>
 {
   "steps": [
-    {"task": "subtask 1", "delegateTo": "subagent-name", "reason": "..."},
-    {"task": "subtask 2", "reason": "..."}  // No delegateTo means execute self
+    {"task": "subtask description", "delegateTo": "subagent-name", "reason": "why this subagent is appropriate"},
+    {"task": "another subtask", "reason": "handled by master agent because..."}
   ],
-  "reasoning": "Overall strategy explanation"
+  "reasoning": "Overall strategy: breakdown and delegation rationale"
 }
-</plan>`;
+</plan>
+
+Important:
+- Use "delegateTo" only when there's a clear match with a subagent's description or skills
+- If no subagent is a good fit, omit "delegateTo" to execute with master agent
+- Provide specific reasoning for each decision`;
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
@@ -276,10 +286,14 @@ Output format (JSON):
       throw new Error(`Subagent ${name} missing 'name' field in agent.yaml`);
     }
     if (!config?.agent?.system_prompt && !config?.agent?.systemPrompt) {
-      throw new Error(`Subagent ${name} missing 'agent.system_prompt' field in agent.yaml`);
+      throw new Error(
+        `Subagent ${name} missing 'agent.system_prompt' field in agent.yaml`
+      );
     }
     if (!config?.agent?.available_skills && !config?.agent?.availableSkills) {
-      throw new Error(`Subagent ${name} missing 'agent.available_skills' field in agent.yaml`);
+      throw new Error(
+        `Subagent ${name} missing 'agent.available_skills' field in agent.yaml`
+      );
     }
 
     // Try to load system prompt from prompts/system.txt if exists
@@ -287,7 +301,9 @@ Output format (JSON):
     const systemPromptPath = path.join(subagentDir, 'prompts', 'system.txt');
     if (fs.existsSync(systemPromptPath)) {
       systemPrompt = fs.readFileSync(systemPromptPath, 'utf-8').trim();
-      console.log(`[MasterAgent] Loaded system prompt from file: ${systemPromptPath}`);
+      console.log(
+        `[MasterAgent] Loaded system prompt from file: ${systemPromptPath}`
+      );
     }
 
     // Normalize config to internal format
