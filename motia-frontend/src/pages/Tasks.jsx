@@ -151,17 +151,20 @@ function Tasks() {
     return new Date(dateString).toLocaleString()
   }
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return '-'
-    if (seconds < 60) return `${seconds}秒`
-    if (seconds < 3600) {
-      const mins = Math.floor(seconds / 60)
-      const secs = seconds % 60
+  const formatDuration = (milliseconds) => {
+    if (!milliseconds) return '-'
+    // 将毫秒转换为秒
+    const totalSeconds = Math.floor(milliseconds / 1000)
+
+    if (totalSeconds < 60) return `${totalSeconds}秒`
+    if (totalSeconds < 3600) {
+      const mins = Math.floor(totalSeconds / 60)
+      const secs = totalSeconds % 60
       return `${mins}分${secs}秒`
     }
-    const hours = Math.floor(seconds / 3600)
-    const mins = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
+    const hours = Math.floor(totalSeconds / 3600)
+    const mins = Math.floor((totalSeconds % 3600) / 60)
+    const secs = totalSeconds % 60
     return `${hours}小时${mins}分${secs}秒`
   }
 
