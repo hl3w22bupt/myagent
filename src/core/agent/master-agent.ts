@@ -7,6 +7,9 @@
 
 import { Agent } from './agent';
 import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
 
 /**
  * Master Agent with delegation capabilities.
@@ -234,34 +237,67 @@ Output format (JSON):
   }
 
   /**
-   * Load subagent configurations.
+   * Load subagent configurations from subagents/{name}/agent.yaml files.
    */
   private loadSubagentConfigs(subagentNames: string[]): void {
-    // In production, load from subagents/{name}/agent.yaml
-    // For now, use placeholder configs
-    const defaultSubagents = {
-      'code-reviewer': {
-        description: 'Specialized agent for code review',
-        systemPrompt: 'You are a code review expert.',
-        availableSkills: ['code-analysis', 'read-file', 'git-diff'],
-      },
-      'data-analyst': {
-        description: 'Specialized agent for data analysis',
-        systemPrompt: 'You are a data analysis expert.',
-        availableSkills: ['data-processing', 'visualization'],
-      },
-      'security-auditor': {
-        description: 'Specialized agent for security auditing',
-        systemPrompt: 'You are a security expert.',
-        availableSkills: ['security-scan', 'dependency-check'],
-      },
-    };
-
     for (const name of subagentNames) {
-      if (defaultSubagents[name as keyof typeof defaultSubagents]) {
-        this.subagentConfigs.set(name, defaultSubagents[name as keyof typeof defaultSubagents]);
+      try {
+        const config = this.loadSubagentConfig(name);
+        if (config) {
+          this.subagentConfigs.set(name, config);
+          console.log(`[MasterAgent] Loaded subagent config: ${name}`);
+        }
+      } catch (error: any) {
+        console.error(`[MasterAgent] Failed to load subagent ${name}:`, error.message);
+        // Continue loading other subagents even if one fails
       }
     }
+  }
+
+  /**
+   * Load a single subagent configuration from YAML file.
+   */
+  private loadSubagentConfig(name: string): any | null {
+    const subagentDir = path.join(process.cwd(), 'subagents', name);
+    const configPath = path.join(subagentDir, 'agent.yaml');
+
+    // Check if config file exists
+    if (!fs.existsSync(configPath)) {
+      console.warn(`[MasterAgent] Subagent config not found: ${configPath}`);
+      return null;
+    }
+
+    // Read and parse YAML
+    const configContent = fs.readFileSync(configPath, 'utf-8');
+    const config = yaml.load(configContent) as any;
+
+    // Validate required fields
+    if (!config?.name) {
+      throw new Error(`Subagent ${name} missing 'name' field in agent.yaml`);
+    }
+    if (!config?.agent?.system_prompt && !config?.agent?.systemPrompt) {
+      throw new Error(`Subagent ${name} missing 'agent.system_prompt' field in agent.yaml`);
+    }
+    if (!config?.agent?.available_skills && !config?.agent?.availableSkills) {
+      throw new Error(`Subagent ${name} missing 'agent.available_skills' field in agent.yaml`);
+    }
+
+    // Try to load system prompt from prompts/system.txt if exists
+    let systemPrompt = config.agent.system_prompt || config.agent.systemPrompt;
+    const systemPromptPath = path.join(subagentDir, 'prompts', 'system.txt');
+    if (fs.existsSync(systemPromptPath)) {
+      systemPrompt = fs.readFileSync(systemPromptPath, 'utf-8').trim();
+      console.log(`[MasterAgent] Loaded system prompt from file: ${systemPromptPath}`);
+    }
+
+    // Normalize config to internal format
+    return {
+      name: config.name,
+      description: config.description || `Subagent: ${name}`,
+      systemPrompt,
+      availableSkills: config.agent.available_skills || config.agent.availableSkills,
+      constraints: config.agent.constraints,
+    };
   }
 
   /**

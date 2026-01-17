@@ -73,7 +73,7 @@ describe('MasterAgent', () => {
             timeout: 5000,
           },
         },
-        subagents: ['code-reviewer'],
+        subagents: ['code-reviewer', 'data-analyst', 'security-auditor'],
       },
       'test-session-master-1'
     );
@@ -88,6 +88,18 @@ describe('MasterAgent', () => {
     const info = masterAgent.getInfo();
     expect(info.type).toBe('MasterAgent');
     expect(info.subagents).toContain('code-reviewer');
+    expect(info.subagents).toContain('data-analyst');
+    expect(info.subagents).toContain('security-auditor');
+  });
+
+  it('should load subagent configs from YAML files', () => {
+    const info = masterAgent.getInfo();
+    expect(info.subagents).toBeDefined();
+    expect(info.subagents.length).toBeGreaterThan(0);
+    // Verify all configured subagents are loaded
+    ['code-reviewer', 'data-analyst', 'security-auditor'].forEach((subagent) => {
+      expect(info.subagents).toContain(subagent);
+    });
   });
 
   it('should have more capabilities than base Agent', () => {
