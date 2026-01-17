@@ -231,17 +231,72 @@ Important:
 
   /**
    * Synthesize results from multiple executions.
+   * Uses LLM to intelligently merge and summarize results from multiple subagents.
    */
   private async synthesizeResults(results: any[]): Promise<any> {
-    // Simple synthesis: combine all outputs
-    // In production, use LLM to intelligently merge results
+    // If only one result, return as-is
+    if (results.length === 1) {
+      return results[0].result?.output || results[0].result;
+    }
+
+    // Prepare results summary for LLM
+    const resultsSummary = results.map((r, i) => {
+      const type = r.self ? 'Master Agent (self)' : `Subagent: ${r.subagent}`;
+      const success = r.result?.success ? 'Success' : 'Failed';
+      const output = r.result?.output ? `${r.result?.output}` : 'No output';
+      return `Step ${i + 1}: ${type}
+Status: ${success}
+${output}`;
+    }).join('\n\n');
+
+    const prompt = `You are a master agent synthesizing results from multiple subagents.
+
+<execution_results>
+${resultsSummary}
+</execution_results>
+
+Please synthesize these results into a coherent response:
+1. Summarize what was accomplished
+2. Highlight key findings from each step
+3. Provide a consolidated output
+4. Note any issues or failures
+
+Output format (JSON):
+<synthesis>
+{
+  "summary": "brief summary of what was accomplished",
+  "keyFindings": ["finding 1", "finding 2", ...],
+  "consolidatedOutput": "merged and formatted output",
+  "issues": ["any issues encountered", ...]
+}
+</synthesis>`;
+
+    try {
+      const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
+      const jsonMatch = response.content.match(/<synthesis>\s*(\{.*?\})\s*<\/synthesis>/s);
+      
+      if (jsonMatch) {
+        const jsonString = jsonMatch[1];
+        if (jsonString && jsonString.trim() !== '' && !jsonString.includes('undefined')) {
+          try {
+            return JSON.parse(jsonString);
+          } catch (error: any) {
+            console.warn('[MasterAgent] Failed to parse LLM synthesis, falling back to simple merge');
+          }
+        }
+      }
+    } catch (error: any) {
+      console.warn('[MasterAgent] LLM synthesis failed, falling back to simple merge:', error.message);
+    }
+
+    // Fallback: simple merge
     return {
       results,
       summary: `Executed ${results.length} steps successfully`,
       details: results.map((r, i) => ({
         step: i + 1,
         type: r.self ? 'self' : `delegated to ${r.subagent}`,
-        success: r.result.success,
+        success: r.result?.success,
       })),
     };
   }
