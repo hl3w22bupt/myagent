@@ -29,7 +29,9 @@ async def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     Args:
         input_data: Dictionary containing:
-            - query: Search query string
+            - query: Search query string (preferred)
+            - task: Task description (fallback for query)
+            - description: Description of what to search (fallback)
             - limit: Maximum number of results (default: 5)
 
     Returns:
@@ -37,18 +39,20 @@ async def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     start_time = time.time()
 
-    query = input_data.get('query')
+    # Try multiple field names for query (in order of preference)
+    query = input_data.get('query') or input_data.get('task') or input_data.get('description')
     limit = input_data.get('limit', 5)
 
-    # Input validation
+    # Input validation with smart fallback
     if not query or not query.strip():
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder() \
                 .set_error(
                     error=ValueError("Query is required for web search"),
                     suggestions=[
-                        "Provide a search query",
-                        "Ensure query field is not empty"
+                        "Provide a search query using 'query' field",
+                        "Provide task description using 'task' field",
+                        "Ensure at least one field is not empty"
                     ]
                 ) \
                 .build()

@@ -31,6 +31,19 @@ export const bodySchema = z.object({
    * Optional: Available skills.
    */
   availableSkills: z.array(z.string()).optional().describe('List of available skills'),
+
+  /**
+   * Optional: Use MasterAgent with delegation (default: false).
+   * When true, the task will be executed by MasterAgent which can
+   * delegate to specialized subagents (code-reviewer, data-analyst, security-auditor).
+   */
+  useDelegation: z.boolean().optional().describe('Enable MasterAgent delegation'),
+
+  /**
+   * Optional: List of subagents to use for delegation (requires useDelegation=true).
+   * If not provided, uses default subagents.
+   */
+  subagents: z.array(z.string()).optional().describe('List of subagent names for delegation'),
 });
 
 /**
@@ -75,7 +88,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills } = validationResult.data;
+  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents } =
+    validationResult.data;
 
   // Generate unique taskId
   const taskId = `task-${Date.now()}`;
@@ -85,10 +99,12 @@ export const handler = async (request: any, { emit, logger }: any) => {
     sessionId,
     taskId,
     skills: availableSkills,
+    useDelegation,
+    subagents,
   });
 
   // Emit agent task execution event
-  // This will be picked up by the Master Agent step
+  // This will be picked up by the master-agent step
   await emit({
     topic: 'agent.task.execute',
     data: {
@@ -97,6 +113,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
       sessionId,
       systemPrompt,
       availableSkills,
+      useDelegation, // Pass delegation flag
+      subagents, // Pass subagents list
     },
   });
 
@@ -106,10 +124,13 @@ export const handler = async (request: any, { emit, logger }: any) => {
     status: 200, // OK
     body: {
       success: true,
-      message: 'Task submitted for execution',
+      message: useDelegation
+        ? 'Task submitted for execution with MasterAgent delegation'
+        : 'Task submitted for execution',
       taskId,
       task,
       sessionId,
+      useDelegation,
     },
   };
 };

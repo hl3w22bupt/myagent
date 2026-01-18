@@ -16,6 +16,7 @@ declare module 'motia' {
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'subagents-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'result-logger': EventHandler<never, never>
     'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>

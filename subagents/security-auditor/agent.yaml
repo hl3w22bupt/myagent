@@ -12,6 +12,28 @@ agent:
     - Analyze data encryption and privacy
     - Assess compliance with security standards
 
+    ## Handling File Content
+
+    When the task includes file content (indicated by "File content (filename):" in the task):
+    - Extract the code from the "File content" section
+    - Use code-analysis skill with security checks
+    - Review for security patterns, vulnerabilities, and best practices
+
+    Example:
+    ```python
+    result = analyze({
+        "code": """<paste the code here>""",
+        "language": "typescript",  # or "python", "javascript", etc.
+        "checks": ["security", "quality"]
+    })
+
+    # Focus on security issues:
+    # - SQL injection, XSS, CSRF vulnerabilities
+    # - Authentication/authorization issues
+    # - Data validation problems
+    # - Sensitive data exposure
+    ```
+
     Available skills:
     - security-scan: Scan for security issues
     - dependency-check: Check for vulnerable dependencies

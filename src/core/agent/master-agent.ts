@@ -17,11 +17,23 @@ import * as yaml from 'js-yaml';
 export class MasterAgent extends Agent {
   private subagents: Map<string, Agent>;
   private subagentConfigs: Map<string, any>;
+  private cacheVersion: string; // Cache version based on subagents config
+  private masterConfig: MasterAgentConfig; // Store typed config
+
+  // Delegation plan cache to reduce LLM calls
+  private delegationPlansCache: Map<string, { plan: DelegationPlan; timestamp: number; cacheVersion: string }>;
+  private readonly MAX_CACHE_SIZE = 100;
+  private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor(config: MasterAgentConfig, sessionId: string) {
     super(config, sessionId);
+    this.masterConfig = config; // Store typed config
     this.subagents = new Map();
     this.subagentConfigs = new Map();
+    this.delegationPlansCache = new Map();
+
+    // Generate cache version from subagents list
+    this.cacheVersion = this.generateCacheVersion();
 
     // Load subagent configurations
     // In production, this would load from subagents/{name}/agent.yaml
@@ -31,7 +43,7 @@ export class MasterAgent extends Agent {
   /**
    * Run task with possible delegation to subagents.
    */
-  async run(task: string): Promise<AgentResult> {
+  async run(task: string, taskId?: string): Promise<AgentResult> {
     const startTime = Date.now();
     const steps: any[] = [];
 
@@ -61,41 +73,96 @@ export class MasterAgent extends Agent {
       // Step 2: Execute plan
       const results: any[] = [];
       let totalSkillCalls = 0;
+      const allSkillNames: string[] = [];  // Collect all skill names from subagents
 
       for (const step of plan.steps) {
-        if (step.delegateTo) {
-          // Delegate to subagent
-          steps.push({
-            type: 'delegation',
-            content: `Delegating to ${step.delegateTo}: ${step.task}`,
-            timestamp: Date.now(),
+        try {
+          if (step.delegateTo) {
+            // Delegate to subagent
+            steps.push({
+              type: 'delegation',
+              content: `Delegating to ${step.delegateTo}: ${step.task}`,
+              timestamp: Date.now(),
+            });
+
+            // Check if task mentions a file and enhance with file content
+            let enhancedTask = step.task;
+            const fileMatch = step.task.match(/(\S+\.ts|\.js|\.py|\.json|\.csv|\.txt|\.md)/);
+            if (fileMatch) {
+              const filePath = fileMatch[1];
+              const resolvedPath = path.resolve(process.cwd(), filePath);
+              try {
+                if (fs.existsSync(resolvedPath)) {
+                  const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
+                  // Truncate if too large (max 2000 chars)
+                  const truncatedContent = fileContent.length > 2000
+                    ? fileContent.substring(0, 2000) + '\n... (truncated)'
+                    : fileContent;
+
+                  enhancedTask = `${step.task}\n\nFile content (${filePath}):\n${truncatedContent}`;
+
+                  console.log(`[MasterAgent] Enhanced task with file content: ${filePath}`);
+                } else {
+                  console.warn(`[MasterAgent] File not found: ${resolvedPath}`);
+                }
+              } catch (error: any) {
+                console.warn(`[MasterAgent] Failed to read file ${filePath}:`, error.message);
+              }
+            }
+
+            const subagent = await this.getOrCreateSubagent(step.delegateTo);
+            const result = await subagent.run(enhancedTask);
+
+            results.push({
+              subagent: step.delegateTo,
+              result,
+            });
+
+            totalSkillCalls += result.metadata.skillCalls;
+
+            // Collect skill names from subagent result
+            if (result.metadata.skillNames && Array.isArray(result.metadata.skillNames)) {
+              allSkillNames.push(...result.metadata.skillNames);
+            }
+          } else {
+            // Execute self
+            steps.push({
+              type: 'execution',
+              content: `Executing self: ${step.task}`,
+              timestamp: Date.now(),
+            });
+
+            const result = await super.run(step.task);
+
+            results.push({
+              self: true,
+              result,
+            });
+
+            totalSkillCalls += result.metadata.skillCalls;
+
+            // Collect skill names from master agent result
+            if (result.metadata.skillNames && Array.isArray(result.metadata.skillNames)) {
+              allSkillNames.push(...result.metadata.skillNames);
+            }
+          }
+        } catch (error: any) {
+          // Handle execution errors gracefully
+          console.error('[MasterAgent] Step execution failed:', {
+            step: step.task,
+            delegateTo: step.delegateTo,
+            error: error.message,
           });
 
-          const subagent = await this.getOrCreateSubagent(step.delegateTo);
-          const result = await subagent.run(step.task);
-
+          // Add error as a failed result
           results.push({
-            subagent: step.delegateTo,
-            result,
+            subagent: step.delegateTo || 'master',
+            result: {
+              success: false,
+              error: error.message,
+              output: `Failed to execute: ${error.message}`,
+            },
           });
-
-          totalSkillCalls += result.metadata.skillCalls;
-        } else {
-          // Execute self
-          steps.push({
-            type: 'execution',
-            content: `Executing self: ${step.task}`,
-            timestamp: Date.now(),
-          });
-
-          const result = await super.run(step.task);
-
-          results.push({
-            self: true,
-            result,
-          });
-
-          totalSkillCalls += result.metadata.skillCalls;
         }
       }
 
@@ -103,6 +170,12 @@ export class MasterAgent extends Agent {
       const finalResult = await this.synthesizeResults(results);
 
       const executionTime = Date.now() - startTime;
+
+      // Extract delegated subagents (filter out undefined values)
+      const delegates = plan.steps
+        .filter((s) => s.delegateTo)
+        .map((s) => s.delegateTo)
+        .filter((d): d is string => d !== undefined);
 
       return {
         success: true,
@@ -113,90 +186,353 @@ export class MasterAgent extends Agent {
           llmCalls: 1,
           skillCalls: totalSkillCalls,
           totalTokens: 0,
+          delegates,
+          skillNames: [...new Set(allSkillNames)],  // Unique skill names
         },
       };
     } catch (error: any) {
+      console.error('[MasterAgent] Task execution failed:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        task,
+        sessionId: this.sessionId,
+      });
+
       return {
         success: false,
         error: error.message,
+        output: undefined, // Explicitly set output to undefined
         steps,
         executionTime: Date.now() - startTime,
         metadata: {
           llmCalls: 1,
           skillCalls: 0,
           totalTokens: 0,
+          delegates: [],
         },
       };
     }
   }
 
   /**
+   * Generate cache version from subagents configuration.
+   * This ensures cache is invalidated when subagents change.
+   */
+  private generateCacheVersion(): string {
+    const subagentNames = this.masterConfig.subagents || [];
+    return subagentNames.sort().join(',');
+  }
+
+  /**
+   * Extract keywords from subagent description and skills.
+   * These keywords help match tasks to appropriate subagents.
+   */
+  private extractKeywords(description: string, skills: string[]): string[] {
+    const keywords: string[] = [];
+    const combined = `${description} ${skills.join(' ')}`.toLowerCase();
+
+    // Common technical terms and patterns
+    const patterns = [
+      /\b(code|coding|programming|software|development)\b/g,
+      /\b(review|audit|analysis|analyze|examine|inspect)\b/g,
+      /\b(security|vulnerability|safety|threat)\b/g,
+      /\b(data|dataset|csv|json|statistics|analytics)\b/g,
+      /\b(system|architecture|api|documentation|guide)\b/g,
+      /\b(file|read|write|io)\b/g,
+      /\b(web|search|research|lookup)\b/g,
+      /\b(test|testing|quality|qa)\b/g,
+      /\b(performance|optimization|speed)\b/g,
+      /\b(document|text|summary|summarize)\b/g,
+    ];
+
+    // Extract matching patterns
+    for (const pattern of patterns) {
+      const matches = combined.match(pattern);
+      if (matches) {
+        keywords.push(...matches);
+      }
+    }
+
+    // Extract specific skill names
+    for (const skill of skills) {
+      const skillName = skill.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+      keywords.push(skillName);
+    }
+
+    // Remove duplicates and return
+    return [...new Set(keywords)].slice(0, 10); // Max 10 keywords
+  }
+
+  /**
+   * Generate cache key from task string.
+   * Uses simple hashing for fast lookup.
+   */
+  private generateCacheKey(task: string): string {
+    // Normalize task: lowercase, trim, collapse whitespace
+    const normalized = task.toLowerCase().trim().replace(/\s+/g, ' ');
+    return `plan:${normalized}`;
+  }
+
+  /**
+   * Get delegation plan from cache if available and not expired.
+   */
+  private getCachedPlan(task: string): DelegationPlan | null {
+    const cacheKey = this.generateCacheKey(task);
+    const cached = this.delegationPlansCache.get(cacheKey);
+
+    if (!cached) {
+      return null;
+    }
+
+    // Check if cache entry version matches current version
+    if (cached.cacheVersion !== this.cacheVersion) {
+      console.log('[MasterAgent] Cache version mismatch, invalidating:', cacheKey);
+      this.delegationPlansCache.delete(cacheKey);
+      return null;
+    }
+
+    // Check if cache entry is expired
+    const now = Date.now();
+    if (now - cached.timestamp > this.CACHE_TTL) {
+      this.delegationPlansCache.delete(cacheKey);
+      console.log('[MasterAgent] Cache entry expired:', cacheKey);
+      return null;
+    }
+
+    console.log('[MasterAgent] Cache hit for task:', task);
+    return cached.plan;
+  }
+
+  /**
+   * Store delegation plan in cache.
+   * Evicts oldest entries if cache is full.
+   */
+  private cachePlan(task: string, plan: DelegationPlan): void {
+    const cacheKey = this.generateCacheKey(task);
+
+    // Evict oldest entries if cache is full
+    if (this.delegationPlansCache.size >= this.MAX_CACHE_SIZE) {
+      const oldestKey = this.delegationPlansCache.keys().next().value;
+      if (oldestKey) {
+        this.delegationPlansCache.delete(oldestKey);
+        console.log('[MasterAgent] Cache full, evicted:', oldestKey);
+      }
+    }
+
+    this.delegationPlansCache.set(cacheKey, {
+      plan,
+      timestamp: Date.now(),
+      cacheVersion: this.cacheVersion, // Include cache version for invalidation
+    });
+
+    console.log('[MasterAgent] Cached plan for task:', task);
+  }
+
+  /**
+   * Clear expired cache entries.
+   */
+  private cleanExpiredCache(): void {
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [key, value] of this.delegationPlansCache.entries()) {
+      if (now - value.timestamp > this.CACHE_TTL) {
+        this.delegationPlansCache.delete(key);
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log('[MasterAgent] Cleaned expired cache entries:', cleanedCount);
+    }
+  }
+
+  /**
+   * Get cache statistics.
+   */
+  private getCacheStats(): { size: number; maxSize: number; ttl: number } {
+    return {
+      size: this.delegationPlansCache.size,
+      maxSize: this.MAX_CACHE_SIZE,
+      ttl: this.CACHE_TTL,
+    };
+  }
+
+  /**
    * Plan task execution with delegation decisions.
    * Uses LLM to intelligently delegate tasks to appropriate subagents.
+   * Implements caching to reduce LLM calls for similar tasks.
    */
   private async planWithDelegation(task: string): Promise<DelegationPlan> {
+    // Step 1: Check cache first
+    const cachedPlan = this.getCachedPlan(task);
+    if (cachedPlan) {
+      console.log('[MasterAgent] Using cached delegation plan');
+      return cachedPlan;
+    }
+
+    // Step 2: Not in cache, create new plan
+    // Dynamically generate subagent descriptions with specialties
     const subagentsList = Array.from(this.subagentConfigs.entries())
       .map(([name, config]) => {
-        const skills = config?.availableSkills?.join(', ') || 'No skills';
-        return `- ${name}: ${config?.description || 'No description'}
-  Available skills: ${skills}`;
+        const description = config?.description || 'No description';
+        const skillsArray = config?.availableSkills || [];
+        const skills = skillsArray.length > 0 ? skillsArray.join(', ') : 'No skills';
+
+        // Extract key capabilities from description and skills
+        const keywords = this.extractKeywords(description, skillsArray);
+
+        return `- ${name}:
+  Description: ${description}
+  Skills: ${skills}
+  Keywords: ${keywords.join(', ')}`;
       })
-      .join('\n');
+      .join('\n\n');
 
-    const prompt = `You are a master agent planning task execution with intelligent delegation.
+    const prompt = `You are a master agent planning task execution with intelligent delegation to specialized subagents.
 
-<available_subagents
+<available_subagents>
 ${subagentsList}
 </available_subagents>
 
-<task
+<task>
 ${task}
 </task>
 
-Analyze the task and break it down into execution steps. For each step:
-1. Determine if it matches a subagent's specialty (based on description and skills)
-2. Delegate to the most appropriate subagent if there's a good match
-3. Otherwise, handle it directly with the master agent
+## Delegation Strategy
 
-Output format (JSON):
+Analyze the task and decide: delegate to a specialized subagent OR handle with master agent.
+
+### When to DELEGATE:
+1. The task clearly matches a subagent's description (keywords overlap)
+2. The task uses skills that a subagent has available
+3. The subagent's specialty is relevant to the task
+
+### When to HANDLE DIRECTLY:
+1. No subagent's specialty matches the task
+2. The task is too vague (e.g., "review the code" without specifying which file)
+3. The task requires general capabilities not tied to any subagent
+4. Multiple subagents could handle it - better to handle with master
+
+### Decision Process:
+1. Extract key concepts and requirements from the task
+2. Match against subagent descriptions, skills, and keywords
+3. Check if the task has sufficient context (file paths, data, specifics)
+4. Delegate if there's a CLEAR and SPECIFIC match
+5. Otherwise, handle directly
+
+## Response Format
+
 <plan>
 {
   "steps": [
-    {"task": "subtask description", "delegateTo": "subagent-name", "reason": "why this subagent is appropriate"},
-    {"task": "another subtask", "reason": "handled by master agent because..."}
+    {
+      "task": "specific task or subtask",
+      "delegateTo": "subagent-name (optional - omit if handling directly)",
+      "reason": "why this matches the subagent OR why handling directly"
+    }
   ],
-  "reasoning": "Overall strategy: breakdown and delegation rationale"
+  "reasoning": "overall delegation strategy and rationale"
 }
 </plan>
 
-Important:
-- Use "delegateTo" only when there's a clear match with a subagent's description or skills
-- If no subagent is a good fit, omit "delegateTo" to execute with master agent
-- Provide specific reasoning for each decision`;
+## Examples
+
+Example 1 - Clear Match:
+Task: "Review the authentication code in auth.ts for security issues"
+→ Delegate to: security-auditor
+→ Reason: "Security review of auth code matches security-auditor's specialty"
+
+Example 2 - Vague Task:
+Task: "Review the code"
+→ Handle directly: "No specific file mentioned - need clarification"
+
+Example 3 - No Match:
+Task: "Calculate the meaning of life"
+→ Handle directly: "No subagent specializes in philosophical questions"
+
+## Important Rules:
+- Output ONLY valid JSON inside <plan> tags
+- Delegate ONLY when there's a clear, specific match
+- Omit "delegateTo" field if handling directly
+- Provide specific reasoning based on descriptions and skills
+- Consider if the task has sufficient context (files, data, specifics)
+`;
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
-    const jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse plan from LLM response');
+    // Try multiple parsing strategies
+    let parsedPlan: any = null;
+    let lastError: Error | null = null;
+
+    // Helper to cache and return plan
+    const cacheAndReturn = (plan: DelegationPlan): DelegationPlan => {
+      this.cachePlan(task, plan);
+      return plan;
+    };
+
+    // Strategy 1: Extract from <plan> tags (non-greedy)
+    let jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        parsedPlan = JSON.parse(jsonMatch[1]);
+        console.log('[MasterAgent] Parsed plan using strategy 1 (<plan> tags)');
+        return cacheAndReturn(parsedPlan);
+      } catch (error: any) {
+        lastError = error;
+        console.warn('[MasterAgent] Strategy 1 failed:', error.message);
+      }
     }
 
-    // Validate JSON string before parsing
-    const jsonString = jsonMatch[1];
-    if (!jsonString || jsonString.trim() === '' || jsonString.includes('undefined')) {
-      console.error('[Master Agent] Invalid JSON string:', jsonString);
-      throw new Error('Invalid JSON in LLM response: contains undefined or is empty');
+    // Strategy 2: Extract from <plan> tags (greedy, for multi-line)
+    jsonMatch = response.content.match(/<plan>\s*(\{[\s\S]*?\})\s*<\/plan>/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        parsedPlan = JSON.parse(jsonMatch[1]);
+        console.log('[MasterAgent] Parsed plan using strategy 2 (<plan> tags, greedy)');
+        return cacheAndReturn(parsedPlan);
+      } catch (error: any) {
+        lastError = error;
+        console.warn('[MasterAgent] Strategy 2 failed:', error.message);
+      }
     }
 
-    try {
-      return JSON.parse(jsonString);
-    } catch (error: any) {
-      console.error('[Master Agent] JSON parse failed:', {
-        error: error.message,
-        jsonString: jsonString.substring(0, 500),
-      });
-      throw new Error(`Failed to parse plan JSON: ${error.message}`);
+    // Strategy 3: Find any JSON object in the response
+    jsonMatch = response.content.match(/\{[\s\S]*?\}/);
+    if (jsonMatch && jsonMatch[0]) {
+      try {
+        parsedPlan = JSON.parse(jsonMatch[0]);
+        console.log('[MasterAgent] Parsed plan using strategy 3 (raw JSON)');
+        return cacheAndReturn(parsedPlan);
+      } catch (error: any) {
+        lastError = error;
+        console.warn('[MasterAgent] Strategy 3 failed:', error.message);
+      }
     }
+
+    // Strategy 4: Try to find JSON between code blocks
+    jsonMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        parsedPlan = JSON.parse(jsonMatch[1]);
+        console.log('[MasterAgent] Parsed plan using strategy 4 (code block)');
+        return cacheAndReturn(parsedPlan);
+      } catch (error: any) {
+        lastError = error;
+        console.warn('[MasterAgent] Strategy 4 failed:', error.message);
+      }
+    }
+
+    // All strategies failed
+    console.error('[MasterAgent] All parsing strategies failed', {
+      response: response.content.substring(0, 1000),
+      lastError: lastError?.message,
+    });
+
+    throw new Error(
+      `Failed to parse plan from LLM response after 4 attempts. Last error: ${lastError?.message || 'Unknown error'}`
+    );
   }
 
   /**
@@ -261,30 +597,98 @@ Please synthesize these results into a coherent response:
 3. Provide a consolidated output
 4. Note any issues or failures
 
-Output format (JSON):
+CRITICAL: You must respond with valid JSON only, wrapped in <synthesis> tags.
+Do not include any text outside the JSON structure.
+
+Example format:
+<synthesis>
+{
+  "summary": "Successfully analyzed data and reviewed code",
+  "keyFindings": ["Data analysis completed with 5 results", "Code review identified 3 issues"],
+  "consolidatedOutput": {"analysis": {...}, "review": {...}},
+  "issues": ["Step 2 had a timeout"]
+}
+</synthesis>
+
+Your response must follow this exact format:
 <synthesis>
 {
   "summary": "brief summary of what was accomplished",
-  "keyFindings": ["finding 1", "finding 2", ...],
+  "keyFindings": ["finding 1", "finding 2"],
   "consolidatedOutput": "merged and formatted output",
-  "issues": ["any issues encountered", ...]
+  "issues": ["any issues encountered"]
 }
-</synthesis>`;
+</synthesis>
+
+Important rules:
+- Output ONLY valid JSON inside <synthesis> tags
+- Ensure all JSON is properly formatted with quotes and commas
+- Keep keyFindings and issues as arrays of strings
+- consolidatedOutput can contain any JSON structure`;
 
     try {
       const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
-      const jsonMatch = response.content.match(/<synthesis>\s*(\{.*?\})\s*<\/synthesis>/s);
-      
-      if (jsonMatch) {
-        const jsonString = jsonMatch[1];
-        if (jsonString && jsonString.trim() !== '' && !jsonString.includes('undefined')) {
-          try {
-            return JSON.parse(jsonString);
-          } catch (error: any) {
-            console.warn('[MasterAgent] Failed to parse LLM synthesis, falling back to simple merge');
-          }
+
+      // Try multiple parsing strategies (similar to planWithDelegation)
+      let parsedSynthesis: any = null;
+      let lastError: Error | null = null;
+
+      // Strategy 1: Extract from <synthesis> tags (non-greedy)
+      let jsonMatch = response.content.match(/<synthesis>\s*(\{.*?\})\s*<\/synthesis>/s);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          parsedSynthesis = JSON.parse(jsonMatch[1]);
+          console.log('[MasterAgent] Parsed synthesis using strategy 1 (<synthesis> tags)');
+          return parsedSynthesis;
+        } catch (error: any) {
+          lastError = error;
+          console.warn('[MasterAgent] Strategy 1 failed:', error.message);
         }
       }
+
+      // Strategy 2: Extract from <synthesis> tags (greedy)
+      jsonMatch = response.content.match(/<synthesis>\s*(\{[\s\S]*?\})\s*<\/synthesis>/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          parsedSynthesis = JSON.parse(jsonMatch[1]);
+          console.log('[MasterAgent] Parsed synthesis using strategy 2 (greedy)');
+          return parsedSynthesis;
+        } catch (error: any) {
+          lastError = error;
+          console.warn('[MasterAgent] Strategy 2 failed:', error.message);
+        }
+      }
+
+      // Strategy 3: Find any JSON object
+      jsonMatch = response.content.match(/\{[\s\S]*?\}/);
+      if (jsonMatch && jsonMatch[0]) {
+        try {
+          parsedSynthesis = JSON.parse(jsonMatch[0]);
+          console.log('[MasterAgent] Parsed synthesis using strategy 3 (raw JSON)');
+          return parsedSynthesis;
+        } catch (error: any) {
+          lastError = error;
+          console.warn('[MasterAgent] Strategy 3 failed:', error.message);
+        }
+      }
+
+      // Strategy 4: Try code blocks
+      jsonMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          parsedSynthesis = JSON.parse(jsonMatch[1]);
+          console.log('[MasterAgent] Parsed synthesis using strategy 4 (code block)');
+          return parsedSynthesis;
+        } catch (error: any) {
+          lastError = error;
+          console.warn('[MasterAgent] Strategy 4 failed:', error.message);
+        }
+      }
+
+      // All strategies failed - log and fall back
+      console.warn('[MasterAgent] All synthesis parsing strategies failed, using fallback', {
+        lastError: lastError?.message,
+      });
     } catch (error: any) {
       console.warn('[MasterAgent] LLM synthesis failed, falling back to simple merge:', error.message);
     }
