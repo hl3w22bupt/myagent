@@ -1,0 +1,577 @@
+# ============================================================================
+# Motia Skill Output Schema - Base Template
+# ============================================================================
+# 所有技能输出必须遵循的统一格式
+# ============================================================================
+
+$schema: http://json-schema.org/draft-07/schema#
+
+title: Motia Skill Output Schema
+description: 统一的技能输出格式规范
+type: object
+required:
+  - result_type
+  - success
+  - content
+  - metadata
+
+properties:
+  # -------------------------------------------------------------------------
+  # 核心字段：结果类型
+  # -------------------------------------------------------------------------
+  result_type:
+    description: |
+      结果类型标识，用于前端自适应渲染。
+      根据不同的 result_type，content 字段的格式会有所不同。
+    type: string
+    enum:
+      # 文本类型
+      - text              # 纯文本内容
+      - markdown          # Markdown 格式文本
+      - code              # 代码片段
+
+      # 媒体类型
+      - image             # 静态图片 (PNG, JPG, GIF等)
+      - video             # 视频 (MP4, WebM等)
+      - audio             # 音频 (MP3, WAV等)
+      - gif               # 动图
+
+      # 文档类型
+      - infographic       # 信息图 (SVG, HTML)
+      - report            # 报告 (PDF, DOCX等)
+      - spreadsheet       # 表格 (CSV, XLSX等)
+      - presentation     # 演示文稿 (PPTX等)
+
+      # 数据类型
+      - table             # 表格数据
+      - json              # JSON数据
+      - chart             # 图表配置
+
+      # 特殊类型
+      - error             # 错误信息
+      - mixed             # 混合内容（包含多种类型）
+      - unknown           # 未知类型
+
+    examples:
+      - infographic
+      - video
+      - text
+      - error
+
+  # -------------------------------------------------------------------------
+  # 核心字段：成功标志
+  # -------------------------------------------------------------------------
+  success:
+    description: |
+      技能执行是否成功。
+      - true: 执行成功，content 包含结果数据
+      - false: 执行失败，content 包含错误信息
+    type: boolean
+
+  # -------------------------------------------------------------------------
+  # 核心字段：具体内容
+  # -------------------------------------------------------------------------
+  content:
+    description: |
+      技能输出的具体内容。
+      格式根据 result_type 的不同而不同。
+      详见各类型的详细 schema 定义。
+    oneOf:
+      # 文本类型
+      - $ref: "#/definitions/TextContent"
+      - $ref: "#/definitions/MarkdownContent"
+      - $ref: "#/definitions/CodeContent"
+
+      # 媒体类型
+      - $ref: "#/definitions/MediaContent"
+
+      # 文档类型
+      - $ref: "#/definitions/MediaContent"  # report, spreadsheet, presentation
+
+      # 数据类型
+      - $ref: "#/definitions/TableContent"
+      - $ref: "#/definitions/JSONContent"
+
+      # 特殊类型
+      - $ref: "#/definitions/ErrorContent"
+      - $ref: "#/definitions/MixedContent"
+
+  # -------------------------------------------------------------------------
+  # 可选字段：标题
+  # -------------------------------------------------------------------------
+  title:
+    description: 结果的标题（可选，用于前端显示）
+    type: string
+    maxLength: 200
+    examples:
+      - "Q4 销售报告信息图"
+      - "产品演示视频"
+      - "代码分析报告"
+
+  # -------------------------------------------------------------------------
+  # 可选字段：描述
+  # -------------------------------------------------------------------------
+  description:
+    description: 结果的详细描述（可选，用于前端显示）
+    type: string
+    maxLength: 500
+    examples:
+      - "2024年第四季度销售数据可视化图表"
+      - "10秒产品功能演示视频"
+
+  # -------------------------------------------------------------------------
+  # 核心字段：元数据
+  # -------------------------------------------------------------------------
+  metadata:
+    description: 技能执行的元数据信息
+    type: object
+    required:
+      - execution_time
+      - skills_used
+    properties:
+      # 执行时长（毫秒）
+      execution_time:
+        type: integer
+        minimum: 0
+        description: 技能执行时长，单位：毫秒
+        example: 45000
+
+      # 使用的技能列表
+      skills_used:
+        type: array
+        items:
+          type: string
+        description: 参与任务执行的所有技能名称
+        example: ["infographic-generator", "llm-planner"]
+
+      # Token 使用量（如果适用）
+      tokens:
+        type: object
+        description: LLM Token 使用统计
+        properties:
+          input:
+            type: integer
+            description: 输入 Token 数量
+          output:
+            type: integer
+            description: 输出 Token 数量
+          total:
+            type: integer
+            description: 总 Token 数量
+
+      # 自定义标签
+      tags:
+        type: array
+        description: 自定义分类标签
+        items:
+          type: string
+        example: ["infographic", "business", "q4"]
+
+      # 用户备注
+      notes:
+        type: string
+        description: 用户添加的备注信息
+
+      # 共享状态
+      shared:
+        type: boolean
+        description: 是否已分享
+
+      # 分享URL
+      share_url:
+        type: string
+        format: uri
+        description: 分享链接
+
+      # 扩展字段（使用 x- 前缀）
+      "^x-":
+        type: any
+        description: |
+          自定义扩展字段。
+          所有自定义字段必须以 x- 开头，以避免与标准字段冲突。
+        examples:
+          - x-data-points: 12
+          - x-template: column-chart
+          - x-complexity: Medium
+
+  # -------------------------------------------------------------------------
+  # 可选字段：附件
+  # -------------------------------------------------------------------------
+  attachments:
+    description: 附加内容（可选）
+    type: array
+    items:
+      type: object
+      required:
+        - name
+        - type
+        - content
+      properties:
+        name:
+          type: string
+          description: 附件名称
+
+        type:
+          type: string
+          description: 附件类型（使用 result_type 枚举值）
+
+        content:
+          description: 附件内容（格式由 type 决定）
+
+        description:
+          type: string
+          description: 附件描述
+
+  # -------------------------------------------------------------------------
+  # 可选字段：相关链接
+  # -------------------------------------------------------------------------
+  links:
+    description: 相关资源链接（可选）
+    type: array
+    items:
+      type: object
+      required:
+        - name
+        - url
+      properties:
+        name:
+          type: string
+          description: 链接名称
+
+        url:
+          type: string
+          format: uri
+          description: 链接地址
+
+        rel:
+          type: string
+          description: 链接关系类型
+          enum: [related, documentation, source, demo]
+
+# ============================================================================
+# 内容定义（Definitions）
+# ============================================================================
+
+definitions:
+  # -------------------------------------------------------------------------
+  # 文本内容
+  # -------------------------------------------------------------------------
+  TextContent:
+    type: string
+    description: 纯文本内容
+    example: "任务执行成功，生成了 3 个图表。"
+
+  MarkdownContent:
+    type: string
+    description: Markdown 格式文本
+    example: |
+      # 分析结果
+
+      ## 代码质量评分
+      - 总分: 85/100
+      - 复杂度: 中等
+      - 安全性: 无问题
+
+      ## 建议
+      1. 添加类型提示
+      2. 拆分大函数
+
+  CodeContent:
+    type: object
+    required:
+      - code
+      - language
+    properties:
+      code:
+        type: string
+        description: 代码内容
+
+      language:
+        type: string
+        description: 编程语言
+        enum:
+          - python
+          - javascript
+          - typescript
+          - java
+          - go
+          - rust
+          - cpp
+          - c
+          - shell
+          - sql
+          - html
+          - css
+          - json
+          - yaml
+          - other
+
+      highlight:
+        type: boolean
+        description: 是否启用语法高亮
+        default: true
+
+      collapsible:
+        type: boolean
+        description: 是否可折叠
+        default: false
+
+      line_numbers:
+        type: boolean
+        description: 是否显示行号
+        default: true
+
+  # -------------------------------------------------------------------------
+  # 媒体内容（图片/视频/音频/文档）
+  # -------------------------------------------------------------------------
+  MediaContent:
+    type: object
+    required:
+      - path
+      - mime_type
+    properties:
+      # 文件路径（相对于 outputs/ 目录）
+      path:
+        type: string
+        description: |
+          文件路径，相对于 outputs/ 目录。
+          注意：不包含 outputs/ 前缀。
+        pattern: "^[^.]"
+        examples:
+          - "infographics/task_123.svg"
+          - "videos/task_456.mp4"
+          - "reports/task_789.pdf"
+
+      # MIME 类型
+      mime_type:
+        type: string
+        description: 文件的 MIME 类型
+        examples:
+          - "image/svg+xml"
+          - "image/png"
+          - "video/mp4"
+          - "application/pdf"
+
+      # 文件大小
+      size:
+        type: integer
+        description: 文件大小（字节）
+        minimum: 0
+        example: 245678
+
+      # 宽度（像素）- 图片/视频
+      width:
+        type: integer
+        description: 宽度（像素）
+        minimum: 1
+        example: 1920
+
+      # 高度（像素）- 图片/视频
+      height:
+        type: integer
+        description: 高度（像素）
+        minimum: 1
+        example: 1080
+
+      # 时长（秒）- 视频/音频
+      duration:
+        type: number
+        description: 时长（秒）
+        minimum: 0
+        example: 10.5
+
+      # 帧率（fps）- 视频
+      fps:
+        type: integer
+        description: 帧率
+        minimum: 1
+        example: 30
+
+      # 缩略图路径
+      thumbnail_path:
+        type: string
+        description: 缩略图路径（相对于 outputs/ 目录）
+        pattern: "^[^.]"
+        example: "thumbnails/infographics/task_123.jpg"
+
+      # 分辨率 - 视频
+      resolution:
+        type: string
+        description: 分辨率（格式: WIDTHxHEIGHT）
+        pattern: "^\\d+x\\d+$"
+        example: "1920x1080"
+
+      # 质量 - 视频
+      quality:
+        type: string
+        description: 质量/编码预设
+        enum: [low, medium, high, ultra]
+        example: "medium"
+
+  # -------------------------------------------------------------------------
+  # 表格内容
+  # -------------------------------------------------------------------------
+  TableContent:
+    type: object
+    required:
+      - headers
+      - rows
+    properties:
+      headers:
+        type: array
+        description: 表头
+        items:
+          type: string
+        minItems: 1
+        example: ["指标", "数值", "状态"]
+
+      rows:
+        type: array
+        description: 数据行
+        items:
+          type: array
+        minItems: 1
+        example:
+          - ["质量评分", "85", "良好"]
+          - ["复杂度", "中等", "警告"]
+          - ["安全性", "无问题", "通过"]
+
+      title:
+        type: string
+        description: 表格标题
+        example: "代码质量指标"
+
+      sortable:
+        type: boolean
+        description: 是否可排序
+        default: true
+
+  # -------------------------------------------------------------------------
+  # JSON 内容
+  # -------------------------------------------------------------------------
+  JSONContent:
+    oneOf:
+      # JSON 字符串
+      - type: string
+        description: JSON 格式的字符串
+
+      # JSON 对象
+      - type: object
+        description: JSON 对象
+        additionalProperties: true
+
+      # JSON 数组
+      - type: array
+        description: JSON 数组
+        items: {}
+
+  # -------------------------------------------------------------------------
+  # 错误内容
+  # -------------------------------------------------------------------------
+  ErrorContent:
+    type: object
+    required:
+      - type
+      - message
+    properties:
+      # 错误类型
+      type:
+        type: string
+        description: 错误类型分类
+        enum:
+          - validation      # 输入验证错误
+          - execution      # 执行错误
+          - timeout        # 超时错误
+          - network        # 网络错误
+          - resource       # 资源错误（内存、磁盘等）
+          - permission     # 权限错误
+          - dependency     # 依赖错误
+          - unknown        # 未知错误
+        example: "timeout"
+
+      # 用户友好的错误消息
+      message:
+        type: string
+        description: 用户友好的错误消息
+        example: "视频生成超时（超过 10 分钟）"
+
+      # 详细错误信息
+      details:
+        type: string
+        description: 详细错误信息（堆栈跟踪等）
+        example: |
+          TimeoutError: Task execution exceeded 600000ms
+            at VideoGenerator.generate (handler.py:156)
+            at SkillExecutor.execute (executor.py:89)
+
+      # 是否可重试
+      retryable:
+        type: boolean
+        description: 是否可重试
+        default: true
+        example: true
+
+      # 建议的解决方案
+      suggestions:
+        type: array
+        description: 建议的解决方案
+        items:
+          type: string
+        example:
+          - "尝试减少视频时长"
+          - "降低质量设置"
+          - "检查系统资源"
+
+      # 相关文档链接
+      docs_url:
+        type: string
+        format: uri
+        description: 相关文档链接
+        example: "https://docs.example.com/troubleshooting/timeout"
+
+      # 错误代码（便于调试）
+      code:
+        type: string
+        description: 机器可读的错误代码
+        pattern: "^[A-Z_]+$"
+        example: "TIMEOUT_ERROR"
+
+  # -------------------------------------------------------------------------
+  # 混合内容
+  # -------------------------------------------------------------------------
+  MixedContent:
+    type: array
+    description: 混合内容数组（包含多种类型的内容项）
+    items:
+      type: object
+      required:
+        - type
+        - content
+      properties:
+        type:
+          type: string
+          description: 内容项的类型（使用 result_type 枚举值）
+          enum:
+            - text
+            - markdown
+            - code
+            - image
+            - video
+            - infographic
+            - table
+            - json
+
+        content:
+          description: 内容项的具体内容（格式由 type 决定）
+          oneOf:
+            - type: string
+            - type: object
+            - type: array
+
+        title:
+          type: string
+          description: 内容项的标题
+
+        description:
+          type: string
+          description: 内容项的描述

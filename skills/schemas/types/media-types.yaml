@@ -1,0 +1,372 @@
+# ============================================================================
+# Media Type Schemas
+# 媒体类型输出详细定义
+# ============================================================================
+
+description: 媒体类型输出（图片、视频、音频等）的详细 schema 定义
+
+types:
+  # ---------------------------------------------------------------
+  # 1. 图片 (image)
+  # ---------------------------------------------------------------
+  image:
+    result_type: image
+    description: 静态图片
+    supported_formats:
+      - PNG (image/png)
+      - JPG/JPEG (image/jpeg)
+      - GIF (image/gif)
+      - WebP (image/webp)
+      - BMP (image/bmp)
+    use_cases:
+      - 图片生成
+      - 图表渲染
+      - 截图
+      - 图片处理
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+      properties:
+        path:
+          type: string
+          description: 文件路径（相对于 outputs/）
+          pattern: "^[^.]"
+          example: "images/task_123.png"
+
+        mime_type:
+          type: string
+          enum:
+            - image/png
+            - image/jpeg
+            - image/gif
+            - image/webp
+            - image/bmp
+
+        size:
+          type: integer
+          description: 文件大小（字节）
+          example: 245678
+
+        width:
+          type: integer
+          description: 宽度（像素）
+          minimum: 1
+          example: 1920
+
+        height:
+          type: integer
+          description: 高度（像素）
+          minimum: 1
+          example: 1080
+
+        thumbnail_path:
+          type: string
+          description: 缩略图路径
+          pattern: "^[^.]"
+          example: "thumbnails/images/task_123.jpg"
+
+    output_example:
+      result_type: image
+      success: true
+      title: "产品宣传图"
+      description: "1920x1080 的产品宣传图片"
+      content:
+        path: "images/product_promo.png"
+        mime_type: "image/png"
+        size: 2456780
+        width: 1920
+        height: 1080
+        thumbnail_path: "thumbnails/images/product_promo.jpg"
+      metadata:
+        execution_time: 8000
+        skills_used: ["image-generator"]
+        tags: ["product", "marketing"]
+        x-format: "PNG"
+        x-dimensions: "1920x1080"
+
+  # ---------------------------------------------------------------
+  # 2. 视频 (video)
+  # ---------------------------------------------------------------
+  video:
+    result_type: video
+    description: 视频文件
+    supported_formats:
+      - MP4 (video/mp4)
+      - WebM (video/webm)
+      - MOV (video/quicktime)
+    use_cases:
+      - 视频生成
+      - 动画渲染
+      - 视频编辑
+      - 屏幕录制
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+        - duration
+      properties:
+        path:
+          type: string
+          description: 文件路径（相对于 outputs/）
+          pattern: "^[^.]"
+          example: "videos/task_456.mp4"
+
+        mime_type:
+          type: string
+          enum:
+            - video/mp4
+            - video/webm
+            - video/quicktime
+
+        size:
+          type: integer
+          description: 文件大小（字节）
+          example: 15728640
+
+        width:
+          type: integer
+          description: 视频宽度
+          minimum: 1
+          example: 1920
+
+        height:
+          type: integer
+          description: 视频高度
+          minimum: 1
+          example: 1080
+
+        duration:
+          type: number
+          description: 视频时长（秒）
+          minimum: 0
+          example: 10.5
+
+        fps:
+          type: integer
+          description: 帧率
+          minimum: 1
+          example: 30
+
+        resolution:
+          type: string
+          description: 分辨率（格式: WIDTHxHEIGHT）
+          pattern: "^\\d+x\\d+$"
+          example: "1920x1080"
+
+        quality:
+          type: string
+          description: 质量/编码预设
+          enum: [low, medium, high, ultra]
+          example: "medium"
+
+        thumbnail_path:
+          type: string
+          description: 缩略图路径
+          pattern: "^[^.]"
+          example: "thumbnails/videos/task_456.jpg"
+
+        bitrate:
+          type: integer
+          description: 比特率（bps）
+          example: 5000000
+
+        codec:
+          type: string
+          description: 视频编码
+          example: "H.264"
+
+    output_example:
+      result_type: video
+      success: true
+      title: "产品演示视频"
+      description: "10秒产品功能演示视频"
+      content:
+        path: "videos/product_demo.mp4"
+        mime_type: "video/mp4"
+        size: 15728640
+        width: 1920
+        height: 1080
+        duration: 10.5
+        fps: 30
+        resolution: "1920x1080"
+        quality: "medium"
+        thumbnail_path: "thumbnails/videos/product_demo.jpg"
+        bitrate: 5000000
+        codec: "H.264"
+      metadata:
+        execution_time: 120000
+        skills_used: ["remotion-generator", "llm-planner"]
+        tags: ["video", "demo", "product"]
+        x-style: "minimal"
+        x-template: "product-demo"
+
+  # ---------------------------------------------------------------
+  # 3. 音频 (audio)
+  # ---------------------------------------------------------------
+  audio:
+    result_type: audio
+    description: 音频文件
+    supported_formats:
+      - MP3 (audio/mpeg)
+      - WAV (audio/wav)
+      - AAC (audio/aac)
+      - OGG (audio/ogg)
+    use_cases:
+      - 语音生成
+      - 音乐生成
+      - 音频编辑
+      - 语音转文本
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+        - duration
+      properties:
+        path:
+          type: string
+          description: 文件路径（相对于 outputs/）
+          pattern: "^[^.]"
+          example: "audio/voiceover.mp3"
+
+        mime_type:
+          type: string
+          enum:
+            - audio/mpeg
+            - audio/wav
+            - audio/aac
+            - audio/ogg
+
+        size:
+          type: integer
+          description: 文件大小（字节）
+          example: 2048576
+
+        duration:
+          type: number
+          description: 音频时长（秒）
+          minimum: 0
+          example: 180.5
+
+        bitrate:
+          type: integer
+          description: 比特率（bps）
+          example: 320000
+
+        sample_rate:
+          type: integer
+          description: 采样率（Hz）
+          example: 44100
+
+        channels:
+          type: integer
+          description: 声道数
+          enum: [1, 2]
+          example: 2
+
+        thumbnail_path:
+          type: string
+          description: 波形图或专辑封面路径
+          pattern: "^[^.]"
+          example: "thumbnails/audio/voiceover.jpg"
+
+    output_example:
+      result_type: audio
+      success: true
+      title: "产品介绍旁白"
+      description: "3分钟的中文产品介绍旁白"
+      content:
+        path: "audio/product_intro.mp3"
+        mime_type: "audio/mpeg"
+        size: 2048576
+        duration: 180.5
+        bitrate: 320000
+        sample_rate: 44100
+        channels: 2
+        thumbnail_path: "thumbnails/audio/product_intro.jpg"
+      metadata:
+        execution_time: 45000
+        skills_used: ["tts-generator"]
+        tags: ["audio", "voiceover", "chinese"]
+        x-language: "zh"
+        x-voice: "female"
+
+  # ---------------------------------------------------------------
+  # 4. 动图 (gif)
+  # ---------------------------------------------------------------
+  gif:
+    result_type: gif
+    description: 动图文件
+    supported_formats:
+      - GIF (image/gif)
+    use_cases:
+      - 动图生成
+      - 短动画
+      - 表情包
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+      properties:
+        path:
+          type: string
+          pattern: "^[^.]"
+          example: "gifs/animation.gif"
+
+        mime_type:
+          type: string
+          enum: ["image/gif"]
+
+        size:
+          type: integer
+          example: 524288
+
+        width:
+          type: integer
+          minimum: 1
+          example: 640
+
+        height:
+          type: integer
+          minimum: 1
+          example: 480
+
+        duration:
+          type: number
+          description: 总时长（秒）
+          minimum: 0
+          example: 3.0
+
+        frame_count:
+          type: integer
+          description: 总帧数
+          minimum: 1
+          example: 75
+
+        thumbnail_path:
+          type: string
+          pattern: "^[^.]"
+          example: "thumbnails/gifs/animation.jpg"
+
+    output_example:
+      result_type: gif
+      success: true
+      title: "加载动画"
+      description: "3秒循环加载动画"
+      content:
+        path: "gifs/loading.gif"
+        mime_type: "image/gif"
+        size: 524288
+        width: 640
+        height: 480
+        duration: 3.0
+        frame_count: 75
+        thumbnail_path: "thumbnails/gifs/loading.jpg"
+      metadata:
+        execution_time: 10000
+        skills_used: ["gif-generator"]
+        tags: ["gif", "animation", "loading"]

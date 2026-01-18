@@ -3,10 +3,13 @@
  *
  * REST API endpoint for querying agent task execution results.
  * Accepts HTTP requests and returns task results from state.
+ *
+ * Uses safe state operations to prevent wrapObject stack overflow.
  */
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
+import { safeStateGet } from '../../src/utils/state-safety';
 
 /**
  * Query parameters schema for results API.
@@ -97,10 +100,10 @@ export const handler = async (request: any, { logger, state }: any) => {
   });
 
   try {
-    // Retrieve execution history from state
+    // Retrieve execution history from state with safety checks
     const groupId = 'agent:execution';
     const key = 'history';
-    const history = (await state.get(groupId, key)) || [];
+    const history = await safeStateGet(state, groupId, key, []);
 
     // Filter and process results
     let results = history;

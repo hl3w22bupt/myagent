@@ -1,0 +1,35 @@
+{
+  "result_type": "infographic",
+  "success": true,
+  "content": {
+    "path": "infographics/q4_sales.svg",
+    "mime_type": "image/svg+xml",
+    "size": 245678,
+    "width": 1920,
+    "height": 1080,
+    "thumbnail_path": "thumbnails/infographics/q4_sales.jpg",
+    "template": "column-chart",
+    "chart_type": "column-chart",
+    "theme": "business",
+    "style": "rough",
+    "data_points": 12
+  },
+  "title": "Q4 Sales Report Infographic",
+  "description": "Data visualization of Q4 2024 sales performance",
+  "metadata": {
+    "execution_time": 45000,
+    "skills_used": ["infographic-generator", "llm-planner"],
+    "template": "column-chart",
+    "language": "zh",
+    "theme": "business",
+    "style": "rough",
+    "tags": ["infographic", "business", "q4"],
+    "tokens": {
+      "input": 1500,
+      "output": 800,
+      "total": 2300
+    },
+    "x-data-points": 12,
+    "x-generation-time": 42.5
+  }
+}

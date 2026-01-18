@@ -1,0 +1,329 @@
+# ============================================================================
+# Data Type Schemas
+# 数据类型输出详细定义
+# ============================================================================
+
+description: 数据类型输出（表格、JSON等）的详细 schema 定义
+
+types:
+  # ---------------------------------------------------------------
+  # 1. 信息图 (infographic)
+  # ---------------------------------------------------------------
+  infographic:
+    result_type: infographic
+    description: 信息图（SVG/HTML格式）
+    supported_formats:
+      - SVG (image/svg+xml)
+      - HTML (text/html)
+    use_cases:
+      - 数据可视化
+      - 信息图表
+      - 营销图表
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+      properties:
+        path:
+          type: string
+          description: 文件路径（相对于 outputs/）
+          pattern: "^[^.]"
+          example: "infographics/task_123.svg"
+
+        mime_type:
+          type: string
+          enum:
+            - image/svg+xml
+            - text/html
+
+        size:
+          type: integer
+          example: 245678
+
+        width:
+          type: integer
+          minimum: 1
+          example: 1920
+
+        height:
+          type: integer
+          minimum: 1
+          example: 1080
+
+        thumbnail_path:
+          type: string
+          pattern: "^[^.]"
+          example: "thumbnails/infographics/task_123.jpg"
+
+        # Infographic 特有字段
+        template:
+          type: string
+          description: 使用的模板
+          example: "column-chart"
+
+        chart_type:
+          type: string
+          description: 图表类型
+          enum:
+            - column-chart
+            - bar-chart
+            - line-chart
+            - pie-chart
+            - scatter-plot
+            - radar-chart
+            - gauge
+            - funnel
+            - timeline
+            - hierarchy
+            - relation
+            - quadrant
+
+        theme:
+          type: string
+          description: 主题配色
+          example: "business"
+
+        data_points:
+          type: integer
+          description: 数据点数量
+          example: 12
+
+    output_example:
+      result_type: infographic
+      success: true
+      title: "Q4销售报告信息图"
+      description: "2024年第四季度销售数据可视化"
+      content:
+        path: "infographics/q4_sales.svg"
+        mime_type: "image/svg+xml"
+        size: 245678
+        width: 1920
+        height: 1080
+        thumbnail_path: "thumbnails/infographics/q4_sales.jpg"
+        template: "column-chart"
+        chart_type: "column-chart"
+        theme: "business"
+        data_points: 12
+      metadata:
+        execution_time: 45000
+        skills_used: ["infographic-generator"]
+        tags: ["infographic", "sales", "q4"]
+        x-language: "zh"
+        x-template: "column-chart"
+        x-data-points: 12
+
+  # ---------------------------------------------------------------
+  # 2. 报告 (report)
+  # ---------------------------------------------------------------
+  report:
+    result_type: report
+    description: 报告文档
+    supported_formats:
+      - PDF (application/pdf)
+      - DOCX (application/vnd.openxmlformats-officedocument.wordprocessingml.document)
+      - HTML (text/html)
+      - Markdown (text/markdown)
+    use_cases:
+      - 分析报告
+      - 技术文档
+      - 总结报告
+    content_schema:
+      type: object
+      required:
+        - path
+        - mime_type
+      properties:
+        path:
+          type: string
+          pattern: "^[^.]"
+          example: "reports/analysis.pdf"
+
+        mime_type:
+          type: string
+          enum:
+            - application/pdf
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - text/html
+            - text/markdown
+
+        size:
+          type: integer
+          example: 1048576
+
+        page_count:
+          type: integer
+          description: 页数
+          example: 15
+
+        word_count:
+          type: integer
+          description: 字数
+          example: 5000
+
+        thumbnail_path:
+          type: string
+          pattern: "^[^.]"
+          example: "thumbnails/reports/analysis.jpg"
+
+        # Report 特有字段
+        format:
+          type: string
+          description: 报告格式
+          example: "PDF"
+
+        author:
+          type: string
+          description: 作者
+          example: "AI Assistant"
+
+        language:
+          type: string
+          description: 语言
+          example: "zh"
+
+    output_example:
+      result_type: report
+      success: true
+      title: "代码质量分析报告"
+      description: "包含详细代码分析和改进建议的完整报告"
+      content:
+        path: "reports/code_quality.pdf"
+        mime_type: "application/pdf"
+        size: 1048576
+        page_count: 15
+        word_count: 5000
+        thumbnail_path: "thumbnails/reports/code_quality.jpg"
+        format: "PDF"
+        language: "zh"
+      metadata:
+        execution_time: 15000
+        skills_used: ["code-analyzer", "report-generator"]
+        tags: ["report", "code", "quality"]
+
+  # ---------------------------------------------------------------
+  # 3. 表格 (table)
+  # ---------------------------------------------------------------
+  table:
+    result_type: table
+    description: 表格数据
+    use_cases:
+      - 数据展示
+      - 分析结果
+      - 对比数据
+    content_schema:
+      type: object
+      required:
+        - headers
+        - rows
+      properties:
+        headers:
+          type: array
+          description: 表头
+          items:
+            type: string
+          minItems: 1
+          example: ["指标", "数值", "状态"]
+
+        rows:
+          type: array
+          description: 数据行
+          items:
+            type: array
+          minItems: 1
+          example:
+            - ["质量评分", "85", "良好"]
+            - ["复杂度", "中等", "警告"]
+            - ["安全性", "无问题", "通过"]
+
+        title:
+          type: string
+          description: 表格标题
+          example: "代码质量指标"
+
+        sortable:
+          type: boolean
+          description: 是否可排序
+          default: true
+
+        filterable:
+          type: boolean
+          description: 是否可筛选
+          default: true
+
+        row_count:
+          type: integer
+          description: 行数
+          example: 25
+
+        column_count:
+          type: integer
+          description: 列数
+          example: 5
+
+    output_example:
+      result_type: table
+      success: true
+      title: "性能指标对比表"
+      description: "不同配置下的性能测试结果"
+      content:
+        headers: ["配置", "响应时间(ms)", "吞吐量(req/s)", "错误率(%)", "CPU使用率(%)"]
+        rows:
+          - ["配置A", "120", "850", "0.1", "45"]
+          - ["配置B", "95", "1100", "0.05", "62"]
+          - ["配置C", "85", "1250", "0.02", "70"]
+        title: "性能测试结果"
+        sortable: true
+        filterable: true
+        row_count: 3
+        column_count: 5
+      metadata:
+        execution_time: 8000
+        skills_used: ["performance-tester"]
+        tags: ["table", "performance", "benchmark"]
+
+  # ---------------------------------------------------------------
+  # 4. JSON (json)
+  # ---------------------------------------------------------------
+  json:
+    result_type: json
+    description: JSON数据
+    use_cases:
+      - 结构化数据
+      - 配置文件
+      - API响应
+    content_schema:
+      oneOf:
+        # JSON字符串
+        - type: string
+          description: JSON格式的字符串
+
+        # JSON对象
+        - type: object
+          description: JSON对象
+          additionalProperties: true
+
+        # JSON数组
+        - type: array
+          description: JSON数组
+          items: {}
+
+    output_example:
+      result_type: json
+      success: true
+      title: "API配置"
+      description: "生成的API端点配置"
+      content:
+        endpoints:
+          - path: "/api/users"
+            method: "GET"
+            auth: true
+          - path: "/api/users"
+            method: "POST"
+            auth: true
+        version: "1.0.0"
+        base_url: "https://api.example.com"
+      metadata:
+        execution_time: 5000
+        skills_used: ["api-designer"]
+        tags: ["json", "api", "config"]

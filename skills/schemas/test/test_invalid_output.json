@@ -1,0 +1,8 @@
+{
+  "result_type": "invalid_type",
+  "success": true,
+  "content": {
+    "path": "outputs/image.png",
+    "mime_type": "image/png"
+  }
+}

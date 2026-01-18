@@ -1,0 +1,161 @@
+# ============================================================================
+# Text Type Schemas
+# 文本类型输出详细定义
+# ============================================================================
+
+description: 文本类型输出的详细 schema 定义
+
+types:
+  # ---------------------------------------------------------------
+  # 1. 纯文本 (text)
+  # ---------------------------------------------------------------
+  text:
+    result_type: text
+    description: 纯文本内容
+    use_cases:
+      - 简单的文本响应
+      - 日志信息
+      - 状态更新
+    content_schema:
+      type: string
+      example: "任务执行成功，已生成 3 个图表。"
+
+    output_example:
+      result_type: text
+      success: true
+      content: "已成功从数据库中提取了 156 条记录。"
+      metadata:
+        execution_time: 2000
+        skills_used: ["database-query"]
+
+  # ---------------------------------------------------------------
+  # 2. Markdown (markdown)
+  # ---------------------------------------------------------------
+  markdown:
+    result_type: markdown
+    description: Markdown 格式文本
+    use_cases:
+      - 格式化的报告
+      - 文档生成
+      - 结构化信息展示
+    content_schema:
+      type: string
+      format: markdown
+      example: |
+        # 分析结果
+
+        ## 概览
+        - 总体评分: 85/100
+        - 主要问题: 2个
+
+        ## 详细分析
+        ### 代码质量
+        - 函数复杂度: 中等
+        - 类型覆盖: 90%
+
+        ### 建议
+        1. 添加类型提示
+        2. 拆分大函数
+
+    output_example:
+      result_type: markdown
+      success: true
+      title: "代码分析报告"
+      content: |
+        # 代码分析结果
+
+        ## 总体评分: 85/100
+
+        ### 发现的问题
+        - [中等] 函数复杂度过高 (handler.py:45)
+        - [低] 缺少类型提示 (utils.py:12)
+
+        ### 改进建议
+        1. 将大函数拆分为小函数
+        2. 添加完整的类型注解
+      metadata:
+        execution_time: 5000
+        skills_used: ["code-analyzer"]
+        tags: ["code", "analysis"]
+
+  # ---------------------------------------------------------------
+  # 3. 代码 (code)
+  # ---------------------------------------------------------------
+  code:
+    result_type: code
+    description: 代码片段
+    use_cases:
+      - 代码生成
+      - 代码优化
+      - 代码转换
+    content_schema:
+      type: object
+      required:
+        - code
+        - language
+      properties:
+        code:
+          type: string
+          description: 代码内容
+
+        language:
+          type: string
+          description: 编程语言
+          enum:
+            - python
+            - javascript
+            - typescript
+            - java
+            - go
+            - rust
+            - cpp
+            - c
+            - shell
+            - sql
+            - html
+            - css
+            - json
+            - yaml
+            - xml
+            - other
+
+        highlight:
+          type: boolean
+          description: 是否启用语法高亮
+          default: true
+
+        collapsible:
+          type: boolean
+          description: 是否可折叠
+          default: false
+
+        line_numbers:
+          type: boolean
+          description: 是否显示行号
+          default: true
+
+        filename:
+          type: string
+          description: 文件名（可选）
+
+    output_example:
+      result_type: code
+      success: true
+      title: "优化后的代码"
+      content:
+        code: |
+          async function fetchData(url: string): Promise<Data> {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.json();
+          }
+        language: typescript
+        highlight: true
+        line_numbers: true
+        filename: "api.ts"
+      metadata:
+        execution_time: 3000
+        skills_used: ["code-optimizer"]
+        tags: ["typescript", "async", "optimization"]

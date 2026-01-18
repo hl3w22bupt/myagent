@@ -3,10 +3,39 @@
  *
  * Listens to agent task completion events and logs results.
  * Provides audit trail and execution history.
+ *
+ * FIX: Added circular reference detection and history size limits
+ * to prevent Motia wrapObject infinite recursion bug.
+ * See: https://github.com/motiadev/motia/issues/xxx
  */
 
 import { z } from 'zod';
 import { EventConfig } from 'motia';
+import { safeStateSet, hasCircularReference, safeClone } from '../../src/utils/state-safety';
+
+/**
+ * Configuration for execution history limits.
+ * Reduced from 100 to 20 to prevent wrapObject stack overflow.
+ */
+const MAX_HISTORY_SIZE = 20;
+
+/**
+ * Simplify history entry to prevent complex nested structures.
+ * Reduces memory and prevents wrapObject issues.
+ */
+function simplifyHistoryEntry(entry: any): any {
+  return {
+    taskId: entry.taskId,
+    timestamp: entry.timestamp,
+    task: entry.task,
+    success: entry.success,
+    sessionId: entry.sessionId,
+    output: entry.output, // 不截断，保留完整输出
+    error: entry.error,
+    executionTime: entry.executionTime,
+    metadata: entry.metadata,
+  };
+}
 
 /**
  * Input schema for result logger.
@@ -274,15 +303,31 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     });
   }
 
-  // Store execution history in state (last 100 executions)
+  // Store execution history in state with size limits and circular reference protection
   try {
     // Use Motia state API with groupId and key
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // Get existing history or initialize empty array
-    const existingHistory = await state.get(groupId, key);
-    const history = existingHistory || [];
+    // Get existing history with circular reference check
+    const existingHistoryRaw = await state.get(groupId, key);
+
+    // Use safe clone to prevent circular reference issues
+    let history: any[];
+    if (existingHistoryRaw && Array.isArray(existingHistoryRaw)) {
+      const cloned = safeClone(existingHistoryRaw);
+      history = cloned || []; // Fallback to empty array if clone fails
+    } else {
+      history = [];
+    }
+
+    // Check for circular references in existing history
+    if (hasCircularReference(history)) {
+      logger.warn('[result-logger] Circular reference detected in existing history, resetting', {
+        historyLength: history.length
+      });
+      history = [];
+    }
 
     // Remove any existing entry with the same taskId to prevent duplicates
     const duplicateIndex = history.findIndex((entry: any) => entry.taskId === taskId);
@@ -291,8 +336,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       logger.info('Removed duplicate task entry', { taskId });
     }
 
-    // Add new entry with normalized structure
-    history.unshift({
+    // Create simplified entry to prevent complex nested structures
+    const newEntry = simplifyHistoryEntry({
       taskId,
       timestamp,
       task,
@@ -300,27 +345,45 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       output: normalizedResult.output,
       error: normalizedResult.error,
       executionTime: normalizedResult.executionTime,
-      metadata: normalizedResult.metadata,
       sessionId,
-      // NEW: Store parsed unified format result if available
-      ...(structuredResult && { result: structuredResult }),
+      metadata: normalizedResult.metadata, // 添加metadata字段
     });
 
-    // Keep only last 100 entries
-    if (history.length > 100) {
-      history.pop();
+    // Add new entry at the beginning
+    history.unshift(newEntry);
+
+    // Keep only last MAX_HISTORY_SIZE entries (reduced from 100 to 20)
+    if (history.length > MAX_HISTORY_SIZE) {
+      const removed = history.splice(MAX_HISTORY_SIZE);
+      logger.debug('Trimmed history entries', { removedCount: removed.length });
     }
 
-    // Save back to state
-    await state.set(groupId, key, history);
+    // Final circular reference check before saving
+    if (hasCircularReference(history)) {
+      logger.error('[result-logger] Circular reference detected after modification, not saving to state');
+      throw new Error('Circular reference in history data');
+    }
+
+    // Save back to state using safeStateSet
+    const success = await safeStateSet(state, groupId, key, history);
+
+    if (!success) {
+      logger.error('[result-logger] Failed to save history due to circular reference or other error');
+      throw new Error('Failed to save history to state');
+    }
 
     logger.info('Execution history updated', {
       totalEntries: history.length,
+      maxSize: MAX_HISTORY_SIZE,
       taskId,
       removedDuplicate: duplicateIndex !== -1,
     });
-  } catch {
-    logger.warn('Failed to update execution history');
+  } catch (error: any) {
+    logger.error('Failed to update execution history', {
+      error: error.message,
+      stack: error.stack
+    });
+    // Don't throw - continue execution even if state update fails
   }
 
   return {

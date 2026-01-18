@@ -7,6 +7,9 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
+import { safeStateGet } from '../../src/utils/state-safety';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Query parameters schema for single result API.
@@ -73,15 +76,16 @@ export const handler = async (request: any, { logger, state }: any) => {
   logger.info('Agent Result API: Received query request', { taskId: id });
 
   try {
-    // Retrieve execution history from state
     const groupId = 'agent:execution';
     const key = 'history';
-    const history = (await state.get(groupId, key)) || [];
 
-    // Find the specific task
-    const result = history.find((r: any) => r.taskId === id);
+    // 使用safeStateGet获取历史数据，防止circular reference问题
+    const history = await safeStateGet(state, groupId, key, []);
 
-    if (!result) {
+    // 查找特定任务
+    const foundResult = history.find((r: any) => r.taskId === id);
+
+    if (!foundResult) {
       return {
         status: 404,
         body: {
@@ -98,15 +102,15 @@ export const handler = async (request: any, { logger, state }: any) => {
       body: {
         success: true,
         result: {
-          taskId: result.taskId,
-          task: result.task,
-          success: result.success,
-          output: result.output,
-          error: result.error,
-          executionTime: result.executionTime,
-          metadata: result.metadata,
-          sessionId: result.sessionId,
-          timestamp: result.timestamp,
+          taskId: foundResult.taskId,
+          task: foundResult.task,
+          success: foundResult.success,
+          output: foundResult.output,
+          error: foundResult.error,
+          executionTime: foundResult.executionTime,
+          metadata: foundResult.metadata,
+          sessionId: foundResult.sessionId,
+          timestamp: foundResult.timestamp,
         },
       },
     };

@@ -2,10 +2,13 @@
  * System API Step.
  *
  * Provides endpoint to get system overview and statistics.
+ *
+ * Uses safe state operations to prevent wrapObject stack overflow.
  */
 
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
+import { safeStateGet } from '../../src/utils/state-safety';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
@@ -138,7 +141,7 @@ export const handler = async (request: any, { logger, state }: any) => {
     let activeSessions = 0;
 
     try {
-      const history = await state.get('agent:execution', 'history');
+      const history = await safeStateGet(state, 'agent:execution', 'history', []);
 
       if (history && Array.isArray(history)) {
         totalTasks = history.length;

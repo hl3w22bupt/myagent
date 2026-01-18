@@ -1,0 +1,266 @@
+# ============================================================================
+# Special Type Schemas
+# 特殊类型输出详细定义（错误、混合内容）
+# ============================================================================
+
+description: 特殊类型输出（错误、混合内容等）的详细 schema 定义
+
+types:
+  # ---------------------------------------------------------------
+  # 1. 错误 (error)
+  # ---------------------------------------------------------------
+  error:
+    result_type: error
+    description: 错误信息
+    use_cases:
+      - 所有技能执行失败时
+      - 输入验证失败
+      - 执行过程异常
+    content_schema:
+      type: object
+      required:
+        - type
+        - message
+      properties:
+        # 错误类型分类
+        type:
+          type: string
+          description: 错误类型分类
+          enum:
+            validation:      # 输入验证错误
+              description: "输入参数验证失败"
+            execution:      # 执行错误
+              description: "技能执行过程中的错误"
+            timeout:        # 超时错误
+              description: "执行超时"
+            network:        # 网络错误
+              description: "网络连接或请求失败"
+            resource:       # 资源错误
+              description: "系统资源不足（内存、磁盘等）"
+            permission:     # 权限错误
+              description: "权限不足"
+            dependency:     # 依赖错误
+              description: "依赖项缺失或版本不兼容"
+            unknown:        # 未知错误
+              description: "未知类型的错误"
+
+        # 用户友好的错误消息
+        message:
+          type: string
+          description: 用户友好的错误消息（简洁明了）
+          maxLength: 500
+          examples:
+            - "视频生成超时（超过 10 分钟）"
+            - "输入参数缺少必需字段 'description'"
+            - "网络连接失败，请检查网络设置"
+
+        # 详细错误信息
+        details:
+          type: string
+          description: 详细错误信息（堆栈跟踪、技术细节等）
+          examples:
+            - |
+              TimeoutError: Task execution exceeded 600000ms
+                at VideoGenerator.generate (handler.py:156)
+                at SkillExecutor.execute (executor.py:89)
+
+            - |
+              ValidationError: Missing required field 'description'
+                at SchemaValidator.validate (validator.py:45)
+
+        # 是否可重试
+        retryable:
+          type: boolean
+          description: 操作是否可以重试
+          default: true
+          example: true
+
+        # 建议的解决方案
+        suggestions:
+          type: array
+          description: 建议的解决方案列表
+          items:
+            type: string
+          maxItems: 5
+          examples:
+            - ["尝试减少视频时长", "降低质量设置", "检查系统资源"]
+            - ["检查输入参数格式", "参考示例输入"]
+            - ["检查网络连接", "尝试使用代理", "稍后重试"]
+
+        # 相关文档链接
+        docs_url:
+          type: string
+          format: uri
+          description: 相关文档链接
+          example: "https://docs.example.com/troubleshooting/timeout"
+
+        # 错误代码（便于调试和自动化处理）
+        code:
+          type: string
+          description: 机器可读的错误代码
+          pattern: "^[A-Z_]+$"
+          examples:
+            - TIMEOUT_ERROR
+            - VALIDATION_ERROR
+            - NETWORK_ERROR
+            - RESOURCE_ERROR
+
+        # 发生时间
+        timestamp:
+          type: integer
+          description: 错误发生的时间戳（Unix timestamp，毫秒）
+          example: 1736890800000
+
+    # 错误类型的 retryable 默认值映射
+    retryable_defaults:
+      validation: false      # 验证错误通常不可重试（需要修正输入）
+      execution: true        # 执行错误可能可重试
+      timeout: true          # 超时通常可重试
+      network: true          # 网络错误可重试
+      resource: false        # 资源错误不可重试（需要增加资源）
+      permission: false      # 权限错误不可重试（需要授权）
+      dependency: false      # 依赖错误不可重试（需要安装依赖）
+      unknown: true          # 未知错误默认可重试
+
+    output_example:
+      result_type: error
+      success: false
+      content:
+        type: "timeout"
+        message: "视频生成超时（超过 10 分钟）"
+        details: |
+          TimeoutError: Task execution exceeded 600000ms
+            at VideoRenderer.render (renderer.py:234)
+            at VideoGenerator.generate (handler.py:156)
+        retryable: true
+        suggestions:
+          - "尝试减少视频时长"
+          - "降低质量设置"
+          - "检查系统资源"
+        code: "TIMEOUT_ERROR"
+        timestamp: 1736890800000
+      metadata:
+        execution_time: 600000
+        skills_used: ["remotion-generator"]
+
+  # ---------------------------------------------------------------
+  # 2. 混合内容 (mixed)
+  # ---------------------------------------------------------------
+  mixed:
+    result_type: mixed
+    description: 混合内容（包含多种类型的内容项）
+    use_cases:
+      - 多步骤任务的结果
+      - 包含多种媒体的综合输出
+      - 复杂报告（文字+图片+表格）
+    content_schema:
+      type: array
+      description: 混合内容数组
+      items:
+        type: object
+        required:
+          - type
+          - content
+        properties:
+          # 内容项的类型
+          type:
+            type: string
+            description: 内容项的类型（使用 result_type 枚举值）
+            enum:
+              - text
+              - markdown
+              - code
+              - image
+              - video
+              - infographic
+              - table
+              - json
+
+          # 内容项的具体内容
+          content:
+            description: 内容项的具体内容（格式由 type 决定）
+            oneOf:
+              - type: string        # text, markdown
+              - type: object        # image, video, code, table
+              - type: array         # json
+
+          # 内容项的标题（可选）
+          title:
+            type: string
+            description: 内容项的标题
+            maxLength: 200
+            example: "数据可视化图表"
+
+          # 内容项的描述（可选）
+          description:
+            type: string
+            description: 内容项的描述
+            maxLength: 500
+            example: "2024年Q1销售数据柱状图"
+
+          # 内容项的顺序标识（可选，用于排序）
+          order:
+            type: integer
+            description: 显示顺序
+            minimum: 0
+            example: 1
+
+    output_example:
+      result_type: mixed
+      success: true
+      title: "综合分析报告"
+      description: "包含数据可视化、文本分析和代码示例的综合报告"
+      content:
+        - type: "text"
+          title: "概述"
+          content: "本分析报告包含3个部分：数据可视化、文本分析、代码示例。"
+          order: 0
+
+        - type: "infographic"
+          title: "销售数据图表"
+          description: "2024年Q1销售数据柱状图"
+          content:
+            path: "infographics/q1_sales.svg"
+            mime_type: "image/svg+xml"
+            width: 1920
+            height: 1080
+            thumbnail_path: "thumbnails/infographics/q1_sales.jpg"
+          order: 1
+
+        - type: "markdown"
+          title: "详细分析"
+          description: "销售数据的详细分析文本"
+          content: |
+            ## 销售趋势分析
+
+            ### 主要发现
+            1. Q1销售额同比增长15%
+            2. 3月份达到季度峰值
+            3. 产品A表现最佳
+
+            ### 建议
+            - 加大产品A的推广力度
+            - 优化产品B的营销策略
+          order: 2
+
+        - type: "code"
+          title: "数据处理代码"
+          description: "用于生成图表的Python代码"
+          content:
+            code: |
+              import pandas as pd
+              import matplotlib.pyplot as plt
+
+              df = pd.read_csv('sales_data.csv')
+              plt.figure(figsize=(12, 6))
+              plt.bar(df['month'], df['sales'])
+              plt.title('Q1 Sales Data')
+              plt.show()
+            language: python
+          order: 3
+
+      metadata:
+        execution_time: 30000
+        skills_used: ["data-analyzer", "infographic-generator", "code-generator"]
+        tags: ["report", "sales", "q1"]
+        x-sections: 4

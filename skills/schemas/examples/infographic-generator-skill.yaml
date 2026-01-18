@@ -1,0 +1,397 @@
+# ============================================================================
+# Infographic Generator Skill - 完整示例
+# ============================================================================
+
+name: infographic-generator
+version: 1.0.0
+description: Generate beautiful infographics using AntV Infographic from natural language descriptions
+tags:
+  - infographic
+  - visualization
+  - svg
+  - antv
+type: hybrid
+
+# ============================================================================
+# 输入 Schema
+# ============================================================================
+input_schema:
+  type: object
+  properties:
+    content:
+      type: string
+      description: "Natural language description of infographic to generate"
+
+    description:
+      type: string
+      description: "Alias for content parameter - use this instead of content"
+
+    language:
+      type: string
+      default: "auto"
+      enum: [auto, zh, en]
+      description: Content language (auto-detect, Chinese, English)
+
+    preferred_template:
+      type: string
+      description: "Optional: Specific template to use"
+
+    theme:
+      type: string
+      default: "auto"
+      enum: [auto, business, tech, nature, warm, cool, monochrome]
+      description: Theme color palette
+
+    style:
+      type: string
+      default: "auto"
+      enum: [auto, rough, pattern, linear-gradient, radial-gradient]
+      description: Visual style for infographic
+
+    width:
+      type: number
+      default: 1920
+      description: Canvas width in pixels
+
+    height:
+      type: number
+      default: 1080
+      description: Canvas height in pixels
+
+    export_format:
+      type: string
+      default: "both"
+      enum: [html, svg, both]
+      description: Output format(s) to generate
+
+  required:
+    - content
+
+# ============================================================================
+# 输出 Schema（标准化格式）
+# ============================================================================
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
+
+  properties:
+    # -----------------------------------------------------------------
+    # Result Type
+    # -----------------------------------------------------------------
+    result_type:
+      type: string
+      enum: [infographic, error]
+      description: "Result type identifier"
+
+    # -----------------------------------------------------------------
+    # Success Flag
+    # -----------------------------------------------------------------
+    success:
+      type: boolean
+      description: "Whether generation succeeded"
+
+    # -----------------------------------------------------------------
+    # Content（使用 oneOf 支持成功和失败两种情况）
+    # -----------------------------------------------------------------
+    content:
+      oneOf:
+        # 成功时的内容
+        - type: object
+          required:
+            - path
+            - mime_type
+          properties:
+            path:
+              type: string
+              description: "SVG/HTML path relative to outputs/ directory"
+              pattern: "^[^.]"
+              examples:
+                - "infographics/task_123.svg"
+                - "infographics/task_123.html"
+
+            mime_type:
+              type: string
+              enum: ["image/svg+xml", "text/html"]
+              description: "MIME type of generated file"
+
+            size:
+              type: integer
+              description: "File size in bytes"
+              example: 245678
+
+            width:
+              type: integer
+              description: "Canvas width in pixels"
+              example: 1920
+
+            height:
+              type: integer
+              description: "Canvas height in pixels"
+              example: 1080
+
+            thumbnail_path:
+              type: string
+              description: "Path to thumbnail image"
+              pattern: "^[^.]"
+              example: "thumbnails/infographics/task_123.jpg"
+
+            # Infographic 特有字段
+            template:
+              type: string
+              description: "Template used for generation"
+              example: "column-chart"
+
+            chart_type:
+              type: string
+              enum:
+                - column-chart
+                - bar-chart
+                - line-chart
+                - pie-chart
+                - scatter-plot
+                - radar-chart
+                - gauge
+                - funnel
+                - timeline
+                - hierarchy
+                - relation
+                - quadrant
+              description: "Type of chart/visualization"
+
+            theme:
+              type: string
+              description: "Color theme applied"
+              example: "business"
+
+            style:
+              type: string
+              description: "Visual style applied"
+              example: "rough"
+
+            data_points:
+              type: integer
+              description: "Number of data points in the infographic"
+              example: 12
+
+        # 失败时的错误
+        - type: object
+          required:
+            - type
+            - message
+          properties:
+            type:
+              type: string
+              enum: [validation, execution, timeout, resource, unknown]
+              description: "Error type"
+
+            message:
+              type: string
+              description: "User-friendly error message"
+              example: "Infographic generation failed: invalid input data"
+
+            details:
+              type: string
+              description: "Detailed error information"
+
+            retryable:
+              type: boolean
+              description: "Whether the error is retryable"
+
+            suggestions:
+              type: array
+              items:
+                type: string
+              description: "Suggested solutions"
+
+            code:
+              type: string
+              pattern: "^[A-Z_]+$"
+              description: "Machine-readable error code"
+
+    # -----------------------------------------------------------------
+    # 可选字段：标题
+    # -----------------------------------------------------------------
+    title:
+      type: string
+      description: "Generated infographic title"
+      example: "Q4 Sales Report Infographic"
+
+    # -----------------------------------------------------------------
+    # 可选字段：描述
+    # -----------------------------------------------------------------
+    description:
+      type: string
+      description: "Infographic description"
+      example: "Data visualization of Q4 2024 sales performance"
+
+    # -----------------------------------------------------------------
+    # 元数据
+    # -----------------------------------------------------------------
+    metadata:
+      type: object
+      required:
+        - execution_time
+        - skills_used
+      properties:
+        execution_time:
+          type: integer
+          description: "Execution time in milliseconds"
+          example: 45000
+
+        skills_used:
+          type: array
+          items:
+            type: string
+          description: "Skills used in this task"
+          example: ["infographic-generator", "llm-planner"]
+
+        # Infographic 特定元数据
+        template:
+          type: string
+          description: "Template name"
+
+        language:
+          type: string
+          enum: [zh, en, auto]
+          description: "Content language"
+
+        theme:
+          type: string
+          description: "Color theme"
+
+        style:
+          type: string
+          description: "Visual style"
+
+        # Token 使用（如果适用）
+        tokens:
+          type: object
+          properties:
+            input:
+              type: integer
+            output:
+              type: integer
+            total:
+              type: integer
+
+        # 自定义标签
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["infographic", "business", "q4"]
+
+        # 扩展字段
+        x-data-points:
+          type: integer
+          description: "Number of data points"
+
+        x-generation-time:
+          type: number
+          description: "Actual generation time in seconds"
+
+# ============================================================================
+# Prompt Template
+# ============================================================================
+prompt_template: |
+  You are an AntV Infographic generation expert. Create a complete infographic based on content description.
+
+  Content Requirements:
+  Description: {{content}}
+  Language: {{language}}
+  Preferred Template: {{preferred_template}}
+  Theme: {{theme}}
+  Style: {{style}}
+  Dimensions: {{width}}x{{height}}
+  Export Format: {{export_format}}
+
+  Generate an AntV Infographic DSL that:
+  - Analyzes content structure (sequence, list, compare, hierarchy, chart, quadrant, relation)
+  - Selects most appropriate template based on content type
+  - Creates visually appealing infographics with proper data hierarchy
+  - Uses appropriate icons and color schemes
+  - Produces valid AntV Infographic DSL syntax
+  - Supports the specified dimensions
+  - Includes proper styling (rough, pattern, gradient) if specified
+
+  The infographic should be:
+  - Professional and visually appealing
+  - Easy to understand
+  - Properly structured with clear hierarchy
+  - Using semantic icons where applicable
+  - Color-coordinated with the selected theme
+
+  Output the complete AntV Infographic DSL syntax below:
+
+# ============================================================================
+# Execution Configuration
+# ============================================================================
+execution:
+  handler: handler.py
+  function: generate_infographic
+  timeout: 180000
+
+# ============================================================================
+# 示例输出
+# ============================================================================
+# 成功输出示例:
+# {
+#   "result_type": "infographic",
+#   "success": true,
+#   "content": {
+#     "path": "infographics/task_123.svg",
+#     "mime_type": "image/svg+xml",
+#     "size": 245678,
+#     "width": 1920,
+#     "height": 1080,
+#     "thumbnail_path": "thumbnails/infographics/task_123.jpg",
+#     "template": "column-chart",
+#     "chart_type": "column-chart",
+#     "theme": "business",
+#     "style": "rough",
+#     "data_points": 12
+#   },
+#   "title": "Q4 Sales Report Infographic",
+#   "description": "Data visualization of Q4 2024 sales performance",
+#   "metadata": {
+#     "execution_time": 45000,
+#     "skills_used": ["infographic-generator"],
+#     "template": "column-chart",
+#     "language": "zh",
+#     "theme": "business",
+#     "style": "rough",
+#     "tags": ["infographic", "business", "q4"],
+#     "tokens": {
+#       "input": 1500,
+#       "output": 800,
+#       "total": 2300
+#     },
+#     "x-data-points": 12,
+#     "x-generation-time": 42.5
+#   }
+# }
+#
+# 失败输出示例:
+# {
+#   "result_type": "error",
+#   "success": false,
+#   "content": {
+#     "type": "validation",
+#     "message": "Invalid input: content description is too short",
+#     "details": "Content must be at least 10 characters long",
+#     "retryable": false,
+#     "suggestions": [
+#       "Provide a more detailed description",
+#       "Include specific data points to visualize"
+#     ],
+#     "code": "VALIDATION_ERROR"
+#   },
+#   "metadata": {
+#     "execution_time": 100,
+#     "skills_used": ["infographic-generator"]
+#   }
+# }
