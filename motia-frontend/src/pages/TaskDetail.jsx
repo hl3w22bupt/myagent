@@ -461,13 +461,44 @@ function TaskDetail() {
     )
   }
 
+  const handleDeleteTask = async () => {
+    // 确认删除
+    if (!window.confirm(`确定要删除任务 ${task.taskId} 吗?此操作不可恢复。`)) {
+      return
+    }
+
+    try {
+      await tasksAPI.deleteTask(task.taskId)
+      // 删除成功后跳转回任务列表
+      window.location.href = '/tasks'
+    } catch (error) {
+      console.error('删除任务失败:', error)
+      alert('删除任务失败,请稍后重试')
+    }
+  }
+
   return (
     <div className="task-detail">
       <div className="task-detail-header">
         <Link to="/tasks" className="back-link">
           ← 返回任务列表
         </Link>
-        <h1>任务详情</h1>
+        <div className="header-title-action">
+          <h1>任务详情</h1>
+          <button
+            className="delete-button-detail"
+            onClick={handleDeleteTask}
+            title="删除任务"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            删除任务
+          </button>
+        </div>
       </div>
 
       {/* 任务信息 */}
@@ -500,6 +531,18 @@ function TaskDetail() {
                   {task.metadata.skillNames.map((skill, index) => (
                     <span key={index} className="skill-badge">
                       {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {task.metadata?.delegates && task.metadata.delegates.length > 0 && (
+              <div className="info-item">
+                <span className="info-label">委派给:</span>
+                <div className="delegate-badges">
+                  {task.metadata.delegates.map((delegate, index) => (
+                    <span key={index} className="delegate-badge">
+                      🤖 {delegate}
                     </span>
                   ))}
                 </div>

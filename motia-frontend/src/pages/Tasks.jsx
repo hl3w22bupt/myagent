@@ -141,6 +141,26 @@ function Tasks() {
     }
   }
 
+  const handleDeleteTask = async (taskId, event) => {
+    // 阻止事件冒泡,防止触发链接跳转
+    event.preventDefault()
+    event.stopPropagation()
+
+    // 确认删除
+    if (!window.confirm(`确定要删除任务 ${taskId} 吗?此操作不可恢复。`)) {
+      return
+    }
+
+    try {
+      await tasksAPI.deleteTask(taskId)
+      // 删除成功后刷新列表
+      fetchTasks()
+    } catch (error) {
+      console.error('删除任务失败:', error)
+      alert('删除任务失败,请稍后重试')
+    }
+  }
+
 
   const getSkillDisplayName = (skill) => {
     // 使用动态从API获取的技能映射
@@ -259,9 +279,24 @@ function Tasks() {
                     <Link to={`/tasks/${task.taskId}`} className="task-title">
                       {task.task}
                     </Link>
-                    <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
-                      {task.success ? '已完成' : '失败'}
-                    </span>
+                    <div className="task-header-actions">
+                      <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
+                        {task.success ? '已完成' : '失败'}
+                      </span>
+                      <button
+                        className="delete-button"
+                        onClick={(e) => handleDeleteTask(task.taskId, e)}
+                        title="删除任务"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          <line x1="10" y1="11" x2="10" y2="17"></line>
+                          <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                        删除
+                      </button>
+                    </div>
                   </div>
                   <div className="task-details">
                     <div className="detail-item">

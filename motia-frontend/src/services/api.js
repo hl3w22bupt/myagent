@@ -81,7 +81,12 @@ export const tasksAPI = {
       ...response,
       data: response.data.result || null
     })),
-  submitTask: (task) => apiClient.post('/agent/execute', { task })
+  submitTask: (task) => apiClient.post('/agent/execute', { task }),
+  deleteTask: (id) =>
+    apiClient.delete('/agent/result', { params: { id } }).then(response => ({
+      ...response,
+      data: response.data
+    }))
 }
 
 export default apiClient
