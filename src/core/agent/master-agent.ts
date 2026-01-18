@@ -43,7 +43,7 @@ export class MasterAgent extends Agent {
   /**
    * Run task with possible delegation to subagents.
    */
-  async run(task: string, taskId?: string): Promise<AgentResult> {
+  async run(task: string, _taskId?: string): Promise<AgentResult> {
     const startTime = Date.now();
     const steps: any[] = [];
 
