@@ -22,6 +22,7 @@ module.exports = {
   ignorePatterns: [
     'dist',
     'node_modules',
+    'python_modules',
     '*.js',
     'jest.config.js',
     'types.d.ts',

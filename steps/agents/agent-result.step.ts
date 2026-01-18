@@ -8,8 +8,6 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { safeStateGet } from '../../src/utils/state-safety';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * Query parameters schema for single result API.
