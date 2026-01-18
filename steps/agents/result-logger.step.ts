@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import { EventConfig } from 'motia';
-import { safeStateGet, safeStateSet, hasCircularReference, safeClone } from '../../src/utils/state-safety';
+import { safeStateGet, safeStateSet, hasCircularReference } from '../../src/utils/state-safety';
 
 /**
  * Configuration for execution history limits.

@@ -5,6 +5,8 @@ import './Settings.css'
 function Settings() {
   const { settings, updateSettings } = useSettings()
 
+  const [formSettings, setFormSettings] = useState(settings)
+
   // 从localStorage加载设置的初始值
   useEffect(() => {
     const savedSettings = localStorage.getItem('motia-settings')
@@ -18,8 +20,6 @@ function Settings() {
       }
     }
   }, [])
-
-  const [formSettings, setFormSettings] = useState(settings)
 
   const handleSettingChange = (key, value) => {
     setFormSettings(prev => ({
