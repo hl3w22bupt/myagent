@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import { EventConfig } from 'motia';
-import { safeStateSet, hasCircularReference, safeClone } from '../../src/utils/state-safety';
+import { safeStateGet, safeStateSet, hasCircularReference, safeClone } from '../../src/utils/state-safety';
 
 /**
  * Configuration for execution history limits.
@@ -328,17 +328,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // Get existing history with circular reference check
-    const existingHistoryRaw = await state.get(groupId, key);
-
-    // Use safe clone to prevent circular reference issues
-    let history: any[];
-    if (existingHistoryRaw && Array.isArray(existingHistoryRaw)) {
-      const cloned = safeClone(existingHistoryRaw);
-      history = cloned || []; // Fallback to empty array if clone fails
-    } else {
-      history = [];
-    }
+    // 使用 safeStateGet 获取现有历史记录，防止 circular reference 问题
+    let history = await safeStateGet(state, groupId, key, []);
 
     // Check for circular references in existing history
     if (hasCircularReference(history)) {

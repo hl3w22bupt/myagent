@@ -12,6 +12,7 @@ declare module 'motia' {
   }
 
   interface Handlers {
+    'media-serve-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -21,9 +22,9 @@ declare module 'motia' {
     'result-logger': EventHandler<never, never>
     'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
     'failure-handler': EventHandler<never, never>
+    'agent-task-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-results-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'agent-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     

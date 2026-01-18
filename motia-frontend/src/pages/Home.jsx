@@ -75,104 +75,122 @@ function Home() {
   return (
     <div className="home">
       {/* 主要任务输入区 */}
-      <div className="home-hero">
-        <h1>Motia Agent Dashboard</h1>
-        <p>输入您的任务，AI将自动处理并返回结果</p>
+      <div className="home-hero-wrapper">
+        <div className="container">
+          <div className="home-hero">
+            <h1>Motia Agent Dashboard</h1>
+            <p>输入您的任务，AI将自动处理并返回结果</p>
 
-        <div className="hero-submit-section">
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="hero-submit-form">
-            <div className="hero-input-group">
-              <textarea
-                value={taskContent}
-                onChange={(e) => setTaskContent(e.target.value)}
-                placeholder="请输入您的任务描述，例如：总结这篇文章、生成一张图表、计算 1 + 1 的结果..."
-                rows={6}
-                className="hero-task-input"
-                disabled={submitting}
-              />
-              <div className="input-hint">
-                系统会自动识别任务需求并选择合适的技能来处理
+          <div className="hero-submit-section">
+            {error && (
+              <div className="error-message">
+                {error}
               </div>
-            </div>
+            )}
 
-            <button
-              type="submit"
-              className="hero-submit-button"
-              disabled={submitting || !taskContent.trim()}
-            >
-              {submitting ? (
-                <span className="loading-text">
-                  <span className="spinner"></span>
-                  提交中...
-                </span>
-              ) : (
-                <>
-                  <span className="button-icon">→</span>
-                  开始执行任务
-                </>
-              )}
-            </button>
-          </form>
+            <form onSubmit={handleSubmit} className="hero-submit-form">
+              <div className="hero-input-group">
+                <textarea
+                  value={taskContent}
+                  onChange={(e) => setTaskContent(e.target.value)}
+                  placeholder="请输入您的任务描述，例如：总结这篇文章、生成一张图表、计算 1 + 1 的结果..."
+                  rows={6}
+                  className="hero-task-input"
+                  disabled={submitting}
+                />
+                <div className="input-hint">
+                  系统会自动识别任务需求并选择合适的技能来处理
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="hero-submit-button"
+                disabled={submitting || !taskContent.trim()}
+              >
+                {submitting ? (
+                  <span className="loading-text">
+                    <span className="spinner"></span>
+                    提交中...
+                  </span>
+                ) : (
+                  <>
+                    <svg className="button-icon" width="24" height="24" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    开始执行任务
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
         </div>
+      </div>
       </div>
 
       {loading ? (
         <div className="loading">加载中...</div>
       ) : (
         <>
-          {/* 统计卡片 */}
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-label">总任务数</div>
-              <div className="stat-value">{systemInfo?.totalTasks || 0}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">完成任务</div>
-              <div className="stat-value">{systemInfo?.completedTasks || 0}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">可用技能</div>
-              <div className="stat-value">{skills.length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">活跃子代理</div>
-              <div className="stat-value">{agents.length}</div>
+          {/* 统计卡片区域 */}
+          <div className="stats-wrapper">
+            <div className="container">
+              <div className="stats-section">
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-label">总任务数</div>
+                  <div className="stat-value">{systemInfo?.totalTasks || 0}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">完成任务</div>
+                  <div className="stat-value">{systemInfo?.completedTasks || 0}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">可用技能</div>
+                  <div className="stat-value">{skills.length}</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">活跃子代理</div>
+                  <div className="stat-value">{agents.length}</div>
+                </div>
+              </div>
+              </div>
             </div>
           </div>
 
-          {/* 最近任务 */}
-          <div className="recent-tasks">
-            <h2>最近任务</h2>
-            {recentTasks.length > 0 ? (
-              <ul className="task-list">
-                {recentTasks.map(task => (
-                  <li key={task.taskId} className="task-item">
-                    <Link to={`/tasks/${task.taskId}`} className="task-link">
-                      <div className="task-title">{task.task}</div>
-                      <div className="task-meta">
-                        <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
-                          {task.success ? '成功' : '失败'}
-                        </span>
-                        <span className="time">
-                          {formatDate(task.timestamp)}
-                        </span>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="no-tasks">暂无任务</div>
-            )}
-            <Link to="/tasks" className="view-all-link">
-              查看所有任务 →
-            </Link>
+          {/* 最近任务区域 */}
+          <div className="tasks-wrapper">
+            <div className="container">
+              <div className="tasks-section">
+              <div className="recent-tasks">
+                <h2>最近任务</h2>
+                {recentTasks.length > 0 ? (
+                  <ul className="task-list">
+                    {recentTasks.map(task => (
+                      <li key={task.taskId} className="task-item">
+                        <Link to={`/tasks/${task.taskId}`} className="task-link">
+                          <div className="task-title">{task.task}</div>
+                          <div className="task-meta">
+                            <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
+                              {task.success ? '成功' : '失败'}
+                            </span>
+                            <span className="time">
+                              {formatDate(task.timestamp)}
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="no-tasks">暂无任务</div>
+                )}
+                <Link to="/tasks" className="view-all-link">
+                  查看所有任务
+                </Link>
+              </div>
+              </div>
+            </div>
           </div>
         </>
       )}

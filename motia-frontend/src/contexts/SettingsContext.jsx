@@ -28,6 +28,7 @@ export const SettingsProvider = ({ children }) => {
           language: 'zh-CN'
         }
         setSettings(defaultSettings)
+        applySettings(defaultSettings)
       }
     } else {
       // 使用默认设置
@@ -36,6 +37,7 @@ export const SettingsProvider = ({ children }) => {
         language: 'zh-CN'
       }
       setSettings(defaultSettings)
+      applySettings(defaultSettings)
     }
   }, [])
 

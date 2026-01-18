@@ -1,0 +1,121 @@
+/**
+ * Media File Serve API
+ *
+ * Serves media files (videos, images) from the outputs/ and videos/ directories.
+ * Provides static file access for generated content.
+ */
+
+import { z } from 'zod';
+import { ApiRouteConfig } from 'motia';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+/**
+ * Input schema for media file requests.
+ */
+export const inputSchema = z
+  .object({
+    /**
+     * File path relative to outputs/ or videos/ directory
+     * Examples: "videos/task-123_video_1.mp4", "images/chart.png"
+     */
+    path: z.string().min(1),
+  })
+  .passthrough();
+
+/**
+ * Media Serve API configuration.
+ */
+export const config: ApiRouteConfig = {
+  type: 'api',
+  name: 'media-serve-api',
+  path: '/media',
+  method: 'GET',
+  flows: ['agent-workflow'],
+  emits: [],
+};
+
+/**
+ * Get MIME type based on file extension.
+ */
+function getMimeType(filePath: string): string {
+  const ext = filePath.toLowerCase().split('.').pop();
+  const mimeTypes: Record<string, string> = {
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+  };
+  return mimeTypes[ext || ''] || 'application/octet-stream';
+}
+
+/**
+ * Serve media file from disk.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const handler = async (request: any, { logger }: any) => {
+  // Motia uses queryParams not query
+  const queryParams: Record<string, any> = request.queryParams || {};
+  const path = queryParams.path as string;
+
+  if (!path) {
+    return {
+      status: 400,
+      body: {
+        error: 'Missing path parameter',
+      },
+    };
+  }
+
+  logger.info('Media file requested', { path });
+
+  // Try videos/ directory first, then outputs/
+  const possiblePaths = [
+    join(process.cwd(), 'videos', path),
+    join(process.cwd(), 'outputs', path),
+    join(process.cwd(), 'outputs', 'videos', path),
+  ];
+
+  let filePathFound = '';
+  for (const possiblePath of possiblePaths) {
+    if (existsSync(possiblePath)) {
+      filePathFound = possiblePath;
+      break;
+    }
+  }
+
+  if (!filePathFound) {
+    logger.warn('Media file not found', { path, tried: possiblePaths });
+    return {
+      status: 404,
+      body: {
+        error: 'File not found',
+        path,
+      },
+    };
+  }
+
+  const mimeType = getMimeType(filePathFound);
+  const fileBuffer = readFileSync(filePathFound);
+
+  logger.info('Serving media file', {
+    path,
+    fullPath: filePathFound,
+    mimeType,
+    size: fileBuffer.length,
+  });
+
+  return {
+    status: 200,
+    headers: {
+      'Content-Type': mimeType,
+      'Content-Length': fileBuffer.length.toString(),
+      'Cache-Control': 'public, max-age=3600',
+    },
+    body: fileBuffer,
+  };
+};
