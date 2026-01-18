@@ -40,6 +40,27 @@ export const inputSchema = _z.object({
    * Optional: Whether to continue previous conversation.
    */
   continue: _z.boolean().optional(),
+
+  /**
+   * Optional: Use MasterAgent with delegation.
+   * When true, creates MasterAgent instance instead of regular Agent.
+   */
+  useDelegation: _z.boolean().optional(),
+
+  /**
+   * Optional: List of subagents for delegation (requires useDelegation=true).
+   */
+  subagents: _z.array(_z.string()).optional(),
+
+  /**
+   * Optional: System prompt override.
+   */
+  systemPrompt: _z.string().optional(),
+
+  /**
+   * Optional: Available skills.
+   */
+  availableSkills: _z.array(_z.string()).optional(),
 });
 
 /**
@@ -111,11 +132,29 @@ export const handler = async (
     // Update status to running
     await updateStream('running', { currentStep: 'Acquiring agent' });
 
-    // Get Agent from Manager (each session has independent Agent instance)
-    const agent = await agentManager.acquire(sessionId);
+    // Determine agent type
+    const useMasterAgent = input.useDelegation || false;
+    const agentType = useMasterAgent ? 'master' : 'agent';
 
-    logger.info('Agent acquired', { sessionId });
-    await updateStream('running', { currentStep: 'Agent acquired, starting execution' });
+    logger.info('Acquiring agent', { sessionId, agentType, useDelegation: useMasterAgent });
+
+    // Get Agent or MasterAgent from Manager
+    // each session has independent Agent/MasterAgent instance
+    const agent = await agentManager.acquire(sessionId, {
+      agentType,
+    });
+
+    // Verify agent type
+    const agentTypeName = agent.constructor.name;
+    logger.info('Agent acquired', {
+      sessionId,
+      agentType: agentTypeName,
+      isMasterAgent: agentTypeName === 'MasterAgent',
+    });
+
+    await updateStream('running', {
+      currentStep: `${agentTypeName} acquired, starting execution`,
+    });
 
     // If continuing conversation, get history
     if (input.continue) {
@@ -139,6 +178,7 @@ export const handler = async (
       sessionId,
       success: result.success,
       executionTime: result.executionTime,
+      delegates: result.metadata.delegates,  // Show which subagents were used
     });
 
     // Update stream with completed status
@@ -175,6 +215,7 @@ export const handler = async (
       taskId,
       output: result.output,
       state: result.state,
+      metadata: result.metadata,  // Include metadata with delegates info
     };
   } catch (error: any) {
     logger.error('Agent execution failed', {

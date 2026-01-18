@@ -288,18 +288,37 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   });
 
   if (normalizedResult.success) {
+    // Handle both string and object outputs
+    let outputPreview = normalizedResult.output;
+    if (typeof normalizedResult.output === 'string') {
+      outputPreview = normalizedResult.output.substring(0, 200) + (normalizedResult.output.length > 200 ? '...' : '');
+    } else {
+      // Convert object to JSON for preview
+      const jsonStr = JSON.stringify(normalizedResult.output);
+      outputPreview = jsonStr.substring(0, 200) + (jsonStr.length > 200 ? '...' : '');
+    }
+
     logger.info('✅ Task Execution Successful', {
-      output: normalizedResult.output?.substring(0, 200) + ((normalizedResult.output?.length ?? 0) > 200 ? '...' : ''),
+      output: outputPreview,
       llmCalls: normalizedResult.metadata?.llmCalls,
       skillCalls: normalizedResult.metadata?.skillCalls,
       totalTokens: normalizedResult.metadata?.totalTokens,
     });
   } else {
+    // Handle both string and object outputs for errors
+    let stderrPreview = normalizedResult.output;
+    if (typeof normalizedResult.output === 'string') {
+      stderrPreview = normalizedResult.output.substring(0, 500);
+    } else {
+      const jsonStr = JSON.stringify(normalizedResult.output);
+      stderrPreview = jsonStr.substring(0, 500);
+    }
+
     logger.warn('❌ Task Execution Failed', {
       task,
       sessionId,
       error: normalizedResult.error,
-      stderr: normalizedResult.output?.substring(0, 500),
+      stderr: stderrPreview,
     });
   }
 

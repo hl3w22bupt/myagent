@@ -11,7 +11,8 @@
  */
 
 import { Agent } from './agent';
-import { AgentConfig } from './types';
+import { MasterAgent } from './master-agent';
+import { AgentConfig, MasterAgentConfig } from './types';
 
 /**
  * Configuration for AgentManager.
@@ -25,6 +26,20 @@ export interface AgentManagerConfig {
 
   /** Agent configuration for creating new Agents */
   agentConfig: AgentConfig;
+
+  /** Optional: MasterAgent configuration for delegation */
+  masterAgentConfig?: MasterAgentConfig;
+
+  /** Optional: Default agent type ('agent' or 'master') */
+  defaultAgentType?: 'agent' | 'master';
+}
+
+/**
+ * Options for acquiring an agent.
+ */
+export interface AcquireOptions {
+  /** Agent type to create */
+  agentType?: 'agent' | 'master';
 }
 
 /**
@@ -40,7 +55,8 @@ export interface AgentManagerConfig {
  * - Session limit enforcement (evicts oldest when full)
  */
 export class AgentManager {
-  private sessions: Map<string, Agent> = new Map();
+  private sessions: Map<string, Agent | MasterAgent> = new Map();
+  private sessionTypes: Map<string, 'agent' | 'master'> = new Map();
   private lastActivity: Map<string, number> = new Map();
   private config: AgentManagerConfig;
   private cleanupTimer?: NodeJS.Timeout;
@@ -61,9 +77,13 @@ export class AgentManager {
    * If session doesn't exist, creates new Agent with session state.
    *
    * @param sessionId - Session identifier
-   * @returns Agent instance for this session
+   * @param options - Optional acquire options (agent type)
+   * @returns Agent or MasterAgent instance for this session
    */
-  async acquire(sessionId: string): Promise<Agent> {
+  async acquire(
+    sessionId: string,
+    options?: AcquireOptions
+  ): Promise<Agent | MasterAgent> {
     // Session exists - return existing Agent
     if (this.sessions.has(sessionId)) {
       const agent = this.sessions.get(sessionId)!;
@@ -71,11 +91,31 @@ export class AgentManager {
       return agent;
     }
 
-    // Create new Agent with session state
-    // Now passing sessionId to Agent constructor (Task 5.4)
-    const agent = new Agent(this.config.agentConfig, sessionId);
+    // Determine agent type
+    const agentType =
+      options?.agentType ||
+      this.config.defaultAgentType ||
+      'agent';
 
+    // Create new Agent or MasterAgent
+    let agent: Agent | MasterAgent;
+
+    if (agentType === 'master') {
+      // Validate masterAgentConfig exists
+      if (!this.config.masterAgentConfig) {
+        throw new Error(
+          'Cannot create MasterAgent: masterAgentConfig not provided in AgentManagerConfig'
+        );
+      }
+      agent = new MasterAgent(this.config.masterAgentConfig, sessionId);
+    } else {
+      // Create regular Agent
+      agent = new Agent(this.config.agentConfig, sessionId);
+    }
+
+    // Store session and type
     this.sessions.set(sessionId, agent);
+    this.sessionTypes.set(sessionId, agentType);
     this.lastActivity.set(sessionId, Date.now());
 
     // Enforce session limit
@@ -102,6 +142,7 @@ export class AgentManager {
       }
 
       this.sessions.delete(sessionId);
+      this.sessionTypes.delete(sessionId);
       this.lastActivity.delete(sessionId);
     }
   }

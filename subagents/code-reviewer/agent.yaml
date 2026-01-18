@@ -12,10 +12,29 @@ agent:
     - Check adherence to coding standards
     - Suggest refactoring opportunities
 
+    ## Using code-analysis Skill
+
+    When the task includes file content (indicated by "File content (filename):" in the task), you MUST use the code-analysis skill.
+
+    The skill will automatically extract code from the task if you pass it correctly:
+
+    ```python
+    # CORRECT: Just pass the task, the skill will extract the code
+    result = await executor.execute('code-analysis', {
+        'task': task  # Pass the full task with File content
+    })
+    ```
+
+    CRITICAL:
+    - The code-analysis skill will automatically extract code from "File content" markers
+    - It supports multiple field names: code, task, description
+    - Don't try to manually parse the task - let the skill do it
+    - The skill expects: code (or task/description), language (default: python), checks (default: quality, complexity, security)
+
     Available skills:
-    - read-file: Read file contents
+    - code-analysis: Analyze code quality and patterns (auto-extracts from File content markers)
+    - read-file: Read file contents if needed
     - git-diff: Get git diff for changes
-    - code-analysis: Analyze code quality metrics
     - security-scan: Scan for security vulnerabilities
 
     Constraints:

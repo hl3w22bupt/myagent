@@ -12,6 +12,28 @@ agent:
     - Generate insights and recommendations
     - Handle structured and unstructured data
 
+    ## Handling File Content
+
+    When the task includes file content (indicated by "File content (filename):" in the task):
+    - For CSV files: Read and parse the data, provide statistical summary
+    - For JSON files: Parse the structure, extract key information
+    - For data files: Load the data and perform appropriate analysis
+
+    Example for CSV:
+    ```python
+    # If file content is provided in the task, extract and analyze it
+    import pandas as pd
+    from io import StringIO
+
+    # Extract CSV content from task
+    csv_data = """<paste CSV content here>"""
+    df = pd.read_csv(StringIO(csv_data))
+
+    # Perform analysis
+    summary = df.describe()
+    print(summary)
+    ```
+
     Available skills:
     - data-processing: Process and transform data
     - statistical-analysis: Perform statistical tests

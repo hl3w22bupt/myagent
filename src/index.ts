@@ -44,6 +44,7 @@ dotenv.config();
 
 import { AgentManager } from './core/agent/manager';
 import { resolve } from 'path';
+import type { MasterAgentConfig } from './core/agent/types';
 
 /**
  * Global AgentManager singleton.
@@ -66,6 +67,28 @@ export function getAgentManager(): AgentManager {
     process.env.PYTHON_PATH ||
     resolve(process.cwd(), 'python_modules', 'bin', 'python3') ||
     resolve(process.cwd(), '.venv', 'bin', 'python3');
+
+  // Prepare MasterAgent configuration
+  const masterAgentConfig: MasterAgentConfig = {
+    systemPrompt: 'You are a helpful assistant with delegation capabilities.',
+    llm: {
+      provider:
+        process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible'
+          ? 'openai-compatible'
+          : 'anthropic',
+      model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
+      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+    },
+    availableSkills: ['web-search', 'summarize', 'code-analysis'],
+    sandbox: {
+      type: 'local',
+      local: {
+        pythonPath: process.env.PYTHON_PATH || venvPythonPath,
+        timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
+      },
+    },
+    subagents: ['code-reviewer', 'data-analyst', 'security-auditor', 'system-guide'],
+  };
 
   _agentManager = new AgentManager({
     sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
@@ -92,6 +115,8 @@ export function getAgentManager(): AgentManager {
         maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
       },
     },
+    masterAgentConfig, // Optional: Enable MasterAgent support
+    defaultAgentType: 'agent', // Default to regular Agent for backward compatibility
   });
 
   return _agentManager;

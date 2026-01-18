@@ -108,6 +108,8 @@ export interface AgentResult {
     skillCalls: number;
     totalTokens: number;
     skillNames?: string[];
+    /** Subagents that were delegated to (for MasterAgent) */
+    delegates?: string[];
   };
 
   /** Session ID (optional for backward compatibility) */

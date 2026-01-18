@@ -28,18 +28,28 @@ def analyze(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     Args:
         input_data: Dictionary containing:
-            - code: Source code to analyze
-            - language: Programming language
-            - checks: List of checks to perform
+            - code: Source code to analyze (preferred)
+            - task: Task description that may contain code (fallback)
+            - description: Description that may contain code (fallback)
+            - language: Programming language (default: 'python')
+            - checks: List of checks to perform (default: ['quality', 'complexity', 'security'])
 
     Returns:
         Dictionary with analysis results in unified format
     """
     start_time = time.time()
 
-    code = input_data.get('code', '')
+    # Try multiple field names for code (in order of preference)
+    code = input_data.get('code') or input_data.get('task') or input_data.get('description', '')
     language = input_data.get('language', 'python')
     checks = input_data.get('checks', ['quality', 'complexity', 'security'])
+
+    # If code is in task/description, try to extract it from "File content" markers
+    if code and 'File content' in code:
+        import re
+        file_match = re.search(r'File content \([^)]+\):\n(.+)', code, re.DOTALL)
+        if file_match:
+            code = file_match.group(1).strip()
 
     # Input validation
     if not code or not code.strip():
@@ -48,8 +58,9 @@ def analyze(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 .set_error(
                     error=ValueError("Code content is required for analysis"),
                     suggestions=[
-                        "Provide source code to analyze",
-                        "Ensure code field is not empty"
+                        "Provide source code using 'code' field",
+                        "Include file content in 'task' field with 'File content (filename):' marker",
+                        "Ensure at least one field contains code"
                     ]
                 ) \
                 .build()

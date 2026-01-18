@@ -197,15 +197,16 @@ Output format (JSON):
       throw new Error(`Failed to parse plan JSON: ${error.message}`);
     }
 
-    // Validate required fields
-    if (!plan.selected_skills || !Array.isArray(plan.selected_skills)) {
+    // Validate required fields - accept both 'selected_skills' and 'selected'
+    const skillsArray = plan.selected_skills || plan.selected;
+    if (!skillsArray || !Array.isArray(skillsArray)) {
       console.error('[PTC Generator] Missing or invalid selected_skills field:', plan);
-      throw new Error(`Plan missing valid 'selected_skills' array`);
+      throw new Error(`Plan missing valid 'selected_skills' or 'selected' array`);
     }
 
     return {
       code: '', // Will be generated in step 2
-      selectedSkills: plan.selected_skills,
+      selectedSkills: skillsArray,
       reasoning: plan.reasoning || 'No reasoning provided',
     };
   }
@@ -304,11 +305,25 @@ ${
 from core.skill.executor import SkillExecutor
 executor = SkillExecutor()
 
-# Use skills with await:
-# IMPORTANT: Pass the task description as the 'description' parameter
+# CRITICAL - SkillResult structure:
+# All skill executions return a SkillResult object with:
+#   - result.success (bool): whether execution succeeded
+#   - result.output (any): the actual output data
+#   - result.error (str): error message if failed
+#   - result.execution_time (float): execution time
+
+# IMPORTANT: Always extract .output to get the actual data:
 result = await executor.execute('skill-name', {
     'description': 'detailed task description',
     'param2': 'value2'  # optional parameters
+})
+actual_output = result.output  # Extract the real output
+
+# When chaining skills, pass result.output (NOT result) to the next skill:
+result1 = await executor.execute('first-skill', {'param': 'value'})
+result2 = await executor.execute('second-skill', {
+    'description': 'process the result',
+    'input_data': result1.output  # Pass .output, not result1
 })`
     : `No skills needed - solve the task directly with Python code.`
 }
@@ -329,8 +344,14 @@ CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 result = await executor.execute('skill-name', {
     'description': 'task description'
 })
-print(result)
+print(result.output)  # Print .output, not result
 \`\`\`
+
+IMPORTANT REMINDERS:
+- Always use result.output to get the actual output from a skill
+- When passing results to another skill, always pass result.output (NOT result)
+- Match the parameter names to the skill's input schema
+- Check the skill's input schema to understand expected parameter types
 
 Generate the code now:`;
 
