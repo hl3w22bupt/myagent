@@ -156,7 +156,7 @@ except Exception as e:
       const result = await sandbox.execute(testCode, {
         skills: [],
         skillImplPath: process.cwd(),
-        sessionId: 'test-env-check',
+        sessionId: `test-env-check-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
@@ -166,7 +166,17 @@ except Exception as e:
     it('should execute Python code that imports SkillExecutor', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+# Use absolute path from environment for reliable imports
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+# Also add src directory
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.executor import SkillExecutor
 
@@ -177,7 +187,7 @@ print("SUCCESS: SkillExecutor imported")
       const result = await sandbox.execute(testCode, {
         skills: [],
         skillImplPath: process.cwd(),
-        sessionId: 'test-skill-executor-import',
+        sessionId: `test-skill-executor-import-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
@@ -188,7 +198,15 @@ print("SUCCESS: SkillExecutor imported")
     it('should list available skills via SkillRegistry', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.registry import SkillRegistry
 
@@ -203,7 +221,7 @@ for name, meta in skills.items():
       const result = await sandbox.execute(testCode, {
         skills: [],
         skillImplPath: process.cwd(),
-        sessionId: 'test-skill-registry',
+        sessionId: `test-skill-registry-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
@@ -218,7 +236,15 @@ for name, meta in skills.items():
     it('should execute summarize skill (pure-prompt)', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.executor import SkillExecutor
 
@@ -244,7 +270,7 @@ print(f"SUCCESS: Summary: {str(summary_content)[:50]}")
           },
         ],
         skillImplPath: process.cwd(),
-        sessionId: 'test-summarize-skill',
+        sessionId: `test-summarize-skill-${Date.now()}`,  // Unique sessionId
         timeout: 15000,
       });
 
@@ -255,7 +281,15 @@ print(f"SUCCESS: Summary: {str(summary_content)[:50]}")
     it('should execute code-analysis skill (pure-script)', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.executor import SkillExecutor
 
@@ -278,7 +312,7 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
           },
         ],
         skillImplPath: process.cwd(),
-        sessionId: 'test-code-analysis-skill',
+        sessionId: `test-code-analysis-skill-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
@@ -352,7 +386,15 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
     it('should handle missing skill gracefully', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.executor import SkillExecutor
 
@@ -367,7 +409,7 @@ except Exception as e:
       const result = await sandbox.execute(testCode, {
         skills: [],
         skillImplPath: process.cwd(),
-        sessionId: 'test-missing-skill',
+        sessionId: `test-missing-skill-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
@@ -378,7 +420,15 @@ except Exception as e:
     it('should handle invalid skill input gracefully', async () => {
       const testCode = `
 import sys
-sys.path.insert(0, '.')
+import os
+
+skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
+if skill_path not in sys.path:
+    sys.path.insert(0, skill_path)
+
+src_path = os.path.join(skill_path, 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 from core.skill.executor import SkillExecutor
 
@@ -402,7 +452,7 @@ else:
           },
         ],
         skillImplPath: process.cwd(),
-        sessionId: 'test-invalid-input',
+        sessionId: `test-invalid-input-${Date.now()}`,  // Unique sessionId
         timeout: 10000,
       });
 
