@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import { EventConfig } from 'motia';
-import { safeStateGet, safeStateSet, hasCircularReference } from '../../src/utils/state-safety';
+import { hasCircularReference } from '../../src/utils/state-safety';
 import { stateLockManager } from '../../src/utils/state-lock';
 
 /**
