@@ -34,7 +34,7 @@
 
 /* 英雄区域 */
 .home-hero {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.85) 0%, rgba(124, 58, 237, 0.85) 100%);
   border-radius: 1rem;
   text-align: center;
   color: white;
@@ -95,23 +95,21 @@
 
 /* 提交表单卡片 */
 .hero-submit-form {
-  background-color: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: transparent;
+  border: none;
   border-radius: 1rem;
   padding: 2rem;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   text-align: left;
 }
 
 .hero-input-group {
   margin-bottom: 1.5rem;
+  position: relative;
 }
 
 .hero-task-input {
   width: 100%;
-  padding: 1rem;
+  padding: 1.25rem;
   border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 0.75rem;
   font-size: 1rem;
@@ -120,6 +118,8 @@
   transition: all var(--transition-fast);
   background-color: rgba(255, 255, 255, 0.9);
   color: #1e293b; /* 始终使用深色文字，因为背景是白色 */
+  min-height: 160px;
+  line-height: 1.6;
 }
 
 .hero-task-input::placeholder {
@@ -145,19 +145,24 @@
 }
 
 .input-hint {
-  margin-top: 0.75rem;
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.9);
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #ffffff;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  font-weight: 600;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.8),
+    0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .input-hint::before {
   content: '💡';
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 /* 提交按钮 */
@@ -197,6 +202,62 @@
 .button-icon {
   font-size: 1.5rem;
   line-height: 1;
+}
+
+/* 提交按钮 - 纯图标设计 */
+.hero-submit-button-icon {
+  position: absolute;
+  bottom: 3.75rem;
+  right: 1rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  background: transparent;
+  color: #ef4444;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.hero-submit-button-icon:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  transform: scale(1.1);
+}
+
+.hero-submit-button-icon:active:not(:disabled) {
+  transform: scale(1.05);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.hero-submit-button-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  color: #9ca3af;
+}
+
+.submit-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  stroke-width: 2;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.submit-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {

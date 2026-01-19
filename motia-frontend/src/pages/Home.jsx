@@ -19,7 +19,7 @@ function Home() {
       try {
         const [systemRes, tasksRes, skillsRes, agentsRes] = await Promise.all([
           systemAPI.getSystemInfo(),
-          tasksAPI.getTasks({ limit: 5 }),
+          tasksAPI.getTasks({ limit: 6 }),
           skillsAPI.getSkills(),
           agentsAPI.getAgents()
         ])
@@ -78,7 +78,7 @@ function Home() {
       <div className="home-hero-wrapper">
         <div className="container">
           <div className="home-hero">
-            <h1>Motia Agent Dashboard</h1>
+            <h1>MyAgent Workspace</h1>
             <p>输入您的任务，AI将自动处理并返回结果</p>
 
           <div className="hero-submit-section">
@@ -93,35 +93,40 @@ function Home() {
                 <textarea
                   value={taskContent}
                   onChange={(e) => setTaskContent(e.target.value)}
-                  placeholder="请输入您的任务描述，例如：总结这篇文章、生成一张图表、计算 1 + 1 的结果..."
-                  rows={6}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault()
+                      if (taskContent.trim() && !submitting) {
+                        handleSubmit(e)
+                      }
+                    }
+                  }}
+                  placeholder="请输入您的任务描述，例如：总结这篇文章、生成一张图表、计算 1 + 1 的结果... (按 Cmd+Enter 或 Ctrl+Enter 快速提交)"
+                  rows={8}
                   className="hero-task-input"
                   disabled={submitting}
                 />
                 <div className="input-hint">
-                  系统会自动识别任务需求并选择合适的技能来处理
+                  系统会自动识别任务需求并选择合适的 subagent 和 skill 来处理
                 </div>
-              </div>
-
-              <button
-                type="submit"
-                className="hero-submit-button"
-                disabled={submitting || !taskContent.trim()}
-              >
-                {submitting ? (
-                  <span className="loading-text">
-                    <span className="spinner"></span>
-                    提交中...
-                  </span>
-                ) : (
-                  <>
-                    <svg className="button-icon" width="24" height="24" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <button
+                  type="submit"
+                  className="hero-submit-button-icon"
+                  disabled={submitting || !taskContent.trim()}
+                  title="开始执行任务"
+                  aria-label="开始执行任务"
+                >
+                  {submitting ? (
+                    <svg className="submit-icon spinning" width="40" height="40" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                  ) : (
+                    <svg className="submit-icon" width="40" height="40" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                     </svg>
-                    开始执行任务
-                  </>
-                )}
-              </button>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
