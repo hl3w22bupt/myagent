@@ -85,9 +85,9 @@ export const handler = async (request: any, { logger, state }: any) => {
       logger.warn('[agent-result] Detected corrupted history data (object instead of array), attempting repair...');
 
       // 如果是旧的错误格式 { found, taskIndex, deletedTask, history: [...] }
-      if ('history' in history && Array.isArray(history.history)) {
+      if ('history' in history && Array.isArray((history as any).history)) {
         logger.warn('[agent-result] Found old buggy format, extracting history array');
-        history = history.history;
+        history = (history as any).history;
 
         // 立即修复 state
         await state.set(groupId, key, history);

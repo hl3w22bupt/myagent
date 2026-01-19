@@ -80,16 +80,16 @@ export const handler = async (request: any, { logger, state }: any) => {
     const key = 'history';
 
     // 先读取当前 history 以找到要删除的任务
-    let currentHistory: any[] = await safeStateGet(state, groupId, key, []);
+    let currentHistory: any = await safeStateGet(state, groupId, key, []);
 
     // 🔧 修复损坏的 state 数据：如果 history 是对象而不是数组，提取其中的数组
     if (!Array.isArray(currentHistory) && typeof currentHistory === 'object' && currentHistory !== null) {
       console.warn('[agent-task-delete] Detected corrupted history data (object instead of array), attempting repair...');
 
       // 如果是旧的错误格式 { found, taskIndex, deletedTask, history: [...] }
-      if ('history' in currentHistory && Array.isArray(currentHistory.history)) {
+      if ('history' in currentHistory && Array.isArray((currentHistory as any).history)) {
         console.warn('[agent-task-delete] Found old buggy format, extracting history array');
-        currentHistory = currentHistory.history;
+        currentHistory = (currentHistory as any).history;
 
         // 立即修复 state
         await safeStateSet(state, groupId, key, currentHistory);
