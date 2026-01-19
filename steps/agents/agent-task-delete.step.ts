@@ -79,39 +79,40 @@ export const handler = async (request: any, { logger, state }: any) => {
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // ✅ 使用 atomicUpdate 保证原子性
-    const result: any = await stateLockManager.atomicUpdate(
-      state,
-      groupId,
-      key,
-      (history: any) => {
-        const current = history || [];
+    // 先读取当前 history 以找到要删除的任务
+    let currentHistory: any[] = await safeStateGet(state, groupId, key, []);
 
-        if (!Array.isArray(current)) {
-          throw new Error('Invalid history data structure');
-        }
+    // 🔧 修复损坏的 state 数据：如果 history 是对象而不是数组，提取其中的数组
+    if (!Array.isArray(currentHistory) && typeof currentHistory === 'object' && currentHistory !== null) {
+      console.warn('[agent-task-delete] Detected corrupted history data (object instead of array), attempting repair...');
 
-        // Find the task to delete
-        const taskIndex = current.findIndex((r: any) => r.taskId === id);
+      // 如果是旧的错误格式 { found, taskIndex, deletedTask, history: [...] }
+      if ('history' in currentHistory && Array.isArray(currentHistory.history)) {
+        console.warn('[agent-task-delete] Found old buggy format, extracting history array');
+        currentHistory = currentHistory.history;
 
-        if (taskIndex === -1) {
-          // 标记未找到
-          return { found: false, taskIndex: -1, deletedTask: null, history: current };
-        }
-
-        // Remove the task from history
-        const deletedTask = current[taskIndex];
-        const newHistory = [
-          ...current.slice(0, taskIndex),
-          ...current.slice(taskIndex + 1)
-        ];
-
-        return { found: true, taskIndex, deletedTask, history: newHistory };
+        // 立即修复 state
+        await safeStateSet(state, groupId, key, currentHistory);
+        console.warn('[agent-task-delete] State repaired successfully');
+      } else {
+        // 完全无法修复的数据，重置为空数组
+        console.error('[agent-task-delete] Corrupted data cannot be repaired, resetting to empty array');
+        currentHistory = [];
+        await safeStateSet(state, groupId, key, currentHistory);
       }
-    );
+    }
 
-    // 检查是否找到任务
-    if (!result.found) {
+    // 确保现在是数组
+    if (!Array.isArray(currentHistory)) {
+      console.error('[agent-task-delete] Failed to repair history, resetting to empty array');
+      currentHistory = [];
+      await safeStateSet(state, groupId, key, currentHistory);
+    }
+
+    // 检查任务是否存在
+    const taskIndex = currentHistory.findIndex((r: any) => r.taskId === id);
+
+    if (taskIndex === -1) {
       return {
         status: 404,
         body: {
@@ -122,9 +123,41 @@ export const handler = async (request: any, { logger, state }: any) => {
       };
     }
 
+    // 保存要删除的任务信息
+    const deletedTask = currentHistory[taskIndex];
+
+    // ✅ 使用 atomicUpdate 删除任务（只返回并存储数组）
+    const newHistory: any[] = await stateLockManager.atomicUpdate(
+      state,
+      groupId,
+      key,
+      (history: any) => {
+        const current = history || [];
+
+        if (!Array.isArray(current)) {
+          console.error('[agent-task-delete] Invalid history data structure, resetting to empty array');
+          return [];
+        }
+
+        // Find the task to delete
+        const index = current.findIndex((r: any) => r.taskId === id);
+
+        if (index === -1) {
+          // 任务已被其他请求删除，返回当前 history
+          return current;
+        }
+
+        // 删除任务并返回新的 history 数组（不包含额外字段）
+        return [
+          ...current.slice(0, index),
+          ...current.slice(index + 1)
+        ];
+      }
+    );
+
     logger.info('Agent Task Delete API: Task deleted successfully', {
       taskId: id,
-      remainingTasks: result.history.length
+      remainingTasks: newHistory.length
     });
 
     return {
@@ -134,12 +167,12 @@ export const handler = async (request: any, { logger, state }: any) => {
         message: 'Task deleted successfully',
         taskId: id,
         deletedTask: {
-          taskId: result.deletedTask.taskId,
-          task: result.deletedTask.task,
-          success: result.deletedTask.success,
-          timestamp: result.deletedTask.timestamp,
+          taskId: deletedTask.taskId,
+          task: deletedTask.task,
+          success: deletedTask.success,
+          timestamp: deletedTask.timestamp,
         },
-        remainingTasks: result.history.length,
+        remainingTasks: newHistory.length,
       },
     };
   } catch (error: any) {
