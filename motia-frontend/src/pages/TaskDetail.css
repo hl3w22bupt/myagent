@@ -302,6 +302,9 @@
 }
 
 .tab-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.75rem 1.5rem;
   background: transparent;
   border: none;
@@ -321,6 +324,10 @@
 .tab-button.active {
   color: #3b82f6;
   border-bottom-color: #3b82f6;
+}
+
+.tab-icon {
+  flex-shrink: 0;
 }
 
 .result-content {

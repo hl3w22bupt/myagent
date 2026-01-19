@@ -41,7 +41,7 @@
   position: relative;
   overflow: hidden;
   padding-top: 4rem;
-  padding-bottom: 5rem;
+  padding-bottom: 2.5rem;
 }
 
 .home-hero::before {
@@ -68,7 +68,7 @@
 .home-hero > p {
   font-size: 1.25rem;
   opacity: 0.95;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
   position: relative;
   z-index: 1;
 }
@@ -110,6 +110,7 @@
 .hero-task-input {
   width: 100%;
   padding: 1.25rem;
+  padding-right: 4.5rem; /* 为按钮留出空间 */
   border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 0.75rem;
   font-size: 1rem;
@@ -207,7 +208,7 @@
 /* 提交按钮 - 纯图标设计 */
 .hero-submit-button-icon {
   position: absolute;
-  bottom: 3.75rem;
+  bottom: 1rem;
   right: 1rem;
   width: 3.5rem;
   height: 3.5rem;

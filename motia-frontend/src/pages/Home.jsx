@@ -106,9 +106,6 @@ function Home() {
                   className="hero-task-input"
                   disabled={submitting}
                 />
-                <div className="input-hint">
-                  系统会自动识别任务需求并选择合适的 subagent 和 skill 来处理
-                </div>
                 <button
                   type="submit"
                   className="hero-submit-button-icon"

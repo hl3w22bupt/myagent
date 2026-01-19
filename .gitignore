@@ -69,3 +69,4 @@ motia-workbench.json
 .worktree/
 
 .serena/
+.cache
