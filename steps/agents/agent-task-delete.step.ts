@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { safeStateGet, safeStateSet } from '../../src/utils/state-safety';
+import { stateLockManager } from '../../src/utils/state-lock';
 
 /**
  * Query parameters schema for delete API.
@@ -78,21 +79,38 @@ export const handler = async (request: any, { logger, state }: any) => {
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // 使用 safeStateGet 获取当前历史记录，防止 circular reference 问题
-    const history = await safeStateGet(state, groupId, key, []);
+    // 先读取当前 history 以找到要删除的任务
+    let currentHistory: any = await safeStateGet(state, groupId, key, []);
 
-    if (!Array.isArray(history)) {
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Invalid history data structure',
-        },
-      };
+    // 🔧 修复损坏的 state 数据：如果 history 是对象而不是数组，提取其中的数组
+    if (!Array.isArray(currentHistory) && typeof currentHistory === 'object' && currentHistory !== null) {
+      console.warn('[agent-task-delete] Detected corrupted history data (object instead of array), attempting repair...');
+
+      // 如果是旧的错误格式 { found, taskIndex, deletedTask, history: [...] }
+      if ('history' in currentHistory && Array.isArray((currentHistory as any).history)) {
+        console.warn('[agent-task-delete] Found old buggy format, extracting history array');
+        currentHistory = (currentHistory as any).history;
+
+        // 立即修复 state
+        await safeStateSet(state, groupId, key, currentHistory);
+        console.warn('[agent-task-delete] State repaired successfully');
+      } else {
+        // 完全无法修复的数据，重置为空数组
+        console.error('[agent-task-delete] Corrupted data cannot be repaired, resetting to empty array');
+        currentHistory = [];
+        await safeStateSet(state, groupId, key, currentHistory);
+      }
     }
 
-    // Find the task to delete
-    const taskIndex = history.findIndex((r: any) => r.taskId === id);
+    // 确保现在是数组
+    if (!Array.isArray(currentHistory)) {
+      console.error('[agent-task-delete] Failed to repair history, resetting to empty array');
+      currentHistory = [];
+      await safeStateSet(state, groupId, key, currentHistory);
+    }
+
+    // 检查任务是否存在
+    const taskIndex = currentHistory.findIndex((r: any) => r.taskId === id);
 
     if (taskIndex === -1) {
       return {
@@ -105,26 +123,37 @@ export const handler = async (request: any, { logger, state }: any) => {
       };
     }
 
-    // Remove the task from history
-    const deletedTask = history[taskIndex];
-    const newHistory = [
-      ...history.slice(0, taskIndex),
-      ...history.slice(taskIndex + 1)
-    ];
+    // 保存要删除的任务信息
+    const deletedTask = currentHistory[taskIndex];
 
-    // 使用 safeStateSet 更新状态，防止 circular reference 问题
-    const success = await safeStateSet(state, groupId, key, newHistory);
+    // ✅ 使用 atomicUpdate 删除任务（只返回并存储数组）
+    const newHistory: any[] = await stateLockManager.atomicUpdate(
+      state,
+      groupId,
+      key,
+      (history: any) => {
+        const current = history || [];
 
-    if (!success) {
-      logger.error('Agent Task Delete API: Failed to update state due to circular reference');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Failed to update state: circular reference detected',
-        },
-      };
-    }
+        if (!Array.isArray(current)) {
+          console.error('[agent-task-delete] Invalid history data structure, resetting to empty array');
+          return [];
+        }
+
+        // Find the task to delete
+        const index = current.findIndex((r: any) => r.taskId === id);
+
+        if (index === -1) {
+          // 任务已被其他请求删除，返回当前 history
+          return current;
+        }
+
+        // 删除任务并返回新的 history 数组（不包含额外字段）
+        return [
+          ...current.slice(0, index),
+          ...current.slice(index + 1)
+        ];
+      }
+    );
 
     logger.info('Agent Task Delete API: Task deleted successfully', {
       taskId: id,

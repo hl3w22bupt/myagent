@@ -9,6 +9,11 @@ import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 
 /**
+ * Task counter for generating unique task IDs.
+ */
+let taskCounter = 0;
+
+/**
  * Request body schema for Agent API.
  */
 export const bodySchema = z.object({
@@ -91,8 +96,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
   const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents } =
     validationResult.data;
 
-  // Generate unique taskId
-  const taskId = `task-${Date.now()}`;
+  // Generate unique taskId with counter to prevent conflicts
+  const taskId = `task-${Date.now()}-${++taskCounter}`;
 
   logger.info('Agent API: Received task request', {
     task,

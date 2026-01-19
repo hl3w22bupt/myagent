@@ -90,7 +90,7 @@ export const handler = async (
 ) => {
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
-  const taskId = input.taskId || `task-${Date.now()}`;
+  const taskId = input.taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   logger.info('Master Agent: Starting task execution', {
     task: input.task,
