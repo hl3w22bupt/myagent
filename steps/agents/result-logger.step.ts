@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { EventConfig } from 'motia';
 import { safeStateGet, safeStateSet, hasCircularReference } from '../../src/utils/state-safety';
+import { stateLockManager } from '../../src/utils/state-lock';
 
 /**
  * Configuration for execution history limits.
@@ -290,12 +291,14 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   if (normalizedResult.success) {
     // Handle both string and object outputs
     let outputPreview = normalizedResult.output;
-    if (typeof normalizedResult.output === 'string') {
+    if (typeof normalizedResult.output === 'string' && normalizedResult.output) {
       outputPreview = normalizedResult.output.substring(0, 200) + (normalizedResult.output.length > 200 ? '...' : '');
-    } else {
+    } else if (normalizedResult.output) {
       // Convert object to JSON for preview
-      const jsonStr = JSON.stringify(normalizedResult.output);
+      const jsonStr = JSON.stringify(normalizedResult.output) || '{}';
       outputPreview = jsonStr.substring(0, 200) + (jsonStr.length > 200 ? '...' : '');
+    } else {
+      outputPreview = '(empty output)';
     }
 
     logger.info('✅ Task Execution Successful', {
@@ -307,11 +310,13 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   } else {
     // Handle both string and object outputs for errors
     let stderrPreview = normalizedResult.output;
-    if (typeof normalizedResult.output === 'string') {
+    if (typeof normalizedResult.output === 'string' && normalizedResult.output) {
       stderrPreview = normalizedResult.output.substring(0, 500);
-    } else {
-      const jsonStr = JSON.stringify(normalizedResult.output);
+    } else if (normalizedResult.output) {
+      const jsonStr = JSON.stringify(normalizedResult.output) || '{}';
       stderrPreview = jsonStr.substring(0, 500);
+    } else {
+      stderrPreview = '(no error details)';
     }
 
     logger.warn('❌ Task Execution Failed', {
@@ -328,65 +333,66 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // 使用 safeStateGet 获取现有历史记录，防止 circular reference 问题
-    let history = await safeStateGet(state, groupId, key, []);
+    // ✅ 使用 atomicUpdate 保证原子性，防止竞态条件
+    const updatedHistory: any[] = await stateLockManager.atomicUpdate(
+      state,
+      groupId,
+      key,
+      (history: any) => {
+        // 在锁内执行，不会有竞态条件
+        let current = history || [];
 
-    // Check for circular references in existing history
-    if (hasCircularReference(history)) {
-      logger.warn('[result-logger] Circular reference detected in existing history, resetting', {
-        historyLength: history.length
-      });
-      history = [];
-    }
+        // Check for circular references in existing history
+        if (hasCircularReference(current)) {
+          logger.warn('[result-logger] Circular reference detected in existing history, resetting', {
+            historyLength: current.length
+          });
+          current = [];
+        }
 
-    // Remove any existing entry with the same taskId to prevent duplicates
-    const duplicateIndex = history.findIndex((entry: any) => entry.taskId === taskId);
-    if (duplicateIndex !== -1) {
-      history.splice(duplicateIndex, 1);
-      logger.info('Removed duplicate task entry', { taskId });
-    }
+        // Remove any existing entry with the same taskId to prevent duplicates
+        const duplicateIndex = current.findIndex((entry: any) => entry.taskId === taskId);
+        if (duplicateIndex !== -1) {
+          current.splice(duplicateIndex, 1);
+          logger.info('Removed duplicate task entry', { taskId });
+        }
 
-    // Create simplified entry to prevent complex nested structures
-    const newEntry = simplifyHistoryEntry({
-      taskId,
-      timestamp,
-      task,
-      success: normalizedResult.success,
-      output: normalizedResult.output,
-      error: normalizedResult.error,
-      executionTime: normalizedResult.executionTime,
-      sessionId,
-      metadata: normalizedResult.metadata, // 添加metadata字段
-    });
+        // Create simplified entry to prevent complex nested structures
+        const newEntry = simplifyHistoryEntry({
+          taskId,
+          timestamp,
+          task,
+          success: normalizedResult.success,
+          output: normalizedResult.output,
+          error: normalizedResult.error,
+          executionTime: normalizedResult.executionTime,
+          sessionId,
+          metadata: normalizedResult.metadata,
+        });
 
-    // Add new entry at the beginning
-    history.unshift(newEntry);
+        // Add new entry at the beginning
+        const newHistory = [newEntry, ...current];
 
-    // Keep only last MAX_HISTORY_SIZE entries (reduced from 100 to 20)
-    if (history.length > MAX_HISTORY_SIZE) {
-      const removed = history.splice(MAX_HISTORY_SIZE);
-      logger.debug('Trimmed history entries', { removedCount: removed.length });
-    }
+        // Keep only last MAX_HISTORY_SIZE entries
+        if (newHistory.length > MAX_HISTORY_SIZE) {
+          newHistory.splice(MAX_HISTORY_SIZE);
+        }
 
-    // Final circular reference check before saving
-    if (hasCircularReference(history)) {
-      logger.error('[result-logger] Circular reference detected after modification, not saving to state');
-      throw new Error('Circular reference in history data');
-    }
+        // Final circular reference check before returning
+        if (hasCircularReference(newHistory)) {
+          logger.error('[result-logger] Circular reference detected after modification, throwing error');
+          throw new Error('Circular reference in history data');
+        }
 
-    // Save back to state using safeStateSet
-    const success = await safeStateSet(state, groupId, key, history);
-
-    if (!success) {
-      logger.error('[result-logger] Failed to save history due to circular reference or other error');
-      throw new Error('Failed to save history to state');
-    }
+        return newHistory;
+      }
+    );
 
     logger.info('Execution history updated', {
-      totalEntries: history.length,
+      totalEntries: updatedHistory.length,
       maxSize: MAX_HISTORY_SIZE,
       taskId,
-      removedDuplicate: duplicateIndex !== -1,
+      removedDuplicate: updatedHistory.findIndex((e: any) => e.taskId === taskId) === -1,
     });
   } catch (error: any) {
     logger.error('Failed to update execution history', {

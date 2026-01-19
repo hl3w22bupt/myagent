@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { safeStateGet, safeStateSet } from '../../src/utils/state-safety';
+import { stateLockManager } from '../../src/utils/state-lock';
 
 /**
  * Query parameters schema for delete API.
@@ -78,23 +79,39 @@ export const handler = async (request: any, { logger, state }: any) => {
     const groupId = 'agent:execution';
     const key = 'history';
 
-    // 使用 safeStateGet 获取当前历史记录，防止 circular reference 问题
-    const history = await safeStateGet(state, groupId, key, []);
+    // ✅ 使用 atomicUpdate 保证原子性
+    const result: any = await stateLockManager.atomicUpdate(
+      state,
+      groupId,
+      key,
+      (history: any) => {
+        const current = history || [];
 
-    if (!Array.isArray(history)) {
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Invalid history data structure',
-        },
-      };
-    }
+        if (!Array.isArray(current)) {
+          throw new Error('Invalid history data structure');
+        }
 
-    // Find the task to delete
-    const taskIndex = history.findIndex((r: any) => r.taskId === id);
+        // Find the task to delete
+        const taskIndex = current.findIndex((r: any) => r.taskId === id);
 
-    if (taskIndex === -1) {
+        if (taskIndex === -1) {
+          // 标记未找到
+          return { found: false, taskIndex: -1, deletedTask: null, history: current };
+        }
+
+        // Remove the task from history
+        const deletedTask = current[taskIndex];
+        const newHistory = [
+          ...current.slice(0, taskIndex),
+          ...current.slice(taskIndex + 1)
+        ];
+
+        return { found: true, taskIndex, deletedTask, history: newHistory };
+      }
+    );
+
+    // 检查是否找到任务
+    if (!result.found) {
       return {
         status: 404,
         body: {
@@ -105,30 +122,9 @@ export const handler = async (request: any, { logger, state }: any) => {
       };
     }
 
-    // Remove the task from history
-    const deletedTask = history[taskIndex];
-    const newHistory = [
-      ...history.slice(0, taskIndex),
-      ...history.slice(taskIndex + 1)
-    ];
-
-    // 使用 safeStateSet 更新状态，防止 circular reference 问题
-    const success = await safeStateSet(state, groupId, key, newHistory);
-
-    if (!success) {
-      logger.error('Agent Task Delete API: Failed to update state due to circular reference');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Failed to update state: circular reference detected',
-        },
-      };
-    }
-
     logger.info('Agent Task Delete API: Task deleted successfully', {
       taskId: id,
-      remainingTasks: newHistory.length
+      remainingTasks: result.history.length
     });
 
     return {
@@ -138,12 +134,12 @@ export const handler = async (request: any, { logger, state }: any) => {
         message: 'Task deleted successfully',
         taskId: id,
         deletedTask: {
-          taskId: deletedTask.taskId,
-          task: deletedTask.task,
-          success: deletedTask.success,
-          timestamp: deletedTask.timestamp,
+          taskId: result.deletedTask.taskId,
+          task: result.deletedTask.task,
+          success: result.deletedTask.success,
+          timestamp: result.deletedTask.timestamp,
         },
-        remainingTasks: newHistory.length,
+        remainingTasks: result.history.length,
       },
     };
   } catch (error: any) {
