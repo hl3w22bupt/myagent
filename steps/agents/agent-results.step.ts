@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { safeStateGet } from '../../src/utils/state-safety';
+import { getTaskStore } from '../../src/core/database/task-store';
 
 /**
  * Query parameters schema for results API.
@@ -77,7 +77,7 @@ export const config: ApiRouteConfig = {
  *
  * Retrieves paginated task results from state based on query parameters.
  */
-export const handler = async (request: any, { logger, state }: any) => {
+export const handler = async (request: any, { logger }: any) => {
   // Parse query parameters - use queryParams not query
   const queryParams: Record<string, any> = request.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
@@ -100,78 +100,51 @@ export const handler = async (request: any, { logger, state }: any) => {
   });
 
   try {
-    // Retrieve execution history from state with safety checks
-    const groupId = 'agent:execution';
-    const key = 'history';
-    const history = await safeStateGet(state, groupId, key, []);
+    // Query from database
+    const taskStore = getTaskStore();
 
-    // Filter and process results
-    let results = history;
+    // Map status filter to TaskStatus
+    const taskStatus = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : undefined;
 
-    // Filter by sessionId if provided
-    if (sessionId) {
-      results = results.filter((r: any) => r.sessionId === sessionId);
-    }
+    const { tasks, total } = await taskStore.list({
+      sessionId,
+      limit: resultLimit,
+      offset: resultOffset,
+      status: taskStatus as any,
+    });
 
-    // Filter by status if provided
-    if (status === 'completed') {
-      results = results.filter((r: any) => r.success === true);
-    } else if (status === 'failed') {
-      results = results.filter((r: any) => r.success === false);
-    }
+    // Map database tasks to API response format
+    // Handle potentially invalid dates
+    const safeToISOString = (date: Date | undefined) => {
+      if (!date) return new Date().toISOString();
+      if (isNaN(date.getTime())) {
+        return new Date().toISOString();
+      }
+      return date.toISOString();
+    };
 
-    // Filter by skills if provided
-    if (skillsArray.length > 0) {
-      results = results.filter((r: any) => {
-        // Check if result.skill is in the skills array
-        if (r.skill && skillsArray.includes(r.skill)) {
-          return true;
-        }
-        // Check if result.metadata.skillNames contains any of the skills
-        if (r.metadata?.skillNames) {
-          return r.metadata.skillNames.some((skillName: string) =>
-            skillsArray.includes(skillName)
-          );
-        }
-        return false;
-      });
-    }
-
-    // Get total count before pagination
-    const totalCount = results.length;
-
-    // Apply offset and limit for pagination
-    results = results.slice(resultOffset, resultOffset + resultLimit);
+    const results = tasks.map(task => ({
+      taskId: task.id,
+      task: task.task,
+      success: task.status === 'completed',
+      output: task.output,
+      error: task.error,
+      executionTime: task.executionTime,
+      metadata: task.metadata,
+      sessionId: task.sessionId,
+      timestamp: safeToISOString(task.createdAt),
+    }));
 
     return {
       status: 200,
       body: {
         success: true,
         count: results.length,
-        total: totalCount,
+        total: total,
         offset: resultOffset,
         limit: resultLimit,
-        hasMore: resultOffset + resultLimit < totalCount,
-        results: results.map((r: any) => {
-          const result: any = {
-            taskId: r.taskId,
-            task: r.task,
-            success: r.success,
-            output: r.output,
-            error: r.error,
-            executionTime: r.executionTime,
-            metadata: r.metadata,
-            sessionId: r.sessionId,
-            timestamp: r.timestamp,
-          };
-
-          // Include parsed unified format result if available
-          if (r.result) {
-            result.result = r.result;
-          }
-
-          return result;
-        }),
+        hasMore: resultOffset + resultLimit < total,
+        results,
       },
     };
   } catch (error: any) {

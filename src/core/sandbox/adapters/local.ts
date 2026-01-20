@@ -138,16 +138,108 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
       const executionTime = Date.now() - startTime;
 
-      return {
-        success: result.exitCode === 0,
-        output: result.stdout,
-        error:
-          result.exitCode !== 0
-            ? {
-                type: 'execution',
-                message: result.stderr || 'Unknown error',
+      // Check for unified format result in stdout
+      // Skills may return structured results like: output={'success': False, ...}
+      // even when exiting cleanly (exitCode=0). We need to detect this.
+      let success = result.exitCode === 0;
+      let errorMessage = result.stderr || undefined;
+
+      if (result.stdout) {
+        try {
+          // Look for Python dict pattern: output={...}
+          const outputMatch = result.stdout.indexOf('output={');
+          if (outputMatch !== -1) {
+            // Find the complete dict by counting braces
+            let braceCount = 0;
+            let inString = false;
+            let escapeNext = false;
+            let dictEnd = -1;
+
+            for (let i = outputMatch + 7; i < result.stdout.length; i++) {
+              const char = result.stdout[i];
+
+              if (escapeNext) {
+                escapeNext = false;
+                continue;
               }
-            : undefined,
+
+              if (char === '\\') {
+                escapeNext = true;
+                continue;
+              }
+
+              if (char === "'" && !escapeNext) {
+                inString = !inString;
+                continue;
+              }
+
+              if (!inString) {
+                if (char === '{') {
+                  braceCount++;
+                } else if (char === '}') {
+                  braceCount--;
+                  if (braceCount === 0) {
+                    dictEnd = i;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (dictEnd !== -1) {
+              // Extract the dict string
+              const dictStr = result.stdout.substring(outputMatch + 7, dictEnd + 1);
+
+              // Convert Python syntax to JSON
+              const jsonStr = dictStr
+                .replace(/'/g, '"')  // Python single quotes to JSON double quotes
+                .replace(/True/g, 'true')  // Python True to JSON true
+                .replace(/False/g, 'false')  // Python False to JSON false
+                .replace(/None/g, 'null');  // Python None to JSON null
+
+              // Parse as JSON
+              const structuredResult = JSON.parse(jsonStr);
+
+              // Override success if structured result has success field
+              if (typeof structuredResult.success === 'boolean') {
+                const originalSuccess = success;
+                success = structuredResult.success;
+
+                // Extract error message if available
+                if (!success && structuredResult.content && structuredResult.content.message) {
+                  errorMessage = structuredResult.content.message;
+                }
+
+                // Log if status was overridden
+                if (originalSuccess !== success) {
+                  console.log('[Sandbox] Success status overridden by unified format result', {
+                    sessionId,
+                    originalSuccess,
+                    overriddenSuccess: success,
+                    resultType: structuredResult.result_type,
+                  });
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Failed to parse unified format, ignore and use exitCode
+          console.warn('[Sandbox] Failed to parse unified format result', {
+            sessionId,
+            error: (error as Error).message,
+          });
+        }
+      }
+
+      return {
+        success,
+        output: result.stdout,
+        error: !success
+          ? {
+              type: 'execution',
+              message: errorMessage || 'Unknown error',
+            }
+          : undefined,
         executionTime,
         sessionId,
         stdout: result.stdout,
@@ -209,10 +301,11 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       .map((line) => '        ' + line)
       .join('\n');
 
-    // Only import SkillExecutor if skills are provided
+    // Only import SkillExecutor and retry_utils if skills are provided
     const skillExecutorImports = options.skills && options.skills.length > 0 ? `
 # Import and create SkillExecutor instance for skill execution
 from core.skill.executor import SkillExecutor
+from core.sandbox.retry_utils import execute_with_retry
 executor = SkillExecutor()
 ` : `
 # No skills provided, skipping SkillExecutor import

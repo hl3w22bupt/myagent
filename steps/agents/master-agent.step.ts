@@ -15,6 +15,7 @@ import type { EventConfig } from 'motia';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
+import { getTaskStore, TaskStatus } from '../../src/core/database/task-store';
 
 /**
  * Input schema for Master Agent step.
@@ -61,6 +62,11 @@ export const inputSchema = _z.object({
    * Optional: Available skills.
    */
   availableSkills: _z.array(_z.string()).optional(),
+
+  /**
+   * Optional: Whether this is a retry of a previous task.
+   */
+  isRetry: _z.boolean().optional(),
 });
 
 /**
@@ -97,6 +103,16 @@ export const handler = async (
     sessionId,
     taskId,
   });
+
+  // Initialize task store and create task record
+  const taskStore = getTaskStore();
+  await taskStore.create({
+    id: taskId,
+    task: input.task,
+    sessionId: sessionId,
+    status: TaskStatus.PENDING,
+  });
+  logger.info('Task record created in database', { taskId, status: 'PENDING' });
 
   // Helper function to update stream
   // DISABLED: Stream updates cause stack overflow due to wrapObject bug
@@ -171,6 +187,10 @@ export const handler = async (
     // Execute task (Agent maintains session state)
     await updateStream('running', { currentStep: 'Executing task' });
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
+
+    // Update task status to RUNNING
+    await taskStore.update(taskId, { status: TaskStatus.RUNNING });
+    logger.info('Task status updated to RUNNING', { taskId });
 
     const result = await agent.run(input.task, taskId);
 

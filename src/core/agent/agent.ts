@@ -12,6 +12,7 @@ import { SandboxFactory } from '../sandbox/factory';
 import { PTCGenerator } from './ptc-generator';
 import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
 import { SkillDiscovery, getSkillDiscovery } from './skill-discovery';
+import { retryOperation, isDefaultRetryableError } from './retry';
 
 /**
  * Base Agent class with core Agent capabilities.
@@ -185,7 +186,7 @@ export class Agent {
     console.log('[Agent] About to generate PTC code');
 
     try {
-      // Step 1: Generate PTC code
+      // Step 1: Generate PTC code with retry logic
       steps.push({
         type: 'planning',
         content: 'Generating PTC code for task',
@@ -193,13 +194,82 @@ export class Agent {
         metadata: { task },
       });
 
-      // Generate PTC code with conversation history and variables as context
-      console.log('[Agent] Calling ptcGenerator.generateWithResult()');
-      const ptcResult = await this.ptcGenerator.generateWithResult(task, {
-        history: this.state.conversationHistory,
-        variables: Object.fromEntries(this.state.variables),
-      });
-      console.log('[Agent] PTC code generated', { codeLength: ptcResult.code.length, selectedSkills: ptcResult.selectedSkills });
+      // Track PTC generation retry information
+      const ptcRetryInfo = {
+        attempts: 1,
+        totalDelay: 0,
+        recovered: false,
+      };
+
+      // Generate PTC code with retry (max 3 attempts)
+      console.log('[Agent] Calling ptcGenerator.generateWithResult() with retry');
+
+      const ptcResult = await (async () => {
+        const maxPtcRetries = 3; // Hardcoded to 3 attempts for PTC generation
+
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= maxPtcRetries; attempt++) {
+          try {
+            console.log(`[Agent] PTC generation attempt ${attempt}/${maxPtcRetries}`);
+
+            const result = await this.ptcGenerator.generateWithResult(task, {
+              history: this.state.conversationHistory,
+              variables: Object.fromEntries(this.state.variables),
+            });
+
+            console.log('[Agent] PTC code generated', {
+              codeLength: result.code.length,
+              selectedSkills: result.selectedSkills,
+              attempt
+            });
+
+            // Success
+            if (attempt > 1) {
+              ptcRetryInfo.attempts = attempt;
+              ptcRetryInfo.recovered = true;
+              steps.push({
+                type: 'ptc-generation',
+                content: `PTC code generation succeeded on attempt ${attempt}`,
+                timestamp: Date.now(),
+              });
+            }
+
+            return result;
+
+          } catch (error: any) {
+            lastError = error;
+            console.error(`[Agent] PTC generation failed on attempt ${attempt}:`, error.message);
+
+            // Check if should retry
+            const isRetryable = isDefaultRetryableError(error);
+
+            if (!isRetryable || attempt >= maxPtcRetries) {
+              console.error('[Agent] PTC generation failed, will not retry', {
+                isRetryable,
+                attempt,
+                maxAttempts: maxPtcRetries
+              });
+              throw error;
+            }
+
+            // Retry with exponential backoff
+            const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+            console.log(`[Agent] Retrying PTC generation in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            ptcRetryInfo.totalDelay += delay;
+            steps.push({
+              type: 'planning',
+              content: `PTC generation retry attempt ${attempt + 1} after ${delay}ms: ${error.message}`,
+              timestamp: Date.now(),
+            });
+          }
+        }
+
+        // Should never reach here, but TypeScript needs it
+        throw lastError || new Error('PTC generation failed');
+      })();
 
       steps.push({
         type: 'ptc-generation',
@@ -213,7 +283,7 @@ export class Agent {
         },
       });
 
-      // Step 2: Execute in Sandbox
+      // Step 2: Execute in Sandbox with retry logic
       steps.push({
         type: 'execution',
         content: 'Executing PTC code in sandbox',
@@ -221,17 +291,98 @@ export class Agent {
       });
 
       console.log('[Agent] Executing PTC code in sandbox');
-      const sandboxResult = await this.sandbox.execute(ptcResult.code, {
-        skills: ptcResult.selectedSkills || [],
-        skillImplPath: process.cwd(),
-        sessionId: this.sessionId,
-        timeout: this.config.constraints?.timeout || 60000,
-        metadata: {
-          traceId: this.sessionId,
-          task,
-          taskId,
-        },
-      });
+
+      // Get retry configuration
+      const retryConfig = this.config.constraints?.retry;
+
+      // Track retry information
+      const retryInfo = {
+        attempts: 1,
+        totalDelay: 0,
+        recovered: false,
+      };
+
+      const sandboxResult = await (async () => {
+        // If retry is disabled, execute directly
+        if (!retryConfig || (retryConfig.maxRetries !== undefined && retryConfig.maxRetries <= 0)) {
+          return await this.sandbox.execute(ptcResult.code, {
+            skills: ptcResult.selectedSkills || [],
+            skillImplPath: process.cwd(),
+            sessionId: this.sessionId,
+            timeout: this.config.constraints?.timeout || 60000,
+            metadata: {
+              traceId: this.sessionId,
+              task,
+              taskId,
+            },
+          });
+        }
+
+        // Execute with retry
+        const retryResult = await retryOperation(
+          async () => {
+            const result = await this.sandbox.execute(ptcResult.code, {
+              skills: ptcResult.selectedSkills || [],
+              skillImplPath: process.cwd(),
+              sessionId: this.sessionId,
+              timeout: this.config.constraints?.timeout || 60000,
+              metadata: {
+                traceId: this.sessionId,
+                task,
+                taskId,
+                retryAttempt: retryInfo.attempts,
+              },
+            });
+
+            // If execution failed, throw error for retry logic
+            if (!result.success) {
+              const error = new Error(result.error?.message || 'Sandbox execution failed');
+              (error as any).sandboxResult = result;
+              throw error;
+            }
+
+            return result;
+          },
+          {
+            ...retryConfig,
+            isRetryable: retryConfig.isRetryable || isDefaultRetryableError,
+            onRetry: (attempt, error, delay) => {
+              console.log('[Agent] Retrying sandbox execution', {
+                attempt,
+                error: error.message,
+                delay,
+                maxRetries: retryConfig.maxRetries,
+              });
+              steps.push({
+                type: 'execution',
+                content: `Retry attempt ${attempt} after ${Math.round(delay)}ms delay: ${error.message}`,
+                timestamp: Date.now(),
+              });
+            },
+          }
+        );
+
+        // Update retry information
+        retryInfo.attempts = retryResult.attempts;
+        retryInfo.totalDelay = retryResult.totalDelay;
+        retryInfo.recovered = retryResult.attempts > 1 && retryResult.success;
+
+        // Check if retry was successful
+        if (!retryResult.success || !retryResult.data) {
+          throw retryResult.error || new Error('Retry failed');
+        }
+
+        // Log retry information
+        if (retryResult.attempts > 1) {
+          console.log('[Agent] Sandbox execution recovered after retries', {
+            attempts: retryResult.attempts,
+            totalDelay: retryResult.totalDelay,
+          });
+        }
+
+        return retryResult.data;
+      })();
+
       console.log('[Agent] Sandbox execution completed', { success: sandboxResult.success });
 
       // Step 3: Process result
@@ -260,6 +411,8 @@ export class Agent {
             llmCalls: 1,
             skillCalls: 0,
             totalTokens: 0,
+            retries: retryInfo.attempts > 1 ? retryInfo : undefined,
+            ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
           },
         };
       }
@@ -305,6 +458,8 @@ export class Agent {
           skillCalls,
           totalTokens: 0,
           skillNames: ptcResult.selectedSkills,
+          retries: retryInfo.attempts > 1 ? retryInfo : undefined,
+          ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
         },
       };
     } catch (error: any) {

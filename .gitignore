@@ -70,3 +70,6 @@ motia-workbench.json
 
 .serena/
 .cache
+
+# data
+data/

@@ -40,6 +40,19 @@ export interface AgentConfig {
   constraints?: {
     maxIterations?: number;
     timeout?: number;
+    /** Retry configuration for failed operations */
+    retry?: {
+      /** Maximum number of retry attempts (default: 3) */
+      maxRetries?: number;
+      /** Base delay in milliseconds (default: 1000) */
+      baseDelay?: number;
+      /** Maximum delay in milliseconds (default: 30000) */
+      maxDelay?: number;
+      /** Whether to use exponential backoff (default: true) */
+      exponentialBackoff?: boolean;
+      /** Custom retryable error checker */
+      isRetryable?: (error: Error) => boolean;
+    };
   };
 }
 
@@ -110,6 +123,24 @@ export interface AgentResult {
     skillNames?: string[];
     /** Subagents that were delegated to (for MasterAgent) */
     delegates?: string[];
+    /** Sandbox execution retry information */
+    retries?: {
+      /** Number of retry attempts */
+      attempts: number;
+      /** Total time spent in retries (milliseconds) */
+      totalDelay: number;
+      /** Whether the last attempt was successful after retries */
+      recovered: boolean;
+    };
+    /** PTC generation retry information */
+    ptcRetries?: {
+      /** Number of retry attempts */
+      attempts: number;
+      /** Total time spent in retries (milliseconds) */
+      totalDelay: number;
+      /** Whether the last attempt was successful after retries */
+      recovered: boolean;
+    };
   };
 
   /** Session ID (optional for backward compatibility) */

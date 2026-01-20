@@ -7,8 +7,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { safeStateGet, safeStateSet } from '../../src/utils/state-safety';
-import { stateLockManager } from '../../src/utils/state-lock';
+import { getTaskStore } from '../../src/core/database/task-store';
 
 /**
  * Query parameters schema for delete API.
@@ -53,10 +52,9 @@ export const config: ApiRouteConfig = {
 /**
  * Agent Task Delete API handler.
  *
- * Deletes a task result from state based on task ID.
- * Uses safeState utilities to prevent circular reference issues.
+ * Deletes a task result from database based on task ID.
  */
-export const handler = async (request: any, { logger, state }: any) => {
+export const handler = async (request: any, { logger }: any) => {
   // Parse query parameters
   const queryParams: Record<string, any> = request.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
@@ -76,43 +74,11 @@ export const handler = async (request: any, { logger, state }: any) => {
   logger.info('Agent Task Delete API: Received delete request', { taskId: id });
 
   try {
-    const groupId = 'agent:execution';
-    const key = 'history';
+    // Query from database first to get task info
+    const taskStore = getTaskStore();
+    const task = await taskStore.get(id);
 
-    // 先读取当前 history 以找到要删除的任务
-    let currentHistory: any = await safeStateGet(state, groupId, key, []);
-
-    // 🔧 修复损坏的 state 数据：如果 history 是对象而不是数组，提取其中的数组
-    if (!Array.isArray(currentHistory) && typeof currentHistory === 'object' && currentHistory !== null) {
-      console.warn('[agent-task-delete] Detected corrupted history data (object instead of array), attempting repair...');
-
-      // 如果是旧的错误格式 { found, taskIndex, deletedTask, history: [...] }
-      if ('history' in currentHistory && Array.isArray((currentHistory as any).history)) {
-        console.warn('[agent-task-delete] Found old buggy format, extracting history array');
-        currentHistory = (currentHistory as any).history;
-
-        // 立即修复 state
-        await safeStateSet(state, groupId, key, currentHistory);
-        console.warn('[agent-task-delete] State repaired successfully');
-      } else {
-        // 完全无法修复的数据，重置为空数组
-        console.error('[agent-task-delete] Corrupted data cannot be repaired, resetting to empty array');
-        currentHistory = [];
-        await safeStateSet(state, groupId, key, currentHistory);
-      }
-    }
-
-    // 确保现在是数组
-    if (!Array.isArray(currentHistory)) {
-      console.error('[agent-task-delete] Failed to repair history, resetting to empty array');
-      currentHistory = [];
-      await safeStateSet(state, groupId, key, currentHistory);
-    }
-
-    // 检查任务是否存在
-    const taskIndex = currentHistory.findIndex((r: any) => r.taskId === id);
-
-    if (taskIndex === -1) {
+    if (!task) {
       return {
         status: 404,
         body: {
@@ -123,42 +89,10 @@ export const handler = async (request: any, { logger, state }: any) => {
       };
     }
 
-    // 保存要删除的任务信息
-    const deletedTask = currentHistory[taskIndex];
+    // Delete from database
+    await taskStore.delete(id);
 
-    // ✅ 使用 atomicUpdate 删除任务（只返回并存储数组）
-    const newHistory: any[] = await stateLockManager.atomicUpdate(
-      state,
-      groupId,
-      key,
-      (history: any) => {
-        const current = history || [];
-
-        if (!Array.isArray(current)) {
-          console.error('[agent-task-delete] Invalid history data structure, resetting to empty array');
-          return [];
-        }
-
-        // Find the task to delete
-        const index = current.findIndex((r: any) => r.taskId === id);
-
-        if (index === -1) {
-          // 任务已被其他请求删除，返回当前 history
-          return current;
-        }
-
-        // 删除任务并返回新的 history 数组（不包含额外字段）
-        return [
-          ...current.slice(0, index),
-          ...current.slice(index + 1)
-        ];
-      }
-    );
-
-    logger.info('Agent Task Delete API: Task deleted successfully', {
-      taskId: id,
-      remainingTasks: newHistory.length
-    });
+    logger.info('Agent Task Delete API: Task deleted successfully', { taskId: id });
 
     return {
       status: 200,
@@ -167,12 +101,11 @@ export const handler = async (request: any, { logger, state }: any) => {
         message: 'Task deleted successfully',
         taskId: id,
         deletedTask: {
-          taskId: deletedTask.taskId,
-          task: deletedTask.task,
-          success: deletedTask.success,
-          timestamp: deletedTask.timestamp,
+          taskId: task.id,
+          task: task.task,
+          success: task.status === 'completed',
+          timestamp: task.createdAt.toISOString(),
         },
-        remainingTasks: newHistory.length,
       },
     };
   } catch (error: any) {

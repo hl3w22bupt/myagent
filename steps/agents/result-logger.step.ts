@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { EventConfig } from 'motia';
 import { hasCircularReference } from '../../src/utils/state-safety';
 import { stateLockManager } from '../../src/utils/state-lock';
+import { getTaskStore, TaskStatus } from '../../src/core/database/task-store';
 
 /**
  * Configuration for execution history limits.
@@ -271,8 +272,65 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const task = input.task || 'Unknown task';
   const sessionId = input.sessionId;
 
-  // Parse unified format result from output
+  // Parse unified format result from output FIRST (before database update)
   const structuredResult = parseUnifiedResult(normalizedResult.output);
+
+  // Override success status if unified format result has a success field
+  // This is important for skills like remotion-generator that return error results
+  // but still exit cleanly (exitCode=0)
+  if (structuredResult && typeof structuredResult.success === 'boolean') {
+    const originalSuccess = normalizedResult.success;
+    normalizedResult.success = structuredResult.success as boolean;
+
+    // Update error message if available
+    if (!normalizedResult.success && structuredResult.content) {
+      const content = structuredResult.content as any;
+      if (content.message) {
+        normalizedResult.error = content.message;
+      }
+    }
+
+    // Log if status was overridden
+    if (originalSuccess !== normalizedResult.success) {
+      logger.warn('Task success status overridden by unified format result', {
+        taskId,
+        originalSuccess,
+        overriddenSuccess: normalizedResult.success,
+        resultType: structuredResult.result_type,
+      });
+    }
+  }
+
+  // Update task record in database AFTER status override
+  if (taskId) {
+    try {
+      const taskStore = getTaskStore();
+      const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
+
+      await taskStore.update(taskId, {
+        status: finalStatus,
+        output: normalizedResult.output,
+        error: normalizedResult.error,
+        executionTime: normalizedResult.executionTime,
+        metadata: normalizedResult.metadata,
+        completedAt: new Date(),
+      });
+
+      logger.info('Task record updated in database', {
+        taskId,
+        status: finalStatus,
+        success: normalizedResult.success,
+      });
+    } catch (error: any) {
+      logger.warn('Failed to update task record in database', {
+        error: error.message,
+        taskId,
+      });
+      // Don't throw - continue execution even if database update fails
+    }
+  } else {
+    logger.warn('No taskId provided, skipping database update');
+  }
 
   logger.info(isFailedEvent ? '=== Agent Task Failed ===' : '=== Agent Task Completed ===', {
     taskId,

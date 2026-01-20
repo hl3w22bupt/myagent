@@ -1354,9 +1354,456 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 
 ---
 
-## 8. 总结
+## 8. 三层重试架构
 
-### 8.1 项目当前状态
+**设计目标**: 通过分层重试策略，提高系统的可靠性和容错能力，同时避免无效重试浪费资源。
+
+**实施日期**: 2026-01-20
+
+### 8.1 架构概述
+
+系统采用三层重试架构，每一层有明确的责任和重试策略：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Layer 3: Agent Layer (TypeScript)                           │
+│ 责任: PTC Code 生成和执行                                    │
+│ 重试: PTC 生成失败 (max 3), PTC 执行异常 (max 3)            │
+│ 策略: 指数退避 (1s, 2s, 4s), 检查错误类型决定是否重试        │
+└─────────────────────────────────────────────────────────────┘
+                          ↓ 生成
+┌─────────────────────────────────────────────────────────────┐
+│ Layer 2: PTC Code Layer (Python - Auto-generated)           │
+│ 责任: 编排 Skill 调用                                        │
+│ 重试: Skill 执行失败 (max 3)                                 │
+│ 策略: 检查 retryable 字段, 指数退避 (1s, 2s, 4s)             │
+└─────────────────────────────────────────────────────────────┘
+                          ↓ 调用
+┌─────────────────────────────────────────────────────────────┐
+│ Layer 1: Skill Layer (Python)                               │
+│ 责任: 执行具体任务, 返回结果                                 │
+│ 重试: 无                                                    │
+│ 建议: 在输出中包含 retryable 字段                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 Layer 1: Skill 层（无重试）
+
+**设计原则**: Skill 只负责执行任务并返回结果，不实现重试逻辑。
+
+**职责**:
+- 执行具体任务（网络请求、文件操作、视频渲染等）
+- 捕获异常并返回统一格式的结果
+- 提供重试建议（retryable 字段）
+
+**输出格式** (Unified Format):
+```python
+{
+    "result_type": "video" | "text" | "error" | ...,
+    "success": True | False,
+    "content": {
+        "message": "Human-readable message",
+        "retryable": True | False,  # ← 重试建议
+        "suggestions": ["Suggestion 1", "Suggestion 2"]
+    },
+    "metadata": {
+        "execution_time": 1.5,
+        "attempts": 1
+    }
+}
+```
+
+**retryable 推断规则** (OutputBuilder 自动推断):
+
+| 错误类型 | retryable | 说明 |
+|---------|-----------|------|
+| `TimeoutError` | `True` | 超时可能暂时性 |
+| `ConnectionError` | `True` | 网络问题可能恢复 |
+| `FileNotFoundError` | `True` | 资源可能暂时不可用 |
+| `ValueError` | `False` | 输入验证失败，重试无意义 |
+| `TypeError` | `False` | 类型错误，重试无意义 |
+| `PermissionError` | `False` | 权限问题，重试无意义 |
+
+**实现示例**:
+```python
+from skills.lib.output_builder import OutputBuilder, ErrorInfo
+
+async def handler(input_data: dict) -> dict:
+    try:
+        result = do_risky_operation(input_data)
+        return OutputBuilder().set_text(result).build()
+    except TimeoutError as e:
+        # OutputBuilder 自动设置 retryable = True
+        return OutputBuilder().set_error(e).build()
+    except ValueError as e:
+        # OutputBuilder 自动设置 retryable = False
+        return OutputBuilder().set_error(e).build()
+
+# 显式指定 retryable（可选）
+except ConnectionError as e:
+    return OutputBuilder().set_error(
+        ErrorInfo(
+            type="network_timeout",
+            message="API request timed out",
+            retryable=True,  # ← 显式设置
+            suggestions=["Retry with longer timeout"]
+        )
+    ).build()
+```
+
+### 8.3 Layer 2: PTC Code 层（Skill 重试）
+
+**设计原则**: PTC Code 作为编排层，负责实现 Skill 调用的重试逻辑。
+
+**职责**:
+- 调用 `execute_with_retry()` 执行 Skill
+- 检查 Skill 返回的 `success` 和 `retryable` 字段
+- 实现指数退避策略（1s, 2s, 4s）
+- 最多重试 3 次
+
+**核心函数**: `execute_with_retry()`
+
+位置: `src/core/sandbox/retry_utils.py`
+
+```python
+from core.sandbox.retry_utils import execute_with_retry
+
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='web-search',
+    input_data={'query': 'example'},
+    max_attempts=3
+)
+
+if result['success']:
+    print(f"Success after {result['attempts']} attempts")
+    actual_output = result['content']
+else:
+    print(f"Failed after {result['attempts']} attempts")
+    error = result['content'].get('message')
+```
+
+**重试决策逻辑**:
+```python
+# 1. 检查 success 字段
+if result['success']:
+    return result  # 成功，无需重试
+
+# 2. 检查 retryable 字段
+if isinstance(result['content'], dict):
+    retryable = result['content'].get('retryable')
+    if retryable is False:
+        return result  # 明确标记为不可重试
+
+# 3. 使用默认推断逻辑
+if is_default_retryable_error(result['content']):
+    retry_with_exponential_backoff()
+else:
+    return result  # 不可重试
+```
+
+**默认可重试错误**:
+- 包含 "timeout", "network", "connection", "temporary" 等关键词
+- 异常类型为 `TimeoutError`, `ConnectionError` 等
+
+**默认不可重试错误**:
+- 包含 "validation", "permission", "not found", "syntax" 等关键词
+- 异常类型为 `ValueError`, `TypeError`, `PermissionError` 等
+
+**指数退避策略**:
+```
+Attempt 1: 立即执行
+Attempt 2: 等待 1s (1000ms × 2^0)
+Attempt 3: 等待 2s (1000ms × 2^1)
+```
+
+### 8.4 Layer 3: Agent 层（PTC 生成重试）
+
+**设计原则**: Agent 负责 PTC Code 的生成和执行，在这两个阶段失败时重试。
+
+**职责**:
+- 调用 PTC Generator 生成代码
+- 在 Sandbox 中执行 PTC Code
+- PTC 生成失败时重试（max 3）
+- PTC 执行异常时重试（max 3）
+
+**实现位置**: `src/core/agent/agent.ts`
+
+**PTC 生成重试**:
+```typescript
+const maxPtcRetries = 3;
+let lastError: Error | null = null;
+
+for (let attempt = 1; attempt <= maxPtcRetries; attempt++) {
+  try {
+    const ptcResult = await this.ptcGenerator.generateWithResult(task, {
+      history: this.state.conversationHistory,
+      variables: Object.fromEntries(this.state.variables),
+    });
+    return ptcResult;  // 成功
+  } catch (error: any) {
+    lastError = error;
+
+    // 检查是否可重试
+    const isRetryable = isDefaultRetryableError(error);
+
+    if (!isRetryable || attempt >= maxPtcRetries) {
+      throw error;  // 不可重试或达到最大次数
+    }
+
+    // 指数退避
+    const delay = 1000 * Math.pow(2, attempt - 1);  // 1s, 2s, 4s
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+}
+
+throw lastError;
+```
+
+**PTC 执行重试** (已有逻辑):
+```typescript
+const retryResult = await retryOperation(
+  async () => {
+    const result = await this.sandbox.execute(ptcResult.code, {...});
+
+    if (!result.success) {
+      throw new Error(result.error?.message);
+    }
+
+    return result;
+  },
+  {
+    maxRetries: 3,
+    isRetryable: retryConfig.isRetryable || isDefaultRetryableError,
+  }
+);
+```
+
+**重试信息返回**:
+```typescript
+return {
+  success: true,
+  output: sandboxResult.output,
+  metadata: {
+    llmCalls: 1,
+    skillCalls: 2,
+    totalTokens: 1000,
+    retries: {
+      attempts: 2,  // Sandbox 执行重试次数
+      totalDelay: 1000,
+      recovered: true
+    },
+    ptcRetries: {
+      attempts: 1,  // PTC 生成重试次数
+      totalDelay: 0,
+      recovered: false
+    }
+  }
+};
+```
+
+### 8.5 重试决策流程图
+
+```
+┌─────────────────┐
+│ Skill 执行失败   │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────┐
+│ 检查 retryable  │
+│   字段是否存在  │
+└────┬─────────┬──┘
+     │         │
+  Yes │         │ No
+     │         │
+     ↓         ↓
+┌─────────┐  ┌──────────────┐
+│ retryable│  │ 检查错误消息  │
+│ = True? │  │ 是否包含可重试│
+└────┬────┘  │   关键词？    │
+     │       └──┬───────┬───┘
+    Yes No       │ Yes   │ No
+     │  │        │       │
+     │  └──┬─────┘       │
+     │     │              │
+     ↓     ↓              ↓
+┌────┐ ┌────┐      ┌──────────┐
+│重试│ │返回│      │  返回    │
+└────┘ └────┘      │(不重试)  │
+                   └──────────┘
+```
+
+### 8.6 可重试和不可重试错误分类
+
+**可重试错误** (Transient Errors):
+
+| 错误类型 | retryable | 示例 | 重试原因 |
+|---------|-----------|------|---------|
+| `TimeoutError` | `True` | API 请求超时 | 网络可能恢复 |
+| `ConnectionError` | `True` | 连接失败 | 服务可能临时不可用 |
+| `ConnectionRefusedError` | `True` | 目标服务拒绝连接 | 服务可能重启中 |
+| `TemporaryError` | `True` | "Temporary failure" | 明确的临时错误 |
+| `ResourceError` | `True` | 资源暂时不可用 | 资源可能很快恢复 |
+
+**不可重试错误** (Non-transient Errors):
+
+| 错误类型 | retryable | 示例 | 不重试原因 |
+|---------|-----------|------|----------|
+| `ValueError` | `False` | 参数验证失败 | 重试不会改变结果 |
+| `TypeError` | `False` | 类型不匹配 | 代码错误，需要修复 |
+| `PermissionError` | `False` | 权限不足 | 重试不会改变权限 |
+| `FileNotFoundError` | `False` | 文件不存在 | 文件确实不存在 |
+| `SyntaxError` | `False` | Python 语法错误 | 代码错误，需要重新生成 |
+| `ValidationError` | `False` | 输入验证失败 | 输入数据有问题 |
+| `AuthError` | `False` | 认证失败 | 重试不会改变认证状态 |
+
+### 8.7 配置示例
+
+**Agent 配置** (`src/index.ts`):
+```typescript
+agentConfig: {
+  constraints: {
+    timeout: 60000,
+    retry: {
+      maxRetries: 3,  // Sandbox 执行重试次数
+      baseDelay: 1000,  // 初始延迟 1s
+      exponentialBase: 2.0,  // 指数退避倍数
+      isRetryable: (error) => {
+        // 自定义重试判断逻辑
+        return isDefaultRetryableError(error);
+      }
+    }
+  }
+}
+```
+
+**PTC Code 重试配置** (硬编码):
+```python
+# src/core/sandbox/retry_utils.py
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='web-search',
+    input_data={'query': 'example'},
+    max_attempts=3,  # 硬编码为 3 次
+    base_delay=1.0,  # 初始延迟 1s
+    exponential_base=2.0  # 指数退避倍数
+)
+```
+
+### 8.8 监控和日志
+
+**PTC 生成重试日志**:
+```
+[Agent] PTC generation attempt 1/3
+[Agent] PTC generation failed on attempt 1: LLM API timeout
+[Agent] Retrying PTC generation in 1000ms...
+[Agent] PTC generation attempt 2/3
+[Agent] PTC code generated { codeLength: 1234, attempt: 2 }
+```
+
+**Skill 执行重试日志**:
+```
+Executing skill 'web-search', attempt 1/3
+Skill 'web-search' failed on attempt 1: Connection timeout. Retryable: True, Will retry: True
+Retrying skill 'web-search' in 1.0s...
+Executing skill 'web-search', attempt 2/3
+Skill 'web-search' succeeded on attempt 2
+Success after 2 attempts
+```
+
+**Sandbox 执行重试日志**:
+```
+[Agent] Executing PTC code in sandbox
+[Agent] Sandbox execution failed: Syntax error in generated code
+[Agent] Retrying sandbox execution, attempt 2/3
+[Agent] Sandbox execution recovered after retries { attempts: 2, totalDelay: 1000 }
+```
+
+### 8.9 测试建议
+
+**单元测试**:
+```python
+# tests/unit/sandbox/test_retry_utils.py
+async def test_execute_with_retry_success_on_first_attempt():
+    result = await execute_with_retry(
+        execute_func=mock_execute,
+        skill_name='test-skill',
+        input_data={},
+        max_attempts=3
+    )
+    assert result['success'] is True
+    assert result['attempts'] == 1
+
+async def test_execute_with_retry_recovers_from_timeout():
+    result = await execute_with_retry(
+        execute_func=mock_execute_with_timeout,
+        skill_name='test-skill',
+        input_data={},
+        max_attempts=3
+    )
+    assert result['success'] is True
+    assert result['attempts'] == 2
+
+async def test_execute_with_retry_fails_on_validation_error():
+    result = await execute_with_retry(
+        execute_func=mock_execute_with_validation_error,
+        skill_name='test-skill',
+        input_data={},
+        max_attempts=3
+    )
+    assert result['success'] is False
+    assert result['attempts'] == 1  # 不应重试
+```
+
+**集成测试**:
+```typescript
+// tests/integration/agent/retry.test.ts
+test('Agent should retry PTC generation on LLM timeout', async () => {
+  const agent = new Agent({...});
+
+  // Mock LLM to timeout once, then succeed
+  mockLLM.sequence([
+    { error: new TimeoutError('LLM API timeout') },
+    { data: { code: 'print("success")' } }
+  ]);
+
+  const result = await agent.run('test task');
+
+  expect(result.success).toBe(true);
+  expect(result.metadata.ptcRetries?.attempts).toBe(2);
+});
+```
+
+### 8.10 性能考虑
+
+**重试开销**:
+- PTC 生成重试: 每次重试消耗 LLM API 调用和 tokens
+- Skill 执行重试: 每次重试消耗等待时间（最多 1s + 2s + 4s = 7s）
+- Sandbox 执行重试: 每次重试消耗 Sandbox 执行时间
+
+**建议**:
+- 监控重试率，过高的重试率可能表明系统不稳定
+- 设置合理的超时时间，避免长时间等待
+- 对于关键任务，可以增加重试次数（如 5 次）
+- 对于非关键任务，可以减少重试次数（如 1 次）
+
+**监控指标**:
+```typescript
+{
+  "ptc_generation_retry_rate": 0.05,  // 5% 的任务需要重试 PTC 生成
+  "skill_execution_retry_rate": 0.10,  // 10% 的 Skill 调用需要重试
+  "sandbox_execution_retry_rate": 0.02,  // 2% 的 PTC 执行需要重试
+  "total_retry_delay_avg": 1500,  // 平均重试延迟 1.5s
+  "max_concurrent_retries": 10  // 最大并发重试数
+}
+```
+
+---
+
+## 9. 总结
+
+### 9.1 项目当前状态
 
 **Phase 1-5 全部完成** ✅
 

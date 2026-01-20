@@ -15,6 +15,7 @@ function Tasks() {
   const [selectedSkill, setSelectedSkill] = useState('')
   const [availableSkills, setAvailableSkills] = useState([])
   const [skillsMap, setSkillsMap] = useState({})
+  const [retryingTasks, setRetryingTasks] = useState({})
   const pageSize = 12
 
   // 加载可用技能列表
@@ -161,6 +162,32 @@ function Tasks() {
     }
   }
 
+  const handleRetryTask = async (taskId, event) => {
+    // 阻止事件冒泡,防止触发链接跳转
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (retryingTasks[taskId]) return
+
+    if (!window.confirm(`确定要重试任务 ${taskId} 吗?`)) {
+      return
+    }
+
+    setRetryingTasks(prev => ({ ...prev, [taskId]: true }))
+    try {
+      await tasksAPI.retryTask(taskId)
+      alert('任务重试已启动')
+      // 刷新列表
+      fetchTasks()
+    } catch (error) {
+      console.error('重试失败:', error)
+      const errorMessage = error.response?.data?.message || '重试失败，请稍后重试'
+      alert(errorMessage)
+    } finally {
+      setRetryingTasks(prev => ({ ...prev, [taskId]: false }))
+    }
+  }
+
 
   const getSkillDisplayName = (skill) => {
     // 使用动态从API获取的技能映射
@@ -279,9 +306,31 @@ function Tasks() {
                     <Link to={`/tasks/${task.taskId}`} className="task-title">
                       {task.task}
                     </Link>
-                    <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
-                      {task.success ? '已完成' : '失败'}
-                    </span>
+                    <div className="task-status-actions">
+                      <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
+                        {task.success ? '已完成' : '失败'}
+                      </span>
+                      {!task.success && (
+                        <button
+                          className="retry-button-small"
+                          onClick={(e) => handleRetryTask(task.taskId, e)}
+                          disabled={retryingTasks[task.taskId]}
+                          title="重新执行此任务"
+                          aria-label="重新执行此任务"
+                        >
+                          {retryingTasks[task.taskId] ? (
+                            <svg className="retry-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                            </svg>
+                          ) : (
+                            <svg className="retry-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="23 4 23 10 17 10"></polyline>
+                              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="task-details">
                     <div className="detail-item">

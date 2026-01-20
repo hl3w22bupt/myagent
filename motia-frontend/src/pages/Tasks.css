@@ -200,6 +200,14 @@
   margin-bottom: 1rem;
 }
 
+/* 状态和操作按钮的容器 */
+.task-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .delete-button {
   padding: 0.375rem;
   background-color: transparent;
@@ -226,6 +234,58 @@
 
 .delete-button:active {
   transform: translateY(0);
+}
+
+/* 小重试按钮样式 - 用于任务卡片 */
+.retry-button-small {
+  padding: 0.375rem;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.retry-button-small:hover:not(:disabled) {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.retry-button-small:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.retry-button-small:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.retry-icon {
+  display: block;
+}
+
+.retry-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .detail-item-with-action {

@@ -8,7 +8,7 @@
 
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { safeStateGet } from '../../src/utils/state-safety';
+import { getTaskStore } from '../../src/core/database/task-store';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
@@ -126,7 +126,7 @@ function loadSubagentsMetadata(): any[] {
  *
  * Returns system overview including skills, agents, and statistics.
  */
-export const handler = async (request: any, { logger, state }: any) => {
+export const handler = async (request: any, { logger }: any) => {
   logger.info('System API: Received request');
 
   try {
@@ -134,26 +134,26 @@ export const handler = async (request: any, { logger, state }: any) => {
     const skills = loadSkillsMetadata();
     const agents = loadSubagentsMetadata();
 
-    // Get execution statistics
+    // Get execution statistics from database
     let totalTasks = 0;
     let successfulTasks = 0;
     let failedTasks = 0;
     let activeSessions = 0;
 
     try {
-      const history = await safeStateGet(state, 'agent:execution', 'history', []);
+      const taskStore = getTaskStore();
+      const { tasks } = await taskStore.list({ limit: 10000 });
 
-      if (history && Array.isArray(history)) {
-        totalTasks = history.length;
-        successfulTasks = history.filter((h: any) => h.success).length;
-        failedTasks = history.filter((h: any) => !h.success).length;
+      totalTasks = tasks.length;
+      successfulTasks = tasks.filter(t => t.status === 'completed').length;
+      failedTasks = tasks.filter(t => t.status === 'failed').length;
 
-        // Count unique sessions
-        const sessions = new Set(history.map((h: any) => h.sessionId).filter(Boolean));
-        activeSessions = sessions.size;
-      }
-    } catch {
-      // Use defaults if state is not available
+      // Count unique sessions
+      const sessions = new Set(tasks.map(t => t.sessionId).filter(Boolean));
+      activeSessions = sessions.size;
+    } catch (error: any) {
+      logger.error('System API: Error reading from database', { error: error.message });
+      // Use defaults if database is not available
     }
 
     // Read package.json for version

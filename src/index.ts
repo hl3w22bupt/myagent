@@ -114,6 +114,13 @@ export function getAgentManager(): AgentManager {
       constraints: {
         timeout: parseInt(process.env.TASK_TIMEOUT || '600000'), // 10 minute - unified with sandbox
         maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
+        // Retry configuration for failed operations
+        retry: {
+          maxRetries: parseInt(process.env.MAX_RETRIES || '3'), // Maximum retry attempts
+          baseDelay: parseInt(process.env.RETRY_BASE_DELAY || '1000'), // Base delay in ms
+          maxDelay: parseInt(process.env.RETRY_MAX_DELAY || '30000'), // Maximum delay in ms
+          exponentialBackoff: process.env.RETRY_EXPONENTIAL_BACKOFF !== 'false', // Use exponential backoff
+        },
       },
     },
     masterAgentConfig, // Optional: Enable MasterAgent support

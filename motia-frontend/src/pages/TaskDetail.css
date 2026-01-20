@@ -146,6 +146,65 @@
   color: #1e293b;
 }
 
+/* 状态和操作按钮的容器 */
+.info-value-with-action {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* 重试按钮样式 */
+.retry-button {
+  padding: 0.625rem;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.retry-button:hover:not(:disabled) {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
+}
+
+.retry-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.retry-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.retry-icon {
+  display: block;
+}
+
+.retry-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* 技能Badge样式 */
 .skill-badges {
   display: flex;
@@ -273,6 +332,11 @@
 .status-failed {
   background-color: #fee2e2;
   color: #991b1b;
+}
+
+.status-running {
+  background-color: #dbeafe;
+  color: #1e40af;
 }
 
 .task-content {

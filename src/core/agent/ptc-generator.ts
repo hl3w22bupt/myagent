@@ -303,28 +303,66 @@ ${
   selectedSkills.length > 0
     ? `Available skills to use:
 from core.skill.executor import SkillExecutor
+from core.sandbox.retry_utils import execute_with_retry
 executor = SkillExecutor()
 
-# CRITICAL - SkillResult structure:
-# All skill executions return a SkillResult object with:
-#   - result.success (bool): whether execution succeeded
-#   - result.output (any): the actual output data
-#   - result.error (str): error message if failed
-#   - result.execution_time (float): execution time
+# CRITICAL - Skill execution with RETRY logic:
+# All skill executions MUST use execute_with_retry() function
+# This implements orchestration-layer retry with exponential backoff
 
-# IMPORTANT: Always extract .output to get the actual data:
-result = await executor.execute('skill-name', {
-    'description': 'detailed task description',
-    'param2': 'value2'  # optional parameters
-})
-actual_output = result.output  # Extract the real output
+# execute_with_retry() signature:
+#   result = await execute_with_retry(
+#       execute_func=executor.execute,
+#       skill_name='skill-name',
+#       input_data={
+#           'description': 'detailed task description',
+#           'param2': 'value2'
+#       },
+#       max_attempts=3  # Max 3 retry attempts
+#   )
 
-# When chaining skills, pass result.output (NOT result) to the next skill:
-result1 = await executor.execute('first-skill', {'param': 'value'})
-result2 = await executor.execute('second-skill', {
-    'description': 'process the result',
-    'input_data': result1.output  # Pass .output, not result1
-})`
+# Result format (unified):
+#   {
+#       'success': bool,
+#       'content': any,  # Actual output data
+#       'result_type': str,
+#       'metadata': dict,
+#       'attempts': int  # Number of attempts made
+#   }
+
+# IMPORTANT: Always check result['success'] and extract result['content']:
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='skill-name',
+    input_data={
+        'description': 'detailed task description',
+        'param2': 'value2'
+    }
+)
+
+if result['success']:
+    actual_output = result['content']  # Extract the real output
+    print(f"Success after {result['attempts']} attempts")
+else:
+    error_message = result['content'].get('message', 'Unknown error')
+    print(f"Failed after {result['attempts']} attempts: {error_message}")
+
+# When chaining skills, pass result['content'] (NOT result) to the next skill:
+result1 = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='first-skill',
+    input_data={'param': 'value'}
+)
+
+if result1['success']:
+    result2 = await execute_with_retry(
+        execute_func=executor.execute,
+        skill_name='second-skill',
+        input_data={
+            'description': 'process the result',
+            'input_data': result1['content']  # Pass ['content'], not result1
+        }
+    )`
     : `No skills needed - solve the task directly with Python code.`
 }
 
@@ -341,17 +379,29 @@ Code requirements:
 
 CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 \`\`\`python
-result = await executor.execute('skill-name', {
-    'description': 'task description'
-})
-print(result.output)  # Print .output, not result
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='skill-name',
+    input_data={
+        'description': 'task description'
+    }
+)
+
+if result['success']:
+    print(result['content'])  # Print ['content'], not result
+else:
+    error = result['content'].get('message', 'Unknown error')
+    print(f"Error: {error}")
 \`\`\`
 
 IMPORTANT REMINDERS:
-- Always use result.output to get the actual output from a skill
-- When passing results to another skill, always pass result.output (NOT result)
-- Match the parameter names to the skill's input schema
+- ALWAYS use execute_with_retry() for skill execution (NEVER call executor.execute directly)
+- Check result['success'] to determine if execution succeeded
+- Extract actual output from result['content'] (NOT result['output'])
+- When passing results to another skill, pass result['content'] (NOT result)
 - Check the skill's input schema to understand expected parameter types
+- The retry logic will automatically handle transient failures (timeout, network errors)
+- Non-retryable errors (validation, permission, not found) will fail immediately
 
 Generate the code now:`;
 

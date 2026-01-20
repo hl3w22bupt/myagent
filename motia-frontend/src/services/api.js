@@ -77,16 +77,24 @@ export const tasksAPI = {
       hasMore: response.data.hasMore || false
     })),
   getTaskDetails: (id) =>
-    apiClient.get('/agent/result', { params: { id } }).then(response => ({
-      ...response,
-      data: response.data.result || null
-    })),
+    apiClient.get('/agent/result', { params: { id } }).then(response => response.data.result),
   submitTask: (task) => apiClient.post('/agent/execute', { task }),
-  deleteTask: (id) =>
-    apiClient.delete('/agent/result', { params: { id } }).then(response => ({
-      ...response,
-      data: response.data
-    }))
+  deleteTask: (id) => {
+    console.log('=== deleteTask 被调用 ===')
+    console.log('删除任务 ID:', id)
+    return apiClient.delete('/agent/result', {
+      params: { id },
+      timeout: 30000 // 增加到 30 秒
+    }).catch(error => {
+      console.error('=== deleteTask API 错误 ===')
+      console.error('错误对象:', error)
+      console.error('错误 code:', error.code)
+      console.error('是否超时:', error.code === 'ECONNABORTED')
+      throw error
+    })
+  },
+  retryTask: (id) =>
+    apiClient.post('/agent/result/retry', {}, { params: { id } })
 }
 
 export default apiClient

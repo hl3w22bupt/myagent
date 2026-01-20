@@ -15,6 +15,7 @@ function TaskDetail() {
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text'
   const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
+  const [retrying, setRetrying] = useState(false) // 重试状态
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
 
   useEffect(() => {
@@ -25,8 +26,8 @@ function TaskDetail() {
     }
     const fetchTaskDetails = async () => {
       try {
-        const response = await tasksAPI.getTaskDetails(id)
-        setTask(response.data)
+        const task = await tasksAPI.getTaskDetails(id)
+        setTask(task)
         setError('')
         setLoading(false)
         return { found: true, error: null }
@@ -474,18 +475,142 @@ function TaskDetail() {
   }
 
   const handleDeleteTask = async () => {
+    // ⭐ 停止轮询，防止在删除过程中显示 404 错误
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+    setPolling(false)
+
     // 确认删除
     if (!window.confirm(`确定要删除任务 ${task.taskId} 吗?此操作不可恢复。`)) {
+      // 用户取消删除，恢复轮询
+      setPolling(true)
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const task = await tasksAPI.getTaskDetails(id)
+          setTask(task)
+          setPolling(false)
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        } catch (err) {
+          console.error('轮询失败:', err)
+        }
+      }, 1000)
       return
     }
 
     try {
-      await tasksAPI.deleteTask(task.taskId)
+      console.log('=== 开始删除任务 ===')
+      console.log('任务 ID:', task.taskId)
+
+      const response = await tasksAPI.deleteTask(task.taskId)
+
+      console.log('=== 删除成功 ===')
+      console.log('响应对象:', response)
+      console.log('响应数据:', response.data)
+      console.log('响应状态:', response.status)
+
       // 删除成功后跳转回任务列表
       window.location.href = '/tasks'
     } catch (error) {
-      console.error('删除任务失败:', error)
-      alert('删除任务失败,请稍后重试')
+      console.error('=== 删除任务失败 ===')
+      console.error('完整错误对象:', error)
+      console.error('错误名称:', error.name)
+      console.error('错误消息:', error.message)
+      console.error('错误堆栈:', error.stack)
+
+      if (error.response) {
+        console.error('HTTP 状态码:', error.response.status)
+        console.error('HTTP 状态文本:', error.response.statusText)
+        console.error('响应头:', error.response.headers)
+        console.error('响应数据:', error.response.data)
+      } else if (error.request) {
+        console.error('请求已发送但没有收到响应:', error.request)
+      } else {
+        console.error('请求设置错误:', error.message)
+      }
+
+      // 显示更详细的错误信息
+      let errorMessage = '未知错误'
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      alert(`删除任务失败: ${errorMessage}\n请查看浏览器控制台获取详细信息`)
+
+      // 删除失败，恢复轮询
+      setPolling(true)
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const task = await tasksAPI.getTaskDetails(id)
+          setTask(task)
+          setPolling(false)
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        } catch (err) {
+          console.error('轮询失败:', err)
+        }
+      }, 1000)
+    }
+  }
+
+  const handleRetryTask = async () => {
+    if (retrying) return
+
+    if (!window.confirm(`确定要重试任务 ${task.taskId} 吗?`)) {
+      return
+    }
+
+    setRetrying(true)
+    try {
+      await tasksAPI.retryTask(task.taskId)
+
+      // 重试成功，显示提示并保持当前页面状态
+      alert('任务重试已启动，页面将自动更新')
+
+      // 重新开始轮询任务状态
+      setLoading(true)
+      setPolling(true)
+      setRetrying(false)
+
+      // 使用现有的轮询逻辑，不再手动 reload
+      // useEffect 会自动处理轮询
+      const fetchTaskDetails = async () => {
+        try {
+          const task = await tasksAPI.getTaskDetails(id)
+          setTask(task)
+          setError('')
+          setLoading(false)
+          setPolling(false)
+        } catch (error) {
+          console.error('Error fetching task details:', error)
+          if (error.response?.status === 404) {
+            // 404 表示任务还在执行中，继续轮询
+            setTimeout(fetchTaskDetails, 1000)
+          } else {
+            setError('获取任务详情失败')
+            setLoading(false)
+            setPolling(false)
+          }
+        }
+      }
+
+      fetchTaskDetails()
+    } catch (error) {
+      console.error('重试失败:', error)
+      const errorMessage = error.response?.data?.message || '重试失败，请稍后重试'
+      alert(errorMessage)
+      setRetrying(false)
     }
   }
 
@@ -524,9 +649,31 @@ function TaskDetail() {
             </div>
             <div className="info-item">
               <span className="info-label">状态:</span>
-              <span className={`info-value status status-${task.success ? 'completed' : 'failed'}`}>
-                {task.success ? '成功' : '失败'}
-              </span>
+              <div className="info-value-with-action">
+                <span className={`info-value status status-${task.executionTime === null ? 'running' : (task.success ? 'completed' : 'failed')}`}>
+                  {task.executionTime === null ? '执行中' : (task.success ? '成功' : '失败')}
+                </span>
+                {task.executionTime !== null && !task.success && (
+                  <button
+                    className="retry-button"
+                    onClick={handleRetryTask}
+                    disabled={retrying}
+                    title="重新执行此任务"
+                    aria-label="重新执行此任务"
+                  >
+                    {retrying ? (
+                      <svg className="retry-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                      </svg>
+                    ) : (
+                      <svg className="retry-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="info-item">
               <span className="info-label">创建时间:</span>

@@ -25,6 +25,7 @@ declare module 'motia' {
     'agent-task-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-results-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     
