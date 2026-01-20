@@ -106,12 +106,13 @@ export function getAgentManager(): AgentManager {
       availableSkills: ['web-search', 'summarize', 'code-analysis'],
       sandbox: {
         type: 'local',
-        config: {
+        local: {
           pythonPath: process.env.PYTHON_PATH || venvPythonPath,
+          timeout: parseInt(process.env.TASK_TIMEOUT || '600000'), // 10 minute
         },
       },
       constraints: {
-        timeout: parseInt(process.env.TASK_TIMEOUT || '600000'), // 10 minutes for video rendering
+        timeout: parseInt(process.env.TASK_TIMEOUT || '600000'), // 10 minute - unified with sandbox
         maxIterations: parseInt(process.env.MAX_ITERATIONS || '5'),
       },
     },

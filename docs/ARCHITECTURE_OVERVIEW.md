@@ -7,8 +7,17 @@
 **项目**: Motia-based Distributed Agent System
 **架构模式**: 四层架构 + 事件驱动
 **实施阶段**: Phase 1-5 已完成
-**文档版本**: v1.0
-**更新日期**: 2026-01-09
+**文档版本**: v1.1
+**更新日期**: 2026-01-20
+**更新内容**:
+- 修正测试覆盖率数据（184个测试，146 passed, 38 skipped）
+- 更新 Phase 2 Skill 数量（6个而非3个）
+- 添加性能数据警告说明（设计目标值，未经验证）
+- 更新 SandboxManager 使用状态（暂时保留，待架构评审）
+- 标记配置不一致问题为已修复
+- 标记类型安全问题为已修复
+- 补充 MasterAgent 和技能发现系统高级功能描述
+- 添加代码覆盖率数据（Statements 24.55%, Branches 15.09%, Functions 29.19%, Lines 25.02%）
 
 ---
 
@@ -132,7 +141,7 @@ config/sandbox.config.yaml
 - ✅ Skill 类型定义 (SkillType, SkillMetadata, SkillDefinition)
 - ✅ Skill Registry (自动发现、两级加载)
 - ✅ Skill Executor (统一执行接口)
-- ✅ 三个示例 Skills (web-search, summarize, code-analysis)
+- ✅ 六个示例 Skills (web-search, summarize, code-analysis, read-file, remotion-generator, infographic-generator)
 
 **核心设计**:
 
@@ -267,6 +276,33 @@ core/agent/llm-client.ts
 
 **测试覆盖**: 20+ TypeScript 单元测试
 
+**额外实现的功能**:
+
+#### ✅ MasterAgent 高级功能（超出基础设计）
+
+- **子代理委托和编排**: 智能任务分解和分配
+- **智能任务分配**: 基于技能匹配自动选择最合适的子代理
+- **缓存机制**: 减少重复的 LLM 调用，提升性能
+- **结果合成和汇总**: 整合多个子代理的输出
+- **YAML 配置文件加载**: 支持灵活的子代理配置 (`src/subagents/`)
+- **文件内容增强**: 自动读取相关文件作为任务上下文
+- **工具使用能力**: 子代理可以调用外部工具和服务
+
+#### ✅ 技能自动发现系统（`src/core/agent/skill-discovery.ts`）
+
+- **自动扫描**: 启动时扫描 `/skills` 目录
+- **YAML 解析**: 自动读取每个技能的 `skill.yaml` 文件
+- **动态注册表**: 运行时更新技能列表
+- **异步初始化**: 非阻塞式技能加载
+- **热重载支持**: 开发环境下的技能配置更新
+
+**关键文件**:
+
+```
+core/agent/skill-discovery.ts
+skills/*/skill.yaml
+```
+
 ---
 
 ### Phase 4.5: 集成测试 (独立) ✅
@@ -303,7 +339,7 @@ core/agent/llm-client.ts
 - ✅ SandboxManager (会话 → Sandbox 映射)
 - ✅ Master-Agent Step (Motia 事件处理)
 - ✅ 应用入口 (src/index.ts)
-- ✅ 完整测试验证 (59/60 通过)
+- ✅ 完整测试验证 (184 个测试，146 passed, 38 skipped)
 
 **核心设计**:
 
@@ -1153,72 +1189,75 @@ const ptcCode = await this.ptcGenerator.generate(task, {
 
 ### 7.4 潜在改进点
 
-#### ⚠️ 1. SandboxManager 未使用（高优先级）
+#### ⚠️ 1. SandboxManager 使用状态（2026-01-20 更新）
 
-**问题**：
+**当前状态**: 暂时保留，未集成到 Agent（架构待评审）
 
-- `src/index.ts` 创建了 `sandboxManager`
-- Agent 类在构造函数中自己创建 Sandbox
-- `sandboxManager` 未被使用
+**架构说明**:
+- `SandboxManager` 已完整实现 (`src/core/sandbox/manager.ts`)
+- 当前 Agent 直接使用 `SandboxFactory.create()` 创建 Sandbox，绕过了 Manager
+- Manager 的会话管理功能未被使用
+- **决策**: 暂时保留实现，等待架构评审后决定是否集成
 
-**建议**：
+**影响**:
+- ✅ 当前实现仍然功能正常
+- ⚠️ 缺少统一的 Sandbox 会话管理
+- ⚠️ 资源清理依赖 Agent 自己的生命周期
 
-```typescript
-// 选项 A：移除未使用的 SandboxManager
-// 从 src/index.ts 移除 export const sandboxManager
+**后续计划**:
+- 评估是否需要统一的 Sandbox 管理
+- 如果需要，重构 Agent 使用 SandboxManager（推荐）
+- 如果不需要，移除 SandboxManager 简化架构
 
-// 选项 B：让 Agent 使用 SandboxManager（不推荐，引入循环依赖）
-```
-
-**优先级**：高
-**影响**：代码混淆、资源浪费
-**工作量**：5分钟
-
----
-
-#### ⚠️ 2. 配置重复（高优先级）
-
-**问题**：
-
-- `src/index.ts` 配置了 AgentManager
-- `steps/agents/master-agent.step.ts` 也配置了 AgentManager
-- 配置可能不一致
-
-**建议**：
-
-```typescript
-// master-agent.step.ts 改为：
-import { agentManager } from '../../src/index';
-
-// 移除本地创建的 AgentManager
-// 使用全局实例
-```
-
-**优先级**：高
-**影响**：配置不一致风险
-**工作量**：10分钟
+**优先级**: 中（待架构评审后确定）
+**工作量**: 评估 30 分钟，实施 2-4 小时
 
 ---
 
-#### ⚠️ 3. 类型安全问题（中优先级）
+#### ⚠️ 2. 配置不一致（已修复 ✅）
 
-**问题**：
+**原问题**：
+
+- Agent 使用 `sandbox.config`，MasterAgent 使用 `sandbox.local`
+- 超时值不一致（600000ms vs 60000ms）
+- 配置格式不统一
+
+**修复方案**：
+
+- ✅ 统一使用 `sandbox.local` 格式
+- ✅ 统一超时值为 60000ms（1分钟）
+- ✅ 添加配置一致性验证代码
+
+**修复时间**: 2026-01-20
+**影响**: 配置更加统一和可预测
+
+---
+
+#### ✅ 3. 类型安全问题（已修复）
+
+**原问题**：
 
 ```typescript
-// src/index.ts line 65
+// 使用类型断言可能导致运行时错误
 provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai-compatible';
 ```
 
-**建议**：
+**修复方案**：
+
+- ✅ 使用安全的类型检查和默认值处理
+- ✅ `src/index.ts` 使用了三元运算符进行类型守卫
+- ✅ 默认值设置为 'anthropic'
+
+**当前实现**：
 
 ```typescript
-// 更安全的写法：
-provider: process.env.LLM_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'anthropic';
+provider: process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible'
+  ? 'openai-compatible'
+  : 'anthropic'
 ```
 
-**优先级**：中
-**影响**：运行时错误风险
-**工作量**：5分钟
+**修复时间**: 2026-01-20
+**影响**: 类型安全得到保障
 
 ---
 
@@ -1253,6 +1292,10 @@ if (this.state.conversationHistory.length > this.config.maxConversationHistory) 
 ---
 
 ### 7.5 性能特征
+
+> ⚠️ **重要说明**：以下性能数据为设计目标值和估算值，尚未通过基准测试验证。
+> 实际性能可能因硬件、工作负载、网络延迟和环境配置而异。
+> 性能优化策略详见 `docs/PERFORMANCE_OPTIMIZATION.md`，目前尚未实施。
 
 #### 当前未优化版本的性能
 
