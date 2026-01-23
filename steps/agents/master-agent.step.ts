@@ -142,13 +142,23 @@ export const handler = async (
 
   // Initialize task store and create task record
   const taskStore = getTaskStore();
-  await taskStore.create({
-    id: taskId,
-    task: input.task,
-    sessionId: sessionId,
-    status: TaskStatus.PENDING,
-  });
-  logger.info('Task record created in database', { taskId, status: 'PENDING' });
+
+  // 检查任务是否已存在（可能因为 BullMQ 重试）
+  const existingTask = await taskStore.get(taskId).catch(() => null);
+  if (existingTask) {
+    logger.info('Task already exists in database, skipping creation', {
+      taskId,
+      existingStatus: existingTask.status,
+    });
+  } else {
+    await taskStore.create({
+      id: taskId,
+      task: input.task,
+      sessionId: sessionId,
+      status: TaskStatus.PENDING,
+    });
+    logger.info('Task record created in database', { taskId, status: 'PENDING' });
+  }
 
   // Helper function to update stream
   // DISABLED: Stream updates cause stack overflow due to wrapObject bug
