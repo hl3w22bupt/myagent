@@ -1,0 +1,27 @@
+# TaskHook global configuration
+hooks:
+  # Default enabled TaskHooks
+  enabled:
+    - DefaultTaskHook
+    - ContextManagerTaskHook
+    - UserAllowTaskHook
+    - MetricsCollectorTaskHook
+
+  # Individual Hook configurations
+  DefaultTaskHook:
+    heartbeatInterval: 30000  # milliseconds
+
+  ContextManagerTaskHook:
+    autoCompression: true
+    compressionThreshold: 0.8
+    maxContextTokens: 100000
+
+  UserAllowTaskHook:
+    allowAllMode: true  # Initial implementation: allow all tasks
+    strictMode: false  # Future: fail closed on permission errors
+    logAttempts: true
+
+  MetricsCollectorTaskHook:
+    reportToPrometheus: false
+    reportToLogger: true
+    includeDetailedTimings: true
