@@ -17,7 +17,7 @@ function App() {
     : 'ws://localhost:3000'
 
   return (
-    <MotiaStreamProvider url={streamUrl}>
+    <MotiaStreamProvider address={streamUrl}>
       <SettingsProvider>
         <div className="app">
           <Navigation />

@@ -20,7 +20,10 @@ function TaskDetail() {
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
 
   // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
-  const { data: streamData, error: streamError } = useStreamGroup('taskExecution', id)
+  const { data: streamData } = useStreamGroup({
+    streamName: 'taskExecution',
+    groupId: id,
+  })
 
   useEffect(() => {
     // 清理之前的 interval
@@ -238,7 +241,7 @@ function TaskDetail() {
   // 获取媒体文件的Blob URL
   // 渲染 Stream 内容（实时日志）
   const renderStreamContent = () => {
-    // streamData 现在是来自 Motia SDK 的数组，而不是对象
+    // streamData 是来自 Motia SDK 的对象数组，每个对象包含 id 和其他字段
     const entries = Array.isArray(streamData) ? streamData : []
 
     if (entries.length === 0) {
@@ -262,23 +265,20 @@ function TaskDetail() {
           </div>
         </div>
         <div className="stream-entries">
-          {entries.map((entry, index) => {
-            // entry 是 [id, data] 格式的数组
-            const entryId = entry[0]
-            const entryData = entry[1]
-
+          {entries.map((entry) => {
+            // entry 是对象，包含 id, type, status, message, timestamp 等字段
             return (
-              <div key={index} className={`stream-entry stream-entry-${entryData.status || 'info'}`}>
+              <div key={entry.id} className={`stream-entry stream-entry-${entry.status || 'info'}`}>
                 <div className="entry-header">
-                  <span className="entry-time">{new Date(entryData.timestamp).toLocaleTimeString()}</span>
-                  <span className={`entry-status status-${entryData.status || 'info'}`}>
-                    {entryData.status || 'pending'}
+                  <span className="entry-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                  <span className={`entry-status status-${entry.status || 'info'}`}>
+                    {entry.status || 'pending'}
                   </span>
-                  {entryData.type && <span className="entry-step">{entryData.type}</span>}
+                  {entry.type && <span className="entry-step">{entry.type}</span>}
                 </div>
-                {entryData.task && <div className="entry-task">{entryData.task}</div>}
-                {entryData.message && <div className="entry-output">{entryData.message}</div>}
-                {entryData.error && <div className="entry-error">{entryData.error}</div>}
+                {entry.task && <div className="entry-task">{entry.task}</div>}
+                {entry.message && <div className="entry-output">{entry.message}</div>}
+                {entry.error && <div className="entry-error">{entry.error}</div>}
               </div>
             )
           })}
