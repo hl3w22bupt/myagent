@@ -12,8 +12,13 @@ import bullmqPlugin from '@motiadev/plugin-bullmq/plugin';
 
 export default defineConfig({
   plugins: [
-    // Motia built-in plugins
-    observabilityPlugin,
+    // 🔧 Observability plugin disabled to prevent infinite recursion with Stream operations
+    // Issue: Stream.set() → Redis write → Observability tracing → Redis write → recursion
+    // Impact: Tracing UI is disabled, but Logs UI and all core features still work
+    // For TaskHook progress updates, tracing is not needed and would create noise
+    // observabilityPlugin,
+
+    // Core plugins (still active)
     statesPlugin,
     endpointPlugin,
     logsPlugin,

@@ -51,8 +51,10 @@ export class DefaultTaskHook extends BaseTaskHook {
   }
 
   async onProgressingNotify(context: TaskContext): Promise<void> {
-    // Log progress metrics only
-    // Do NOT call services.streams to avoid infinite recursion with observability plugin
+    // Call parent class to send heartbeat via Stream
+    await super.onProgressingNotify(context);
+
+    // Add custom progress metrics logging
     const { services, metadata } = context;
     services.logger.debug('Task progress', {
       taskId: context.taskId,
