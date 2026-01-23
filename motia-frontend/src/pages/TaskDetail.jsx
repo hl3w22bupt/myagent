@@ -18,12 +18,52 @@ function TaskDetail() {
   const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
   const [retrying, setRetrying] = useState(false) // 重试状态
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
+  const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
 
   // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
   const { data: streamData } = useStreamGroup({
     streamName: 'taskExecution',
     groupId: id,
   })
+
+  // 监听 Stream 数据，当检测到任务完成时，重新获取任务详情
+  useEffect(() => {
+    if (!streamData || streamData.length === 0 || completedFetchedRef.current) {
+      return
+    }
+
+    // 查找最后一个 entry
+    const lastEntry = streamData[streamData.length - 1]
+
+    // 如果检测到完成状态，重新获取任务详情
+    if (lastEntry?.status === 'completed' || lastEntry?.status === 'failed') {
+      console.log('检测到任务状态变化:', lastEntry.status, '，重新获取任务详情')
+
+      // 标记已处理，避免重复请求
+      completedFetchedRef.current = true
+
+      // 重新获取任务详情
+      const fetchUpdatedDetails = async () => {
+        try {
+          const updatedTask = await tasksAPI.getTaskDetails(id)
+          console.log('已获取更新后的任务详情:', updatedTask)
+          setTask(updatedTask)
+          setLoading(false)
+          setPolling(false)
+
+          // 清除轮询
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        } catch (error) {
+          console.error('获取更新后的任务详情失败:', error)
+        }
+      }
+
+      fetchUpdatedDetails()
+    }
+  }, [streamData, id])
 
   useEffect(() => {
     // 清理之前的 interval
@@ -654,6 +694,9 @@ function TaskDetail() {
     setRetrying(true)
     try {
       await tasksAPI.retryTask(task.taskId)
+
+      // 重置完成标记，以便新的任务执行完成时可以再次触发自动获取
+      completedFetchedRef.current = false
 
       // 重试成功，显示提示并保持当前页面状态
       alert('任务重试已启动，页面将自动更新')
