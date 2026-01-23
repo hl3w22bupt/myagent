@@ -36,27 +36,34 @@ export abstract class BaseTaskHook {
   /**
    * Called periodically during task execution (every 30s by default)
    *
-   * Use for:
+   * Default implementation is a no-op (does nothing).
+   *
+   * Override this method to add custom progress monitoring:
    * - Send heartbeat signals to Stream
    * - Report overall progress
    * - Monitor task health
+   * - Update external monitoring systems
    *
-   * Default implementation sends heartbeat to Stream.
-   * Override to add custom progress monitoring.
-   *
-   * Note: Observability plugin is disabled in motia.config.ts to prevent
-   * infinite recursion. With observability disabled, Stream operations are safe.
+   * Example for custom heartbeat:
+   * ```typescript
+   * async onProgressingNotify(context: TaskContext) {
+   *   const { taskId, services } = context;
+   *   await services.streams.taskExecution.set(
+   *     taskId,
+   *     `${taskId}-heartbeat-${Date.now()}`,
+   *     {
+   *       type: 'heartbeat',
+   *       status: 'running',
+   *       timestamp: new Date().toISOString(),
+   *     }
+   *   );
+   * }
+   * ```
    *
    * @param context - Task execution context
    */
   async onProgressingNotify(context: TaskContext): Promise<void> {
-    const { taskId, services } = context;
-
-    // Default: send heartbeat to Stream
-    await services.streams.taskExecution.set(taskId, taskId, {
-      type: 'heartbeat',
-      message: 'Task is still running...',
-      timestamp: new Date().toISOString(),
-    });
+    // Default: no-op
+    // Subclasses can override to implement custom progress tracking
   }
 }

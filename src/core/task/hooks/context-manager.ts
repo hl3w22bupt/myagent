@@ -12,6 +12,7 @@ import { TaskContext, PreExecResult } from './types';
 export class ContextManagerTaskHook extends BaseTaskHook {
   async preExec(context: TaskContext): Promise<void | { stop?: boolean; reason?: string; modifiedTask?: string }> {
     const { taskId, services } = context;
+    const entryId = `${taskId}-context-pre`;
 
     // TODO: Implement ContextManager.createTaskContext()
     // For now, create empty context object
@@ -22,7 +23,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
     };
 
     // Send initialization message
-    await services.streams.taskExecution.set(taskId, taskId, {
+    await services.streams.taskExecution.set(taskId, entryId, {
       type: 'step',
       message: 'Context initialized (placeholder)',
       currentStep: 'context_init',
