@@ -17,7 +17,7 @@ export abstract class BaseTaskHook {
    * @param context - Task execution context
    * @returns undefined to continue, {stop: true, reason: '...'} to abort, or {modifiedTask: '...'} to change task
    */
-  abstract preExec(context: TaskContext): Promise<PreExecResult>;
+  abstract preExec(context: TaskContext): Promise<void | { stop?: boolean; reason?: string; modifiedTask?: string }>;
 
   /**
    * Called after task execution completes (success or failure)
@@ -41,19 +41,17 @@ export abstract class BaseTaskHook {
    * - Report overall progress
    * - Monitor task health
    *
-   * Default implementation sends heartbeat to Stream.
-   * Override to add custom progress monitoring.
+   * Default implementation does nothing to avoid infinite recursion
+   * with observability plugin. Override to add custom progress monitoring.
+   *
+   * IMPORTANT: When implementing this method, avoid calling services.streams
+   * directly as it may cause infinite recursion with the observability plugin.
+   * Use services.logger.debug() instead for progress logging.
    *
    * @param context - Task execution context
    */
   async onProgressingNotify(context: TaskContext): Promise<void> {
-    const { taskId, services } = context;
-
-    // Default: send heartbeat
-    await services.streams.taskExecution.set(taskId, taskId, {
-      type: 'heartbeat',
-      message: 'Task is still running...',
-      timestamp: new Date().toISOString(),
-    });
+    // Default: no-op to prevent infinite recursion with observability plugin
+    // Override in subclasses if needed, but avoid calling services.streams
   }
 }

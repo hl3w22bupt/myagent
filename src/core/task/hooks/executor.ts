@@ -1,4 +1,5 @@
-import { BaseTaskHook, TaskContext } from './base';
+import { BaseTaskHook } from './base';
+import { TaskContext } from './types';
 
 /**
  * Manages and executes TaskHooks

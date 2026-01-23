@@ -10,7 +10,7 @@ import { TaskContext, PreExecResult } from './types';
  * See: docs/design/context-engineering.md
  */
 export class ContextManagerTaskHook extends BaseTaskHook {
-  async preExec(context: TaskContext): PreExecResult {
+  async preExec(context: TaskContext): Promise<void | { stop?: boolean; reason?: string; modifiedTask?: string }> {
     const { taskId, services } = context;
 
     // TODO: Implement ContextManager.createTaskContext()

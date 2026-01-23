@@ -116,22 +116,10 @@ describe('DefaultTaskHook', () => {
   });
 
   describe('onProgressingNotify', () => {
-    it('should send heartbeat via parent class', async () => {
+    it('should log progress metrics without calling streams', async () => {
       await hook.onProgressingNotify(mockContext);
 
-      expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
-        'test-1',
-        'test-1',
-        expect.objectContaining({
-          type: 'heartbeat',
-          message: 'Task is still running...',
-        })
-      );
-    });
-
-    it('should log progress metrics', async () => {
-      await hook.onProgressingNotify(mockContext);
-
+      // Should log progress metrics
       expect(mockContext.services.logger.debug).toHaveBeenCalledWith(
         'Task progress',
         {
@@ -141,6 +129,9 @@ describe('DefaultTaskHook', () => {
           totalTokens: 1000,
         }
       );
+
+      // Should NOT call streams to avoid infinite recursion with observability plugin
+      expect(mockContext.services.streams.taskExecution.set).not.toHaveBeenCalled();
     });
   });
 });

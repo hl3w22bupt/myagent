@@ -15,7 +15,7 @@ import { TaskContext, PreExecResult } from './types';
  * Future version: Implement actual permission validation
  */
 export class UserAllowTaskHook extends BaseTaskHook {
-  async preExec(context: TaskContext): PreExecResult {
+  async preExec(context: TaskContext): Promise<void | { stop?: boolean; reason?: string; modifiedTask?: string }> {
     const { task, services, metadata } = context;
     const userId = metadata?.userId;
 

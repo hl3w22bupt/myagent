@@ -10,7 +10,7 @@ import { TaskContext, PreExecResult } from './types';
  * - Log task lifecycle events
  */
 export class DefaultTaskHook extends BaseTaskHook {
-  async preExec(context: TaskContext): PreExecResult {
+  async preExec(context: TaskContext): Promise<void | { stop?: boolean; reason?: string; modifiedTask?: string }> {
     const { taskId, task, services } = context;
 
     // 1. Send initial status to Stream
@@ -51,10 +51,8 @@ export class DefaultTaskHook extends BaseTaskHook {
   }
 
   async onProgressingNotify(context: TaskContext): Promise<void> {
-    // Call parent class to send heartbeat
-    await super.onProgressingNotify(context);
-
-    // Add custom progress monitoring
+    // Log progress metrics only
+    // Do NOT call services.streams to avoid infinite recursion with observability plugin
     const { services, metadata } = context;
     services.logger.debug('Task progress', {
       taskId: context.taskId,
