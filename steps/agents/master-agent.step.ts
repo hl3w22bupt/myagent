@@ -23,7 +23,7 @@ import {
   UserAllowTaskHook,
   MetricsCollectorTaskHook,
   TaskContext,
-} from '../../src/core/task/hooks';
+} from '../../src/core/task/hooks/index';
 
 /**
  * Input schema for Master Agent step.
