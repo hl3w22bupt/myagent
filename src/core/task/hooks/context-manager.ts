@@ -1,4 +1,5 @@
-import { BaseTaskHook, TaskContext, PreExecResult } from './base';
+import { BaseTaskHook } from './base';
+import { TaskContext, PreExecResult } from './types';
 
 /**
  * Context Manager TaskHook
