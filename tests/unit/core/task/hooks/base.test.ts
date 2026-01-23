@@ -1,4 +1,4 @@
-import { BaseTaskHook } from '@/core/task/hooks/types';
+import { BaseTaskHook } from '@/core/task/hooks/base';
 import { TaskContext } from '@/core/task/hooks/types';
 
 class TestTaskHook extends BaseTaskHook {
