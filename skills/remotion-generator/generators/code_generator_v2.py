@@ -226,7 +226,12 @@ Your output must be a COMPLETE, RENDERABLE Remotion entry point file with:
    - You MUST export your main component like: export const MyVideo: React.FC
    - The component should be defined with proper TypeScript typing
 
-4. **Composition Component** (at the end, before registerRoot)
+4. **Root Component** (contains the Composition)
+   - Define a root component that wraps the Composition: export const RemotionRoot: React.FC
+   - The root component returns: <><Composition ... /></>
+   - This is REQUIRED for Remotion to work properly
+
+5. **Composition Component** (inside the root component)
    - Create a Composition with these required props:
      - id: A unique string identifier for your composition
        **CRITICAL**: Composition id can ONLY contain:
@@ -236,14 +241,15 @@ Your output must be a COMPLETE, RENDERABLE Remotion entry point file with:
        - CJK characters (Chinese, Japanese, Korean)
        **NO UNDERSCORES (_) or other special characters allowed!**
        Example: ✅ "MyVideo-Component", ❌ "My_Video_Component"
-     - component: Your exported main component
+     - component: Your exported main component (the scene component, not the root!)
      - durationInFrames: Total number of frames (use provided value)
      - fps: Frames per second (use provided value)
      - width: Video width (use provided value)
      - height: Video height (use provided value)
 
-5. **registerRoot Call** (the VERY LAST line of your file)
-   - MUST call registerRoot(YourMainComponent) as the final line
+6. **registerRoot Call** (the VERY LAST line of your file)
+   - MUST call registerRoot(RemotionRoot) as the final line
+   - Pass the ROOT component, not the scene component
    - This is CRITICAL for Remotion to recognize your composition
 
 ### Component Organization Checklist
@@ -252,9 +258,10 @@ Your output must be a COMPLETE, RENDERABLE Remotion entry point file with:
 - Create helper components for common visualizations
 - Create scene components for each major section
 - Create main component that manages scene transitions
-- EXPORT your main component
-- Define Composition with all required props
-- Call registerRoot with your main component
+- EXPORT your main component (scene component)
+- EXPORT your root component (contains Composition)
+- Define Composition with all required props (inside root component)
+- Call registerRoot with your ROOT component
 
 ### Scene Management Pattern (Conceptual)
 Instead of frame-based scene switching, use Sequence from Remotion for cleaner code:
@@ -460,26 +467,39 @@ export const MyVideo: React.FC = () => {
   );
 };
 
-// CRITICAL: Define Composition at the end
-<Composition
-  id="MyVideo"
-  component={MyVideo}
-  durationInFrames={300}
-  fps={30}
-  width={1920}
-  height={1080}
-/>
+// Define root component that contains the Composition
+export const RemotionRoot: React.FC = () => {
+  return (
+    <>
+      <Composition
+        id="MyVideo"
+        component={MyVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+    </>
+  );
+};
 
-// CRITICAL: Call registerRoot as the VERY LAST line
-registerRoot(MyVideo);
+// CRITICAL: Call registerRoot with the ROOT component, not the scene component
+registerRoot(RemotionRoot);
 ```
 
 **Key Points from This Example**:
 1. Imports at the top (React, Composition, registerRoot, hooks)
 2. Component definitions (Scene1, MyVideo)
 3. Export main component: `export const MyVideo: React.FC`
-4. Composition with id, component, durationInFrames, fps, width, height
-5. registerRoot(MyVideo) as the final line
+4. Export root component: `export const RemotionRoot: React.FC` that contains the Composition
+5. Composition with id, component, durationInFrames, fps, width, height (inside RemotionRoot)
+6. registerRoot(RemotionRoot) as the final line (register the ROOT, not the scene!)
+
+**CRITICAL REMOTION ARCHITECTURE**:
+- Remotion needs a ROOT component that contains all Compositions
+- registerRoot() registers the ROOT, not individual scene components
+- The ROOT component returns <><Composition.../><Composition.../></>
+- Each Composition has a unique id that can be referenced during rendering
 
 **Your Task**: Generate similar complete code for the provided content analysis.
 
