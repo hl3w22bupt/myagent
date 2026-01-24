@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { tasksAPI } from '../services/api'
-import { useStreamGroup } from '@motiadev/stream-client-react'
+import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -20,11 +20,36 @@ function TaskDetail() {
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
   const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
 
+  // 获取 stream 实例，避免初始化时的竞态条件
+  const { stream } = useMotiaStream()
+
   // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
-  const { data: streamData } = useStreamGroup({
-    streamName: 'taskExecution',
-    groupId: id,
-  })
+  // 只在 stream 存在时订阅，避免初始化时的错误警告
+  // 需要直接在组件内部处理，因为 useStreamGroup 内部会处理 args || {}
+  const [streamData, setStreamData] = useState([])
+  const subscriptionRef = useRef(null)
+
+  useEffect(() => {
+    // 如果 stream 或 id 不存在，直接返回
+    if (!stream || !id) {
+      return
+    }
+
+    // 订阅 stream
+    subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
+
+    // 监听数据变化
+    subscriptionRef.current.addChangeListener((data) => {
+      setStreamData(data)
+    })
+
+    // 清理订阅
+    return () => {
+      subscriptionRef.current?.close()
+      subscriptionRef.current = null
+      setStreamData([])
+    }
+  }, [stream, id])
 
   // 监听 Stream 数据，当检测到任务完成时，重新获取任务详情
   useEffect(() => {
