@@ -7,12 +7,12 @@ class MockHook extends BaseTaskHook {
   postExecCalled = false;
   progressingCalled = false;
 
-  async preExec(context: TaskContext) {
+  async preExec(_context: TaskContext) {
     this.preExecCalled = true;
     return undefined;
   }
 
-  async postExec(context: TaskContext, result: any) {
+  async postExec(_context: TaskContext, _result: any) {
     this.postExecCalled = true;
   }
 
@@ -23,29 +23,29 @@ class MockHook extends BaseTaskHook {
 }
 
 class StoppingHook extends BaseTaskHook {
-  async preExec(context: TaskContext) {
+  async preExec(_context: TaskContext) {
     return { stop: true, reason: 'Test stop' };
   }
 
-  async postExec(context: TaskContext, result: any) {
+  async postExec(_context: TaskContext, _result: any) {
     // Do nothing
   }
 
-  async onProgressingNotify(context: TaskContext): Promise<void> {
+  async onProgressingNotify(_context: TaskContext): Promise<void> {
     // Do nothing
   }
 }
 
 class ModifyingHook extends BaseTaskHook {
-  async preExec(context: TaskContext) {
+  async preExec(_context: TaskContext) {
     return { modifiedTask: 'Modified task' };
   }
 
-  async postExec(context: TaskContext, result: any) {
+  async postExec(_context: TaskContext, _result: any) {
     // Do nothing
   }
 
-  async onProgressingNotify(context: TaskContext): Promise<void> {
+  async onProgressingNotify(_context: TaskContext): Promise<void> {
     // Do nothing
   }
 }

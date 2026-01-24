@@ -19,15 +19,4 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'no-console': 'off',
   },
-  ignorePatterns: [
-    'dist/**',
-    'node_modules/**',
-    'python_modules/**',
-    'jest.config.js',
-    'types.d.ts',
-    'tests/debug/**',
-    'tests/manual/**',
-    'tests/performance/**',
-    'tests/integration/**',
-  ],
 };

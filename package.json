@@ -81,5 +81,16 @@
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  }
+  },
+  "eslintIgnore": [
+    "node_modules",
+    "dist",
+    "python_modules",
+    "jest.config.js",
+    "types.d.ts",
+    "tests/debug",
+    "tests/manual",
+    "tests/performance",
+    "tests/integration"
+  ]
 }

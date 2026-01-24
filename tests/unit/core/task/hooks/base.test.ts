@@ -2,11 +2,11 @@ import { BaseTaskHook } from '@/core/task/hooks/base';
 import { TaskContext } from '@/core/task/hooks/types';
 
 class TestTaskHook extends BaseTaskHook {
-  async preExec(context: TaskContext) {
+  async preExec(_context: TaskContext) {
     return undefined;
   }
 
-  async postExec(context: TaskContext, result: any) {
+  async postExec(_context: TaskContext, _result: any) {
     // Do nothing
   }
 }
