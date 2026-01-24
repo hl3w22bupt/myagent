@@ -294,29 +294,26 @@ class RemotionVideoGenerator:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                print(f"[DEBUG] Attempt {attempt}/{max_attempts}: LLM generation for: {description[:50]}...")
-                logging.info(f"Attempt {attempt}/{max_attempts}: LLM two-stage generation for: {description[:50]}...")
+                logging.info(f"Attempt {attempt}/{max_attempts}: LLM generation for: {description[:50]}...")
 
                 code = await self._generate_with_llm_two_stage(
                     description, duration, fps, resolution, style,
                     error_context=last_error  # Pass previous error for context
                 )
 
-                print(f"[DEBUG] LLM generation completed, code length: {len(code) if code else 0}")
                 logging.info(f"LLM generation completed, code length: {len(code) if code else 0}")
 
                 # Validate code using CodeValidator with TypeScript syntax check
                 from generators.validator import CodeValidator
                 validator = CodeValidator()
 
-                print(f"[DEBUG] Running comprehensive validation (including TypeScript syntax)...")
                 logging.info(f"Running comprehensive validation (including TypeScript syntax)...")
 
                 is_valid, validation_errors, validation_warnings = validator.validate_with_syntax_check(code)
 
                 if not is_valid:
                     last_error = f"Code validation failed: {'; '.join(validation_errors[:3])}"
-                    print(f"[DEBUG] ❌ Validation failed: {last_error}")
+                    logging.error(f"Validation failed: {last_error}")
                     logging.warning(f"⚠️  Attempt {attempt} failed: {last_error}")
                     if attempt < max_attempts:
                         logging.info(f"Retrying with error context...")
@@ -324,7 +321,6 @@ class RemotionVideoGenerator:
                         continue
 
                 if validation_warnings:
-                    print(f"[DEBUG] ⚠️  Validation warnings: {'; '.join(validation_warnings[:3])}")
                     logging.warning(f"Validation warnings: {'; '.join(validation_warnings[:3])}")
 
                 # Post-process: Ensure complete Remotion structure
@@ -334,7 +330,6 @@ class RemotionVideoGenerator:
 
             except Exception as e:
                 last_error = f"{type(e).__name__}: {str(e)}"
-                print(f"[DEBUG] ❌ Attempt {attempt} failed: {last_error}")
                 logging.error(f"❌ Attempt {attempt} failed: {last_error}")
                 if attempt < max_attempts:
                     logging.info(f"Retrying in {2 ** attempt} seconds...")
