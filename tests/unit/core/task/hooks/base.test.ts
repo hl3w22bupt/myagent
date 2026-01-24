@@ -24,7 +24,7 @@ describe('BaseTaskHook', () => {
     expect(hook.postExec).toBeDefined();
   });
 
-  it('should have default onProgressingNotify implementation', async () => {
+  it('should have default onProgressingNotify implementation (no-op)', async () => {
     const hook = new TestTaskHook();
     const mockContext: TaskContext = {
       taskId: 'test-1',
@@ -55,15 +55,10 @@ describe('BaseTaskHook', () => {
       },
     };
 
-    await hook.onProgressingNotify(mockContext);
+    // Default implementation is a no-op - should not throw errors
+    await expect(hook.onProgressingNotify(mockContext)).resolves.toBeUndefined();
 
-    expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
-      'test-1',
-      'test-1',
-      expect.objectContaining({
-        type: 'heartbeat',
-        message: 'Task is still running...',
-      })
-    );
+    // Should not send any stream updates
+    expect(mockContext.services.streams.taskExecution.set).not.toHaveBeenCalled();
   });
 });

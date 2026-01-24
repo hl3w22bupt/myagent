@@ -43,7 +43,7 @@ describe('DefaultTaskHook', () => {
 
       expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
         'test-1',
-        'test-1',
+        'test-1-default-pre',
         expect.objectContaining({
           type: 'status',
           status: 'running',
@@ -76,7 +76,7 @@ describe('DefaultTaskHook', () => {
 
       expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
         'test-1',
-        'test-1',
+        'test-1-default-post',
         expect.objectContaining({
           type: 'status',
           status: 'completed',
@@ -93,7 +93,7 @@ describe('DefaultTaskHook', () => {
 
       expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
         'test-1',
-        'test-1',
+        'test-1-default-post',
         expect.objectContaining({
           type: 'status',
           status: 'failed',
@@ -116,17 +116,12 @@ describe('DefaultTaskHook', () => {
   });
 
   describe('onProgressingNotify', () => {
-    it('should send heartbeat via parent class', async () => {
+    it('should inherit no-op implementation from parent class', async () => {
+      // DefaultTaskHook inherits the no-op onProgressingNotify from BaseTaskHook
       await hook.onProgressingNotify(mockContext);
 
-      expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
-        'test-1',
-        'test-1',
-        expect.objectContaining({
-          type: 'heartbeat',
-          message: 'Task is still running...',
-        })
-      );
+      // Should not send any stream updates (no-op implementation)
+      expect(mockContext.services.streams.taskExecution.set).not.toHaveBeenCalled();
     });
 
     it('should log progress metrics', async () => {

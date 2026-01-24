@@ -48,25 +48,11 @@ describe('ContextManagerTaskHook', () => {
       });
     });
 
-    it('should send initialization message to stream', async () => {
+    it('should log placeholder message at debug level', async () => {
       await hook.preExec(mockContext);
 
-      expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
-        'test-1',
-        'test-1',
-        expect.objectContaining({
-          type: 'step',
-          currentStep: 'context_init',
-          message: 'Context initialized (placeholder)',
-        })
-      );
-    });
-
-    it('should log initialization', async () => {
-      await hook.preExec(mockContext);
-
-      expect(mockContext.services.logger.info).toHaveBeenCalledWith(
-        'Task context initialized (placeholder)',
+      expect(mockContext.services.logger.debug).toHaveBeenCalledWith(
+        'Task context placeholder',
         { taskId: 'test-1' }
       );
     });
