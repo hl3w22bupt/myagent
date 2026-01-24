@@ -112,36 +112,112 @@ output_schema:
           description: Execution time in milliseconds
 
 prompt_template: |
-  You are a Remotion video generation expert. Create a complete Remotion video based on the description.
-  
+  You are a Remotion expert generating educational videos. Follow these rules strictly:
+
+  {{MUST_RULES}}
+
+  {{FORBIDDEN_RULES}}
+
+  {{RECOMMENDED_RULES}}
+
+  {{ANIMATION_PRESETS}}
+
+  {{SCENE_PATTERNS}}
+
+  ## Task
+
+  Create a complete Remotion video based on the description:
+
   Video Requirements:
-  Description: {{description}}
-  Duration: {{duration}} seconds
-  FPS: {{fps}}
-  Resolution: {{resolution}}
-  Style: {{style}}
-  Output Format: {{output_format}}
-  Quality: {{quality}}
-  
+  - Description: {{description}}
+  - Duration: {{duration}} seconds ({{duration}} * {{fps}} = {{total_frames}} frames)
+  - FPS: {{fps}}
+  - Resolution: {{resolution}}
+  - Style: {{style}}
+  - Output Format: {{output_format}}
+  - Quality: {{quality}}
+
   Generate a Remotion React component that:
-  - Uses TypeScript with proper types
-  - Follows Remotion best practices (deterministic, interpolated animations)
+  - STRICTLY follows all MUST rules above
+  - AVOIDS all FORBIDDEN patterns above
+  - Uses recommended patterns when applicable
+  - Applies appropriate animation presets
+  - Follows scene structure patterns for educational content
+  - Uses TypeScript with proper `type` definitions (not interface)
   - Creates a {{style}} style video
-  - Renders for exactly {{duration}} seconds at {{fps}} fps
-  - Uses {{resolution}} resolution
-  - Exports proper Composition with durationInFrames = {{duration}} * {{fps}}
-  - Includes professional animations and transitions
-  - Is production-ready with error handling
-  - Focuses on creating visually appealing content that matches the description
-  
-  Specific style requirements:
-  - minimal: Clean, simple, focused on content
-  - corporate: Professional, branded, suitable for business
-  - animated: Dynamic, engaging, with motion graphics
-  - cinematic: Dramatic, film-like, with lighting effects
-  - presentation: Informational, clear, suitable for educational content
-  
-  Provide the complete Remotion component code below:
+  - Exports proper Composition with durationInFrames = {{total_frames}}
+
+  ## Style Guidelines
+
+  For {{style}} style:
+  {{#if style_minimal}}
+  - Clean, simple, focused on content
+  - Use minimal animations (smooth_entrance preset: damping: 200)
+  - Color palette: monochrome or low contrast
+  {{/if}}
+  {{#if style_corporate}}
+  - Professional, branded
+  - Use moderate animations (snappy_ui preset: damping: 20, stiffness: 200)
+  - Color palette: business colors (blue, gray)
+  {{/if}}
+  {{#if style_animated}}
+  - Dynamic, engaging
+  - Use extensive animations (bouncy_playful preset: damping: 8)
+  - Color palette: vibrant, high contrast
+  {{/if}}
+  {{#if style_cinematic}}
+  - Dramatic, film-like
+  - Use slow, heavy animations (heavy_slow preset: damping: 15, stiffness: 80, mass: 2)
+  - Color palette: dramatic, high contrast
+  {{/if}}
+  {{#if style_presentation}}
+  - Informational, educational
+  - Use moderate animations (smooth_entrance preset)
+  - Color palette: educational (clear, readable)
+  {{/if}}
+
+  ## Output Format
+
+  Return ONLY valid TypeScript code with:
+
+  ```typescript
+  // 1. Props definition (use type, not interface)
+  export type MyCompProps = {
+    title: string;
+    // ...
+  };
+
+  // 2. Composition component
+  export const MyComposition: React.FC<MyCompProps> = ({ title }) => {
+    const frame = useCurrentFrame();
+    const { fps } = useVideoConfig();
+
+    // Use frame for ALL animations
+    const opacity = interpolate(frame, [0, 30], [0, 1]);
+
+    return (
+      <AbsoluteFill style={{ opacity }}>
+        {/* Content */}
+      </AbsoluteFill>
+    );
+  };
+
+  // 3. Register in Root.tsx
+  export const RemotionRoot = () => {
+    return (
+      <Composition
+        id="MyComposition"
+        component={MyComposition}
+        durationInFrames={{total_frames}}
+        fps={{fps}}
+        width={{width}}
+        height={{height}}
+      />
+    );
+  };
+  ```
+
+  Provide the complete Remotion TypeScript code below:
 
 execution:
   handler: handler.py
