@@ -17,6 +17,7 @@ import time
 import math
 from pathlib import Path
 from typing import Dict, Any, Optional
+from datetime import datetime
 import logging
 
 # Add parent lib for OutputBuilder (absolute path to skills/lib)
@@ -292,33 +293,54 @@ class RemotionVideoGenerator:
         max_attempts = 3
         last_error = None
 
+        # 添加标记日志文件（用于确认重试）
+        retry_marker = f"/tmp/remotion_retry_{id(self)}_{int(time.time())}.log"
+
         for attempt in range(1, max_attempts + 1):
             try:
-                logging.info(f"Attempt {attempt}/{max_attempts}: LLM generation for: {description[:50]}...")
+                # 写入标记文件（无法遗漏的证据）
+                with open(retry_marker, 'a') as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"RETRY ATTEMPT: {attempt}/{max_attempts}\n")
+                    f.write(f"TIMESTAMP: {datetime.now().isoformat()}\n")
+                    f.write(f"DESCRIPTION: {description[:100]}\n")
+                    f.write(f"{'='*60}\n")
+
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] LLM generation START")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] Description: {description[:50]}...")
 
                 code = await self._generate_with_llm_two_stage(
                     description, duration, fps, resolution, style,
                     error_context=last_error  # Pass previous error for context
                 )
 
-                logging.info(f"LLM generation completed, code length: {len(code) if code else 0}")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] LLM generation DONE, code length: {len(code) if code else 0}")
 
                 # Validate code using CodeValidator with TypeScript syntax check
                 from generators.validator import CodeValidator
                 validator = CodeValidator()
 
-                logging.info(f"Running comprehensive validation (including TypeScript syntax)...")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] VALIDATION START")
 
                 is_valid, validation_errors, validation_warnings = validator.validate_with_syntax_check(code)
 
+                # 写入验证结果到文件
+                with open(retry_marker, 'a') as f:
+                    f.write(f"VALIDATION_RESULT: {'PASS' if is_valid else 'FAIL'}\n")
+                    if not is_valid:
+                        f.write(f"VALIDATION_ERRORS: {validation_errors[:3]}\n")
+
                 if not is_valid:
                     last_error = f"Code validation failed: {'; '.join(validation_errors[:3])}"
-                    logging.error(f"Validation failed: {last_error}")
-                    logging.warning(f"⚠️  Attempt {attempt} failed: {last_error}")
+                    logging.error(f"[RETRY-{attempt}/{max_attempts}] VALIDATION FAILED: {last_error}")
+                    logging.warning(f"[RETRY-{attempt}/{max_attempts}] Will retry...")
+
+                    # 等待后重试
                     if attempt < max_attempts:
-                        logging.info(f"Retrying with error context...")
-                        # Continue to next attempt with error feedback
-                        continue
+                        wait_time = 2 ** attempt
+                        logging.info(f"[RETRY-{attempt}/{max_attempts}] Waiting {wait_time}s before retry...")
+                        await asyncio.sleep(wait_time)
+                    continue  # ← 关键：重试循环
 
                 if validation_warnings:
                     logging.warning(f"Validation warnings: {'; '.join(validation_warnings[:3])}")
