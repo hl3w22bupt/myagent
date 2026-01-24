@@ -303,9 +303,9 @@ class CodeValidator:
                 logger.warning("esbuild not found, skipping TypeScript syntax validation")
                 return True, []  # Assume valid if we can't check
 
-            # Run esbuild to check syntax (using --format=errors-only for faster output)
+            # Run esbuild to check syntax (write to /dev/null, we only care about errors)
             result = subprocess.run(
-                [esbuild_path, temp_file, '--format=errors-only'],
+                [esbuild_path, temp_file, '--outfile=/dev/null', '--format=esm'],
                 capture_output=True,
                 text=True,
                 timeout=30  # 30 second timeout
