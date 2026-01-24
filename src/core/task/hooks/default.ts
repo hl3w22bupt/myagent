@@ -1,5 +1,5 @@
 import { BaseTaskHook } from './base';
-import { TaskContext, PreExecResult } from './types';
+import { TaskContext } from './types';
 
 /**
  * Default TaskHook implementation

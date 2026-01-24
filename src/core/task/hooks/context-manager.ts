@@ -1,5 +1,5 @@
 import { BaseTaskHook } from './base';
-import { TaskContext, PreExecResult } from './types';
+import { TaskContext } from './types';
 
 /**
  * Context Manager TaskHook
@@ -27,7 +27,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
     return undefined;
   }
 
-  async postExec(context: TaskContext, result: any): Promise<void> {
+  async postExec(context: TaskContext, _result: any): Promise<void> {
     const { taskId, services } = context;
 
     // TODO: Implement ContextManager.saveContext() and compression

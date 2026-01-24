@@ -11,7 +11,7 @@ import { TaskContext } from './types';
 export class MetricsCollectorTaskHook extends BaseTaskHook {
   private startTime: number = 0;
 
-  async preExec(context: TaskContext): Promise<void> {
+  async preExec(_context: TaskContext): Promise<void> {
     // Record start time
     this.startTime = Date.now();
   }

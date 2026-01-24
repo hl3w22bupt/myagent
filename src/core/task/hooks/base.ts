@@ -1,4 +1,4 @@
-import { TaskContext, PreExecResult } from './types';
+import { TaskContext } from './types';
 
 /**
  * Abstract base class for all TaskHooks
@@ -62,7 +62,7 @@ export abstract class BaseTaskHook {
    *
    * @param context - Task execution context
    */
-  async onProgressingNotify(context: TaskContext): Promise<void> {
+  async onProgressingNotify(_context: TaskContext): Promise<void> {
     // Default: no-op
     // Subclasses can override to implement custom progress tracking
   }

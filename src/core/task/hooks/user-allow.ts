@@ -1,5 +1,5 @@
 import { BaseTaskHook } from './base';
-import { TaskContext, PreExecResult } from './types';
+import { TaskContext } from './types';
 
 /**
  * User Allow TaskHook
@@ -43,7 +43,7 @@ export class UserAllowTaskHook extends BaseTaskHook {
     return undefined;
   }
 
-  async postExec(context: TaskContext, result: any): Promise<void> {
+  async postExec(_context: TaskContext, _result: any): Promise<void> {
     // No cleanup needed for permission checking
   }
 }
