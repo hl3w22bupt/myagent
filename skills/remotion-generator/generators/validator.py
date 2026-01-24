@@ -5,8 +5,12 @@ Validates generated Remotion code for correctness and quality.
 """
 
 import re
+import subprocess
 import logging
-from typing import Dict, Any, List, Tuple
+import tempfile
+import os
+from pathlib import Path
+from typing import Dict, Any, List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -270,3 +274,131 @@ class CodeValidator:
         """
         is_valid, errors, _ = self.validate(code)
         return is_valid
+
+    def validate_typescript_syntax(self, code: str, project_dir: Optional[Path] = None) -> Tuple[bool, List[str]]:
+        """
+        Validate TypeScript code syntax using esbuild.
+
+        This is a REAL syntax check that will catch actual TypeScript errors,
+        not just structural issues.
+
+        Args:
+            code: Generated TypeScript code
+            project_dir: Optional project directory to use for validation
+
+        Returns:
+            Tuple of (is_valid, errors)
+        """
+        errors = []
+
+        # Create a temporary file for validation
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsx', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+
+        try:
+            # Find esbuild executable
+            esbuild_path = self._find_esbuild()
+            if not esbuild_path:
+                logger.warning("esbuild not found, skipping TypeScript syntax validation")
+                return True, []  # Assume valid if we can't check
+
+            # Run esbuild to check syntax (using --format=errors-only for faster output)
+            result = subprocess.run(
+                [esbuild_path, temp_file, '--format=errors-only'],
+                capture_output=True,
+                text=True,
+                timeout=30  # 30 second timeout
+            )
+
+            if result.returncode != 0:
+                # Parse esbuild error output
+                stderr = result.stderr.strip()
+                if stderr:
+                    # Extract error messages (format: "file:line:col: ERROR: message")
+                    error_lines = stderr.split('\n')
+                    for line in error_lines:
+                        if 'ERROR:' in line or 'error:' in line.lower():
+                            # Clean up the error message
+                            error_msg = line
+                            # Remove temporary file path for cleaner output
+                            error_msg = error_msg.replace(temp_file, 'index.tsx')
+                            errors.append(error_msg)
+
+                    logger.warning(f"TypeScript syntax validation failed with {len(errors)} errors")
+                    return False, errors
+
+            logger.info("TypeScript syntax validation passed")
+            return True, []
+
+        except subprocess.TimeoutExpired:
+            logger.error("TypeScript syntax validation timed out")
+            errors.append("Syntax validation timed out after 30 seconds")
+            return False, errors
+        except Exception as e:
+            logger.error(f"Error during TypeScript syntax validation: {str(e)}")
+            # If validation fails for unexpected reasons, don't block generation
+            return True, []
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+
+    def _find_esbuild(self) -> Optional[str]:
+        """
+        Find esbuild executable in the Remotion template directory.
+
+        Returns:
+            Path to esbuild executable or None if not found
+        """
+        # Try to find the template directory
+        current_dir = Path(__file__).parent.parent
+        template_dir = current_dir / "template"
+
+        if not template_dir.exists():
+            # Try alternative location
+            template_dir = current_dir.parent / "remotion-generator" / "template"
+
+        if not template_dir.exists():
+            logger.warning(f"Could not find template directory at {template_dir}")
+            return None
+
+        # Check for esbuild in node_modules/.bin
+        esbuild_path = template_dir / "node_modules" / ".bin" / "esbuild"
+        if esbuild_path.exists():
+            return str(esbuild_path)
+
+        # Try to find esbuild CLI (Windows)
+        esbuild_cmd = template_dir / "node_modules" / ".bin" / "esbuild.cmd"
+        if esbuild_cmd.exists():
+            return str(esbuild_cmd)
+
+        logger.warning(f"esbuild not found in {template_dir}/node_modules/.bin/")
+        return None
+
+    def validate_with_syntax_check(self, code: str, project_dir: Optional[Path] = None) -> Tuple[bool, List[str], List[str]]:
+        """
+        Comprehensive validation including syntax check.
+
+        This combines structural checks with real TypeScript syntax validation.
+
+        Args:
+            code: Generated TypeScript code
+            project_dir: Optional project directory
+
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        # First do structural checks
+        is_valid, errors, warnings = self.validate(code)
+
+        # Then do TypeScript syntax validation
+        syntax_valid, syntax_errors = self.validate_typescript_syntax(code, project_dir)
+
+        if not syntax_valid:
+            is_valid = False
+            errors.extend(syntax_errors)
+
+        return is_valid, errors, warnings

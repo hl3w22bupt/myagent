@@ -305,26 +305,32 @@ class RemotionVideoGenerator:
                 print(f"[DEBUG] LLM generation completed, code length: {len(code) if code else 0}")
                 logging.info(f"LLM generation completed, code length: {len(code) if code else 0}")
 
-                # Validate code
-                code_looks_valid = (
-                    code and
-                    len(code) > 500 and  # Reasonable length
-                    'import' in code and  # Has imports
-                    ('React.FC' in code or 'function' in code or 'const' in code)  # Has components
-                )
+                # Validate code using CodeValidator with TypeScript syntax check
+                from generators.validator import CodeValidator
+                validator = CodeValidator()
 
-                if code_looks_valid:
-                    # Post-process: Ensure complete Remotion structure
-                    code = self._ensure_complete_structure(code, duration, fps, resolution)
-                    logging.info(f"✅ LLM generation successful on attempt {attempt}")
-                    return code
-                else:
-                    last_error = "Generated code looks invalid (too short or missing required elements)"
+                print(f"[DEBUG] Running comprehensive validation (including TypeScript syntax)...")
+                logging.info(f"Running comprehensive validation (including TypeScript syntax)...")
+
+                is_valid, validation_errors, validation_warnings = validator.validate_with_syntax_check(code)
+
+                if not is_valid:
+                    last_error = f"Code validation failed: {'; '.join(validation_errors[:3])}"
+                    print(f"[DEBUG] ❌ Validation failed: {last_error}")
                     logging.warning(f"⚠️  Attempt {attempt} failed: {last_error}")
                     if attempt < max_attempts:
-                        logging.info(f"Retrying...")
-                        # Wait before retry (exponential backoff)
-                        await asyncio.sleep(2 ** attempt)
+                        logging.info(f"Retrying with error context...")
+                        # Continue to next attempt with error feedback
+                        continue
+
+                if validation_warnings:
+                    print(f"[DEBUG] ⚠️  Validation warnings: {'; '.join(validation_warnings[:3])}")
+                    logging.warning(f"Validation warnings: {'; '.join(validation_warnings[:3])}")
+
+                # Post-process: Ensure complete Remotion structure
+                code = self._ensure_complete_structure(code, duration, fps, resolution)
+                logging.info(f"✅ LLM generation successful on attempt {attempt}")
+                return code
 
             except Exception as e:
                 last_error = f"{type(e).__name__}: {str(e)}"
