@@ -314,19 +314,40 @@ class CodeValidator:
             if result.returncode != 0:
                 # Parse esbuild error output
                 stderr = result.stderr.strip()
-                if stderr:
-                    # Extract error messages (format: "file:line:col: ERROR: message")
-                    error_lines = stderr.split('\n')
-                    for line in error_lines:
-                        if 'ERROR:' in line or 'error:' in line.lower():
-                            # Clean up the error message
-                            error_msg = line
-                            # Remove temporary file path for cleaner output
-                            error_msg = error_msg.replace(temp_file, 'index.tsx')
-                            errors.append(error_msg)
+                stdout = result.stdout.strip()
 
-                    logger.warning(f"TypeScript syntax validation failed with {len(errors)} errors")
-                    return False, errors
+                # Log raw output for debugging
+                logger.error(f"esbuild failed (exit code {result.returncode})")
+                if stderr:
+                    logger.error(f"esbuild stderr:\n{stderr}")
+                if stdout:
+                    logger.error(f"esbuild stdout:\n{stdout}")
+
+                # Extract error messages from both stderr and stdout
+                error_outputs = []
+                if stderr:
+                    error_outputs.extend(stderr.split('\n'))
+                if stdout:
+                    error_outputs.extend(stdout.split('\n'))
+
+                # Process all lines, not just ones containing 'ERROR:'
+                for line in error_outputs:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    # Clean up the error message
+                    error_msg = line
+                    # Remove temporary file path for cleaner output
+                    error_msg = error_msg.replace(temp_file, 'index.tsx')
+                    errors.append(error_msg)
+
+                # If we still have no errors after parsing, add a generic message
+                if not errors:
+                    errors.append(f"esbuild validation failed (exit code {result.returncode}) but no error details were captured")
+
+                logger.warning(f"TypeScript syntax validation failed with {len(errors)} errors")
+                return False, errors
 
             logger.info("TypeScript syntax validation passed")
             return True, []
