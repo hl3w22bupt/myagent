@@ -307,10 +307,10 @@ function Tasks() {
                       {task.task}
                     </Link>
                     <div className="task-status-actions">
-                      <span className={`status status-${task.success ? 'completed' : 'failed'}`}>
-                        {task.success ? '已完成' : '失败'}
+                      <span className={`status status-${task.executionTime === null ? 'running' : (task.success ? 'completed' : 'failed')}`}>
+                        {task.executionTime === null ? '执行中' : (task.success ? '已完成' : '失败')}
                       </span>
-                      {!task.success && (
+                      {task.executionTime !== null && !task.success && (
                         <button
                           className="retry-button-small"
                           onClick={(e) => handleRetryTask(task.taskId, e)}

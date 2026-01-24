@@ -22,7 +22,6 @@ export default {
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/.worktree/',
     '/tests/integration/e2e.test.ts', // E2E tests require local env vars (LLM API keys)
   ],
   collectCoverageFrom: [

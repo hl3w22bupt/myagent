@@ -17,6 +17,7 @@ import time
 import math
 from pathlib import Path
 from typing import Dict, Any, Optional
+from datetime import datetime
 import logging
 
 # Add parent lib for OutputBuilder (absolute path to skills/lib)
@@ -292,43 +293,65 @@ class RemotionVideoGenerator:
         max_attempts = 3
         last_error = None
 
+        # 添加标记日志文件（用于确认重试）
+        retry_marker = f"/tmp/remotion_retry_{id(self)}_{int(time.time())}.log"
+
         for attempt in range(1, max_attempts + 1):
             try:
-                print(f"[DEBUG] Attempt {attempt}/{max_attempts}: LLM generation for: {description[:50]}...")
-                logging.info(f"Attempt {attempt}/{max_attempts}: LLM two-stage generation for: {description[:50]}...")
+                # 写入标记文件（无法遗漏的证据）
+                with open(retry_marker, 'a') as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"RETRY ATTEMPT: {attempt}/{max_attempts}\n")
+                    f.write(f"TIMESTAMP: {datetime.now().isoformat()}\n")
+                    f.write(f"DESCRIPTION: {description[:100]}\n")
+                    f.write(f"{'='*60}\n")
+
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] LLM generation START")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] Description: {description[:50]}...")
 
                 code = await self._generate_with_llm_two_stage(
                     description, duration, fps, resolution, style,
                     error_context=last_error  # Pass previous error for context
                 )
 
-                print(f"[DEBUG] LLM generation completed, code length: {len(code) if code else 0}")
-                logging.info(f"LLM generation completed, code length: {len(code) if code else 0}")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] LLM generation DONE, code length: {len(code) if code else 0}")
 
-                # Validate code
-                code_looks_valid = (
-                    code and
-                    len(code) > 500 and  # Reasonable length
-                    'import' in code and  # Has imports
-                    ('React.FC' in code or 'function' in code or 'const' in code)  # Has components
-                )
+                # Validate code using CodeValidator with TypeScript syntax check
+                from generators.validator import CodeValidator
+                validator = CodeValidator()
 
-                if code_looks_valid:
-                    # Post-process: Ensure complete Remotion structure
-                    code = self._ensure_complete_structure(code, duration, fps, resolution)
-                    logging.info(f"✅ LLM generation successful on attempt {attempt}")
-                    return code
-                else:
-                    last_error = "Generated code looks invalid (too short or missing required elements)"
-                    logging.warning(f"⚠️  Attempt {attempt} failed: {last_error}")
+                logging.info(f"[RETRY-{attempt}/{max_attempts}] VALIDATION START")
+
+                is_valid, validation_errors, validation_warnings = validator.validate_with_syntax_check(code)
+
+                # 写入验证结果到文件
+                with open(retry_marker, 'a') as f:
+                    f.write(f"VALIDATION_RESULT: {'PASS' if is_valid else 'FAIL'}\n")
+                    if not is_valid:
+                        f.write(f"VALIDATION_ERRORS: {validation_errors[:3]}\n")
+
+                if not is_valid:
+                    last_error = f"Code validation failed: {'; '.join(validation_errors[:3])}"
+                    logging.error(f"[RETRY-{attempt}/{max_attempts}] VALIDATION FAILED: {last_error}")
+                    logging.warning(f"[RETRY-{attempt}/{max_attempts}] Will retry...")
+
+                    # 等待后重试
                     if attempt < max_attempts:
-                        logging.info(f"Retrying...")
-                        # Wait before retry (exponential backoff)
-                        await asyncio.sleep(2 ** attempt)
+                        wait_time = 2 ** attempt
+                        logging.info(f"[RETRY-{attempt}/{max_attempts}] Waiting {wait_time}s before retry...")
+                        await asyncio.sleep(wait_time)
+                    continue  # ← 关键：重试循环
+
+                if validation_warnings:
+                    logging.warning(f"Validation warnings: {'; '.join(validation_warnings[:3])}")
+
+                # Post-process: Ensure complete Remotion structure
+                code = self._ensure_complete_structure(code, duration, fps, resolution)
+                logging.info(f"✅ LLM generation successful on attempt {attempt}")
+                return code
 
             except Exception as e:
                 last_error = f"{type(e).__name__}: {str(e)}"
-                print(f"[DEBUG] ❌ Attempt {attempt} failed: {last_error}")
                 logging.error(f"❌ Attempt {attempt} failed: {last_error}")
                 if attempt < max_attempts:
                     logging.info(f"Retrying in {2 ** attempt} seconds...")
@@ -444,6 +467,50 @@ class RemotionVideoGenerator:
             'visual_elements': visual_elements,
             'description': description
         }
+
+    def _extract_composition_id(self, code: str) -> str:
+        """
+        Extract the composition id from generated Remotion code.
+
+        Uses regex to find the Composition component and extract its id prop.
+
+        Args:
+            code: Generated Remotion TypeScript code
+
+        Returns:
+            The composition id (e.g., 'MyVideo', 'CNNVideo')
+        """
+        import re
+
+        # Pattern to match: id="Something" or id='Something' or id={Something}
+        # Only search within Composition components
+        patterns = [
+            r'<Composition[^>]*\bid=["\']([^"\']+)["\']',  # id="name" or id='name'
+            r'<Composition[^>]*\bid=({([^}]+)})',  # id={variable}
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, code)
+            if matches:
+                # For pattern 1, matches[0] is the id
+                # For pattern 2, matches[0] is the full match, matches[1] is the variable
+                if pattern == r'<Composition[^>]*\bid=["\']([^"\']+)["\']':
+                    composition_id = matches[0]
+                else:
+                    composition_id = matches[0][1] if len(matches[0]) > 1 else matches[0]
+
+                logger.info(f"Extracted composition_id: {composition_id}")
+                return composition_id
+
+        # Fallback: try to find any Composition and look for nearby id
+        composition_match = re.search(r'<Composition[^>]*>', code)
+        if composition_match:
+            composition_tag = composition_match.group(0)
+            logger.warning(f"Found Composition but couldn't extract id: {composition_tag[:100]}")
+
+        # Default fallback
+        logger.warning("Could not extract composition_id, using default 'MyComposition'")
+        return 'MyComposition'
 
     def _ensure_complete_structure(
         self,

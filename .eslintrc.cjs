@@ -15,20 +15,8 @@ module.exports = {
   },
   rules: {
     '@typescript-eslint/explicit-function-return-type': 'off',
-    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'no-console': 'off',
   },
-  ignorePatterns: [
-    'dist',
-    'node_modules',
-    'python_modules',
-    '*.js',
-    'jest.config.js',
-    'types.d.ts',
-    'tests/debug/',
-    'tests/manual/',
-    'tests/performance/',
-    'tests/integration/',
-  ],
 };

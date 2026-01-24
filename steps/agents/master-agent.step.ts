@@ -16,6 +16,14 @@ import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
 import { getTaskStore, TaskStatus } from '../../src/core/database/task-store';
+import {
+  TaskHookExecutor,
+  DefaultTaskHook,
+  ContextManagerTaskHook,
+  UserAllowTaskHook,
+  MetricsCollectorTaskHook,
+  TaskContext,
+} from '../../src/core/task/hooks/index';
 
 /**
  * Input schema for Master Agent step.
@@ -104,15 +112,53 @@ export const handler = async (
     taskId,
   });
 
+  // === TaskHook Setup ===
+  const hookExecutor = new TaskHookExecutor();
+  hookExecutor.registerHook(new DefaultTaskHook());
+  hookExecutor.registerHook(new ContextManagerTaskHook());
+  hookExecutor.registerHook(new UserAllowTaskHook());
+  hookExecutor.registerHook(new MetricsCollectorTaskHook());
+
+  // Build TaskContext
+  const taskContext: TaskContext = {
+    taskId,
+    sessionId,
+    task: input.task,
+    status: 'pending',
+    context: null,
+    metadata: {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      llmCalls: 0,
+      skillCalls: 0,
+      totalTokens: 0,
+    },
+    services: {
+      streams: _streams,
+      logger,
+      emit,
+    },
+  };
+
   // Initialize task store and create task record
   const taskStore = getTaskStore();
-  await taskStore.create({
-    id: taskId,
-    task: input.task,
-    sessionId: sessionId,
-    status: TaskStatus.PENDING,
-  });
-  logger.info('Task record created in database', { taskId, status: 'PENDING' });
+
+  // 检查任务是否已存在（可能因为 BullMQ 重试）
+  const existingTask = await taskStore.get(taskId).catch(() => null);
+  if (existingTask) {
+    logger.info('Task already exists in database, skipping creation', {
+      taskId,
+      existingStatus: existingTask.status,
+    });
+  } else {
+    await taskStore.create({
+      id: taskId,
+      task: input.task,
+      sessionId: sessionId,
+      status: TaskStatus.PENDING,
+    });
+    logger.info('Task record created in database', { taskId, status: 'PENDING' });
+  }
 
   // Helper function to update stream
   // DISABLED: Stream updates cause stack overflow due to wrapObject bug
@@ -145,6 +191,32 @@ export const handler = async (
   await updateStream('pending', { currentStep: 'Initializing' });
 
   try {
+    // === Execute pre-hooks ===
+    logger.info('Executing pre-execution hooks', { taskId });
+    const preResult = await hookExecutor.executePreHooks(taskContext);
+
+    if (preResult.stop) {
+      logger.warn('Task stopped by pre-hook', { taskId, reason: preResult.reason });
+      await emit({
+        topic: 'agent.task.failed',
+        data: { taskId, sessionId, error: preResult.reason },
+      });
+      return {
+        success: false,
+        taskId,
+        sessionId,
+        error: preResult.reason,
+      };
+    }
+
+    // Update task if modified by hooks
+    if (preResult.modifiedTask) {
+      taskContext.task = preResult.modifiedTask;
+      logger.info('Task modified by hook', { taskId, modifiedTask: preResult.modifiedTask });
+    }
+
+    taskContext.status = 'running';
+
     // Update status to running
     await updateStream('running', { currentStep: 'Acquiring agent' });
 
@@ -192,13 +264,32 @@ export const handler = async (
     await taskStore.update(taskId, { status: TaskStatus.RUNNING });
     logger.info('Task status updated to RUNNING', { taskId });
 
-    const result = await agent.run(input.task, taskId);
+    // === Start progressing hooks ===
+    hookExecutor.startProgressingHooks(taskContext);
+    logger.info('Progressing hooks started', { taskId });
+
+    const result = await agent.run(taskContext.task, taskId);
 
     logger.info('Task execution completed', {
       sessionId,
       success: result.success,
       executionTime: result.executionTime,
       delegates: result.metadata.delegates,  // Show which subagents were used
+    });
+
+    // === Stop progressing hooks ===
+    hookExecutor.stopProgressingHooks();
+    logger.info('Progressing hooks stopped', { taskId });
+
+    // === Execute post-hooks ===
+    logger.info('Executing post-execution hooks', { taskId });
+    taskContext.status = result.success ? 'completed' : 'failed';
+    await hookExecutor.executePostHooks(taskContext, {
+      success: result.success,
+      executionTime: result.executionTime,
+      output: result.output,
+      error: result.error,
+      metadata: result.metadata,
     });
 
     // Update stream with completed status
@@ -242,6 +333,17 @@ export const handler = async (
       error: error.message,
       stack: error.stack,
       sessionId,
+    });
+
+    // === Clean up hooks on error ===
+    hookExecutor.stopProgressingHooks();
+    taskContext.status = 'failed';
+
+    // Execute post-hooks even on failure
+    await hookExecutor.executePostHooks(taskContext, {
+      success: false,
+      error: error.message,
+      executionTime: 0,
     });
 
     // Update stream with failed status

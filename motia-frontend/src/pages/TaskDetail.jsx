@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { tasksAPI } from '../services/api'
+import { useStreamGroup } from '@motiadev/stream-client-react'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -13,10 +14,56 @@ function TaskDetail() {
   const [loading, setLoading] = useState(true)
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text'
+  const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
   const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
   const [retrying, setRetrying] = useState(false) // 重试状态
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
+  const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
+
+  // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
+  const { data: streamData } = useStreamGroup({
+    streamName: 'taskExecution',
+    groupId: id,
+  })
+
+  // 监听 Stream 数据，当检测到任务完成时，重新获取任务详情
+  useEffect(() => {
+    if (!streamData || streamData.length === 0 || completedFetchedRef.current) {
+      return
+    }
+
+    // 查找最后一个 entry
+    const lastEntry = streamData[streamData.length - 1]
+
+    // 如果检测到完成状态，重新获取任务详情
+    if (lastEntry?.status === 'completed' || lastEntry?.status === 'failed') {
+      console.log('检测到任务状态变化:', lastEntry.status, '，重新获取任务详情')
+
+      // 标记已处理，避免重复请求
+      completedFetchedRef.current = true
+
+      // 重新获取任务详情
+      const fetchUpdatedDetails = async () => {
+        try {
+          const updatedTask = await tasksAPI.getTaskDetails(id)
+          console.log('已获取更新后的任务详情:', updatedTask)
+          setTask(updatedTask)
+          setLoading(false)
+          setPolling(false)
+
+          // 清除轮询
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        } catch (error) {
+          console.error('获取更新后的任务详情失败:', error)
+        }
+      }
+
+      fetchUpdatedDetails()
+    }
+  }, [streamData, id])
 
   useEffect(() => {
     // 清理之前的 interval
@@ -34,10 +81,14 @@ function TaskDetail() {
       } catch (error) {
         console.error('Error fetching task details:', error)
         setLoading(false)
-        // 如果是404错误，说明任务还在执行中，继续轮询
+
+        // 处理 404 错误：404 = Not Found，直接停止轮询
         if (error.response?.status === 404) {
-          return { found: false, error: null }
+          setError('任务不存在')
+          return { found: false, error: true, taskNotFound: true }
         }
+
+        // 其他错误
         setError('获取任务详情失败')
         return { found: false, error: true }
       }
@@ -54,14 +105,17 @@ function TaskDetail() {
         pollCount++
         const result = await fetchTaskDetails()
 
-        // 如果找到任务、出错或达到最大轮询次数，停止轮询
-        if (result.found || result.error || pollCount >= maxPolls) {
+        // 如果找到任务、出错、任务不存在或达到最大轮询次数，停止轮询
+        if (result.found || result.error || result.taskNotFound || pollCount >= maxPolls) {
           setPolling(false)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
             pollIntervalRef.current = null
           }
-          if (result.error) {
+          if (result.taskNotFound) {
+            // 任务不存在，停止轮询，不设置额外错误
+            console.log('任务不存在，停止轮询')
+          } else if (result.error && !result.taskNotFound) {
             setError('获取任务详情失败')
           } else if (!result.found && pollCount >= maxPolls) {
             setError('任务执行超时，请稍后刷新页面重试')
@@ -72,8 +126,8 @@ function TaskDetail() {
       // 立即执行一次
       await poll()
 
-      // 如果还没找到且没有错误，开始轮询
-      if (pollCount < maxPolls && !error && !task) {
+      // 如果还没找到、没有错误、且任务不是不存在，开始轮询
+      if (pollCount < maxPolls && !error && !task && !polling) {
         pollIntervalRef.current = setInterval(poll, 1000) // 每秒轮询一次
       }
     }
@@ -225,6 +279,54 @@ function TaskDetail() {
   }
 
   // 获取媒体文件的Blob URL
+  // 渲染 Stream 内容（实时日志）
+  const renderStreamContent = () => {
+    // streamData 是来自 Motia SDK 的对象数组，每个对象包含 id 和其他字段
+    const entries = Array.isArray(streamData) ? streamData : []
+
+    if (entries.length === 0) {
+      return (
+        <div className="stream-content">
+          <div className="no-stream-data">
+            <p>暂无实时日志数据</p>
+            <p className="hint">任务执行时会显示实时进度和心跳信息</p>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="stream-content">
+        <div className="stream-header">
+          <h3>任务执行日志</h3>
+          <div className="stream-info">
+            <span className="stream-count">{entries.length} 条记录</span>
+            <span className="stream-live">● WebSocket 实时连接</span>
+          </div>
+        </div>
+        <div className="stream-entries">
+          {entries.map((entry) => {
+            // entry 是对象，包含 id, type, status, message, timestamp 等字段
+            return (
+              <div key={entry.id} className={`stream-entry stream-entry-${entry.status || 'info'}`}>
+                <div className="entry-header">
+                  <span className="entry-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                  <span className={`entry-status status-${entry.status || 'info'}`}>
+                    {entry.status || 'pending'}
+                  </span>
+                  {entry.type && <span className="entry-step">{entry.type}</span>}
+                </div>
+                {entry.task && <div className="entry-task">{entry.task}</div>}
+                {entry.message && <div className="entry-output">{entry.message}</div>}
+                {entry.error && <div className="entry-error">{entry.error}</div>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const getMediaBlobUrl = async (path) => {
     if (mediaUrls[path]) {
       return mediaUrls[path]
@@ -401,38 +503,56 @@ function TaskDetail() {
 
     const resultType = getResultType(result)
     const hasVisual = ['video', 'image', 'table'].includes(resultType)
+    const hasStream = streamData && Array.isArray(streamData) && streamData.length > 0
 
     return (
       <div className="result-container">
         {/* Tab切换 */}
-        {hasVisual && (
-          <div className="result-tabs">
+        <div className="result-tabs">
+          {hasVisual && (
+            <>
+              <button
+                className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
+                onClick={() => setActiveTab('visual')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                  <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+                </svg>
+                多媒体
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
+                onClick={() => setActiveTab('text')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+                  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                  <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                </svg>
+                JSON
+              </button>
+            </>
+          )}
+          {hasStream && (
             <button
-              className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
-              onClick={() => setActiveTab('visual')}
+              className={`tab-button ${activeTab === 'stream' ? 'active' : ''}`}
+              onClick={() => setActiveTab('stream')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
               </svg>
-              多媒体
+              实时日志
+              <span className="stream-indicator">●</span>
             </button>
-            <button
-              className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
-              onClick={() => setActiveTab('text')}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-              </svg>
-              JSON
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 内容区域 */}
         <div className="result-content">
-          {hasVisual ? (
+          {activeTab === 'stream' ? (
+            renderStreamContent()
+          ) : hasVisual ? (
             <>
               {activeTab === 'visual' && renderVisualContent(result)}
               {activeTab === 'text' && renderTextContent(result)}
@@ -574,6 +694,9 @@ function TaskDetail() {
     setRetrying(true)
     try {
       await tasksAPI.retryTask(task.taskId)
+
+      // 重置完成标记，以便新的任务执行完成时可以再次触发自动获取
+      completedFetchedRef.current = false
 
       // 重试成功，显示提示并保持当前页面状态
       alert('任务重试已启动，页面将自动更新')
