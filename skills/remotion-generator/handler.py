@@ -468,6 +468,50 @@ class RemotionVideoGenerator:
             'description': description
         }
 
+    def _extract_composition_id(self, code: str) -> str:
+        """
+        Extract the composition id from generated Remotion code.
+
+        Uses regex to find the Composition component and extract its id prop.
+
+        Args:
+            code: Generated Remotion TypeScript code
+
+        Returns:
+            The composition id (e.g., 'MyVideo', 'CNNVideo')
+        """
+        import re
+
+        # Pattern to match: id="Something" or id='Something' or id={Something}
+        # Only search within Composition components
+        patterns = [
+            r'<Composition[^>]*\bid=["\']([^"\']+)["\']',  # id="name" or id='name'
+            r'<Composition[^>]*\bid=({([^}]+)})',  # id={variable}
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, code)
+            if matches:
+                # For pattern 1, matches[0] is the id
+                # For pattern 2, matches[0] is the full match, matches[1] is the variable
+                if pattern == r'<Composition[^>]*\bid=["\']([^"\']+)["\']':
+                    composition_id = matches[0]
+                else:
+                    composition_id = matches[0][1] if len(matches[0]) > 1 else matches[0]
+
+                logger.info(f"Extracted composition_id: {composition_id}")
+                return composition_id
+
+        # Fallback: try to find any Composition and look for nearby id
+        composition_match = re.search(r'<Composition[^>]*>', code)
+        if composition_match:
+            composition_tag = composition_match.group(0)
+            logger.warning(f"Found Composition but couldn't extract id: {composition_tag[:100]}")
+
+        # Default fallback
+        logger.warning("Could not extract composition_id, using default 'MyComposition'")
+        return 'MyComposition'
+
     def _ensure_complete_structure(
         self,
         code: str,
