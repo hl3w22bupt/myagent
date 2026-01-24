@@ -422,6 +422,69 @@ Create a component to render function graphs:
   const Comp: React.FC<Props> = ({ prop }) => {};  // CORRECT!
   ```
 
+---
+
+## Complete Working Example (Study This Carefully!)
+
+Here is a COMPLETE, renderable Remotion file. Your output should follow this exact structure:
+
+```typescript
+import React from 'react';
+import { Composition, registerRoot } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence } from 'remotion';
+
+// Define your scene components
+const Scene1: React.FC = () => {
+  const frame = useCurrentFrame();
+  const opacity = spring({
+    frame: frame - 30,
+    fps: 30,
+    config: { damping: 10 },
+  });
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+      <h1 style={{ opacity, fontSize: 80, color: '#fff' }}>Hello World</h1>
+    </AbsoluteFill>
+  );
+};
+
+// Define your main component
+export const MyVideo: React.FC = () => {
+  return (
+    <AbsoluteFill>
+      <Sequence from={0} durationInFrames={150}>
+        <Scene1 />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+
+// CRITICAL: Define Composition at the end
+<Composition
+  id="MyVideo"
+  component={MyVideo}
+  durationInFrames={300}
+  fps={30}
+  width={1920}
+  height={1080}
+/>
+
+// CRITICAL: Call registerRoot as the VERY LAST line
+registerRoot(MyVideo);
+```
+
+**Key Points from This Example**:
+1. Imports at the top (React, Composition, registerRoot, hooks)
+2. Component definitions (Scene1, MyVideo)
+3. Export main component: `export const MyVideo: React.FC`
+4. Composition with id, component, durationInFrames, fps, width, height
+5. registerRoot(MyVideo) as the final line
+
+**Your Task**: Generate similar complete code for the provided content analysis.
+
+---
+
 Generate complete, production-ready Remotion code now."""
 
         return prompt
