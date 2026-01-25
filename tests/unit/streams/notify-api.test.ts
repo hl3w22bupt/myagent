@@ -45,7 +45,7 @@ async function mockHandler(request: any, { logger, streams }: any) {
       status: 500,
       body: { success: false, error: error.message },
     };
-  };
+  }
 }
 
 describe('Notify API Step', () => {
@@ -144,7 +144,7 @@ describe('Notify API Step', () => {
       }),
     };
 
-    const response = await mockHandler(request, {
+    await mockHandler(request, {
       logger: mockLogger,
       streams: mockStreams,
     });

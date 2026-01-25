@@ -28,7 +28,7 @@ class WebSearchHook {
     return result;
   }
 
-  async onProgressingNotify(context: any, progressData: any): Promise<any> {
+  async onProgressingNotify(_context: any, _progressData: any): Promise<any> {
     return {};
   }
 }
