@@ -98,7 +98,22 @@ class ProgressNotificationHook(BaseHook):
         if result is None:
             result = {}
 
-        success = result.get("success", False)
+        # 根据统一输出格式正确判断成功状态
+        # 参考: skills/lib/output_builder.py
+        # 优先检查 result_type
+        result_type = result.get("result_type")
+        if result_type == "error":
+            success = False
+        elif "success" in result:
+            # 如果存在 success 字段，使用其值
+            success = result["success"]
+        elif result_type and result_type != "error":
+            # 有 result_type 且不是 error，默认成功
+            success = True
+        else:
+            # 兜底逻辑：默认为失败
+            success = False
+
         message = f"{context.skill_name} {'succeeded' if success else 'failed'}"
 
         await self._send_notification(
