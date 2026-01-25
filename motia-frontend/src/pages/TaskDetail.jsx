@@ -35,11 +35,24 @@ function TaskDetail() {
       return
     }
 
+    // DEBUG: 打印订阅信息
+    console.log('[DEBUG] Subscribing to taskExecution stream:', {
+      streamName: 'taskExecution',
+      groupId: id,
+      fullId: id,
+      idType: typeof id
+    })
+
     // 订阅 stream
     subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
 
     // 监听数据变化
     subscriptionRef.current.addChangeListener((data) => {
+      console.log('[DEBUG] Received stream data:', {
+        count: data?.length || 0,
+        data: data,
+        firstItem: data?.[0]
+      })
       setStreamData(data)
     })
 
@@ -339,11 +352,19 @@ function TaskDetail() {
                   <span className={`entry-status status-${entry.status || 'info'}`}>
                     {entry.status || 'pending'}
                   </span>
-                  {entry.type && <span className="entry-step">{entry.type}</span>}
+                  {entry.type && <span className="entry-type">{entry.type === 'task' ? '任务' : '技能'}</span>}
+                  {entry.skill && <span className="entry-skill">{entry.skill}</span>}
+                  {entry.stage && <span className="entry-stage">{entry.stage}</span>}
+                  {entry.progressType && <span className="entry-progress-type">{entry.progressType}</span>}
                 </div>
                 {entry.task && <div className="entry-task">{entry.task}</div>}
                 {entry.message && <div className="entry-output">{entry.message}</div>}
                 {entry.error && <div className="entry-error">{entry.error}</div>}
+                {entry.metadata?.data && (
+                  <div className="entry-metadata">
+                    <pre>{JSON.stringify(entry.metadata.data, null, 2)}</pre>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -798,8 +819,8 @@ function TaskDetail() {
             <div className="info-item">
               <span className="info-label">状态:</span>
               <div className="info-value-with-action">
-                <span className={`info-value status status-${task.executionTime === null ? 'running' : (task.success ? 'completed' : 'failed')}`}>
-                  {task.executionTime === null ? '执行中' : (task.success ? '成功' : '失败')}
+                <span className={`info-value status status-${task.executionTime === null ? (task.status === 'started' ? 'started' : 'running') : (task.success ? 'completed' : 'failed')}`}>
+                  {task.executionTime === null ? (task.status === 'started' ? '已开始' : '执行中') : (task.success ? '成功' : '失败')}
                 </span>
                 {task.executionTime !== null && !task.success && (
                   <button

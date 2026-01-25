@@ -108,6 +108,8 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_TASK_ID: options.metadata?.taskId || '',
           MOTIA_SKILL_PATH: skillPath,
+          MOTIA_NOTIFY_API_URL: 'http://localhost:3000/api/notify',
+          MOTIA_SESSION_ID: options.sessionId,
           PYTHONPATH: pythonPathEnv,
           ...options.env,
         },
@@ -291,24 +293,45 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       return line.substring(minIndent);
     });
 
+    // Filter out LLM-generated SkillExecutor initialization to avoid overriding template
+    const filteredLines = dedentedLines.filter((line) => {
+      const trimmed = line.trim();
+      // Remove simple "executor = SkillExecutor()" without parameters
+      // But keep "executor = SkillExecutor(notify_hook_api_url=...)" from template
+      if (trimmed.includes('executor') && trimmed.includes('=') && trimmed.includes('SkillExecutor')) {
+        // Check if it has function parameters (anything between parentheses after SkillExecutor)
+        const match = trimmed.match(/SkillExecutor\s*\(([^)]*)\)/);
+        if (match && match[1].trim() !== '') {
+          // Has parameters - this is from template, keep it
+          return true;
+        }
+        // No parameters - this is LLM-generated, filter it out
+        return false;
+      }
+      // Keep all other lines (including notify_hook_api_url from template)
+      return true;
+    });
+
     // Ensure there's at least some content
-    if (dedentedLines.length === 0 || dedentedLines.every((l) => l.trim() === '')) {
+    if (filteredLines.length === 0 || filteredLines.every((l) => l.trim() === '')) {
       throw new Error('Generated code is empty or contains only whitespace');
     }
 
     // Add consistent 8-space indent to all lines
-    const normalizedCode = dedentedLines
+    const normalizedCode = filteredLines
       .map((line) => '        ' + line)
       .join('\n');
 
-    // Only import SkillExecutor and retry_utils if skills are provided
-    const skillExecutorImports = options.skills && options.skills.length > 0 ? `
+    // Always include SkillExecutor and retry_utils (needed for progress notifications)
+    const skillExecutorImports = `
 # Import and create SkillExecutor instance for skill execution
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
-executor = SkillExecutor()
-` : `
-# No skills provided, skipping SkillExecutor import
+
+# Get notify API URL from environment (set by LocalSandboxAdapter)
+# This enables automatic hook registration for progress notifications
+notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 `;
 
     return `

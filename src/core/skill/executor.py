@@ -7,6 +7,7 @@ The Executor provides a consistent interface for executing all types of Skills:
 - hybrid: Combined script and prompt execution
 """
 
+import os
 import importlib
 import json
 import time
@@ -14,6 +15,8 @@ import asyncio
 from typing import Any, Dict, Optional, List
 from .registry import SkillRegistry
 from .types import SkillType, SkillResult, SkillContext
+from .hooks.base import BaseHook, NoOpHook
+from .hooks.executor import SkillHookExecutor
 
 
 class SkillExecutor:
@@ -24,15 +27,47 @@ class SkillExecutor:
     and returns consistent results.
     """
 
-    def __init__(self, skills_dir: str = 'skills/'):
+    def __init__(
+        self,
+        skills_dir: str = 'skills/',
+        hooks: Optional[List[BaseHook]] = None,
+        notify_hook_api_url: Optional[str] = None
+    ):
         """
         Initialize the Skill Executor.
 
         Args:
             skills_dir: Path to the skills directory
+            hooks: Optional list of hook instances for pre/post execution callbacks
+            notify_hook_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
+                              If not provided, will try to get from MOTIA_NOTIFY_API_URL environment variable
         """
         self.registry = SkillRegistry(skills_dir)
         self._loaded = False
+
+        # Get notify_hook_api_url from parameter or environment variable
+        if notify_hook_api_url is None:
+            notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL', 'http://localhost:3000/api/notify')
+
+        # Get default hook configuration
+        from config.hooks import get_default_hooks
+
+        # Hook configuration logic:
+        # - hooks=None (default): Auto-register default hooks (ProgressNotificationHook if notify_api_url is set)
+        # - hooks=[] (explicit empty): Disable all hooks
+        # - hooks=[...]: Use custom hooks
+        if hooks is None:
+            default_hooks = get_default_hooks(notify_hook_api_url)
+        elif hooks == []:  # Explicitly empty list - disable all hooks
+            default_hooks = []
+        else:  # User provided custom hooks
+            default_hooks = hooks
+
+        # Create hook executor
+        self.hook_executor = SkillHookExecutor(
+            hooks=default_hooks,
+            notify_hook_api_url=notify_hook_api_url if default_hooks else None
+        )
 
     async def ensure_loaded(self):
         """Ensure registry is initialized and scanned."""
@@ -65,32 +100,75 @@ class SkillExecutor:
         skill = await self.registry.load_full(skill_name)
         start_time = time.time()
 
-        try:
+        # Define the skill execution function
+        async def _skill_func(enhanced_input: Dict[str, Any]) -> Any:
+            """Internal skill execution function"""
             if skill.type == SkillType.PURE_PROMPT:
-                output = await self._execute_prompt_skill(skill, input_data)
+                return await self._execute_prompt_skill(skill, enhanced_input)
             elif skill.type == SkillType.PURE_SCRIPT:
-                output = await self._execute_script_skill(skill, input_data)
+                return await self._execute_script_skill(skill, enhanced_input)
             elif skill.type == SkillType.HYBRID:
-                output = await self._execute_hybrid_skill(skill, input_data)
+                return await self._execute_hybrid_skill(skill, enhanced_input)
             else:
                 raise ValueError(f"Unknown skill type: {skill.type}")
 
-            execution_time = time.time() - start_time
+        # Execute with hooks if there are any hooks configured
+        from config.hooks import HOOK_CONFIG
+        has_hooks_configured = len(self.hook_executor.hook_manager.hooks) > 0
 
-            return SkillResult(
-                success=True,
-                output=output,
-                execution_time=execution_time
-            )
+        print(f"[DEBUG] SkillExecutor.execute: skill_name={skill_name}")
+        print(f"[DEBUG]   has_hooks_configured={has_hooks_configured}")
+        print(f"[DEBUG]   hook_manager.hooks count={len(self.hook_executor.hook_manager.hooks)}")
+        for i, hook in enumerate(self.hook_executor.hook_manager.hooks):
+            print(f"[DEBUG]     hook[{i}]: {type(hook).__name__}")
 
-        except Exception as e:
-            execution_time = time.time() - start_time
+        if has_hooks_configured:
+            try:
+                result = await self.hook_executor.execute_with_hooks(
+                    skill_name=skill_name,
+                    skill_func=_skill_func,
+                    input_data=input_data
+                )
 
-            return SkillResult(
-                success=False,
-                error=str(e),
-                execution_time=execution_time
-            )
+                execution_time = time.time() - start_time
+
+                # Convert hook result to SkillResult
+                if result.get("success"):
+                    return SkillResult(
+                        success=True,
+                        output=result.get("output"),
+                        execution_time=execution_time
+                    )
+                else:
+                    return SkillResult(
+                        success=False,
+                        error=result.get("error"),
+                        execution_time=execution_time
+                    )
+            except Exception as e:
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=False,
+                    error=str(e),
+                    execution_time=execution_time
+                )
+        else:
+            # Execute without hooks (backward compatibility)
+            try:
+                output = await _skill_func(input_data)
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=True,
+                    output=output,
+                    execution_time=execution_time
+                )
+            except Exception as e:
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=False,
+                    error=str(e),
+                    execution_time=execution_time
+                )
 
     async def _execute_prompt_skill(
         self,

@@ -24,7 +24,7 @@ export const taskExecutionSchema = z.object({
   /**
    * Current status: pending, running, completed, failed
    */
-  status: z.enum(['pending', 'running', 'completed', 'failed']),
+  status: z.enum(['pending', 'started', 'running', 'completed', 'failed']),
 
   /**
    * Current output being generated.
@@ -57,6 +57,26 @@ export const taskExecutionSchema = z.object({
   timestamp: z.string(),
 
   /**
+   * Message type: task or skill
+   */
+  type: z.enum(['task', 'skill']).default('task'),
+
+  /**
+   * Skill name (only for skill type messages)
+   */
+  skill: z.string().optional(),
+
+  /**
+   * Skill execution stage (only for skill type messages): pre, processing, post
+   */
+  stage: z.enum(['pre', 'processing', 'post']).optional(),
+
+  /**
+   * Progress type (only for skill type messages): step, heartbeat, status, chat
+   */
+  progressType: z.enum(['step', 'heartbeat', 'status', 'chat']).optional(),
+
+  /**
    * Execution metadata.
    */
   metadata: z
@@ -64,6 +84,7 @@ export const taskExecutionSchema = z.object({
       llmCalls: z.number().optional(),
       skillCalls: z.number().optional(),
       totalTokens: z.number().optional(),
+      data: z.any().optional(),
     })
     .optional(),
 });

@@ -38,16 +38,21 @@ describe('DefaultTaskHook', () => {
   });
 
   describe('preExec', () => {
-    it('should send running status to stream', async () => {
+    it('should send started status to stream', async () => {
       await hook.preExec(mockContext);
 
       expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
         'test-1',
         'test-1-default-pre',
         expect.objectContaining({
-          type: 'status',
-          status: 'running',
-          message: 'Task started',
+          type: 'task',
+          status: 'started',
+          task: 'test task',
+          metadata: expect.objectContaining({
+            llmCalls: 5,
+            skillCalls: 3,
+            totalTokens: 1000,
+          }),
         })
       );
     });
@@ -78,10 +83,15 @@ describe('DefaultTaskHook', () => {
         'test-1',
         'test-1-default-post',
         expect.objectContaining({
-          type: 'status',
+          type: 'task',
           status: 'completed',
-          message: 'Task completed successfully',
-          data: result,
+          task: 'test task',
+          metadata: expect.objectContaining({
+            llmCalls: 5,
+            skillCalls: 3,
+            totalTokens: 1000,
+            data: result,
+          }),
         })
       );
     });
@@ -95,10 +105,15 @@ describe('DefaultTaskHook', () => {
         'test-1',
         'test-1-default-post',
         expect.objectContaining({
-          type: 'status',
+          type: 'task',
           status: 'failed',
-          message: 'Task failed',
-          data: result,
+          task: 'test task',
+          metadata: expect.objectContaining({
+            llmCalls: 5,
+            skillCalls: 3,
+            totalTokens: 1000,
+            data: result,
+          }),
         })
       );
     });

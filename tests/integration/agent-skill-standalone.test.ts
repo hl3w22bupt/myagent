@@ -248,7 +248,7 @@ if os.path.exists(src_path) and src_path not in sys.path:
 
 from core.skill.executor import SkillExecutor
 
-executor = SkillExecutor()
+executor = SkillExecutor(notify_hook_api_url=None, hooks=[])
 result = await executor.execute('summarize', {
     'content': 'This is a long text that needs to be summarized.',
     'max_length': 50
@@ -293,7 +293,7 @@ if os.path.exists(src_path) and src_path not in sys.path:
 
 from core.skill.executor import SkillExecutor
 
-executor = SkillExecutor()
+executor = SkillExecutor(notify_hook_api_url=None, hooks=[])
 result = await executor.execute('code-analysis', {
     'code': 'def hello():\\n    print("Hello, World!")'
 })
