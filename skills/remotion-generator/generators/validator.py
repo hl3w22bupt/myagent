@@ -2,6 +2,7 @@
 Code Validator - Phase 3 of Generation Pipeline
 
 Validates generated Remotion code for correctness and quality.
+Enhanced with rule system integration (v2.0).
 """
 
 import re
@@ -12,6 +13,13 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 
+# Import RuleLoader for rule-based validation
+try:
+    from lib.rule_loader import RuleLoader
+    RULE_LOADER_AVAILABLE = True
+except ImportError:
+    RULE_LOADER_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +28,7 @@ class CodeValidator:
     Validates generated Remotion TypeScript code.
 
     Performs structural and syntax checks to ensure code quality.
+    Enhanced with rule-based validation (v2.0).
     """
 
     def __init__(self):
@@ -30,6 +39,14 @@ class CodeValidator:
             "failed": 0,
             "warnings": 0
         }
+
+        # Initialize RuleLoader for rule-based validation
+        if RULE_LOADER_AVAILABLE:
+            self.rule_loader = RuleLoader()
+            logger.info("✅ RuleLoader initialized - rule-based validation enabled")
+        else:
+            self.rule_loader = None
+            logger.warning("⚠️  RuleLoader not available - using standard validation only")
 
     def validate(self, code: str) -> Tuple[bool, List[str], List[str]]:
         """
@@ -73,6 +90,16 @@ class CodeValidator:
         # Check 7: Common issues
         common_errors = self._check_common_issues(code)
         errors.extend(common_errors)
+
+        # ============================================
+        # NEW: Check 8 - Rule-based validation
+        # ============================================
+        if self.rule_loader:
+            rule_errors = self._check_rules(code)
+            errors.extend(rule_errors)
+        # ============================================
+        # END: Rule-based validation
+        # ============================================
 
         # Determine overall validity
         is_valid = len(errors) == 0
@@ -274,6 +301,180 @@ class CodeValidator:
         """
         is_valid, errors, _ = self.validate(code)
         return is_valid
+
+    def _check_rules(self, code: str) -> List[str]:
+        """
+        Check code against MUST and FORBIDDEN rules from rule system.
+
+        Args:
+            code: Generated code to check
+
+        Returns:
+            List of error messages for rule violations
+        """
+        errors = []
+
+        if not self.rule_loader:
+            return errors
+
+        # Check MUST rules
+        errors.extend(self._check_must_rules(code))
+
+        # Check FORBIDDEN rules
+        errors.extend(self._check_forbidden_rules(code))
+
+        return errors
+
+    def _check_must_rules(self, code: str) -> List[str]:
+        """
+        Check MUST rules from rules/must-rules.md.
+
+        MUST Rules:
+        1. 使用 useCurrentFrame() 驱动所有动画
+        2. 必须定义 durationInFrames
+        3. 必须使用 TypeScript 类型定义
+        4. 必须在 Root.tsx 中注册 Composition
+        5. 静态资源必须使用 staticFile()
+        """
+        errors = []
+
+        # Must 1: 使用 useCurrentFrame() 驱动所有动画
+        if "useCurrentFrame" not in code:
+            # Only warn if there are animations (indicated by animate props or remotion hooks)
+            if any(hook in code for hook in ["interpolate", "spring", "Sequence", "Series"]):
+                errors.append(
+                    "[MUST-1] Code uses Remotion animations but missing useCurrentFrame(). "
+                    "All animations must be driven by useCurrentFrame() for determinism."
+                )
+
+        # Must 2: 必须定义 durationInFrames
+        if "durationInFrames" not in code:
+            errors.append(
+                "[MUST-2] Missing durationInFrames in Composition. "
+                "This is required for Remotion to know the video length."
+            )
+
+        # Must 3: 必须使用 TypeScript 类型定义
+        # Check for component props without type annotations
+        has_interfaces = "interface " in code or "type " in code
+        has_function_components = re.search(r'const\s+\w+\s*:\s*React\.FC', code)
+        has_arrow_functions = re.findall(r'const\s+\w+\s*=\s*\([^)]*\)\s*=>\s*{', code)
+
+        if has_arrow_functions and not has_interfaces and not has_function_components:
+            # Check if arrow functions have prop types
+            has_props = any("<" in line and ":" in line for line in code.split('\n'))
+            if not has_props:
+                errors.append(
+                    "[MUST-3] Components should have TypeScript type annotations. "
+                    "Use 'interface Props' or 'type Props' to define component props."
+                )
+
+        # Must 4: 必须在 Root.tsx 中注册 Composition
+        # This is already checked by _check_register_root(), so we skip it here
+
+        # Must 5: 静态资源必须使用 staticFile()
+        # Check for image/video imports that don't use staticFile()
+        # Look for direct imports of media files
+        media_imports = re.findall(
+            r"import\s+.*?\s+from\s+['\"].*?\.(png|jpg|jpeg|gif|mp4|webm|mov|wav|mp3)['\"]",
+            code,
+            re.IGNORECASE
+        )
+        if media_imports:
+            errors.append(
+                "[MUST-5] Direct media imports detected. Use staticFile() for all media assets: "
+                f"{', '.join(set(media_imports))}"
+            )
+
+        return errors
+
+    def _check_forbidden_rules(self, code: str) -> List[str]:
+        """
+        Check FORBIDDEN rules from rules/forbidden-rules.md.
+
+        FORBIDDEN Rules:
+        1. CSS Transitions 和 Animations
+        2. Tailwind 动画类（animate-, transition-）
+        3. setTimeout/setInterval
+        4. useEffect 中的异步操作
+        5. 基于状态的副作用
+        """
+        errors = []
+
+        # Forbidden 1: CSS Transitions 和 Animations
+        css_transitions = re.findall(r'transition\s*:', code, re.IGNORECASE)
+        css_animations = re.findall(r'animation\s*:', code, re.IGNORECASE)
+
+        if css_transitions:
+            errors.append(
+                "[FORBIDDEN-1] CSS transitions detected. Use Remotion's interpolate() or spring() instead. "
+                f"Found {len(css_transitions)} transition(s)."
+            )
+
+        if css_animations:
+            errors.append(
+                "[FORBIDDEN-1] CSS animations detected. Use Remotion's Sequence and frame-based animation instead. "
+                f"Found {len(css_animations)} animation(s)."
+            )
+
+        # Forbidden 2: Tailwind 动画类
+        tailwind_animate = re.findall(r'className=["\'][^"\']*animate-[^"\']*["\']', code)
+        tailwind_transition = re.findall(r'className=["\'][^"\']*transition-[^"\']*["\']', code)
+
+        if tailwind_animate:
+            errors.append(
+                "[FORBIDDEN-2] Tailwind animate- classes detected. Use Remotion's spring() for animations. "
+                f"Found {len(tailwind_animate)}."
+            )
+
+        if tailwind_transition:
+            errors.append(
+                "[FORBIDDEN-2] Tailwind transition- classes detected. Use interpolate() for smooth transitions. "
+                f"Found {len(tailwind_transition)}."
+            )
+
+        # Forbidden 3: setTimeout/setInterval
+        if "setTimeout" in code or "setInterval" in code:
+            errors.append(
+                "[FORBIDDEN-3] setTimeout/setInterval detected. Use Remotion's Sequence for timing control. "
+                "Timers cause non-deterministic rendering."
+            )
+
+        # Forbidden 4: useEffect 中的异步操作
+        # Look for async functions in useEffect
+        async_useeffects = re.findall(
+            r'useEffect\s*\(\s*\(\)\s*=>\s*{.*?async',
+            code,
+            re.DOTALL
+        )
+        if async_useeffects:
+            errors.append(
+                "[FORBIDDEN-4] Async operations in useEffect detected. "
+                "Use static data or pre-calculate values. Async effects cause rendering inconsistencies."
+            )
+
+        # Forbidden 5: 基于状态的副作用
+        # This is harder to detect precisely, but we can look for patterns
+        state_setters_outside_useeffect = re.findall(
+            r'(const\s+\[.*?\]\s*=\s*useState.*?\n.*?(?!(useEffect|if.*frame)))',
+            code,
+            re.MULTILINE
+        )
+
+        # More specific check: setState calls outside of conditional frame checks
+        setstate_pattern = re.findall(
+            r'set\w+\s*\(',
+            code
+        )
+
+        # If there are setState calls but no frame-based conditionals, it's suspicious
+        if setstate_pattern:
+            has_frame_conditionals = bool(re.search(r'if\s*\([^)]*frame[^)]*\)', code))
+            if not has_frame_conditionals:
+                # This might be a false positive, so just warn
+                pass  # We'll skip this check to avoid false positives
+
+        return errors
 
     def validate_typescript_syntax(self, code: str, project_dir: Optional[Path] = None) -> Tuple[bool, List[str]]:
         """

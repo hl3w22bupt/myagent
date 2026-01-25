@@ -20,7 +20,18 @@ from typing import Dict, Any, Optional
 
 from .base_generator import BaseGenerator, GenerationResult
 
+# Import PromptBuilder for rule integration
+try:
+    from lib.prompt_builder import PromptBuilder
+    PROMPT_BUILDER_AVAILABLE = True
+except ImportError:
+    PROMPT_BUILDER_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
+# Log warning after logger is defined
+if not PROMPT_BUILDER_AVAILABLE:
+    logger.warning("PromptBuilder not available. Proceeding without rule integration.")
 
 
 class RemotionCodeGeneratorV2(BaseGenerator):
@@ -33,7 +44,31 @@ class RemotionCodeGeneratorV2(BaseGenerator):
     - Detailed scene management patterns
     - Concrete visualization components
     - Performance optimization guidelines
+    - Integrated rules from rules/*.md files
     """
+
+    def __init__(self, llm_client=None):
+        """
+        Initialize the code generator.
+
+        Args:
+            llm_client: Optional LLM client (uses singleton if not provided)
+        """
+        # Initialize base generator
+        super().__init__(llm_client)
+
+        # Initialize PromptBuilder for rule integration
+        if PROMPT_BUILDER_AVAILABLE:
+            try:
+                self.prompt_builder = PromptBuilder()
+                logger.info("✅ PromptBuilder initialized - rules will be integrated")
+            except ImportError as e:
+                self.prompt_builder = None
+                logger.warning(f"⚠️  PromptBuilder initialization failed: {e}")
+                logger.warning("⚠️  Generating without explicit rules")
+        else:
+            self.prompt_builder = None
+            logger.warning("⚠️  PromptBuilder not available - generating without explicit rules")
 
     async def generate(
         self,
@@ -155,6 +190,34 @@ class RemotionCodeGeneratorV2(BaseGenerator):
         width, height = resolution.split("x")
         total_frames = duration * fps
 
+        # ============================================
+        # NEW: Load rules from PromptBuilder
+        # ============================================
+        if self.prompt_builder:
+            # Build params for PromptBuilder
+            params = {
+                "description": analysis.get('topic', {}).get('name', 'Educational video'),
+                "duration": duration,
+                "fps": fps,
+                "resolution": resolution,
+                "style": "presentation",  # Default style for educational content
+                "output_format": "mp4",
+                "quality": "medium"
+            }
+
+            # Get base prompt with rules integrated
+            base_prompt = self.prompt_builder.build_prompt(params)
+
+            logger.info(f"✅ Loaded rules into prompt ({len(base_prompt)} characters)")
+        else:
+            # Fallback without rules
+            base_prompt = "Generate complete Remotion TypeScript/React code based on educational content analysis."
+            logger.warning("⚠️  Building prompt without explicit rules")
+
+        # ============================================
+        # END: Rule loading
+        # ============================================
+
         error_section = ""
         if error_context:
             error_section = """
@@ -174,19 +237,29 @@ Please address these issues in your new implementation.""".format(error_context)
 
         # Build prompt using string concatenation to avoid f-string brace issues
         analysis_json = json.dumps(analysis, indent=2, ensure_ascii=False)
-        
-        prompt = """Generate complete Remotion TypeScript/React code based on educational content analysis.
 
-## Content Analysis
+        # ============================================
+        # NEW: Start with base prompt (includes rules)
+        # ============================================
+        prompt = base_prompt + """
+
+---
+
+## Content Analysis (Phase 1 Result)
 ```json
 """ + analysis_json + """
 ```
 
 ## Video Parameters
-- Duration: """ + str(duration) + """ seconds
+- Duration: """ + str(duration) + """ seconds (""" + str(total_frames) + """ frames)
 - FPS: """ + str(fps) + """
 - Resolution: """ + resolution + """ (""" + width + """x""" + height + """)
 - Total Frames: """ + str(total_frames) + """
+- Style: presentation (educational)
+
+---
+
+""" + scene_breakdown + """
 
 ---
 

@@ -19,6 +19,14 @@ from typing import Dict, Any, Optional
 
 from .base_generator import BaseGenerator, GenerationResult
 
+# Import RuleLoader for scene pattern integration
+try:
+    from lib.rule_loader import RuleLoader
+    RULE_LOADER_AVAILABLE = True
+except ImportError:
+    RULE_LOADER_AVAILABLE = False
+    logger.warning("RuleLoader not available. Proceeding without scene pattern guidance.")
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +39,26 @@ class ContentAnalyzerV2(BaseGenerator):
     - Category-specific visualization strategies
     - Detailed topic identification guidance
     - Difficulty-adaptive scene structures
+    - Integrated scene patterns from rules/scene-patterns.md
     """
+
+    def __init__(self, llm_client=None):
+        """
+        Initialize the content analyzer.
+
+        Args:
+            llm_client: Optional LLM client (uses singleton if not provided)
+        """
+        # Initialize base generator
+        super().__init__(llm_client)
+
+        # Initialize RuleLoader for scene pattern integration
+        if RULE_LOADER_AVAILABLE:
+            self.rule_loader = RuleLoader()
+            logger.info("✅ RuleLoader initialized - scene patterns will be available")
+        else:
+            self.rule_loader = None
+            logger.warning("⚠️  RuleLoader not available - analyzing without scene pattern guidance")
 
     async def analyze(self, description: str) -> Dict[str, Any]:
         """
@@ -107,10 +134,39 @@ Analyze user descriptions to extract structured information that will guide AI-d
 
     def _build_analysis_prompt_v2(self, description: str) -> str:
         """Build enhanced analysis prompt with Few-Shot examples (v2.0)."""
+
+        # ============================================
+        # NEW: Load scene patterns for guidance
+        # ============================================
+        scene_patterns_section = ""
+
+        if self.rule_loader:
+            try:
+                scene_patterns = self.rule_loader.get_scene_rules()
+                scene_patterns_section = f"""
+
+---
+
+## Educational Video Scene Patterns
+
+When designing the scene structure, consider these proven patterns for educational content:
+
+{scene_patterns}
+
+Use these patterns as inspiration but adapt them based on the specific topic and difficulty level.
+"""
+                logger.info("✅ Loaded scene patterns for analysis guidance")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not load scene patterns: {str(e)}")
+        # ============================================
+        # END: Scene pattern loading
+        # ============================================
+
         return f"""Analyze the following video description and extract structured information for code generation.
 
 ## User Description
 {description}
+{scene_patterns_section}
 
 ---
 

@@ -141,8 +141,8 @@ prompt_template: |
   - STRICTLY follows all MUST rules above
   - AVOIDS all FORBIDDEN patterns above
   - Uses recommended patterns when applicable
-  - Applies appropriate animation presets
-  - Follows scene structure patterns for educational content
+  - Applies appropriate animation presets from animations, timing, and transitions rules
+  - Follows scene structure patterns from compositions, sequencing, and trimming rules
   - Uses TypeScript with proper `type` definitions (not interface)
   - Creates a {{style}} style video
   - Exports proper Composition with durationInFrames = {{total_frames}}

@@ -5,8 +5,14 @@ Prompt 构建器 - 将规则文件集成到 LLM prompt 中
 """
 
 from typing import Dict, Any, Optional
-import yaml
 from pathlib import Path
+
+# Import yaml with graceful fallback
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
 
 from .rule_loader import RuleLoader
 
@@ -33,7 +39,16 @@ class PromptBuilder:
         Args:
             skill_yaml_path: skill.yaml 文件路径
             rules_dir: rules 目录路径
+
+        Raises:
+            ImportError: If pyyaml is not installed
         """
+        if not YAML_AVAILABLE:
+            raise ImportError(
+                "PyYAML is required for PromptBuilder. "
+                "Install it with: pip install pyyaml"
+            )
+
         if skill_yaml_path is None:
             # 默认路径
             current_file = Path(__file__)
@@ -60,11 +75,11 @@ class PromptBuilder:
         prompt_template = self.skill_config.get('prompt_template', '')
 
         # 加载规则
-        must_rules = self.rule_loader.load_rule("must-rules")
-        forbidden_rules = self.rule_loader.load_rule("forbidden-rules")
-        recommended_rules = self.rule_loader.load_rule("recommended-rules")
-        animation_presets = self.rule_loader.load_rule("animation-presets")
-        scene_patterns = self.rule_loader.load_rule("scene-patterns")
+        must_rules = self.rule_loader.get_must_rules()
+        forbidden_rules = self.rule_loader.get_forbidden_rules()
+        recommended_rules = self.rule_loader.get_recommended_rules()
+        animation_presets = self.rule_loader.get_animation_rules()
+        scene_patterns = self.rule_loader.get_scene_rules()
 
         # 计算总帧数
         duration = params.get('duration', 10)

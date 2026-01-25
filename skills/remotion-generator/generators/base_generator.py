@@ -232,6 +232,9 @@ class BaseGenerator(ABC):
         # Clean response - remove leading/trailing whitespace
         response = response.strip()
 
+        # Debug: Print response for debugging
+        logger.debug(f"Raw response received for code extraction: {response[:200]}...")
+
         # Look for ```typescript or ```tsx code blocks
         code_block_marker = f"```{language}"
 
@@ -258,11 +261,19 @@ class BaseGenerator(ABC):
                         extracted = response[start:end].strip()
                         logger.info(f"✅ Extracted code using generic ``` block")
                         return extracted
+                else:
+                    # If there's no newline after ```, treat the rest of the response as code
+                    start = first_marker + 3
+                    extracted = response[start:].strip()
+                    logger.warning(f"⚠️  No newline after code block marker, extracting rest of response")
+                    return extracted
 
         # No code block markers found, check if response starts with ```
         # This handles malformed responses where the response IS the code block
         if response.startswith("```"):
             logger.warning(f"⚠️  Response starts with ``` but no end marker found")
+            # Debug: Print full response
+            logger.debug(f"Full response: {response}")
             # Try to extract anyway by skipping first line and taking everything
             lines = response.split('\n')
             if len(lines) > 1:
@@ -277,9 +288,15 @@ class BaseGenerator(ABC):
                     extracted = '\n'.join(code_lines).strip()
                     logger.info(f"✅ Extracted code by skipping first line")
                     return extracted
+            else:
+                # If there's only one line, just strip the leading ```
+                extracted = response[3:].strip()
+                logger.warning(f"⚠️  Single-line code block, stripping leading ```")
+                return extracted
 
         # No code block found, return response as-is
         logger.warning(f"⚠️  No code block markers found, returning response as-is")
+        logger.debug(f"Returning response as-is: {response[:200]}...")
         return response.strip()
 
     def get_stats(self) -> Dict[str, Any]:

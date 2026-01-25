@@ -116,14 +116,14 @@ def evaluate_code_quality(code, validator):
     details = []
 
     try:
-        validation = validator.validate(code)
+        is_valid, errors, warnings = validator.validate(code)
 
         # 基本语法 (3分)
-        if validation.get('valid_syntax', False):
+        if is_valid:
             score += 3
             details.append("✓ TypeScript 语法正确")
         else:
-            details.append(f"✗ 语法错误")
+            details.append(f"✗ 语法错误: {', '.join(errors)}")
 
         # 必需组件 (3分)
         if 'Composition' in code:

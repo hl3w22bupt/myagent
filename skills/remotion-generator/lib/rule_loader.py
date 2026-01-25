@@ -13,7 +13,7 @@ class RuleLoader:
 
     用法：
         loader = RuleLoader()
-        must_rules = loader.load_rule("must-rules")
+        must_rules = loader.get_must_rules()
         all_rules = loader.get_all_rules()
     """
 
@@ -84,17 +84,70 @@ class RuleLoader:
 
         return "\n\n---\n\n".join(rules)
 
-    def get_core_rules(self) -> str:
+    def get_must_rules(self) -> str:
         """
-        获取核心规则（MUST + FORBIDDEN）
+        获取包含 MUST 规则的所有文件内容
 
         Returns:
-            合并后的核心规则内容
+            合并后的 MUST 规则内容
         """
-        return self.load_rules([
-            "must-rules",
-            "forbidden-rules"
-        ])
+        must_rule_files = []
+        for rule_file in self.rules_dir.glob("*.md"):
+            content = rule_file.read_text(encoding='utf-8')
+            if "MUST" in content:
+                must_rule_files.append(rule_file.stem)
+
+        return self.load_rules(must_rule_files)
+
+    def get_forbidden_rules(self) -> str:
+        """
+        获取包含 FORBIDDEN 规则的所有文件内容
+
+        Returns:
+            合并后的 FORBIDDEN 规则内容
+        """
+        forbidden_rule_files = []
+        for rule_file in self.rules_dir.glob("*.md"):
+            content = rule_file.read_text(encoding='utf-8')
+            if "FORBIDDEN" in content:
+                forbidden_rule_files.append(rule_file.stem)
+
+        return self.load_rules(forbidden_rule_files)
+
+    def get_recommended_rules(self) -> str:
+        """
+        获取包含 RECOMMENDED 规则的所有文件内容
+
+        Returns:
+            合并后的 RECOMMENDED 规则内容
+        """
+        recommended_rule_files = []
+        for rule_file in self.rules_dir.glob("*.md"):
+            content = rule_file.read_text(encoding='utf-8')
+            if "RECOMMENDED" in content:
+                recommended_rule_files.append(rule_file.stem)
+
+        return self.load_rules(recommended_rule_files)
+
+    def get_animation_rules(self) -> str:
+        """
+        获取与动画相关的规则文件内容
+
+        Returns:
+            合并后的动画规则内容
+        """
+        animation_rule_files = ["animations", "timing", "transitions"]
+        return self.load_rules(animation_rule_files)
+
+    def get_scene_rules(self) -> str:
+        """
+        获取与场景相关的规则文件内容
+
+        Returns:
+            合并后的场景规则内容
+        """
+        scene_rule_files = ["compositions", "sequencing", "trimming"]
+        return self.load_rules(scene_rule_files)
 
     def get_all_rules(self) -> str:
         """
@@ -103,13 +156,8 @@ class RuleLoader:
         Returns:
             合并后的所有规则内容
         """
-        return self.load_rules([
-            "must-rules",
-            "forbidden-rules",
-            "recommended-rules",
-            "animation-presets",
-            "scene-patterns"
-        ])
+        all_rule_files = [f.stem for f in self.rules_dir.glob("*.md") if not f.name.startswith('_')]
+        return self.load_rules(all_rule_files)
 
     def list_available_rules(self) -> List[str]:
         """
