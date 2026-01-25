@@ -1,0 +1,815 @@
+---
+description: MyAgent 子代理系统 - MasterAgent 委派、子代理配置（YAML）、委派计划生成、内置子代理列表
+---
+
+# MyAgent 子代理系统
+
+## 概述
+
+子代理系统实现专业化 AI 代理，每个子代理专注于特定领域，MasterAgent 根据任务类型委派给合适的子代理。
+
+### 核心组件
+
+| 组件 | 职责 |
+|------|------|
+| **MasterAgent** | 协调型代理，负责任务委派 |
+| **子代理配置** | YAML 格式的子代理定义 |
+| **委派决策** | 选择合适的子代理 |
+| **PTC 生成** | 生成委派计划的 Python 代码 |
+
+## 子代理目录结构
+
+```
+subagents/
+├── code-reviewer/          # 代码审查子代理
+│   ├── subagent.yaml         # 子代理配置
+│   └── prompt.md             # 系统提示词
+│
+├── data-analyst/           # 数据分析子代理
+│   ├── subagent.yaml
+│   └── prompt.md
+│
+├── security-auditor/       # 安全审计子代理
+│   ├── subagent.yaml
+│   └── prompt.md
+│
+└── system-guide/           # 系统指导子代理
+    ├── subagent.yaml
+    └── prompt.md
+```
+
+## 子代理配置 (subagent.yaml)
+
+### 完整示例
+
+```yaml
+# subagents/code-reviewer/subagent.yaml
+
+id: code-reviewer
+name: Code Reviewer
+version: 1.0.0
+description: 专业的代码审查代理，专注于代码质量、安全性和最佳实践
+
+# 系统提示词（引用外部文件）
+systemPrompt: ./prompt.md
+
+# 能力定义
+capabilities:
+  - analyze-code-quality
+  - detect-anti-patterns
+  - suggest-refactoring
+  - check-security
+  - review-test-coverage
+
+# 支持的编程语言
+languages:
+  - typescript
+  - javascript
+  - python
+  - java
+  - go
+  - rust
+
+# 可用技能
+availableSkills:
+  - code-analysis
+  - read-file
+  - summarize
+
+# 委派规则
+delegationRules:
+  # 触发条件（关键词）
+  triggers:
+    - review
+    - code quality
+    - anti-pattern
+    - security
+    - refactoring
+    - best practice
+
+  # 正则表达式匹配
+  patterns:
+    - (review|analyze|check).*(code|file)
+    - (security|vulnerability|anti.?pattern)
+
+  # 最小置信度（0-1）
+  minConfidence: 0.7
+
+  # 最大任务复杂度
+  maxComplexity: high
+
+# 性能配置
+performance:
+  # 优先级（1-10，数字越大优先级越高）
+  priority: 8
+
+  # 平均执行时间（秒）
+  estimatedDuration: 30
+
+  # 最大并发任务数
+  maxConcurrentTasks: 5
+
+# 成本配置
+cost:
+  # Token 成本（每百万 token）
+  tokensPer1M: 0.3
+
+  # 技能调用成本
+  skillCalls: 0.01
+
+# 元数据
+metadata:
+  author: MyAgent Team
+  tags:
+    - code
+    - review
+    - security
+```
+
+### 配置字段说明
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | string | 子代理唯一标识符 |
+| `name` | string | 子代理显示名称 |
+| `version` | string | 语义化版本 |
+| `description` | string | 子代理描述 |
+| `systemPrompt` | string | 系统提示词（文件路径或直接文本） |
+| `capabilities` | array | 能力列表 |
+| `languages` | array | 支持的编程语言 |
+| `availableSkills` | array | 可用技能列表 |
+| `delegationRules` | object | 委派规则 |
+| `performance` | object | 性能配置 |
+| `cost` | object | 成本配置 |
+| `metadata` | object | 元数据 |
+
+## 委派规则
+
+### 触发条件
+
+```yaml
+delegationRules:
+  triggers:
+    - review              # 包含 "review" 关键词
+    - code quality         # 包含 "code quality"
+    - anti-pattern          # 包含 "anti-pattern"
+```
+
+### 正则表达式匹配
+
+```yaml
+delegationRules:
+  patterns:
+    - (review|analyze|check).*(code|file)   # 匹配 "review code"
+    - (security|vulnerability).*(check|audit)  # 匹配 "security audit"
+```
+
+### 复杂度级别
+
+| 级别 | 描述 |
+|------|------|
+| `low` | 简单任务（如格式检查） |
+| `medium` | 中等任务（如代码分析） |
+| `high` | 复杂任务（如全面审查） |
+| `extreme` | 极复杂任务（如大型项目重构） |
+
+## 子代理发现
+
+### 扫描子代理
+
+```typescript
+import { readdir, readFile } from 'fs/promises';
+import { join } from 'path';
+import { load } from 'js-yaml';
+
+export class SubagentDiscovery {
+  private subagentsDir: string;
+
+  constructor(subagentsDir: string = './subagents') {
+    this.subagentsDir = subagentsDir;
+  }
+
+  /**
+   * 发现所有子代理
+   */
+  async discoverSubagents(): Promise<SubagentInfo[]> {
+    const subagentDirs = await this.scanSubagentDirectories();
+    const subagents: SubagentInfo[] = [];
+
+    for (const subagentDir of subagentDirs) {
+      try {
+        const subagentInfo = await this.loadSubagentInfo(subagentDir);
+        subagents.push(subagentInfo);
+      } catch (error) {
+        console.warn(`Failed to load subagent ${subagentDir}:`, error);
+      }
+    }
+
+    return subagents;
+  }
+
+  /**
+   * 扫描子代理目录
+   */
+  private async scanSubagentDirectories(): Promise<string[]> {
+    const entries = await readdir(this.subagentsDir, {
+      withFileTypes: true,
+    });
+
+    return entries
+      .filter(entry => entry.isDirectory)
+      .map(entry => entry.name);
+  }
+
+  /**
+   * 加载子代理信息
+   */
+  private async loadSubagentInfo(subagentDir: string): Promise<SubagentInfo> {
+    const configPath = join(this.subagentsDir, subagentDir, 'subagent.yaml');
+    const configContent = await readFile(configPath, 'utf-8');
+    const config = load(configContent) as SubagentConfig;
+
+    // 加载系统提示词
+    const systemPrompt = await this.loadSystemPrompt(
+      subagentDir,
+      config.systemPrompt
+    );
+
+    return {
+      id: config.id,
+      name: config.name,
+      version: config.version,
+      description: config.description,
+      systemPrompt,
+      capabilities: config.capabilities,
+      languages: config.languages,
+      availableSkills: config.availableSkills,
+      delegationRules: config.delegationRules,
+      performance: config.performance,
+      cost: config.cost,
+      metadata: config.metadata,
+      path: join(this.subagentsDir, subagentDir),
+    };
+  }
+
+  /**
+   * 加载系统提示词
+   */
+  private async loadSystemPrompt(
+    subagentDir: string,
+    systemPromptPath: string
+  ): Promise<string> {
+    // 如果是相对路径，则从子代理目录读取
+    if (systemPromptPath.startsWith('./') || systemPromptPath.startsWith('../')) {
+      const fullPath = join(this.subagentsDir, subagentDir, systemPromptPath);
+      return await readFile(fullPath, 'utf-8');
+    }
+
+    // 否则作为直接文本返回
+    return systemPromptPath;
+  }
+}
+```
+
+## 委派决策
+
+### 委派评分
+
+```typescript
+export class DelegationDecider {
+  constructor(
+    private subagents: Map<string, SubagentInfo>
+  ) {}
+
+  /**
+   * 决定委派
+   */
+  async decideDelegation(task: string): Promise<DelegationDecision> {
+    const scores: Array<{ subagentId: string; score: number }> = [];
+
+    for (const [id, subagent] of this.subagents.entries()) {
+      const score = await this.scoreSubagent(task, subagent);
+      scores.push({ subagentId: id, score });
+    }
+
+    // 按评分排序
+    scores.sort((a, b) => b.score - a.score);
+
+    // 选择最高分的子代理
+    const bestMatch = scores[0];
+
+    if (bestMatch.score < 0.5) {
+      // 评分过低，不委派
+      return {
+        shouldDelegate: false,
+        reason: 'No suitable subagent found',
+      };
+    }
+
+    return {
+      shouldDelegate: true,
+      subagentId: bestMatch.subagentId,
+      confidence: bestMatch.score,
+      alternatives: scores.slice(1, 3).map(s => ({
+        subagentId: s.subagentId,
+        confidence: s.score,
+      })),
+    };
+  }
+
+  /**
+   * 评估子代理得分
+   */
+  private async scoreSubagent(
+    task: string,
+    subagent: SubagentInfo
+  ): Promise<number> {
+    let score = 0;
+    const taskLower = task.toLowerCase();
+
+    // 1. 关键词匹配（40% 权重）
+    const keywordScore = this.scoreByKeywords(taskLower, subagent);
+    score += keywordScore * 0.4;
+
+    // 2. 正则匹配（30% 权重）
+    const patternScore = this.scoreByPatterns(task, subagent);
+    score += patternScore * 0.3;
+
+    // 3. 性能优先级（20% 权重）
+    const priorityScore = (subagent.performance?.priority || 5) / 10;
+    score += priorityScore * 0.2;
+
+    // 4. 成本考虑（10% 权重，成本越低得分越高）
+    const costScore = this.scoreByCost(subagent);
+    score += costScore * 0.1;
+
+    // 应用最小置信度阈值
+    const minConfidence = subagent.delegationRules?.minConfidence || 0;
+    if (score < minConfidence) {
+      return 0;
+    }
+
+    return Math.min(score, 1); // 确保得分不超过 1
+  }
+
+  /**
+   * 按关键词评分
+   */
+  private scoreByKeywords(task: string, subagent: SubagentInfo): number {
+    const triggers = subagent.delegationRules?.triggers || [];
+    const matches = triggers.filter(trigger =>
+      task.includes(trigger.toLowerCase())
+    );
+
+    return matches.length / Math.max(triggers.length, 1);
+  }
+
+  /**
+   * 按正则评分
+   */
+  private scoreByPatterns(task: string, subagent: SubagentInfo): number {
+    const patterns = subagent.delegationRules?.patterns || [];
+    const matches = patterns.filter(pattern => {
+      try {
+        const regex = new RegExp(pattern, 'i');
+        return regex.test(task);
+      } catch (error) {
+        console.warn(`Invalid pattern: ${pattern}`, error);
+        return false;
+      }
+    });
+
+    return matches.length / Math.max(patterns.length, 1);
+  }
+
+  /**
+   * 按成本评分（成本越低得分越高）
+   */
+  private scoreByCost(subagent: SubagentInfo): number {
+    const cost = subagent.cost || {};
+    const tokenCost = cost.tokensPer1M || 0;
+    const skillCost = cost.skillCalls || 0;
+
+    // 假设最大 token 成本为 1
+    const normalizedTokenCost = Math.min(tokenCost, 1);
+
+    // 成本得分 = 1 - 归一化成本
+    return 1 - (normalizedTokenCost * 0.7 + skillCost * 0.3);
+  }
+}
+```
+
+## 委派执行
+
+
+
+### PTC 生成
+
+```typescript
+export class DelegationPTCGenerator {
+  async generateDelegationPTC(
+    task: string,
+    subagentId: string,
+    subagentInfo: SubagentInfo,
+    context: DelegationContext
+  ) : Promise<string> {
+    // 生成委派 PTC
+    return `
+import json
+from typing import Dict, Any, List
+
+def execute_delegation(context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    委派给子代理执行
+
+    Args:
+        context: 包含任务、子代理等信息的上下文
+
+    Returns:
+        委派执行结果
+    """
+    task = context['task']
+    subagent_id = context['subagent']['id']
+    available_skills = context['subagent']['availableSkills']
+    system_prompt = context['subagent']['systemPrompt']
+
+    # 1. 分析任务
+    task_analysis = analyze_task(task)
+    print(json.dumps({'step': 'analysis', 'data': task_analysis}, ensure_ascii=False))
+
+    # 2. 调用合适的技能
+    results = []
+    for skill_call in determine_skill_calls(task_analysis, available_skills):
+        print(json.dumps({'step': 'skill_call', 'data': {'skill': skill_call}}, ensure_ascii=False))
+        result = call_skill(skill_call['name'], skill_call['inputs'])
+        results.append(result)
+
+    # 3. 综合结果
+    final_result = synthesize_results(results, task_analysis)
+    print(json.dumps({'step': 'synthesis', 'data': {'result_type': type(final_result).__name__}}, ensure_ascii=False))
+
+    # 4. 返回结果
+    return {
+        'success': True,
+        'output': final_result,
+        'metadata': {
+            'subagent': subagent_id,
+            'steps': ['analysis', 'skill_calls', 'synthesis'],
+            'results_count': len(results)
+        }
+    }
+
+def analyze_task(task: str) -> Dict[str, Any]:
+    """分析任务"""
+    # 实现任务分析逻辑
+    return {
+        'type': determine_task_type(task),
+        'complexity': estimate_complexity(task),
+        'keywords': extract_keywords(task)
+    }
+
+def determine_skill_calls(analysis: Dict[str, Any], available_skills: List[str]) -> List[Dict[str, Any]]:
+    """确定需要调用的技能"""
+    # 实现技能调用决策逻辑
+    return []
+
+def call_skill(skill_name: str, inputs: Dict[str, Any]) -> Any:
+    """调用技能"""
+    # 实现技能调用逻辑
+    return {}
+
+def synthesize_results(results: List[Any], analysis: Dict[str, Any]) -> Any:
+    """综和结果"""
+    # 实现结果综和逻辑
+    return {}
+
+# 主执行入口
+if __name__ == '__main__':
+    import sys
+    context_str = sys.stdin.read()
+    context = json.loads(context_str)
+    result = execute_delegation(context)
+    print(json.dumps(result, ensure_ascii=False))
+    `;
+  }
+}
+```
+
+### 委派执行流程
+
+```typescript
+export class MasterAgent {
+  async executeWithDelegation(task: string): Promise<AgentResult> {
+    const steps: AgentStep[] = [];
+
+    // 1. 分析任务并决定是否委派
+    steps.push({
+      type: 'planning',
+      content: '分析任务并决定执行策略',
+      timestamp: Date.now(),
+    });
+
+    const delegation = await this.delegationDecider.decideDelegation(task);
+
+    if (!delegation.shouldDelegate) {
+      // 直接执行
+      return await this.executeDirectly(task);
+    }
+
+    // 2. 委派给子代理
+    steps.push({
+      type: 'delegation',
+      content: `委派给子代理: ${delegation.subagentId}`,
+      timestamp: Date.now(),
+      metadata: {
+        subagentId: delegation.subagentId,
+        confidence: delegation.confidence,
+      },
+    });
+
+    // 3. 获取子代理信息
+    const subagentInfo = this.subagents.get(delegation.subagentId);
+    if (!subagentInfo) {
+      throw new Error(`Subagent not found: ${delegation.subagentId}`);
+    }
+
+    // 4. 生成委派 PTC
+    steps.push({
+      type: 'ptc-generation',
+      content: '生成委派计划',
+      timestamp: Date.now(),
+    });
+
+    const ptcCode = await this.ptcGenerator.generateDelegationPTC(
+      task,
+      delegation.subagentId,
+      subagentInfo,
+      {
+        task,
+        subagent: subagentInfo,
+      }
+    );
+
+    // 5. 在沙箱中执行 PTC
+    steps.push({
+      type: 'execution',
+      content: '执行委派计划',
+      timestamp: Date.now(),
+    });
+
+    const sandboxResult = await this.sandbox.execute(
+      ptcCode,
+      this.config.constraints?.timeout || 60000
+    );
+
+    // 6. 处理结果
+    if (sandboxResult.success) {
+      return {
+        success: true,
+        output: sandboxResult.output,
+        steps,
+        executionTime: sandboxResult.executionTime,
+        metadata: {
+          llmCalls: 0,
+          skillCalls: sandboxResult.output?.metadata?.results_count || 0,
+          totalTokens: 0,
+          delegates: [delegation.subagentId],
+        },
+      };
+    } else {
+      steps.push({
+        type: 'error',
+        content: sandboxResult.error || '执行失败',
+        timestamp: Date.now(),
+      });
+
+      return {
+        success: false,
+        error: sandboxResult.error,
+        steps,
+        executionTime: sandboxResult.executionTime,
+        metadata: {
+          llmCalls: 0,
+          skillCalls: 0,
+          totalTokens: 0,
+        },
+      };
+    }
+  }
+}
+```
+
+## 内置子代理
+
+### 1. Code Reviewer
+
+**ID**: `code-reviewer`
+
+**描述**: 专业的代码审查代理，专注于代码质量、安全性和最佳实践
+
+**能力**:
+- analyze-code-quality
+- detect-anti-patterns
+- suggest-refactoring
+- check-security
+- review-test-coverage
+
+**支持的语言**: TypeScript, JavaScript, Python, Java, Go, Rust
+
+**可用技能**: code-analysis, read-file, summarize
+
+**委派规则**:
+```yaml
+triggers:
+  - review
+  - code quality
+  - anti-pattern
+  - security
+  - refactoring
+  - best practice
+
+patterns:
+  - (review|analyze|check).*(code|file)
+  - (security|vulnerability).*(check|audit)
+```
+
+### 2. Data Analyst
+
+**ID**: `data-analyst`
+
+**描述**: 数据分析专家，专注于数据处理、可视化和洞察发现
+
+**能力**:
+- analyze-data
+- generate-charts
+- detect-anomalies
+- create-reports
+- statistical-analysis
+
+**可用技能**: web-search, summarize, read-file
+
+**委派规则**:
+```yaml
+triggers:
+  - analyze data
+  - generate report
+  - visualize
+  - statistics
+  - trends
+
+    - (analyze|process|visualize).*(data|dataset)
+  - (chart|graph|plot).*(generate|create)
+```
+
+### 3. Security Auditor
+
+**ID**: `security-auditor`
+
+**描述**: 安全审计专家，专注于漏洞检测、安全合规和风险评估
+
+**能力**:
+- detect-vulnerabilities
+- security-audit
+- risk-assessment
+- compliance-check
+- threat-analysis
+
+**可用技能**: web-search, code-analysis, read-file
+
+**委派规则**:
+```yaml
+triggers:
+  - security
+  - vulnerability
+  - audit
+  - compliance
+  - risk assessment
+
+patterns:
+  - (security|vulnerability).*(scan|check|audit)
+  - (compliance|regulation).*(check|verify)
+```
+
+### 4. System Guide
+
+**ID**: `system-guide`
+
+**描述**: 系统指导专家，提供架构建议、技术选择和最佳实践指导
+
+**能力**:
+- architectural-advice
+- technology-selection
+- best-practices
+- system-design
+- troubleshooting
+
+**可用技能**: web-search, summarize
+
+**委派规则**:
+```yaml
+triggers:
+  - architecture
+  - design
+  - best practice
+  - technology selection
+  - system architecture
+
+patterns:
+  - (architecture|system).*(design|planning)
+  - (best|good).*(practice|pattern)
+```
+
+## 子代理最佳实践
+
+### 1. 清晰的委派规则
+
+```yaml
+# ✅ 好：明确的触发条件
+delegationRules:
+  triggers:
+    - review code
+    - security audit
+  patterns:
+    - (review|check).*(code|file)
+
+# ❌ 不好：过于宽泛的规则
+delegationRules:
+  triggers:
+    - code
+    - help
+  patterns:
+    - .*
+```
+
+### 2. 合理的置信度阈值
+
+```yaml
+# ✅ 好：设置合理的最小置信度
+delegationRules:
+  minConfidence: 0.7  # 只有当匹配度超过 70% 时才委派
+
+# ❌ 不好：阈值过低（误委派）
+delegationRules:
+  minConfidence: 0.1  # 几乎总是委派
+```
+
+### 3. 明确的能力定义
+
+```yaml
+# ✅ 好：具体的能力列表
+capabilities:
+  - analyze-code-quality
+  - detect-anti-patterns
+  - suggest-refactoring
+
+# ❌ 不好：模糊的能力定义
+capabilities:
+  - code
+  - review
+  - help
+```
+
+### 4. 准确的技能依赖
+
+```yaml
+# ✅ 好：列出实际可用的技能
+availableSkills:
+  - code-analysis
+  - read-file
+  - summarize
+
+# ❌ 不好：包含不存在的技能
+availableSkills:
+  - code-analysis
+  - unknown-skill
+  - another-missing-skill
+```
+
+### 5. 完整的系统提示词
+
+```markdown
+# ✅ 好：详细的系统提示词
+ 你是一个专业的代码审查专家，专注于：
+
+ 1. 代码质量分析
+ 2. 安全漏洞检测
+ 3. 最佳实践建议
+ 4. 重构建议
+
+ 在审查代码时，请遵循以下原则：
+ - 清晰性优先
+ - 安全性不容忽视
+ - 性能需考虑
+ - 可维护性是关键
+```
+
+```markdown
+# ❌ 不好：过于简单的提示词
+ 你是一个代码审查者。请审查代码。
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `agent-system.mdc` - Agent 系统

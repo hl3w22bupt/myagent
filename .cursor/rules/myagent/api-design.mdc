@@ -1,0 +1,920 @@
+---
+description: MyAgent API 设计规范 - API 端点列表、请求/响应格式、Zod 验证、中间件使用
+---
+
+# MyAgent API 设计规范
+
+## 概述
+
+API 设计遵循 RESTful 原则，使用 Motia 的 Endpoint 插件实现。
+
+### 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **统一前缀** | 相关端点使用统一前缀（如 `/agent/`） |
+| **语义化路径** | 路径清晰表达资源操作 |
+| **统一响应格式** | 所有响应使用一致的 JSON 格式 |
+| **输入验证** | 使用 Zod schema 验证请求 |
+| **错误处理** | 标准化错误响应 |
+| **版本控制** | 路径包含版本号（如 `/api/v1/`） |
+
+## API 端点列表
+
+### Agent API
+
+| 端点 | 方法 | 描述 | 认证 |
+|------|------|------|------|
+| `/agent/execute` | POST | 执行代理任务 | 可选 |
+| `/agent/tasks` | GET | 查询任务列表 | 可选 |
+| `/agent/tasks/:id` | GET | 查询任务详情 | 可选 |
+| `/agent/sessions/:id` | DELETE | 删除会话 | 可选 |
+
+### 资源 API
+
+| 端点 | 方法 | 描述 | 认证 |
+|------|------|------|------|
+| `/api/v1/agents` | GET | 查询子代理列表 | 无 |
+| `/api/v1/skills` | GET | 查询技能列表 | 无 |
+| `/api/v1/health` | GET | 健康检查 | 无 |
+
+## 统一响应格式
+
+### 成功响应
+
+```typescript
+interface SuccessResponse<T = any> {
+  success: true;
+  data: T;
+  message?: string;
+  timestamp?: number;
+}
+```
+
+### 错误响应
+
+```typescript
+interface ErrorResponse {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+  timestamp?: number;
+}
+```
+
+### 分页响应
+
+```typescript
+interface PaginatedResponse<T> {
+  success: true;
+  data: {
+    items: T[];
+    total: number;
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+  };
+  timestamp?: number;
+}
+```
+
+## API 端点详情
+
+### POST /agent/execute
+
+执行代理任务。
+
+**请求体**：
+
+```typescript
+interface ExecuteRequest {
+  task: string;                              // 任务描述
+  sessionId?: string;                         // 会话 ID（可选）
+  systemPrompt?: string;                      // 自定义系统提示
+  useDelegation?: boolean;                     // 是否启用委派
+  availableSkills?: string[];                  // 可用技能列表
+  subagents?: string[];                       // 可用子代理列表
+  options?: {
+    timeout?: number;                          // 超时（毫秒）
+    maxIterations?: number;                    // 最大迭代次数
+  };
+}
+```
+
+**响应**：
+
+```typescript
+interface ExecuteResponse {
+  taskId: string;                            // 任务 ID
+  sessionId: string;                          // 会话 ID
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  estimatedDuration?: number;                  // 预计执行时间（毫秒）
+}
+```
+
+**示例**：
+
+```bash
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "分析这个 GitHub 仓库的代码质量",
+    "sessionId": "session-123",
+    "useDelegation": true,
+    "availableSkills": ["web-search", "code-analysis"],
+    "subagents": ["code-reviewer"]
+  }'
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "taskId": "task-456",
+    "sessionId": "session-123",
+    "status": "pending",
+    "estimatedDuration": 15000
+  },
+  "timestamp": 17061234567890
+}
+```
+
+### GET /agent/tasks
+
+查询任务列表。
+
+**查询参数**：
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `sessionId` | string | 按会话 ID 过滤 |
+| `status` | string | 按状态过滤 |
+| `page` | number | 页码（从 1 开始） |
+| `pageSize` | number | 每页数量（默认 20） |
+| `sortBy` | string | 排序字段（createdAt, updatedAt） |
+| `order` | string | 排序方向（asc, desc） |
+
+**响应**：
+
+```typescript
+interface TaskListResponse {
+  items: TaskSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+interface TaskSummary {
+  id: string;
+  task: string;
+  sessionId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+  executionTime?: number;
+}
+```
+
+**示例**：
+
+```bash
+curl "http://localhost:3000/agent/tasks?sessionId=session-123&status=completed&page=1&pageSize=10"
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "task-456",
+        "task": "分析这个 GitHub 仓库的代码质量",
+        "sessionId": "session-123",
+        "status": "completed",
+        "createdAt": "2024-01-24T10:30:00.000Z",
+        "updatedAt": "2024-01-24T10:30:15.000Z",
+        "executionTime": 15000
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "pageSize": 10,
+    "hasMore": false
+  },
+  "timestamp": 17061234567890
+}
+```
+
+### GET /agent/tasks/:id
+
+查询任务详情。
+
+**路径参数**：
+
+| 参数 | 描述 |
+|------|------|
+| `id` | 任务 ID |
+
+**响应**：
+
+```typescript
+interface TaskDetailResponse {
+  id: string;
+  task: string;
+  sessionId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  output?: any;
+  error?: string;
+  executionTime?: number;
+  metadata?: {
+    llmCalls?: number;
+    skillCalls?: number;
+    totalTokens?: number;
+    skillNames?: string[];
+    delegates?: string[];
+  };
+  steps?: AgentStep[];
+}
+```
+
+**示例**：
+
+```bash
+curl http://localhost:3000/agent/tasks/task-456
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-456",
+    "task": "分析这个 GitHub 仓库的代码质量",
+    "sessionId": "session-123",
+    "status": "completed",
+    "createdAt": "2024-01-24T10:30:00.000Z",
+    "updatedAt": "2024-01-24T10:30:15.000Z",
+    "completedAt": "2024-01-24T10:30:15.000Z",
+    "output": {
+      "analysis": "代码质量良好..."
+    },
+    "executionTime": 15000,
+    "metadata": {
+      "llmCalls": 3,
+      "skillCalls": 2,
+      "totalTokens": 1500,
+      "skillNames": ["web-search", "code" - analysis],
+      "delegates": ["code-reviewer"]
+    },
+    "steps": [
+      {
+        "type": "planning",
+        "content": "分析任务需求",
+        "timestamp": 17061234560000
+      },
+      {
+        "type": "delegation",
+        "content": "委派给 code-reviewer",
+        "timestamp": 17061234565000
+      }
+    ]
+  },
+  "timestamp": 17061234567890
+}
+```
+
+
+### DELETE /agent/sessions/:id
+
+删除会话及其关联资源。
+
+**路径参数**：
+
+| 参数 | 描述 |
+|------|------|
+| `id` | 会话 ID |
+
+**响应**：
+
+```typescript
+interface DeleteSessionResponse {
+  sessionId: string;
+  tasksDeleted: number;
+  message: string;
+}
+```
+
+**示例**：
+
+```bash
+curl -X DELETE http://localhost:3000/agent/sessions/session-123
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "session-123",
+    "tasksDeleted": 5,
+    "message": "Session deleted successfully"
+  },
+  "timestamp": 17061234567890
+}
+```
+
+### GET /api/v1/agents
+
+查询可用的子代理列表。
+
+**响应**：
+
+```typescript
+interface AgentsListResponse {
+  agents: SubagentInfo[];
+}
+
+interface SubagentInfo {
+  id: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+  config?: Record<string, any>;
+}
+```
+
+**示例**：
+
+```bash
+curl http://localhost:3000/api/v1/agents
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "agents": [
+      {
+        "id": "code-reviewer",
+        "name": "Code Reviewer",
+        "description": "代码审查专家",
+        "capabilities": [
+          "analyze-code-quality",
+          "detect-anti-patterns",
+          "suggest-refactoring"
+        ]
+      },
+      {
+        "id": "data-analyst",
+        "name": "Data Analyst",
+        "description": "数据分析专家",
+        "capabilities": [
+          "analyze-data",
+          "generate-charts",
+          "detect-anomalies"
+        ]
+      }
+    ]
+  },
+  "timestamp": 17061234567890
+}
+```
+
+### GET /api/v1/skills
+
+查询可用的技能列表。
+
+**响应**：
+
+```typescript
+interface SkillsListResponse {
+  skills: SkillInfo[];
+}
+
+interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  inputs?: Record<string, any>;
+  outputs?: Record<string, any>;
+}
+```
+
+**示例**：
+
+```bash
+curl http://localhost:3000/api/v1/skills
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "skills": [
+      {
+        "id": "web-search",
+        "name": "Web Search",
+        "description": "执行网页搜索",
+        "version": "1.0.0",
+        "inputs": {
+          "query": {
+            "type": "string",
+            "description": "搜索查询",
+            "required": true
+          },
+          "maxResults": {
+            "type": "number",
+            "description": "最大结果数",
+            "default": 10
+          }
+        },
+        "outputs": {
+          "results": {
+            "type": "array",
+            "items": {
+              "title": "string",
+              "url": "string",
+              "snippet": "string"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "timestamp": 17061234567890
+}
+```
+
+### GET /api/v1/health
+
+系统健康检查。
+
+**响应**：
+
+```typescript
+interface HealthResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  version: string;
+  uptime: number;
+  checks: {
+    database: 'healthy' | 'unhealthy';
+    redis?: 'healthy' | 'unhealthy';
+    llm?: 'healthy' | 'unhealthy';
+  };
+  stats?: {
+    activeSessions: number;
+    activeTasks: number;
+  };
+}
+```
+
+**示例**：
+
+```bash
+curl http://localhost:3000/api/v1/health
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "version": "1.0.0",
+    "uptime": 123456,
+    "checks": {
+      "database": "healthy",
+      "redis": "healthy",
+      "llm": "healthy"
+    },
+    "stats": {
+      "activeSessions": 5,
+      "activeTasks": 3
+    }
+  },
+  "timestamp": 17061234567890
+}
+```
+
+## Zod 验证 Schema
+
+### 执行请求验证
+
+```typescript
+import { z } from 'zod';
+
+export const executeRequestSchema = z.object({
+  task: z.string().min(1).max(10000),
+  sessionId: z.string().uuid().optional(),
+  systemPrompt: z.string().min(1).max(5000).optional(),
+  useDelegation: z.boolean().optional().default(false),
+  availableSkills: z.array(z.string()).optional(),
+  subagents: z.array(z.string()).optional(),
+  options: z.object({
+    timeout: z.number().min(1000).max(600000).optional(),
+    maxIterations: z.number().min(1).max(50).optional(),
+  }).optional(),
+});
+
+export type ExecuteRequest = z.infer<typeof executeRequestSchema>;
+```
+
+### 任务查询验证
+
+```typescript
+export const taskQuerySchema = z.object({
+  sessionId: z.string().uuid().optional(),
+  status: z.enum(['pending', 'running', 'completed', 'failed']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  sortBy: z.enum(['createdAt', 'updatedAt']).optional().default('createdAt'),
+  order: z.enum(['asc', 'desc']).optional().default('desc'),
+});
+
+export type TaskQuery = z.infer<typeof taskQuerySchema>;
+```
+
+## 中间件
+
+### 验证中间件
+
+```typescript
+import { z } from 'zod';
+import { NextFunction } from 'express';
+
+export function validateRequest<T>(
+  schema: z.ZodSchema<T>
+) {
+  return async (req: any, res: any, next: NextFunction) => {
+    try {
+      const validated = schema.parse(req.body);
+      req.validatedBody = validated;
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid request body',
+            details: error.errors,
+          },
+        });
+      } else {
+        next(error);
+      }
+    }
+  };
+}
+
+// 使用
+app.post('/agent/execute',
+  validateRequest(executeRequestSchema),
+  (req, res) => {
+    const validatedBody: ExecuteRequest = req.validatedBody;
+    // 处理请求
+  }
+);
+```
+
+### 错误处理中间件
+
+```typescript
+export enum ErrorType {
+  VALIDATION = 'validation_error',
+  PERMISSION = 'permission_error',
+  NOT_FOUND = 'not_found',
+  TIMEOUT = 'timeout_error',
+  RATE_LIMIT = 'rate_limit_error',
+  INTERNAL = 'internal_error',
+  EXTERNAL = 'external_error',
+}
+
+export class ApplicationError extends Error {
+  constructor(
+    public type: ErrorType,
+    message: string,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'ApplicationError';
+  }
+}
+
+export function errorHandler(
+  error: Error,
+  req: any,
+  res: any,
+  next: NextFunction
+) {
+  if (error instanceof ApplicationError) {
+    const statusCode = getStatusCode(error.type);
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: error.code || error.type,
+        message: error.message,
+        details: error.details,
+      },
+      timestamp: Date.now(),
+    });
+  } else {
+    // 未知错误
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'An unexpected error occurred',
+      },
+      timestamp: Date.now(),
+    });
+  }
+}
+
+function getStatusCode(errorType: ErrorType): number {
+  switch (errorType) {
+    case ErrorType.VALIDATION:
+      return 400;
+    case ErrorType.PERMISSION:
+      return 403;
+    case ErrorType.NOT_FOUND:
+      return 404;
+    case ErrorType.TIMEOUT:
+      return 408;
+    case ErrorType.RATE_LIMIT:
+      return 429;
+    default:
+      return 500;
+  }
+}
+```
+
+### 认证中间件
+
+```typescript
+export function authenticate(req: any, res: any, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    throw new ApplicationError(
+      ErrorType.PERMISSION,
+      'Authorization header required',
+      'AUTH_REQUIRED'
+    );
+  }
+
+  const [type, credentials] = authHeader.split(' ');
+
+  if (type !== 'Bearer') {
+    throw new ApplicationError(
+      ErrorType.PERMISSION,
+      'Unsupported authentication type',
+      'UNSUPPORTED_AUTH_TYPE'
+    );
+  }
+
+  // 验证 token
+  try {
+    const user = verifyToken(credentials);
+    req.user = user;
+    next();
+  } catch (error) {
+    throw new ApplicationError(
+      ErrorType.PERMISSION,
+      'Invalid or expired token',
+      'INVALID_TOKEN'
+    );
+  }
+}
+```
+
+## 实时流 API
+
+### WebSocket 连接
+
+```typescript
+import { WebSocket } from 'ws';
+
+export class TaskStream {
+  private connections = new Map<string, WebSocket[]>();
+
+  /**
+   * 订阅任务更新
+   */
+  subscribe(taskId: string, ws: WebSocket): void {
+    if (!this.connections.has(taskId)) {
+      this.connections.set(taskId, []);
+    }
+    this.connections.get(taskId)!.push(ws);
+
+    ws.on('close', () => {
+      this.unsubscribe(taskId, ws);
+    });
+  }
+
+  /**
+   * 取消订阅
+   */
+  unsubscribe(taskId: string, ws: WebSocket): void {
+    const connections = this.connections.get(taskId);
+    if (connections) {
+      const index = connections.indexOf(ws);
+      if (index !== -1) {
+        connections.splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * 广播任务更新
+   */
+  broadcast(taskId: string, update: any): void {
+    const connections = this.connections.get(taskId);
+    if (connections) {
+      const message = JSON.stringify({
+        type: 'task-update',
+        taskId,
+        data: update,
+      });
+
+      for (const ws of connections) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+        }
+      }
+    }
+  }
+}
+```
+
+### 客户端示例
+
+```javascript
+// WebSocket 连接
+const ws = new WebSocket('ws://localhost:3000/stream/tasks/task-456');
+
+ws.onopen = () => {
+  // 订阅任务更新
+  ws.send(JSON.stringify({
+    action: 'subscribe',
+    taskId: 'task-456',
+  }));
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+
+  if (message.type === 'task-update') {
+    console.log('任务更新:', message.data);
+    // 更新 UI
+  }
+};
+
+ws.onclose = () => {
+  console.log('连接关闭');
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket 错误:', error);
+};
+```
+
+## API 版本控制
+
+### 版本策略
+
+| 策略 | 说明 |
+|------|------|
+| **URL 路径** | `/api/v1/`, `/api/v2/` |
+| **语义化版本** | 遵循语义化版本规范 |
+| **向后兼容** | 新版本保持向后兼容 |
+| **废弃通知** | 废弃端点返回警告 |
+
+### 废弃通知
+
+```typescript
+export function deprecationWarning(message: string) {
+  return async (req: any, res: any, next: NextFunction) => {
+    res.setHeader('X-API-Deprecation', message);
+    console.warn(`[DEPRECATED] ${message} - ${req.method} ${req.url}`);
+    next();
+  };
+}
+
+// 使用
+app.get('/api/v1/old-endpoint',
+  deprecationWarning('Use /api/v2/new-endpoint instead'),
+  handler
+);
+```
+
+## 最佳实践
+
+### 1. 始终验证输入
+
+```typescript
+// ✅ 好：验证所有输入
+app.post('/agent/execute',
+  validateRequest(executeRequestSchema),
+  handler
+);
+
+// ❌ 不好：跳过验证
+app.post('/agent/execute', handler);
+```
+
+### 2. 使用语义化 HTTP 状态码
+
+```typescript
+// ✅ 好：正确的状态码
+if (!task) {
+  return res.status(404).json({ error: 'Task not found' });
+}
+
+// ❌ 不好：总是返回 200
+return res.status(200).json({
+  success: false,
+  error: 'Task not found',
+});
+```
+
+### 3. 提供有用的错误消息
+
+```typescript
+// ✅ 好：清晰的错误消息
+throw new ApplicationError(
+  ErrorType.VALIDATION,
+  'Task must be between 1 and 10000 characters',
+  'TASK_LENGTH_INVALID',
+  { providedLength: task.length }
+);
+
+// ❌ 不好：模糊的错误消息
+throw new Error('Invalid input');
+```
+
+### 4. 支持分页和过滤
+
+```typescript
+// ✅ 好：支持分页
+app.get('/agent/tasks',
+  validateRequest(taskQuerySchema),
+  async (req, res) => {
+    const { page, pageSize, status } = req.validatedQuery;
+    const tasks = await taskStore.list({
+      status,
+      page,
+      pageSize,
+    });
+    res.json(paginateResponse(tasks, page, pageSize));
+  }
+);
+```
+
+### 5. 记录 API 调用
+
+```typescript
+// ✅ 好：记录请求
+app.use((req, res, next) => {
+  const startTime = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    logger.info('API request', {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration,
+    });
+  });
+
+  next();
+});
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `agent-system.mdc` - Agent 系统

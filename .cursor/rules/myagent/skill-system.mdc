@@ -1,0 +1,874 @@
+---
+description: MyAgent 技能系统 - 技能发现机制、技能注册表、Python 技能实现、内置技能列表
+---
+
+# MyAgent 技能系统
+
+## 概述
+
+技能系统提供可复用的功能单元，由 Python 实现，可在 Agent 执行中动态调用。
+
+### 核心组件
+
+| 组件 | 职责 |
+|------|------|
+| **技能发现** | 自动扫描并加载技能 |
+| **技能注册表** | 技能元数据管理 |
+| **技能执行器** | Python 代码执行 |
+| **技能配置** | skill.yaml 定义 |
+
+## 技能目录结构
+
+```
+skills/
+├── web-search/              # 网页搜索技能
+│   ├── skill.yaml           # 技能配置
+│   ├── handler.py           # 技能实现
+│   └── requirements.txt     # Python 依赖
+│
+├── code-analysis/           # 代码分析技能
+│   ├── skill.yaml
+│   ├── handler.py
+│   └── requirements.txt
+│
+├── read-file/               # 文件读取技能
+│   ├── skill.yaml
+│   ├── handler.py
+│   └── requirements.txt
+│
+├── summarize/               # 摘要技能
+│   ├── skill.yaml
+│   ├── handler.py
+│   └── requirements.txt
+│
+└── remotion-generator/      # 视频生成技能
+    ├── skill.yaml
+    ├── handler.py
+    └── requirements.txt
+```
+
+## 技能配置 (skill.yaml)
+
+### 完整示例
+
+```yaml
+# skills/web-search/skill.yaml
+
+id: web-search
+name: Web Search
+version: 1.0.0
+description: 执行网页搜索并返回结果
+
+author: MyAgent Team
+license: MIT
+
+# 输入参数定义
+inputs:
+  query:
+    type: string
+    description: 搜索查询词
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 1000
+
+  maxResults:
+    type: integer
+    description: 最大返回结果数
+    required: false
+    default: 10
+    validation:
+      min: 1
+      max: 100
+
+  language:
+    type: string
+    description: 搜索语言（如 'zh-CN', 'en-US'）
+    required:ser false
+    default: zh-CN
+
+# 输出定义
+outputs:
+  results:
+    type: array
+    description: 搜索结果列表
+    items:
+      title:
+        type: string
+        description: 结果标题
+      url:
+        type: string
+        description: 结果 URL
+      snippet:
+        type: string
+        description: 结果摘要
+
+# 标签（用于技能匹配）
+tags:
+  - search
+  - web
+  - information-retrieval
+
+# 依赖的技能（技能链）
+dependencies: []
+
+# 配置选项
+config:
+  timeout: 30000
+  retryOnFailure: true
+  maxRetries: 3
+```
+
+### 配置字段说明
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | string | 技能唯一标识符 |
+| `name` | string | 技能显示名称 |
+| `version` | string | 语义化版本 |
+| `description` | string | 技能描述 |
+| `author` | string | 作者 |
+| `license` | string | 许可证 |
+| `inputs` | object | 输入参数定义 |
+| `outputs` | object | 输出定义 |
+| `tags` | array | 技能标签 |
+| `dependencies` | array | 依赖的其他技能 |
+| `config` | object | 技能配置选项 |
+
+## 技能实现 (handler.py)
+
+### 基础结构
+
+```python
+import json
+from typing import Dict, Any
+
+def execute(context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    技能执行函数
+
+    Args:
+        context: 包含以下键的字典：
+            - 'inputs': 用户提供的输入参数
+            - 'config': 技能配置
+            - 'metadata': 执行元数据
+
+    Returns:
+        包含以下键的字典：
+            - 'success': 是否成功
+            - 'output': 执行结果（成功时）
+            - 'error': 错误信息（失败时）
+    """
+    inputs = context.get('inputs', {})
+    config = context.get('config', {})
+    metadata = context.get('metadata', {})
+
+    try:
+        # 执行技能逻辑
+        result = perform_search(
+            query=inputs['query'],
+            max_results=inputs.get('maxResults', 10)
+        )
+
+        return {
+            'success': True,
+            'output': result
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+def perform_search(query: str, max_results: int) -> Dict[str, Any]:
+    """实际的搜索逻辑"""
+    # 实现搜索功能
+    return {
+        'results': [
+            {
+                'title': '示例结果',
+                'url': 'https://example.com',
+                'snippet': '这是一个示例结果'
+            }
+        ]
+    }
+```
+
+### 完整示例：网页搜索
+
+```python
+import json
+import httpx
+from typing import Dict, Any
+
+def execute(context: Dict[str, Any]) -> Dict[str, Any]:
+    """执行网页搜索"""
+    inputs = context.get('inputs', {})
+    config = context.get('config', {})
+
+    query = inputs.get('query')
+    max_results = inputs.get('maxResults', 10)
+    language = inputs.get('language', 'zh-CN')
+
+    try:
+        # 使用搜索 API
+        client = httpx.Client(timeout=config.get('timeout', 30.0))
+        results = []
+
+        # 模拟搜索（实际应调用真实 API）
+        # 这里只是示例
+        for i in range(max_results):
+            results.append({
+                'title': f'{query} - 结果 {i+1}',
+                'url': f'https://example.com/{i}',
+                'snippet': f'关于 {query} 的搜索结果 {i+1}'
+            })
+
+        return {
+            'success': True,
+            'output': {
+                'results': results,
+                'query': query,
+                'total': len(results)
+            }
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Search failed: {str(e)}'
+        }
+    finally:
+        client.close()
+```
+
+## 技能发现机制
+
+### 技能扫描
+
+```typescript
+import { readdir, readFile } from 'fs/promises';
+import { join } from 'path';
+import { load } from 'js-yaml';
+
+export class SkillDiscovery {
+  private skillsDir: string;
+
+  constructor(skillsDir: string = './skills') {
+    this.skillsDir = skillsDir;
+  }
+
+  /**
+   * 扫描所有技能
+   */
+  async discoverSkills(): Promise<SkillInfo[]> {
+    const skillDirs = await this.scanSkillDirectories();
+    const skills: SkillInfo[] = [];
+
+    for (const skillDir of skillDirs) {
+      try {
+        const skillInfo = await this.loadSkillInfo(skillDir);
+        skills.push(skillInfo);
+      } catch (error) {
+        console.warn(`Failed to load skill ${skillDir}:`, error);
+      }
+    }
+
+    return skills;
+  }
+
+  /**
+   * 扫描技能目录
+   */
+  private async scanSkillDirectories(): Promise<string[]> {
+    const entries = await readdir(this.skillsDir, {
+      withFileTypes: true,
+    });
+
+    return entries
+      .filter(entry => entry.isDirectory)
+      .map(entry => entry.name);
+  }
+
+  /**
+   * 加载技能信息
+   */
+  private async loadSkillInfo(skillDir: string): Promise<SkillInfo> {
+    const configPath = join(this.skillsDir, skillDir, 'skill.yaml');
+    const configContent = await readFile(configPath, 'utf-8');
+    const config = load(configContent) as SkillConfig;
+
+    return {
+      id: config.id,
+      name: config.name,
+      version: config.version,
+      description: config.description,
+      inputs: config.inputs,
+      outputs: config.outputs,
+      tags: config.tags,
+      dependencies: config.dependencies,
+      config: config.config,
+      path: join(this.skillsDir, skillDir),
+    };
+  }
+}
+```
+
+## 技能注册表
+
+### 注册表实现
+
+```typescript
+export class SkillRegistry {
+  private static instance: SkillRegistry;
+  private skills = new Map<string, SkillInfo>();
+  private skillsByTag = new Map<string, Set<string>>();
+
+  private constructor() {}
+
+  static getInstance(): SkillRegistry {
+    if (!SkillRegistry.instance) {
+      SkillRegistry.instance = new SkillRegistry();
+    }
+    return SkillRegistry.instance;
+  }
+
+  /**
+   * 注册技能
+   */
+  register(skill: SkillInfo): void {
+    this.skills.set(skill.id, skill);
+
+    // 按标签索引
+    for (const tag of skill.tags || []) {
+      if (!this.skillsByTag.has(tag)) {
+        this.skillsByTag.set(tag, new Set());
+      }
+      this.skillsByTag.get(tag)!.add(skill.id);
+    }
+  }
+
+  /**
+   * 获取技能
+   */
+  get(skillId: string): SkillInfo | undefined {
+    return this.skills.get(skillId);
+  }
+
+  /**
+   * 获取所有技能
+   */
+  getAll(): SkillInfo[] {
+    return Array.from(this.skills.values());
+  }
+
+  /**
+   * 按标签查询技能
+   */
+  findByTag(tag: string): SkillInfo[] {
+    const skillIds = this.skillsByTag.get(tag);
+    if (!skillIds) return [];
+
+    return Array.from(skillIds)
+      .map(id => this.skills.get(id))
+      .filter((skill): skill is SkillInfo => skill !== undefined);
+  }
+
+  /**
+   * 搜索技能
+   */
+  search(query: string): SkillInfo[] {
+    const lowerQuery = query.toLowerCase();
+
+    return Array.from(this.skills.values()).filter(skill =>
+      skill.name.toLowerCase().includes(lowerQuery) ||
+      skill.description.toLowerCase().includes(lowerQuery) ||
+      skill.id.toLowerCase().includes(lower) ||
+      skill.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+    );
+  }
+
+  /**
+   * 验证输入
+   */
+  validateInputs(skillId: string, inputs: Record<string, any>): ValidationResult {
+    const skill = this.skills.get(skillId);
+    if (!skill) {
+      return { valid: false, errors: ['Skill not found'] };
+    }
+
+    const errors: string[] = [];
+
+    for (const [key, inputDef] of Object.entries(skill.inputs || {})) {
+      // 检查必需参数
+      if (inputDef.required && !inputs[key]) {
+        errors.push(`Missing required input: ${key}`);
+        continue;
+      }
+
+      // 应用验证规则
+      if (inputs[key] !== undefined && inputDef.validation) {
+        const value = inputs[key];
+        const { validation } = inputDef;
+
+        if (validation.minLength && typeof value === 'string' && value.length < validation.minLength) {
+          errors.push(`${key} must be at least ${validation.minLength} characters`);
+        }
+
+        if (validation.maxLength && typeof value === 'string' && value.length > validation.maxLength) {
+          errors.push(`${key} must be at most ${validation.maxLength} characters`);
+        }
+
+        if (validation.min !== undefined && typeof value === 'number' && value < validation.min) {
+          errors.push(`${key} must be at least ${validation.min}`);
+        }
+
+        if (validation.max !== undefined && typeof value === 'number' && value > validation.max) {
+          errors.push(`${key} must be at most ${validation.max}`);
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+}
+```
+
+## 技能执行器
+
+### 执行器实现
+
+```typescript
+import { spawn } from 'child_process';
+
+export class SkillExecutor {
+  constructor(
+    private sandbox: SandboxAdapter,
+    private registry: SkillRegistry = SkillRegistry.getInstance()
+  ) {}
+
+  /**
+   * 执行技能
+   */
+  async execute(
+    skillId: string,
+    inputs: Record<string, any>,
+    options?: SkillExecutionOptions
+  ): Promise<SkillExecutionResult> {
+    const skill = this.registry.get(skillId);
+
+    if (!skill) {
+      return {
+        success: false,
+        error: `Skill not found: ${skillId}`,
+      };
+    }
+
+    // 验证输入
+    const validation = this.registry.validateInputs(skillId, inputs);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: `Validation failed: ${validation.errors.join(', ')}`,
+        validationErrors: validation.errors,
+      };
+    }
+
+    const context = {
+      inputs,
+      config: skill.config,
+      metadata: {
+        skillId,
+        version: skill.version,
+        executedAt: new Date().toISOString(),
+      },
+    };
+
+    // 准备执行代码
+    const code = await this.prepareExecutionCode(skill.path);
+
+    // 在沙箱中执行
+    const timeout = options?.timeout || skill.config?.timeout || 30000;
+    const sandboxResult = await this.sandbox.execute(code, timeout, { context });
+
+    // 处理结果
+    return this.processSandboxResult(sandboxResult);
+  }
+
+  /**
+   * 准备执行代码
+   */
+  private async prepareExecutionCode(skillPath: string): Promise<string> {
+    const handlerPath = join(skillPath, 'handler.py');
+    const handlerCode = await readFile(handlerPath, 'utf-8');
+
+    // 包装代码以注入上下文
+    return `
+import json
+from typing import Dict, Any
+
+# 注入 handler 代码
+${handlerCode}
+
+# 主执行入口
+if __name__ == '__main__':
+    import sys
+    context_str = sys.stdin.read()
+    context = json.loads(context_str)
+    result = execute(context)
+    print(json.dumps(result))
+    `;
+  }
+
+  /**
+   * 处理沙箱结果
+   */
+  private processSandboxResult(result: SandboxResult): SkillExecutionResult {
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Execution failed',
+        stdout: result.stdout,
+        stderr: result.stderr,
+        executionTime: result.executionTime,
+      };
+    }
+
+    try {
+      const output = JSON.parse(result.output || '{}');
+
+      return {
+        success: output.success || false,
+        output: output.output,
+        error: output.error,
+        executionTime: result.executionTime,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to parse output: ${error}`,
+        rawOutput: result.output,
+        executionTime: result.executionTime,
+      };
+    }
+  }
+}
+```
+
+## 内置技能
+
+### 1. Web Search
+
+**ID**: `web-search`
+
+**描述**: 执行网页搜索并返回结果
+
+**输入**:
+- `query` (string, required): 搜索查询词
+- `maxResults` (integer, optional): 最大返回结果数（默认 10）
+- `language` (string, optional): 搜索语言（默认 'zh-CN'）
+
+**输出**:
+```typescript
+{
+  results: Array<{
+    title: string;
+    url: string;
+    snippet: string;
+  }>;
+  query: string;
+  total: number;
+}
+```
+
+### 2. Code Analysis
+
+**ID**: `code-analysis`
+
+**描述**: 分析代码质量和复杂度
+
+**输入**:
+- `code` (string, required): 要分析的代码
+- `language` (string, optional): 编程语言
+- `checks` (array, optional): 要执行的检查列表
+
+**输出**:
+```typescript
+{
+  quality: 'excellent' | 'good' | 'fair' | 'poor';
+  complexity: number;
+  issues: Array<{
+    type: string;
+    severity: 'error' | 'warning' | 'info';
+    message: string;
+    line?: number;
+  }>;
+  metrics: {
+    linesOfCode: number;
+    cyclomaticComplexity: number;
+    maintainabilityIndex: number;
+  };
+}
+```
+
+### 3. Read File
+
+**ID**: `read-file`
+
+**描述**: 读取文件内容
+
+**输入**:
+- `filePath` (string, required): 文件路径
+- `encoding` (string, optional): 文件编码（默认 'utf-8'）
+
+**输出**:
+```typescript
+{
+  content: string;
+  size: number;
+  encoding: string;
+  lastModified: string;
+}
+```
+
+### 4. Summarize
+
+**ID**: `summarize`
+
+**描述**: 生成文本摘要
+
+**输入**:
+- `text` (string, required): 要摘要的文本
+- `maxLength` (integer, optional): 最大摘要长度（默认 200）
+- `style` (string, optional): 摘要风格（'brief', 'detailed'）
+
+**输出**:
+```typescript
+{
+  summary: string;
+  originalLength: number;
+  summaryLength: number;
+  compressionRatio: number;
+}
+```
+
+### 5. Remotion Generator
+
+**ID**: `remotion-generator`
+
+**描述**: 生成 Remotion 视频
+
+**输入**:
+- `script` (string, required): 视频脚本
+- `duration` (integer, optional): 视频时长（秒）
+- `resolution` (string, optional): 分辨率（'720p', '1080p'）
+
+**输出**:
+```typescript
+{
+  videoPath: string;
+  duration: number;
+  resolution: string;
+  frameCount: number;
+}
+```
+
+## 技能链
+
+### 依赖执行
+
+```typescript
+export class SkillChain {
+  constructor(
+    private executor: SkillExecutor,
+    private registry: SkillRegistry
+  ) {}
+
+  /**
+   * 执行技能链
+   */
+  async executeChain(
+    startSkill: string,
+    initialInputs: Record<string, any>
+  ): Promise<SkillChainResult> {
+    const executedSkills: SkillExecutionResult[] = [];
+    const skillOutputs = new Map<string, any>();
+
+    let currentSkill = startSkill;
+    let currentInputs = initialInputs;
+
+    while (currentSkill) {
+      const skillInfo = this.registry.get(currentSkill);
+
+      if (!skillInfo) {
+        throw new Error(`Skill not found: ${currentSkill}`);
+      }
+
+      // 执行技能
+      const result = await this.executor.execute(currentSkill, currentInputs);
+      executedSkills.push(result);
+
+      if (!result.success) {
+        return {
+          success: false,
+          executedSkills,
+          error: result.error,
+        };
+      }
+
+      // 保存输出
+      skillOutputs.set(currentSkill, result.output);
+
+      // 检查依赖
+      const dependencies = skillInfo.dependencies || [];
+      if (dependencies.length > 0) {
+        // 选择下一个技能
+        currentSkill = await this.selectNextSkill(skillOutputs, dependencies);
+        currentInputs = this.prepareInputs(skillOutputs);
+      } else {
+        break;
+      }
+    }
+
+    return {
+      success: true,
+      executedSkills,
+      outputs: Object.fromEntries(skillOutputs),
+    };
+  }
+
+  private async selectNextSkill(
+    skillOutputs: Map<string, any>,
+    dependencies: string[]
+  ): Promise<string | null> {
+    // 实现技能选择逻辑
+    return dependencies[0] || null;
+  }
+
+  private prepareInputs(skillOutputs: Map<string, any>): Record<string, any> {
+    // 准备下一个技能的输入
+    return {};
+  }
+}
+```
+
+## 技能最佳实践
+
+### 1. 技能应该是幂等的
+
+```python
+# ✅ 好：幂等执行
+def execute(context):
+    inputs = context['inputs']
+    existing_file = inputs.get('filePath')
+
+    # 使用 upsert 而不是 create
+    result = upsert_file(existing_file, content)
+
+    return {'success': True, 'output': result}
+
+# ❌ 不好：非幂等（重复执行会出错）
+def execute(context):
+    inputs = context['inputs']
+    create_file(inputs['filePath'])  # 第二次执行会失败
+
+    return {'success': True}
+```
+
+### 2. 技能应该有清晰的错误处理
+
+```python
+# ✅ 好：清晰的错误信息
+def execute(context):
+    try:
+        result = perform_operation()
+        return {'success': True, 'output': result}
+    except ValueError as e:
+        return {'success': False, 'error': f'Invalid input: {str(e)}'}
+    except IOError as e:
+        return {'success': False, 'error': f'File error: {str(e)}'}
+    except Exception as e:
+        return {'success': False, 'error': f'Unexpected error: {str(e)}'}
+
+# ❌ 不好：模糊的错误信息
+def execute(context):
+    try:
+        result = perform_operation()
+        return {'success': True, 'output': result}
+    except:
+        return {'success': False, 'error': 'Failed'}
+```
+
+### 3. 技能应该验证输入
+
+```python
+# ✅ 好：验证输入
+def execute(context):
+    inputs = context['inputs']
+
+    if 'query' not in inputs:
+        return {'success': False, 'error': 'Missing required input: query'}
+
+    query = inputs['query']
+    if len(query) > 1000:
+        return {'success': False, 'error': 'Query too long (max 1000 characters)'}
+
+    # 执行逻辑...
+    return {'success': True, 'output': result}
+
+# ❌ 不好：不验证输入
+def execute(context):
+    query = context['inputs']['query']  # 可能 KeyError
+    # 执行逻辑...
+    return {'success': True, 'output': result}
+```
+
+### 4. 技能应该有超时控制
+
+```yaml
+# ✅ 好：配置超时
+config:
+  timeout: 30000
+  retryOnFailure: true
+  maxRetries: 3
+
+# ❌ 不好：没有超时
+config: {}
+```
+
+### 5. 技能应该文档完整
+
+```yaml
+# ✅ 好：完整的文档
+id: web-search
+name: Web Search
+version: 1.0.0
+description: 执行网页搜索并返回结果
+
+inputs:
+  query:
+    type: string
+    description: 搜索查询词
+    required: true
+
+outputs:
+  results:
+    type: array
+    description: 搜索结果列表
+
+# ❌ 不好：缺少文档
+id: ws
+name: WS
+
+inputs:
+  q:
+    type: string
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `sandbox-system.mdc` - 沙箱执行环境

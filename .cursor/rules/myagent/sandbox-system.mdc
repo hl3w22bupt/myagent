@@ -1,0 +1,683 @@
+---
+description: MyAgent 沙箱执行环境 - 沙箱适配器设计、Local/Daytona/E2B/Modal 支持、Python 代码执行
+---
+
+# MyAgent 沙箱执行环境
+
+## 概述
+
+沙箱执行环境（Sandbox）为 Python 代码（PTC）提供隔离的执行环境，确保系统安全。
+
+### 支持的适配器
+
+| 适配器 | 用途 | 隔离级别 |
+|--------|------|----------|
+| **Local** | 本地 Python 执行（开发/测试） | 低 |
+| **Daytona** | 云开发环境 | 中 |
+| **E2B** | 安全云沙箱 | 高 |
+| **Modal** | 无服务器函数 | 高 |
+
+## 核心接口
+
+```typescript
+/**
+ * 沙箱配置
+ */
+export interface SandboxConfig {
+  type: 'local' | 'daytona' | 'e2b' | 'modal';
+  local?: {
+    pythonPath: string;  // Python 解释器路径
+  };
+  daytona?: {
+    projectId: string;   // Daytona 项目 ID
+  };
+  e2b?: {
+    apiKey: string;       // E2B API 密钥
+  };
+  modal?: {
+    functionName: string; // Modal 函数名
+  };
+}
+
+/**
+ * 沙箱执行结果
+ */
+export interface SandboxResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  executionTime: number;
+}
+
+/**
+ * 沙箱适配器接口
+ */
+export interface SandboxAdapter {
+  /**
+   * 执行 Python 代码
+   */
+  execute(
+    code: string,
+    timeout: number,
+    context?: Record<string, any
+  ): Promise<SandboxResult>;
+
+  /**
+   * 清理资源
+   */
+  cleanup?(): Promise<void>;
+}
+```
+
+## Local 适配器
+
+### 概述
+
+Local 适配器在本地执行 Python 代码，适合开发和测试环境。
+
+### 配置
+
+```typescript
+const config: SandboxConfig = {
+  type: 'local',
+  local: {
+    pythonPath: './python_modules/bin/python3',
+  },
+};
+```
+
+### 实现要点
+
+```typescript
+import { spawn } from 'child_process';
+
+export class LocalSandboxAdapter implements SandboxAdapter {
+  constructor(private config: SandboxConfig['local']) {}
+
+  async execute(
+    code: string,
+    timeout: number,
+    context?: Record<string, any>
+  ): Promise<SandboxResult> {
+    const startTime = Date.now();
+
+    // 准备执行上下文
+    const contextStr = JSON.stringify(context || {});
+    const wrappedCode = `
+import json
+
+context_str = ${JSON.stringify(contextStr)}
+context = json.loads(context_str)
+
+${code}
+    `;
+
+    return new Promise((resolve) => {
+      const process = spawn(this.config.pythonPath, ['-c', wrappedCode]);
+
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+
+      // 设置超时
+      const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        process.kill('SIGKILL');
+      }, timeout);
+
+      process.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      process.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      process.on('close', (code) => {
+        clearTimeout(timeoutHandle);
+
+        const executionTime = Date.now() - startTime;
+
+        if (timedOut) {
+          resolve({
+            success: false,
+            error: `Execution timeout after ${timeout}ms`,
+            stdout,
+            stderr,
+            executionTime,
+          });
+        } else if (code === 0) {
+          resolve({
+            success: true,
+            output: stdout.trim(),
+            stdout,
+            stderr,
+            executionTime,
+          });
+        } else {
+          resolve({
+            success: false,
+            error: `Process exited with code ${code}`,
+            stdout,
+            stderr,
+            executionTime,
+          });
+        }
+      });
+    });
+  }
+}
+```
+
+### 使用示例
+
+```typescript
+import { LocalSandboxAdapter } from '@/core/sandbox/local-adapter';
+
+const sandbox = new LocalSandboxAdapter({
+  pythonPath: './python_modules/bin/python3',
+});
+
+const result = await sandbox.execute(`
+import json
+
+def execute_task(context):
+    return {
+        'success': True,
+        'output': 'Hello from Python!',
+        'data': context
+    }
+
+result = execute_task(context)
+print(json.dumps(result))
+`, 30000);
+
+console.log('结果:', result);
+```
+
+## Daytona 适配器
+
+### 概述
+
+Daytona 适配器在云开发环境中执行代码，提供中等程度的隔离。
+
+### 配置
+
+```typescript
+const config: SandboxConfig = {
+  type: 'daytona',
+  daytona: {
+    projectId: 'prj_xxx',
+  },
+};
+```
+
+### 实现要点
+
+```typescript
+import daytona from 'daytona';
+
+export class DaytonaSandboxAdapter implements SandboxAdapter {
+  private client?: any;
+
+  constructor(private config: SandboxConfig['daytona']) {}
+
+  async initialize(): Promise<void> {
+    // 初始化 Daytona 客户端
+    this.client = await daytona.createClient();
+  }
+
+  async execute(
+    code: string,
+    timeout: number,
+    context?: Record<string, any>
+  ): Promise<SandboxResult> {
+    if (!this.client) {
+      await this.initialize();
+    }
+
+    const startTime = Date.now();
+
+    // 获取或创建工作区
+    const workspace = await this.client.getWorkspace(
+      this.config.projectId
+    );
+
+    // 写入代码文件
+    await workspace.writeFile('task.py', code);
+
+    // 执行代码
+    const execResult = await workspace.execute(
+      ['python', 'task.py'],
+      { timeout }
+    );
+
+    const executionTime = Date.now() - startTime;
+
+    return {
+      success: execResult.exitCode === 0,
+      output: execResult.stdout,
+      error: execResult.exitCode !== 0 ? execResult.stderr : undefined,
+      stdout: execResult.stdout,
+      stderr: execResult.stderr,
+      executionTime,
+    };
+  }
+
+  async cleanup(): Promise<void> {
+    await this.client?.cleanup();
+  }
+}
+```
+
+## E2B 适配器
+
+### 概述
+
+E2B（Environment to Build）适配器提供高安全性的云沙箱环境。
+
+### 配置
+
+```typescript
+const config: SandboxConfig = {
+  type: 'e2b',
+  e2b: {
+    apiKey: process.env.E2B_API_KEY,
+  },
+};
+```
+
+### 实现要点
+
+```typescript
+import { Sandbox } from 'e2b';
+
+export class E2BSandboxAdapter implements SandboxAdapter {
+  private sandbox?: Sandbox;
+
+  constructor(private config: SandboxConfig['e2b']) {}
+
+  async initialize(): Promise<void> {
+    // 创建沙箱实例
+    this.sandbox = await Sandbox.create({
+      apiKey: this.config.apiKey,
+      template: 'python3.11',  // 使用 Python 3.11 模板
+    });
+  }
+
+  async execute(
+    code: string,
+    timeout: number,
+    context?: Record<string, any>
+  ): Promise<SandboxResult> {
+    if (!this.sandbox) {
+      await this.initialize();
+    }
+
+    const startTime = Date.now();
+
+    // 写入代码文件
+    await this.sandbox.writeFile('task.py', code);
+
+    // 执行代码
+    const execResult = await this.sandbox.runCommand(
+      ['python', 'task.py'],
+      { timeout: timeout / 1000,  // E2B 使用秒为单位
+      background: false,
+    }
+    );
+
+    const executionTime = Date.now() - startTime;
+
+    return {
+      success: execResult.exitCode === 0,
+      output: execResult.stdout,
+      error: execResult.exitCode !== 0 ? execResult.stderr : undefined,
+      stdout: execResult.stdout,
+      stderr: execResult.stderr,
+      executionTime,
+    };
+  }
+
+  async cleanup(): Promise<void> {
+    await this.sandbox?.kill();
+  }
+}
+```
+
+## Modal 适配器
+
+### 概述
+
+Modal 适配器将代码部署为无服务器函数，提供高可扩展性和隔离性。
+
+### 配置
+
+```typescript
+const config: SandboxConfig = {
+  type: 'modal',
+  modal: {
+    functionName: 'python-executor',
+  },
+};
+```
+
+### 实现要点
+
+```typescript
+import modal from 'modal';
+
+export class ModalSandboxAdapter implements SandboxAdapter {
+  private func?: any;
+
+  constructor(private config: SandboxConfig['modal']) {}
+
+  async initialize(): Promise<void> {
+    // 获取 Modal 函数
+    this.func = modal.lookup(this.config.functionName);
+  }
+
+  async execute(
+    code: string,
+    timeout: number,
+    context?: Record<string, any>
+  ): Promise<SandboxResult> {
+    if (!this.func) {
+      await this.initialize();
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // 调用 Modal 函数
+      const result = await this.app.call(code, {
+        timeout: timeout / 1000,
+        context,
+      });
+
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        output: result,
+        executionTime,
+      };
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: false,
+        error: error.message,
+        executionTime,
+      };
+    }
+  }
+}
+```
+
+## 沙箱工厂
+
+### 工厂类
+
+```typescript
+export class SandboxFactory {
+  static create(config: SandboxConfig): SandboxAdapter {
+    switch (config.type) {
+      case 'local':
+        return new LocalSandboxAdapter(config.local!);
+      case 'daytona':
+        return new DaytonaSandboxAdapter(config.daytona!);
+      case 'e2b':
+        return new E2BSandboxAdapter(config.e2b!);
+      case 'modal':
+        return new ModalSandboxAdapter(config.modal!);
+      default:
+        throw new Error(`Unknown sandbox type: ${config.type}`);
+    }
+  }
+}
+```
+
+### 使用示例
+
+```typescript
+import { SandboxFactory } from '@/core/sandbox';
+
+const config: SandboxConfig = {
+  type: process.env.DEFAULT_SANDBOX_ADAPTER as any || 'local',
+  local: {
+    pythonPath: process.env.PYTHON_PATH || 'python3',
+  },
+  // daytona: { ... },
+  // e2b: { ... },
+  // modal: { ... },
+};
+
+const sandbox = SandboxFactory.create(config);
+const result = await sandbox.execute('print("Hello!")', 5000);
+```
+
+## 超时控制
+
+### 超时策略
+
+```typescript
+interface TimeoutConfig {
+  default: number;      // 默认超时（毫秒）
+  max: number;          // 最大超时（毫秒）
+  perOperation?: {       // 每个操作的超时
+    llm?: number;
+    skill?: number;
+    ptc?: number;
+  };
+}
+
+export class TimeoutController {
+  constructor(private config: TimeoutConfig) {}
+
+  /**
+   * 获取操作超时
+   */
+  getTimeout(operation: 'llm' | 'skill' | 'ptc' | 'default'): number {
+    const opTimeout = this.config.perOperation?.[operation];
+    if (opTimeout) {
+      return Math.min(opTimeout, this.config.max);
+    }
+    return Math.min(this.config.default, this.config.max);
+  }
+
+  /**
+   * 带超时的执行器
+   */
+  async withTimeout<T>(
+    operation: string,
+    fn: () => Promise<T>,
+    timeout?: number
+  ): Promise<T> {
+    const actualTimeout = timeout || this.getDefaultTimeout(operation);
+
+    return Promise.race([
+      fn(),
+      new Promise<T>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Operation timeout: ${operation}`)),
+          actualTimeout
+        )
+      ),
+    ]);
+  }
+
+  private getDefaultTimeout(operation: string): number {
+    // 根据操作类型返回默认超时
+    switch (operation) {
+      case 'llm':
+        return this.config.perOperation?.llm || this.config.default;
+      case 'skill':
+        return this.config.perOperation?.skill || this.config.default;
+      case 'ptc':
+        return this.config.perOperation?.ptc || this.config.default;
+      default:
+        return this.config.default;
+    }
+  }
+}
+```
+
+## 资源限制
+
+### 内存限制
+
+```typescript
+export class ResourceLimiter {
+  /**
+   * 监控内存使用
+   */
+  static monitorMemory(threshold: number): void {
+    setInterval(() => {
+      const usedMemoryMB = process.memoryUsage().heapUsed / 1024 / 1024;
+
+      if (usedMemoryMB > threshold) {
+        console.warn(`Memory usage high: ${usedMemoryMB}MB`);
+        // 触发清理或告警
+      }
+    }, 5000);
+  }
+
+  /**
+   * 限制进程内存
+   */
+  static limitProcessMemory(maxMB: number): void {
+    const maxBytes = maxMB * 1024 * 1024;
+
+    // Node.js 20+
+    if (process.setResourceLimits) {
+      process.setResourceLimits({
+        maxOldGenerationSizeMb: maxMB,
+        maxYoungGenerationSizeMb: maxMB / 4,
+      });
+    }
+  }
+}
+```
+
+## 安全考虑
+
+### 1. 输入验证
+
+```typescript
+export class SandboxSecurity {
+  /**
+   * 验证 Python 代码
+   */
+  static validatePythonCode(code: string): void {
+    // 检查危险模式
+    const dangerousPatterns = [
+      /import\s+os\s*\.system/,     // os.system()
+      /import\s+subprocess/,         // subprocess
+      /__import__\(/,               // __import__
+      /eval\s*\(/,                  // eval()
+      /exec\s*\(/,                  // exec()
+      /open\s*\(/,                  // 文件操作
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(code)) {
+        throw new Error('Code contains potentially dangerous patterns');
+      }
+    }
+  }
+}
+```
+
+### 2. 环境隔离
+
+```typescript
+export class SandboxEnvironment {
+  /**
+   * 创建隔离的 Python环境
+   */
+  static async createIsolatedEnv(): Promise<string> {
+    const envId = `env-${Date.now()}`;
+    const envPath = `./python_modules/${envId}`;
+
+    // 使用 uv 或 venv 创建虚拟环境
+    // await exec(`uv venv ${envPath}`);
+
+    return envPath;
+  }
+
+  /**
+   * 清理隔离环境
+   */
+  static async cleanupIsolatedEnv(envPath: string): Promise<void> {
+    // await exec(`rm -rf ${envPath}`);
+  }
+}
+```
+
+## 使用最佳实践
+
+### 1. 总是设置超时
+
+```typescript
+// ✅ 好：设置超时
+const result = await sandbox.execute(code, 30000);
+
+// ❌ 不好：没有超时
+const result = await sandbox.execute(code);
+```
+
+### 2. 处理执行错误
+
+```typescript
+// ✅ 好：完整的错误处理
+try {
+  const result = await sandbox.execute(code, 30000);
+  if (!result.success) {
+    console.error('执行失败:', result.error);
+);
+  } else {
+    console.log('执行结果:', result.output);
+  }
+} catch (error) {
+  console.error('执行异常:', error);
+}
+```
+
+### 3. 清理资源
+
+```typescript
+// ✅ 好：清理资源
+try {
+  const result = await sandbox.execute(code, 30000);
+  return result;
+} finally {
+  await sandbox.cleanup?.();
+}
+```
+
+### 4. 使用适当的安全级别
+
+```typescript
+// 开发环境：使用 Local
+const devSandbox = SandboxFactory.create({
+  type: 'local',
+  local: { pythonPath: './python_modules/bin/python3' },
+});
+
+// 生产环境：使用 E2B 或 Modal
+const prodSandbox = SandboxFactory.create({
+  type: 'e2b',
+  e2b: { apiKey: process.env.E2B_API_KEY },
+});
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `agent-system.mdc` - Agent 系统
+- `state-management.mdc` - 状态管理
+- `concurrency-safety.mdc` - 并发安全

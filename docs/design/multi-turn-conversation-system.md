@@ -162,6 +162,8 @@ function MessageBubble({ message }) {
 **文件位置**：`steps/streams/notify-api.step.ts`
 
 ```typescript
+import { z } from 'zod';
+
 export const config = {
   type: 'api',
   name: 'notify-api',
@@ -170,20 +172,46 @@ export const config = {
   emits: [],
 };
 
+const notifySchema = z.object({
+  taskId: z.string(),
+  type: z.enum(['step', 'heartbeat', 'status', 'chat']),
+  timestamp: z.number(),
+  message: z.string().optional(),
+  skill: z.string().optional(),
+  data: z.any().optional(),
+});
+
 export const handler = async (request: any, { logger, streams }) => {
-  const body = await request.json();
-  const { taskId, type, message, skill, data, timestamp } = body;
+  try {
+    const body = await request.json();
+    const data = notifySchema.parse(body);
 
-  // 通过Motia Stream发送到前端
-  await streams.taskExecution.set(taskId, taskId, {
-    type,  // 'status' | 'step' | 'heartbeat' | 'chat'
-    timestamp: new Date(timestamp * 1000).toISOString(),
-    message,
-    skill,
-    data,
-  });
+    // 通过Motia Stream发送到前端
+    await streams.taskExecution.set(data.taskId, data.taskId, {
+      type: data.type,
+      timestamp: new Date(data.timestamp * 1000).toISOString(),
+      message: data.message,
+      skill: data.skill,
+      data: data.data,
+    });
 
-  return { status: 200, body: { success: true } };
+    logger.info('Progress notification sent', {
+      taskId: data.taskId,
+      type: data.type
+    });
+
+    return {
+      status: 200,
+      body: { success: true },
+    };
+  } catch (error) {
+    logger.error('Failed to send notification', { error });
+
+    return {
+      status: 500,
+      body: { success: false, error: error.message },
+    };
+  }
 };
 ```
 
@@ -274,31 +302,59 @@ class BaseHook(ABC):
         """Skill执行后调用"""
         pass
 
-    async def on_progressing_notify(self, context: SkillContext, progress_data: Dict[str, Any]):
-        """进度通知（可选）"""
-        pass
+    async def on_progressing_notify(self, context: SkillContext, progress_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        进度通知（可选实现）
+
+        默认实现不做任何事，子类可以重写此方法。
+
+        参数：
+        - context: 执行上下文
+        - progress_data: 进度数据
+
+        用途：
+        - 自定义进度处理逻辑
+        - 本地日志记录
+        - 进度聚合
+
+        返回值：
+        - 字典，可用于修改进度数据
+        """
+        return {}
 ```
 
 **文件位置**：`src/core/skill/executor.py`
 
 ```python
+import asyncio
 import httpx
+import time
+from typing import Callable
 
 class SkillExecutor:
     """Skill执行器"""
 
-    def __init__(self, hook: BaseHook = None, notify_api_url: str = None):
+    def __init__(self, hook: Optional[BaseHook] = None, notify_api_url: Optional[str] = None):
+        """
+        初始化执行器
+
+        参数：
+        - hook: Hook实例
+        - notify_api_url: Motia Notify API的URL（如 "http://localhost:3000/api/notify"）
+        """
         self.hook = hook
         self.notify_api_url = notify_api_url
         self._http_client = None
 
-    async def report_progress(self, context: SkillContext, progress_type: str, data: Dict[str, Any]):
-        """报告进度"""
-        # 调用Hook回调
-        if self.hook:
-            await self.hook.on_progressing_notify(context, data)
+    async def _notify_progress(self, task_id: str, progress_type: str, data: Dict[str, Any]):
+        """
+        通过Notify API发送进度到Motia
 
-        # 发送到Motia Notify API
+        参数：
+        - task_id: 任务ID
+        - progress_type: 进度类型（"step", "heartbeat", "status", "chat"）
+        - data: 进度数据
+        """
         if not self.notify_api_url:
             return
 
@@ -306,17 +362,40 @@ class SkillExecutor:
             self._http_client = httpx.AsyncClient(timeout=5.0)
 
         try:
-            await self._http_client.post(
+            response = await self._http_client.post(
                 self.notify_api_url,
                 json={
-                    "taskId": context.task_id,
+                    "taskId": task_id,
                     "type": progress_type,
-                    "timestamp": time.time(),
+                    "timestamp": asyncio.get_event_loop().time(),
                     **data
                 }
             )
+            response.raise_for_status()
         except Exception as e:
-            print(f"Warning: Failed to send progress: {e}")
+            # 静默失败，不影响主流程
+            print(f"Warning: Failed to send progress notification: {e}")
+
+    async def report_progress(
+        self,
+        context: SkillContext,
+        progress_type: str,
+        data: Dict[str, Any]
+    ):
+        """
+        Skill调用此方法报告进度
+
+        参数：
+        - context: 执行上下文
+        - progress_type: 进度类型（"step", "heartbeat", "status", "chat"）
+        - data: 进度数据
+        """
+        # 先调用Hook的回调（如果实现了）
+        if self.hook:
+            await self.hook.on_progressing_notify(context, data)
+
+        # 然后发送到Motia的Notify API
+        await self._notify_progress(context.task_id, progress_type, data)
 
     async def execute(self, skill_name: str, skill_func: Callable, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """执行Skill并调用Hook"""
@@ -333,7 +412,11 @@ class SkillExecutor:
         if self.hook:
             pre_result = await self.hook.pre_exec(context)
             if pre_result and pre_result.get('stop'):
-                return {"success": False, "error": "Stopped by pre-hook"}
+                return {
+                    "success": False,
+                    "error": "Stopped by pre-hook",
+                    "reason": pre_result.get('reason')
+                }
             if pre_result and 'modified_input' in pre_result:
                 input_data = pre_result['modified_input']
 

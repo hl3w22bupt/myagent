@@ -1,0 +1,556 @@
+---
+description: MyAgent 架构设计 - 分层架构、设计原则、模块依赖关系、多语言架构
+---
+
+# MyAgent 架构设计
+
+## 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HTTP/WebSocket API                          │
+│                  (steps/api/, steps/agents/, steps/streams/)          │
+└───────────────────────────────┬───────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Motia Event System                              │
+│                    (agent.task.execute, .completed, .failed)            │
+└───────────────────────────────┬───────────────────────────────────────┘
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+│  MasterAgent      │  │  Agent           │  │  Task Hooks      │
+│  (src/core/agent)│  │  (src/core/agent)│  │  (src/core/task)  │
+│                   │  │                   │  │                   │
+│  • 委派决策      │  │  • 任务执行      │  │  • PreExec        │
+│  • PTC 生成      │  │  • LLM 调用      │  │  • PostExec       │
+│  • Subagent 调用  │  │  • 技能调用      │  │  • Progress       │
+└─────────┬──────────────────────────────────┼──────────────────┘
+          │                     │                     │
+          └─────────────────────┼─────────────────────┘
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+│  Sandbox          │  │  Skill System     │  │  Task Store      │
+│  (src/core/sandbox)│  │  (src/core/skill) │  │  (src/core/database)│
+│                   │  │                   │  │                   │
+│  • Python 执行    │  │  • 技能发现      │  │  • SQLite         │
+│  • 隔离           │  │  • 技能注册      │  │  • PostgreSQL      │
+│  • 超时控制       │  │  • 技能调用      │  │  • 任务查询      │
+└───────────────────┘  └───────────┬───────┘  └───────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            Python Skills                                │
+│                     (skills/*, Python implementation)                   │
+│                     • web-search, code-analysis, etc.                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 分层架构
+
+### 表现层（Presentation Layer）
+
+**位置**：`steps/api/`, `steps/agents/`, `steps/web/`, `steps/streams/`
+
+**职责**：
+- 处理 HTTP 请求和 WebSocket 连接
+- 请求验证（Zod schema）
+- 响应格式化
+- 事件触发（emit）
+
+**关键文件**：
+- `steps/agents/agent-api.step.ts` - `/agent/execute` 任务提交
+- `steps/agents/agent-results.step.ts` - `/agent/tasks` 任务列表
+- `steps/api/agents-api.step.ts` - `/api/agents` 子代理列表
+- `steps/streams/task-stream.step.ts` - 实时任务流
+
+### 应用层（Application Layer）
+
+**位置**：`src/core/agent/`, `src/core/task/`
+
+**职责**：
+- Agent 生命周期管理
+- 任务执行流程控制
+- PTC 生成与执行
+- 钩子调度
+
+**关键文件**：
+- `src/core/agent/manager.ts` - AgentManager
+- `src/core/agent/agent.ts` - Agent 基类
+- `src/core/agent/master-agent.ts` - MasterAgent
+- `src/core/task/hooks/` - 钩子系统
+
+### 领域层（Domain Layer）
+
+**位置**：`src/core/sandbox/`, `src/core/skill/`
+
+**职责**：
+- 沙箱执行环境抽象
+- 技能注册与调用
+- LLM 客户端
+- 重试机制
+
+**关键文件**：
+- `src/core/sandbox/index.ts` - Sandbox 接口
+- `src/core/skill/registry.ts` - 技能注册表
+- `src/core/agent/llm-client.ts` - LLM 客户端
+- `src/core/agent/retry.ts` - 重试机制
+
+### 基础设施层（Infrastructure Layer）
+
+**位置**：`src/core/database/`, `src/utils/`, `src/middleware/`
+
+**职责**：
+- 数据持久化
+- 并发安全
+- 日志与监控
+- 认证与授权
+
+**关键文件**：
+- `src/core/database/task-store.ts` - TaskStore 抽象
+- `src/utils/state-lock.ts` - StateLockManager
+- `src/middleware/validation-middleware.ts` - 验证中间件
+
+## 设计原则
+
+### 1. 单一职责原则（SRP）
+
+每个模块只负责一个明确的职责：
+
+| 模块 | 职责 |
+|------|------|
+| `AgentManager` | 会话管理和资源分配 |
+| `TaskStore` | 任务持久化和查询 |
+| `Sandbox` | 隔离的代码执行 |
+| `SkillRegistry` | 技能注册和发现 |
+| `TaskHook` | 任务生命周期钩子 |
+
+### 2. 依赖倒置原则（DIP）
+
+高层模块不依赖低层模块，都依赖抽象：
+
+```typescript
+// TaskStore 抽象（高层依赖抽象）
+interface TaskStore {
+  create(task: Task): Promise<string>;
+  update(id: string, updates: Partial<Task>): Promise<void>;
+  get(id: string): Promise<Task | null>;
+  list(filters?: TaskFilters): Promise<Task[]>;
+}
+
+// 具体实现（低层实现抽象）
+class SQLiteTaskStore implements TaskStore { /* ... */ }
+class PostgresTaskStore implements TaskStore { /* ... */ }
+```
+
+### 3. 开放封闭原则（OCP）
+
+对扩展开放，对修改封闭：
+
+```typescript
+// 沙箱适配器扩展（无需修改核心代码）
+interface SandboxAdapter {
+  execute(code: string, timeout: number): Promise<SandboxResult>;
+}
+
+class LocalSandboxAdapter implements SandboxAdapter { /* ... */ }
+class DaytonaSandboxAdapter implements SandboxAdapter { /* ... */ }
+class E2BSandboxAdapter implements SandboxAdapter { /* ... */ }
+```
+
+### 4. 接口隔离原则（ISP）
+
+接口应该细粒度，客户端不依赖不需要的方法：
+
+```typescript
+// 精粒度接口
+interface TaskHook {
+  preExec?(context: TaskContext): Promise<PreExecResult>;
+  postExec?(context: TaskContext): Promise<void>;
+  onProgressingNotify?(context: TaskContext): Promise<void>;
+}
+
+// 客户端只实现需要的方法
+class MetricsHook implements TaskHook {
+  postExec = async (context: TaskContext): Promise<void> => {
+    // 只实现 postExec
+  };
+}
+```
+
+### 5. 里氏替换原则（LSP）
+
+子类可以替换父类而不影响正确性：
+
+```typescript
+// Agent 可被 MasterAgent 替换
+const agent = new Agent(config);
+const masterAgent = new MasterAgent(config);
+
+// MasterAgent 继承并扩展 Agent 功能
+class MasterAgent extends Agent {
+  // 可以在任何使用 Agent 的地方使用
+}
+```
+
+## 模块依赖关系
+
+```
+                     ┌─────────────┐
+                     │  Steps      │
+                     │  (API 层)   │
+                     └──────┬──────┘
+                            │
+                            ▼
+              ┌─────────────────────────┐
+              │      AgentManager       │
+              │    (会话管理层)        │
+              └───────┬───────────────┘
+                      │
+         ┌────────────┼────────────┐
+         │            │            │
+         ▼            │            ▼
+┌──────────────┐    │    ┌──────────────┐
+│  MasterAgent │    │    │   Agent      │
+└──────┬───────┘    │    └──────┬─────┘
+       │             │           │
+       │             │           ▼
+       │             │    ┌──────────────┐
+       │             │    │  LLM Client   │
+       │             │    └──────────────┘
+       │             │
+       │             ▼
+       │    ┌──────────────┐
+       │    │  Task Hook   │
+       │    │  System      │
+       │    └──────┬──────┘
+       │           │
+       └───────────┼──────────┐
+                   │
+       ┌───────────┼──────────┬──────────┐
+       │           │          │          │
+       ▼           ▼          ▼          ▼
+┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+│  Sandbox   │ │  Skill     │ │ TaskStore  │ │ StateLock  │
+│  System    │ │  System    │ │            │ │ Manager    │
+└────────────┘ └──────┬─────┘ └────────────┘ └────────────┘
+                      │
+                      ▼
+              ┌──────────────┐
+              │  Python      │
+              │  Skills      │
+              └──────────────┘
+```
+
+## 多语言架构
+
+### TypeScript 层
+
+**职责**：
+- API 端点和中间件
+- Agent 执行引擎
+- 任务管理
+- 沙箱适配器
+- 数据持久化
+
+**优势**：
+- 类型安全
+- 与 Motia 框架集成
+- 异步编程支持
+- 丰富的生态系统
+
+### Python 层
+
+**职责**：
+- 技能实现
+- PTC 代码执行
+- 数据分析
+- 特定库调用（如 pandas, numpy）
+
+**优势**：
+- 丰富的数据科学库
+- 动态代码生成
+- 隔离执行环境
+
+### 交互方式
+
+```typescript
+// TypeScript 调用 Python 技能
+const skillExecutor = new SkillExecutor();
+const result = await skillExecutor.execute('web-search', {
+  query: 'TypeScript vs Python'
+});
+
+// PTC 执行
+const sandbox = new LocalSandbox();
+const ptcCode = await ptcGenerator.generate(task);
+const ptcResult = await sandbox.execute(ptcCode, 30000);
+```
+
+## 事件驱动架构
+
+### 事件类型
+
+| 事件名称 | 触发时机 | 消费者 |
+|----------|----------|--------|
+| `agent.task.execute` | 任务提交 | master-agent.step.ts |
+| `agent.task.completed` | 任务完成 | TaskLogger, MetricsHook |
+| `agent.task.failed` | 任务失败 | Retry Mechanism, ErrorLogger |
+| `agent.task.progress` | 任务进度更新 | WebSocket Stream |
+
+### 事件流程
+
+```
+┌─────────────────┐
+│  API Request    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Emit Event     │
+│  agent.task.    │
+│  execute        │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Event Queue    │
+│  (BullMQ)       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Event Consumer │
+│  (Step Worker)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Process Event  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Emit Result    │
+│  Events         │
+└─────────────────┘
+```
+
+## 并发模型
+
+### 会话级隔离
+
+每个 Session 拥有独立的 Agent 实例：
+
+```typescript
+class AgentManager {
+  private sessions = new Map<string, Agent>();
+
+  async acquire(sessionId: string): Promise<Agent> {
+    if (!this.sessions.has(sessionId)) {
+      this.sessions.set(sessionId, new Agent(config));
+    }
+    return this.sessions.get(sessionId)!;
+  }
+
+  async release(sessionId: string): Promise<void> {
+    const agent = this.sessions.get(sessionId);
+    if (agent) {
+      await agent.cleanup();
+      this.sessions.delete(sessionId);
+    }
+  }
+}
+```
+
+### 细粒度锁
+
+每个 `(groupId, key)` 对应一个独立的锁：
+
+```typescript
+class StateLockManager {
+  private locks = new Map<string, Mutex>();
+
+  async atomicUpdate<T>(
+    state: any,
+    groupId: string,
+    key: string,
+    updater: (current: T) => T
+  ): Promise<void> {
+    const lockKey = `${groupId}:${key}`;
+    const mutex = this.getLock(lockKey);
+    await mutex.acquire();
+
+    try {
+      const current = await state.get(groupId, key);
+      const updated = updater(current);
+      await state.set(groupId, key, updated);
+    } finally {
+      mutex.release();
+    }
+  }
+}
+```
+
+### 任务队列
+
+使用 BullMQ 实现任务队列：
+
+```typescript
+import { Queue, Worker } from 'bullmq';
+
+const taskQueue = new Queue('agent-tasks', {
+  connection: redis,
+});
+
+const worker = new Worker('agent-tasks', async (job) => {
+  return await executeTask(job.data);
+}, {
+  connection: redis,
+  concurrency: 10,
+});
+```
+
+## 错误处理策略
+
+### 分层错误处理
+
+1. **API 层**：捕获并格式化错误返回给客户端
+2. **应用层**：业务逻辑错误处理和降级
+3. **领域层**：领域规则验证
+4. **基础设施层**：系统级错误和重试
+
+### 错误类型
+
+```typescript
+enum ErrorType {
+  VALIDATION = 'validation',       // 输入验证失败
+  PERMISSION = 'permission',       // 权限不足
+  NOT_FOUND = 'not_found',        // 资源不存在
+  TIMEOUT = 'timeout',            // 超时
+  RATE_LIMIT = 'rate_limit',       // 频率限制
+  INTERNAL = 'internal',           // 内部错误
+  EXTERNAL = 'external',           // 外部服务错误
+}
+
+class ApplicationError extends Error {
+  constructor(
+    public type: ErrorType,
+    message: string,
+    public code?: string
+  ) {
+    super(message);
+  }
+}
+```
+
+### 重试策略
+
+指数退避重试：
+
+```typescript
+class RetryMechanism {
+  async retry<T>(
+    fn: () => Promise<T>,
+    options: RetryOptions
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt < options.maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error as Error;
+        if (!this.isRetryable(error)) break;
+
+        const delay = this.calculateDelay(attempt, options);
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError!;
+  }
+
+  private calculateDelay(attempt: number, options: RetryOptions): number {
+    if (options.exponentialBackoff) {
+      return options.baseDelay * Math.pow(2, attempt);
+    }
+    return options.baseDelay;
+  }
+}
+```
+
+## 可观测性
+
+### 日志记录
+
+结构化日志：
+
+```typescript
+import { Logger } from '@motiadev/plugin-logs';
+
+logger.info('Task started', {
+  taskId,
+  sessionId,
+  task,
+  timestamp: Date.now(),
+});
+
+logger.error('Task failed', {
+  taskId,
+  error: error.message,
+  stack: error.stack,
+});
+```
+
+### 指标收集
+
+关键指标：
+
+- 任务执行时间
+- LLM 调用次数
+- 技能调用次数
+- Token 使用量
+- 错误率
+- 会话数量
+
+### 执行追踪
+
+任务执行步骤追踪：
+
+```typescript
+interface AgentStep {
+  type: 'planning' | 'ptc-generation' | 'execution' | 'delegation' | 'error';
+  content: string;
+  timestamp: number;
+  metadata?: Record<string, any>;
+}
+
+interface AgentResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  steps: AgentStep[];
+  executionTime: number;
+  metadata: {
+    llmCalls: number;
+    skillCalls: number;
+    totalTokens: number;
+  };
+}
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `agent-system.mdc` - Agent 系统详解
+- `task-hooks.mdc` - 任务钩子系统
+- `sandbox-system.mdc` - 沙箱执行环境
+- `state-management.mdc` - 状态管理
+- `concurrency-safety.mdc` - 并发安全

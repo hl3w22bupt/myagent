@@ -1,0 +1,159 @@
+# Git Worktree Feature Development Workflow
+
+## 工作树（Worktree）开发规范
+
+### 原则
+
+使用 Git Worktree 进行特性分支开发，每个特性分支有独立的工作目录，避免频繁切换分支。
+
+### 创建 Worktree
+
+```bash
+# 创建特性分支 worktree
+git worktree add -b feature/<feature-name> .worktree/feature/<feature-name>
+
+# 示例：创建 skill-hook 特性
+git worktree add -b feature/skill-hook .worktree/feature/skill-hook
+```
+
+### 目录结构
+
+```
+myagent/                          # 主仓库
+├── .worktree/                    # Worktree 根目录
+│   └── feature/                  # 特性分支 worktrees
+│       ├── skill-hook/           # feature/skill-hook 分支
+│       ├── multi-turn-chat/      # feature/multi-turn-chat 分支
+│       └── ...
+├── src/                          # 主分支代码
+├── steps/                        # 主分支代码
+└── ...
+```
+
+### 使用流程
+
+#### 1. 开始新特性
+
+```bash
+# 从主分支创建特性 worktree
+git checkout main  # 确保在主分支
+git worktree add -b feature/new-feature .worktree/feature/new-feature
+
+# 进入工作目录
+cd .worktree/feature/new-feature
+
+# 现在你在 feature/new-feature 分支
+git branch  # 显示 * feature/new-feature
+```
+
+#### 2. 开发过程中
+
+```bash
+# 在 worktree 中正常开发
+cd .worktree/feature/new-feature
+# ... 编写代码、测试 ...
+git add .
+git commit -m "feat: implement new feature"
+```
+
+#### 3. 查看所有 worktrees
+
+```bash
+git worktree list
+
+# 输出示例：
+# /Users/leo/workspace/myagent              abc1234 [main]
+# /Users/leo/workspace/myagent/.worktree/feature/new-feature  def5678 [feature/new-feature]
+```
+
+#### 4. 完成特性并合并
+
+```bash
+# 方式1：在主分支合并
+cd /Users/leo/workspace/myagent  # 回到主目录
+git checkout main
+git merge feature/new-feature
+git push origin main
+
+# 方式2：创建 PR 后删除 worktree
+git checkout main
+gh pr create --base main --head feature/new-feature
+# 等待 PR 合并后删除 worktree
+git worktree remove .worktree/feature/new-feature
+git branch -d feature/new-feature
+```
+
+#### 5. 清理 worktree
+
+```bash
+# 删除特定 worktree
+git worktree remove .worktree/feature/new-feature
+
+# 删除已合并的分支
+git branch -d feature/new-feature
+
+# 清理所有 stale worktrees
+git worktree prune
+```
+
+### 命名规范
+
+#### 分支命名
+- 特性分支：`feature/<feature-name>`
+- 修复分支：`fix/<bug-name>`
+- 实验性分支：`experiment/<experiment-name>`
+
+#### Worktree 路径
+- 必须放在 `.worktree/` 目录下
+- 路径与分支名对应：`.worktree/<branch-type>/<branch-name>`
+- 示例：
+  - `feature/skill-hook` → `.worktree/feature/skill-hook`
+  - `fix/notify-api` → `.worktree/fix/notify-api`
+
+### 优势
+
+1. **并行开发**：同时在多个特性分支工作，无需切换分支
+2. **独立环境**：每个 worktree 有独立的文件系统和构建产物
+3. **快速上下文切换**：`cd` 到不同目录即可切换上下文
+4. **减少冲突**：特性隔离，减少文件冲突
+
+### 最佳实践
+
+1. **及时清理**：合并完成后的 worktree 应及时删除，避免积累过多
+2. **保持同步**：定期在 worktree 中 rebase 主分支的最新更改
+   ```bash
+   cd .worktree/feature/new-feature
+   git fetch origin
+   git rebase origin/main
+   ```
+3. **独立测试**：每个 worktree 可以独立运行测试，互不干扰，测试时的workdir 也必须在.worktree/feature/new-feature
+4. **文档同步**：在 worktree 中的文档修改，合并前先与主分支同步
+
+### 常见问题
+
+#### Q: worktree 中修改了主分支的文件怎么办？
+A: 正常情况，worktree 有独立的文件副本，互不影响。
+
+#### Q: 如何推送 worktree 分支？
+A: 在 worktree 目录中正常推送：
+```bash
+cd .worktree/feature/new-feature
+git push -u origin feature/new-feature
+```
+
+#### Q: worktree 中能切换分支吗？
+A: 不能。每个 worktree 固定绑定一个分支，要切换其他分支需要用 `git worktree add` 创建新的 worktree。
+
+### 相关命令
+
+```bash
+# 列出所有 worktrees
+git worktree list
+
+# 移动 worktree 到新位置
+git worktree move .worktree/feature/old .worktree/feature/new
+
+# 查看特定 worktree 的状态
+cd .worktree/feature/new-feature
+git status
+```

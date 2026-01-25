@@ -1,0 +1,343 @@
+---
+description: MyAgent 项目概览 - 项目定位、技术栈、目录结构和核心模块
+---
+
+# MyAgent 项目概览
+
+## 项目定位
+
+MyAgent 是一个基于 **Motia 框架** 的分布式 AI 代理系统，具有以下核心特性：
+
+- **PTC (Python Task Code) 支持**：动态生成并执行 Python 代码
+- **多代理协作**：Master Agent + 专业化 Subagents
+- **技能系统**：可复用的 Python 技能模块
+- **沙箱执行**：隔离的代码执行环境
+- **事件驱动架构**：基于 Motia 的 Step 和事件系统
+
+## 技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| **Motia** | 0.17.11-beta.193 | 事件驱动后端框架 |
+| **TypeScript** | 5.3.3 | 主要开发语言 |
+ | **Python** | 3.x | 技能和 PTC 执行 |
+| **Node.js** | ES2022+ | 运行时 |
+| **Anthropic SDK** | 0.32.1 | Claude LLM 集成 |
+| **OpenAI SDK** | 6.15.0 | OpenAI 兼容 API |
+| **BullMQ** | 5.1.8 | 消息队列 |
+| **ioredis** | 5.3.2 | Redis 客户端 |
+| **PostgreSQL** | 8.17.1 | 生产级数据存储 |
+| **SQLite** | 1.13.0 | 开发/测试数据存储 |
+| **Zod** | 4.1.12 | 数据验证 |
+
+## 目录结构
+
+```
+myagent/
+├── src/                          # 核心源代码目录
+│   ├── core/                     # 核心架构组件
+│   │   ├── agent/                # Agent 管理与执行
+│   │   ├── database/             # 数据存储层
+│   │   ├── sandbox/              # 沙箱执行环境
+│   │   ├── task/                 # 任务管理与钩子系统
+│   │   └── skill/                # Python 技能执行器
+│   ├── middleware/               # API 中间件
+│   ├── utils/                    # 工具函数
+│   └── index.ts                  # 应用入口点
+│
+├── steps/                        # Motia Steps 目录
+│   ├── agents/                   # Agent 相关 Steps
+│   ├── api/                      # API 端点 Steps
+│   ├── web/                      # Web 渲染 Steps
+│   ├── streams/                  # 实时流 Steps
+│   └── health/                   # 健康检查 Step
+│
+├── skills/                       # 技能实现（Python）
+│   ├── web-search/               # 网页搜索技能
+│   ├── code-analysis/            # 代码分析技能
+│   ├── read-file/                # 文件读取技能
+│   ├── summarize/                # 摘要技能
+│   └── remotion-generator/       # 视频生成技能
+│
+├── subagents/                    # 子代理配置（YAML）
+│   ├── code-reviewer/            # 代码审查子代理
+│   ├── data-analyst/             # 数据分析子代理
+│   ├── security-auditor/         # 安全审计子代理
+│   └── system-guide/             # 系统指导子代理
+│
+├── docs/                         # 文档目录
+├── tests/                        # 测试目录
+├── scripts/                      # 脚本工具
+├── prompts/                      # 提示词模板
+├── examples/                     # 示例代码
+│
+├── .cursor/                      # Cursor 编辑器配置与规则
+│   ├── rules/                    # 项目规则文档
+│   └── agents/                  # 子代理配置
+│
+├── motia.config.ts               # Motia 全局配置
+├── package.json                  # 项目依赖
+└── tsconfig.json                 # TypeScript 配置
+```
+
+## 核心模块职责
+
+### src/core/agent/ - Agent 系统
+
+| 文件 | 职责 |
+|------|------|
+| `manager.ts` | AgentManager 单例，会话管理与资源控制 |
+| `agent.ts` | Agent 基类，任务执行引擎 |
+| `master-agent.ts` | MasterAgent，支持委派给 Subagents |
+| `llm-client.ts` | LLM 客户端（Anthropic/OpenAI） |
+| `ptc-generator.ts` | PTC 代码生成器 |
+| `retry.ts` | 重试机制（指数退避） |
+| `types.ts` | Agent 相关类型定义 |
+
+### src/core/database/ - 数据存储层
+
+| 文件 | 职责 |
+|------|------|
+| `task-store.ts` | TaskStore 抽象层，支持 SQLite/PostgreSQL |
+| `sqlite-store.ts` | SQLite 实现 |
+| `postgres-store.ts` | PostgreSQL 实现 |
+
+### src/core/sandbox/ - 沙箱执行环境
+
+| 文件 | 职责 |
+|------|------|
+| `index.ts` | Sandbox 接口定义 |
+| `local-adapter.ts` | 本地 Python 执行适配器 |
+| `day-adapter.ts` | Daytona 云开发环境适配器 |
+| `e2b-adapter.ts` | E2B 安全沙箱适配器 |
+| `modal-adapter.ts` | Modal 无服务器函数适配器 |
+
+### src/core/task/ - 任务管理系统
+
+| 文件 | 职责 |
+|------|------|
+| `hooks/` | 钩子系统目录 |
+| `hooks/types.ts` | TaskContext 和钩子类型定义 |
+| `hooks/base.ts` | TaskHook 基类 |
+| `hooks/registry.ts` | 钩子注册表 |
+| `hooks/built-in/` | 内置钩子实现 |
+
+### src/core/skill/ - 技能系统
+
+| 文件 | 职责 |
+|------|------|
+| `executor.ts` | Python 技能执行器 |
+| `discovery.ts` | 技能发现与注册 |
+| `registry.ts` | 技能注册表 |
+
+### src/middleware/ - API 中间件
+
+| 文件 | 职责 |
+|------|------|
+| `validation-middleware.ts` | Zod 请求验证中间件 |
+| `error-middleware.ts` | 错误处理中间件 |
+| `auth-middleware.ts` | 认证中间件 |
+
+### src/utils/ - 工具函数
+
+| 文件 | 职责 |
+|------|------|
+| `state-lock.ts` | StateLockManager，并发安全操作 |
+| `safe-state.ts` | safeStateGet/safeStateSet，防递归溢出 |
+| `logger.ts` | 日志工具 |
+
+## Steps 目录结构
+
+### steps/agents/ - Agent 相关 Steps
+
+| 文件 | 职责 |
+|------|------|
+| `agent-api.step.ts` | `/agent/execute` 端点，任务提交 |
+| `master-agent.step.ts` | MasterAgent 执行 Step |
+| `agent-results.step.ts` | `/agent/tasks` 端点，任务列表 |
+| `agent-result.step.ts` | `/agent/tasks/:id` 端点，任务详情 |
+
+### steps/api/ - API 端点 Steps
+
+| 文件 | 职责 |
+|------|ari------|
+| `agents-api.step.ts` | `/api/agents` 端点，子代理列表 |
+| `skills-api.step.ts` | `/api/skills` 端点，技能列表 |
+
+### steps/web/ - Web 渲染 Steps
+
+| 文件 | 职责 |
+|------|------|
+| `render.step.ts` | Web 响应渲染 |
+
+### steps/streams/ - 实时流 Steps
+
+| 文件 | 职责 |
+|------|------|
+| `task-stream.step.ts` | 任务执行实时流 |
+
+### steps/health/ - 健康检查 Step
+
+| 文件 | 职责 |
+|------|------|
+| `health-check.step.ts` | `/health` 端点，系统健康状态 |
+
+## 主要命令
+
+```bash
+# 开发模式（带热重载）
+npm run dev
+
+# 生产模式
+npm run start
+
+# 生成 Motia 类型
+npm run generate-types
+
+# 构建
+npm run build
+
+# 测试
+npm run test              # 所有测试
+npm run test:unit        # 单元测试
+npm run test:integration # 集成测试
+npm run test:e2e         # E2E 测试
+
+# 代码检查
+npm run lint             # ESLint
+npm run format           # Prettier
+
+# Python 技能相关
+npm run py:install       # 安装 Python 依赖
+npm run py:test          # 运行 pytest
+npm run py:lint          # pylint 检查
+npm run py:format        # black 格式化
+```
+
+## 环境变量配置
+
+### LLM 配置
+
+```bash
+# LLM 提供商
+DEFAULT_LLM_PROVIDER=anthropic  # 或 openai-compatible
+
+# Anthropic Claude
+ANTHROPIC_API_KEY=sk-ant-...
+DEFAULT_LLM_MODEL=claude-sonnet-4-5
+LLM_BASE_URL=https://api.anthropic.com
+
+# OpenAI 兼容
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+### 任务执行配置
+
+```bash
+# 任务超时（毫秒）
+TASK_TIMEOUT=600000
+
+# 最大迭代次数
+MAX_ITERATIONS=5
+
+# 重试配置
+MAX_RETRIES=3
+RETRY_BASE_DELAY=1000
+```
+
+### 会话管理配置
+
+```bash
+# 会话超时（毫秒）
+SESSION_TIMEOUT=1800000
+
+# 最大并发会话数
+MAX_SESSIONS=1000
+```
+
+### 沙箱配置
+
+```bash
+# 沙箱适配器类型
+DEFAULT_SANDBOX_ADAPTER=local  # local, daytona, e2b, modal
+
+# Python 路径
+PYTHON_PATH=./python_modules/bin/python3
+```
+
+### 数据库配置
+
+```bash
+# 数据库类型
+DB_TYPE=sqlite  # 或 postgres
+
+# SQLite 路径（开发环境）
+SQLITE_DB_PATH=./data/tasks.db
+
+# PostgreSQL 连接串（生产环境）
+DATABASE_URL=postgresql://user:password@localhost:5432/motia
+```
+
+### Redis 配置
+
+```bash
+# Redis 连接串（BullMQ 使用）
+REDIS_URL=redis://localhost:6379
+
+# Redis 密码（可选）
+REDIS_PASSWORD=
+```
+
+## 启动流程
+
+1. 加载环境变量（`dotenv`）
+2. 初始化 `AgentManager`（单例模式）
+3. 配置 LLM 客户端
+4. 配置沙箱执行环境
+5. 初始化技能注册表
+6. 设置优雅关闭处理（SIGTERM/SIGINT）
+
+```typescript
+// src/index.ts
+export function getAgentManager(): AgentManager {
+  if (_agentManager) return _agentManager;
+
+  const masterAgentConfig: MasterAgentConfig = {
+    systemPrompt: 'You are a helpful assistant with delegation capabilities.',
+    llm: {
+      provider: process.env.DEFAULT_LLM_PROVIDER === 'openai-compatible'
+        ? 'openai-compatible'
+        : 'anthropic',
+      model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
+      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+    },
+    availableSkills: ['web-search', 'summarize', 'code-analysis'],
+    sandbox: {
+      type: 'local',
+      local: { pythonPath: venvPythonPath },
+    },
+    subagents: ['code-reviewer', 'data-analyst', 'security-auditor', 'system-guide'],
+  };
+
+  _agentManager = new AgentManager({
+    sessionTimeout: 1800000, // 30 分钟
+    maxSessions: 1000,
+    masterAgentConfig,
+  });
+
+  return _agentManager;
+}
+```
+
+## 相关文档
+
+- `architecture.mdc` - 架构设计详解
+- `agent-system.mdc` - Agent 系统详解
+- `task-hooks.mdc` - 任务钩子系统
+- `sandbox-system.mdc` - 沙箱执行环境
+- `state-management.mdc` - 状态管理
+- `concurrency-safety.mdc` - 并发安全
+- `api-design.mdc` - API 设计规范
+- `skill-system.mdc` - 技能系统
+- `subagent-system.mdc` - 子代理系统

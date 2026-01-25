@@ -1,0 +1,750 @@
+---
+description: MyAgent 状态管理 - Motia State API、safeStateGet/safeStateSet、StateLockManager、状态检查点
+---
+
+# MyAgent 状态管理
+
+## 概述
+
+状态管理系统提供安全、并发安全的键值存储，基于 Motia 的 State API 构建。
+
+### 核心组件
+
+| 组件 | 职责 |
+|------|------|
+| **Motia State API** | 分组式状态存储 |
+| **safeStateGet/Set** | 防递归溢出的安全操作 |
+| **StateLockManager** | 原子操作锁 |
+| **状态检查点** | 任务执行历史存储 |
+
+## Motia State API
+
+### 基本接口
+
+```typescript
+interface State {
+  /**
+   * 获取状态值
+   * @param groupId 组 ID（如 'agent:session-123'）
+   * @param key 键名
+   * @param fallback 默认值
+   */
+  get<T>(groupId: string, key: string, fallback?: T): Promise<T>;
+
+  /**
+   * 设置状态值
+   * @param groupId 组 ID
+   * @param key 键名
+   * @param value 值
+   */
+  set<T>(groupId: string, key: string, value: T): Promise<void>;
+
+  /**
+   * 删除状态值
+   */
+  delete(groupId: string, key: string): Promise<void>;
+
+  /**
+   * 清除整个组
+   */
+  clearGroup(groupId: string): Promise<void>;
+
+  /**
+   * 获取组的所有键
+   */
+  keys(groupId: string): Promise<string[]>;
+}
+```
+
+### 使用示例
+
+```typescript
+// 获取 State 实例（在 Step 中）
+export default defineStep({
+  name: 'my-step',
+  run: async (input, { state }) => {
+    // 设置值
+    await state.set('agent:session-123', 'userName', 'Leo');
+
+    // 获取值
+    const userName = await state.get('agent:session-123', 'userName', 'Guest');
+
+    // 嵌套对象
+    await state.set('agent:session-123', 'user', {
+      name: 'Leo',
+      email: 'leo@example.com',
+    });
+
+    // 删除值
+    await state.delete('agent:session-123', 'userName');
+
+    return { success: true };
+  },
+});
+```
+
+## safeStateGet/Set
+
+### 概述
+
+`safeStateGet` 和 `safeStateSet` 是对 Motia State API 的增强，防止递归调用导致的栈溢出。
+
+### 实现原理
+
+```typescript
+import { State } from '@motiadev/plugin-states';
+
+const MAX_RECURSION_DEPTH = 100;
+const activeGets = new Map<string, number>();
+
+/**
+ * 安全的状态获取操作
+ * 防止递归调用导致的栈溢出
+ */
+export async function safeStateGet<T>(
+  state: State,
+  groupId: string,
+  key: string,
+  fallback?: T
+): Promise<T> {
+  const callKey = `${groupId}:${key}`;
+
+  // 获取当前递归深度
+  const currentDepth = activeGets.get(callKey) || 0;
+
+  // 检查递归深度
+  if (currentDepth > MAX_RECURSION_DEPTH) {
+    console.warn(`Maximum recursion depth exceeded for ${callKey}`);
+    return fallback as T;
+  }
+
+  // 增加递归深度
+  activeGets.set(callKey, currentDepth + 1);
+
+  try {
+    return await state.get(groupId, key, fallback);
+  } finally {
+    // 减少递归深度
+    activeGets.set(callKey, currentDepth);
+  }
+}
+
+/**
+ * 安全的状态设置操作
+ */
+export async function safeStateSet<T>(
+  state: State,
+  groupId: string,
+  key: string,
+  value: T
+): Promise<void> {
+  await state.set(groupId, key, value);
+}
+```
+
+### 使用示例
+
+```typescript
+import { safeStateGet, safeStateSet } from '@/utils/safe-state';
+
+// ✅ 安全的递归操作
+export default defineStep({
+  name: 'recursive-step',
+  run: async (input, { state }) => {
+    const groupId = 'agent:session-123';
+
+    // 获取当前计数
+    const count = await safeStateGet(state, groupId, 'count', 0);
+
+    // 更新计数
+    await safeStateSet(state, groupId, 'count', count + 1);
+
+    return { success: true, newCount: count + 1 };
+  },
+});
+```
+
+### 递归防护场景
+
+```typescript
+// 潜在的递归问题
+export default defineStep({
+  name: 'problematic-step',
+  run: async (input, { state, emit }) => {
+    const groupId = 'agent:session-123';
+
+    // ⚠️ 这可能触发递归：state.get 触发事件 -> 事件处理器再次调用 state.get
+    const value = await state.get(groupId, 'key');
+
+    // ✅ 使用 safeStateGet 防止问题
+    const safeValue = await safeStateGet(state, groupId, 'key');
+
+    // 触发事件
+    emit('some.event', { value: safeValue });
+
+    return { success: true };
+  },
+});
+```
+
+## StateLockManager
+
+### 概述
+
+`StateLockManager` 提供细粒度的锁机制，确保状态操作的原子性，防止竞态条件。
+
+### 核心接口
+
+```typescript
+export class StateLockManager {
+  /**
+   * 原子更新操作
+   * @param state State 实例
+   * @param groupId 组 ID
+   * @param key 键名
+   * @param updater 更新函数
+   */
+  async atomicUpdate<T>(
+    state: State,
+    groupId: string,
+    key: string,
+    updater: (current: T) => T
+  ): Promise<void>;
+
+  /**
+   * 原子数组合并
+   */
+  async atomicMerge<T extends object>(
+    state: State,
+    groupId: string,
+    key: string,
+    updates: Partial<T>
+  ): Promise<void>;
+
+  /**
+   * 原子数组操作
+   */
+  async atomicPush<T>(
+    state: State,
+    groupId: string,
+    key: string,
+    item: T
+  ): Promise<void>;
+
+  /**
+   * 获取锁的统计信息
+   */
+  getStats(): LockStats;
+}
+```
+
+### 实现要点
+
+```typescript
+export class StateLockManager {
+  private locks = new Map<string, Mutex>();
+  private stats = {
+    acquires: 0,
+    releases: 0,
+    waits: 0,
+  };
+
+  async atomicUpdate<T>(
+    state: State,
+    groupId: string,
+    key: string,
+    updater: (current: T) => T
+  ): Promise<void> {
+    const lockKey = `${groupId}:${key}`;
+    const mutex = this.getLock(lockKey);
+
+    // 获取锁
+    this.stats.waits++;
+    await mutex.acquire();
+    this.stats.acquires++;
+
+    try {
+      // 读取当前值
+      const current = await state.get(groupId, key);
+
+      // 应用更新
+      const updated = updater(current);
+
+      // 写入更新值
+      await state.set(groupId, key, updated);
+    } finally {
+      // 释放锁
+      mutex.release();
+      this.stats.releases++;
+    }
+  }
+
+  private getLock(key: string): Mutex {
+    if (!this.locks.has(key)) {
+      this.locks.set(key, new Mutex());
+    }
+    return this.locks.get(key)!;
+  }
+}
+
+/**
+ * 互斥锁实现
+ */
+class Mutex {
+  private resolve: (() => void) | null = null;
+
+  async acquire(): Promise<void> {
+    if (!this.resolve) {
+      return new Promise(resolve => {
+        this.resolve = resolve;
+      });
+    }
+  }
+
+  release(): void {
+    if (this.resolve) {
+      const resolve = this.resolve;
+      this.resolve = null;
+      resolve();
+    }
+  }
+}
+```
+
+### 使用示例
+
+#### 1. 原子计数器
+
+```typescript
+import { stateLockManager } from '@/utils/state-lock';
+
+export default defineStep({
+  name: 'counter-step',
+  run: async (input, { state }) => {
+    const groupId = 'agent:session-123';
+
+    // 原子增加计数
+    await stateLockManager.atomicUpdate(state, groupId, 'counter', (count) => {
+      return (count || 0) + 1;
+    });
+
+    return { success: true };
+  },
+});
+```
+
+#### 2. 原子数组合并
+
+```typescript
+import { stateLockManager } from '@/utils/state-lock';
+
+interface UserState {
+  name: string;
+  email?: string;
+  lastSeen?: Date;
+}
+
+export default defineStep({
+  name: 'update-user-step',
+  run: async (input, { state }) => {
+    const groupId = 'agent:session-123';
+
+    // 原子合并用户状态
+    await stateLockManager.atomicMerge<UserState>(state, groupId, 'user', {
+      email: 'leo@example.com',
+      lastSeen: new Date(),
+    });
+
+    return { success: true };
+  },
+});
+```
+
+#### 3. 原子数组操作
+
+```typescript
+import { stateLockManager } from '@/utils/state-lock';
+
+export default defineStep({
+  name: 'log-step',
+  run: async (input, { state }) => {
+    const groupId = 'agent:session-123';
+
+    // 原子添加日志条目
+    await stateLockManager.atomicPush(state, groupId, 'logs', {
+      timestamp: Date.now(),
+      message: input.message,
+    });
+
+    return { success: true };
+  },
+});
+```
+
+### 竞态条件防护
+
+```typescript
+// ❌ 问题：竞态条件
+export default defineStep({
+  name: 'race-condition-step',
+  run: async (input, { state }) => {
+    const groupId = 'agent:session-123';
+
+    // 读取
+    const value = await state.get(groupId, 'counter', 0);
+
+    // 如果两个请求同时执行，都会读取相同的值
+    // 然后导致最终值只增加了 1 而不是 2
+
+    // 写入
+    await state.set(groupId, 'counter', value + 1);
+
+    return { success: true };
+  },
+});
+
+//```
+
+## 状态检查点
+
+### 概述
+
+状态检查点（State Checkpoint）用于存储任务执行的中间状态，支持断点续恢复。
+
+### 检查点结构
+
+```typescript
+interface StateCheckpoint {
+  checkpointId: string;
+  taskId: string;
+  sessionId: string;
+
+  // 执行状态
+  state: 'pending' | 'running' | 'paused' | 'completed' | 'failed';
+
+  // 执行步骤
+  steps: ExecutionStep[];
+
+  // 当前步骤索引
+  currentStep: number;
+
+  // 时间戳
+  createdAt: Date;
+  updatedAt: Date;
+
+  // 元数据
+  metadata?: Record<string, any>;
+}
+
+interface ExecutionStep {
+  stepId: string;
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  input: any;
+  output?: any;
+  error?: string;
+  startTime?: Date;
+  endTime?: Date;
+}
+```
+
+### 检查点管理器
+
+```typescript
+export class StateCheckpointManager {
+  private checkpoints = new Map<string, StateCheckpoint>();
+
+  /**
+   * 创建检查点
+   */
+  async create(taskId: string, sessionId: string): Promise<StateCheckpoint> {
+    const checkpoint: StateCheckpoint = {
+      checkpointId: `cp-${taskId}-${Date.now()}`,
+      taskId,
+      sessionId,
+      state: 'pending',
+      steps: [],
+      currentStep: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.checkpoints.set(checkpoint.checkpointId, checkpoint);
+
+    return checkpoint;
+  }
+
+  /**
+   * 获取检查点
+   */
+  async get(checkpointId: string): Promise<StateCheckpoint | null> {
+    return this.checkpoints.get(checkpointId) || null;
+  }
+
+  /**
+   * 更新检查点
+   */
+  async update(
+    checkpointId: string,
+    updates: Partial<StateCheckpoint>
+  ): Promise<void> {
+    const checkpoint = this.checkpoints.get(checkpointId);
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${checkpointId}`);
+    }
+
+    Object.assign(checkpoint, updates, {
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * 添加执行步骤
+   */
+  async addStep(
+    checkpointId: string,
+    step: ExecutionStep
+  ): Promise<void> {
+    const checkpoint = this.checkpoints.get(checkpointId);
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${checkpointId}`);
+    }
+
+    checkpoint.steps.push(step);
+    checkpoint.currentStep = checkpoint.steps.length;
+    checkpoint.updatedAt = new Date();
+  }
+
+  /**
+   * 删除检查点
+   */
+  async delete(checkpointId: string): Promise<void> {
+    this.checkpoints.delete(checkpointId);
+  }
+
+  /**
+   * 清理过期的检查点
+   */
+  async cleanup(maxAge: number): Promise<number> {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [id, checkpoint] of this.checkpoints.entries()) {
+      const age = now - checkpoint.createdAt.getTime();
+
+      if (age > maxAge) {
+        this.checkpoints.delete(id);
+        cleaned++;
+      }
+    }
+
+    return cleaned;
+  }
+}
+```
+
+### 使用示例
+
+```typescript
+import { StateCheckpointManager } from '@/utils/checkpoint';
+
+const checkpointManager = new StateCheckpointManager();
+
+// 创建检查点
+const checkpoint = await checkpointManager.create('task-123', 'session-456');
+
+// 添加执行步骤
+await checkpointManager.addStep(checkpoint.checkpointId, {
+  stepId: 'step-1',
+  name: 'LLM Call',
+  status: 'completed',
+  input: { prompt: 'Hello' },
+  output: { response: 'World!' },
+  startTime: new Date(),
+  endTime: new Date(),
+});
+
+// 更新状态
+await checkpointManager.update(checkpoint.checkpointId, {
+  state: 'completed',
+});
+
+// 清理过期检查点（24 小时）
+await checkpointManager.cleanup(24 * 60 * 60 * 1000);
+```
+
+## 状态分组策略
+
+### 推荐
+
+| 组前缀 | 用途 |
+|--------|------|
+| `agent:{sessionId}` | Agent 会话状态 |
+| `task:{taskId}` | 任务执行状态 |
+| `user:{userId}` | 用户状态 |
+| `system:{key}` | 系统配置 |
+| `cache:{key}` | 缓存数据 |
+
+### 示例
+
+```typescript
+// Agent 会话状态
+await state.set('agent:session-123', 'conversationHistory', []);
+await state.set('agent:session-123', 'lastActivity', Date.now());
+
+// 任务执行状态
+await state.set('task:task-456', 'status', 'running');
+await state.set('task:task-456', 'progress', 0.5);
+
+// 用户状态
+await state.set('user:leo', 'preferences', {
+  theme: 'dark',
+  language: 'zh-CN',
+});
+
+// 系统配置
+await state.set('system:config', 'maxSessions', 1000);
+
+// 缓存数据
+await state.set('cache:weather', 'Beijing', {
+  temperature: 25,
+  humidity: 60,
+});
+```
+
+## 状态持久化
+
+### Redis 持久化
+
+```typescript
+// motia.config.ts
+import { PluginStates } from '@motiadev/plugin-states';
+
+export default {
+  plugins: [
+    PluginStates({
+      // 使用 Redis 持久化
+      persist: {
+        type: 'redis',
+        url: process.env.REDIS_URL || 'redis://localhost:6379',
+      },
+    }),
+  ],
+};
+```
+
+### 持久化配置
+
+```typescript
+interface PersistConfig {
+  type: 'memory' | 'redis';
+  redis?: {
+    url: string;
+    keyPrefix?: string;  // 状态键前缀，默认 'state:'
+    ttl?: number;         // 过期时间（秒）
+  };
+}
+```
+
+## 状态清理策略
+
+### 定期清理
+
+```typescript
+export class StateCleaner {
+  private interval?: NodeJS.Timeout;
+
+  constructor(
+    private state: State,
+    private intervalMs: number = 300000  // 5 分钟
+  ) {}
+
+  start(): void {
+    this.interval = setInterval(async () => {
+      await this.cleanup();
+    }, this.intervalMs);
+  }
+
+  stop(): void {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = undefined;
+    }
+  }
+
+  private async cleanup(): Promise<void> {
+    // 清理过期的会话状态
+    const now = Date.now();
+    const sessionTimeout = 1800000; // 30 分钟
+
+    const keys = await this.state.keys('agent:');
+    for (const key of keys) {
+      const lastActivity = await this.state.get(key, 'lastActivity', 0);
+
+      if (now - lastActivity > sessionTimeout) {
+        await this.state.clearGroup(key);
+      }
+    }
+  }
+}
+```
+
+## 最佳实践
+
+### 1. 使用有意义的键名
+
+```typescript
+// ✅ 好：清晰的键名
+await state.set('agent:session-123', 'conversationHistory', []);
+
+// ❌ 不好：模糊的键名
+await state.set('agent:session-123', 'data', []);
+```
+
+### 2. 使用正确的分组
+
+```typescript
+// ✅ 好：使用会话分组
+await state.set(`agent:${sessionId}`, 'userName', 'Leo');
+
+// ❌ 不好：全局键（容易冲突）
+await state.set('userName', 'Leo');
+```
+
+### 3. 设置合理的默认值
+
+```typescript
+// ✅ 好：设置默认值
+const count = await state.get(groupId, 'count', 0);
+
+// ❌ 不好：假设值存在
+const count = await state.get(groupId, 'count');  // 可能是 undefined
+```
+
+### 4. 原子更新共享状态
+
+```typescript
+// ✅ 好：使用原子更新
+await stateLockManager.atomicUpdate(state, groupId, 'counter', (c) => c + 1);
+
+// ❌ 不好：读写分离（竞态条件）
+const count = await state.get(groupId, 'counter');
+await(state.set(groupId, 'counter', count + 1));
+```
+
+### 5. 及时清理过期状态
+
+```typescript
+// ✅ 好：定期清理
+setInterval(async () => {
+  await stateCleaner.cleanup();
+}, 300000);
+
+// ❌ 不好：从不清理（内存泄漏）
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `concurrency-safety.mdc` - 并发安全

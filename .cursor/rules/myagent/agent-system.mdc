@@ -1,0 +1,641 @@
+---
+description: MyAgent Agent 系统 - AgentManager、Agent/MasterAgent、LLM Client、PTC 生成、重试机制
+---
+
+# MyAgent Agent 系统
+
+## 概述
+
+Agent 系统是 MyAgent 的核心组件，负责 AI 代理的创建、管理和执行。它包括：
+
+- **AgentManager**：会话管理和资源控制
+- **Agent/MasterAgent**：任务执行引擎
+- **LLM Client**：大语言模型客户端
+- **PTC Generator**：Python Task Code 生成器
+- **Retry Mechanism**：错误重试机制
+
+## AgentManager
+
+### 职责
+
+AgentManager 是一个单例，负责：
+
+1. **会话管理**：创建、获取、释放 Agent 实例
+2. **资源控制**：限制最大并发会话数
+3. **自动清理**：会话超时自动释放
+4. **配置管理**：统一管理 Agent 配置
+
+### 核心接口
+
+```typescript
+interface AgentManagerConfig {
+  sessionTimeout: number;      // 会话超时（毫秒）
+  maxSessions: number;          // 最大并发会话数
+  agentConfig: AgentConfig;     // 基础 Agent 配置
+  masterAgentConfig?: MasterAgentConfig; // MasterAgent 配置
+}
+
+interface AgentConfig {
+  systemPrompt: string;
+  availableSkills: string[];
+  llm?: LLMConfig;
+  sandbox?: SandboxConfig;
+  constraints?: ConstraintConfig;
+}
+
+interface MasterAgentConfig extends AgentConfig {
+  subagents: string[];          // 可用的子代理列表
+}
+```
+
+### 使用示例
+
+```typescript
+import { getAgentManager } from '@/core/agent/manager';
+
+// 获取 AgentManager 单例
+const agentManager = getAgentManager();
+
+// 获取或创建会话
+const agent = await agentManager.acquire('session-123', {
+  agentType: 'master',  // 'master' 或 'agent'
+  systemPrompt: '自定义系统提示',
+});
+
+// 执行任务
+const result = await agent.execute('帮我分析这个文件');
+
+// 释放会话
+await agentManager.release('session-123');
+```
+
+### 实现要点
+
+#### 会话隔离
+
+每个 Session 拥有独立的 Agent 实例，互不干扰：
+
+```typescript
+class AgentManager {
+  private sessions = new Map<string, Agent>();
+  private sessionTimeouts = new Map<string, NodeJS.Timeout>();
+
+  async acquire(sessionId: string, options?: AcquireOptions): Promise<Agent> {
+    // 检查并发限制
+    if (this.sessions.size >= this.maxSessions) {
+      throw new Error('Maximum concurrent sessions exceeded');
+    }
+
+    // 获取或创建 Agent
+    if (!this.sessions.has(sessionId)) {
+      const agent = options?.agentType === 'master'
+        ? new MasterAgent(this.agentConfig)
+        : new Agent(this.agentConfig);
+
+      this.sessions.set(sessionId, agent);
+
+      // 设置超时清理
+      this.setupSessionTimeout(sessionId);
+    }
+
+    return this.sessions.get(sessionId)!;
+  }
+
+  private setupSessionTimeout(sessionId: string): void {
+    // 清除旧的超时
+    if (this.sessionTimeouts.has(sessionId)) {
+      clearTimeout(this.sessionTimeouts.get(sessionId)!);
+    }
+
+    // 设置新超时
+    const timeout = setTimeout(async () => {
+      await this.release(sessionId);
+    }, this.sessionTimeout);
+
+    this.sessionTimeouts.set(sessionId, timeout);
+  }
+}
+```
+
+#### LRU 淘汰
+
+当达到最大会话数时，淘汰最久未使用的会话：
+
+```typescript
+class AgentManager {
+  private accessOrder: string[] = [];
+
+  private evictLRU(): void {
+    const oldestSession = this.accessOrder.shift();
+    if (oldestSession) {
+      this.release(oldestSession);
+    }
+  }
+
+  private recordAccess(sessionId: string): void {
+    // 移除旧记录
+    const index = this.accessOrder.indexOf(sessionId);
+    if (index !== -1) {
+      this.accessOrder.splice(index, 1);
+    }
+    // 添加到末尾
+    this.accessOrder.push(sessionId);
+  }
+}
+```
+
+## Agent
+
+### 职责
+
+Agent 是基础的 AI 代理实现，负责：
+
+1. **任务执行**：调用 LLM 处理任务
+2. **技能调用**：调用可用的技能
+3. **结果记录**：记录执行步骤和结果
+4. **错误处理**：处理执行失败
+
+### 核心接口
+
+```typescript
+interface AgentConfig {
+  systemPrompt: string;
+  availableSkills: string[];
+  llm?: {
+    provider: 'anthropic' | 'openai-compatible';
+    model: string;
+    apiKey?: string;
+    baseURL?: string;
+  };
+  sandbox?: SandboxConfig;
+  constraints?: {
+    maxIterations?: number;
+    timeout?: number;
+    retry?: RetryConfig;
+  };
+}
+
+interface AgentResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  steps: AgentStep[];
+  executionTime: number;
+  metadata: {
+    llmCalls: number;
+    skillCalls: number;
+    totalTokens: number;
+  };
+}
+
+interface AgentStep {
+  type: 'planning' | 'ptc-generation' | 'execution' | 'delegation' | 'error';
+  content: string;
+  timestamp: number;
+  metadata?: Record<string, any>;
+}
+```
+
+### 执行流程
+
+```
+┌─────────────────┐
+│  接收任务       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  构建提示词     │
+│  (系统+任务)    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  调用 LLM       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  解析响应       │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌─────────┐ ┌──────────┐
+│ 技能调用 │ │ 文本响应 │
+└────┬────┘ └─────┬────┘
+     │            │
+     └─────┬────┘
+           │
+           ▼
+┌─────────────────┐
+│  返回结果       │
+└─────────────────┘
+```
+
+### 使用示例
+
+```typescript
+const agent = new Agent({
+  systemPrompt: '你是一个代码分析专家',
+  availableSkills: ['code-analysis', 'summarize'],
+  llm: {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-5',
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  },
+  sandbox: {
+    type: 'local',
+    local: { pythonPath: './python_modules/bin/python3' },
+  },
+});
+
+const result = await agent.execute('分析这个函数的复杂度');
+
+if (result.success) {
+  console.log('输出:', result.output);
+  console.log('执行步骤:', result.steps);
+} else {
+  console.error('错误:', result.error);
+}
+```
+
+## MasterAgent
+
+### 职责
+
+MasterAgent 继承自 Agent，增加了委派能力：
+
+1. **委派决策**：判断是否需要委派给子代理
+2. **子代理选择**：选择合适的子代理
+3. **PTC 生成**：生成委派计划的 Python 代码
+4. **协调执行**：协调子代理执行
+
+### 委派流程
+
+```
+┌─────────────────┐
+│  接收任务       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  分析任务类型   │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌─────────┐ ┌──────────┐
+│ 直接处理 │ │ 需要委派 │
+└────┬────┘ └─────┬────┘
+     │            │
+     │            ▼
+     │    ┌─────────────────┐
+     │    │ 选择子代理     │
+     │    └────────┬────────┘
+     │             │
+     │             ▼
+     │    ┌─────────────────┐
+     │    │ 生成 PTC 计划  │
+     │    └────────┬────────┘
+     │             │
+     │             ▼
+     │    ┌─────────────────┐
+     │    │ 执行 PTC       │
+     │    └────────┬────────┘
+     │             │
+     └─────┬────┘
+           │
+           ▼
+┌─────────────────┐
+│  返回结果       │
+└─────────────────┘
+```
+
+### 使用示例
+
+```typescript
+const masterAgent = new MasterAgent({
+  systemPrompt: '你是一个协调型 AI 助手',
+  availableSkills: ['web-search', 'summarize'],
+  subagents: ['code-reviewer', 'data-analyst', 'security-auditor'],
+});
+
+const result = await masterAgent.execute('审查这段代码的安全性');
+
+// 委派信息
+if (result.metadata.delegates) {
+  console.log('委派给了:', result.metadata.delegates);
+}
+```
+
+## LLM Client
+
+### 支持的提供商
+
+| 提供商 | 模型示例 |
+|--------|----------|
+| **Anthropic** | claude-sonnet-4-5, claude-opus-4-5 |
+| **OpenAI Compatible** | gpt-4, glm-4 |
+
+### 核心接口
+
+```typescript
+interface LLMConfig {
+  provider: 'anthropic' | 'openai-compatible';
+  model: string;
+  apiKey: string;
+  baseURL?: string;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+interface LLMMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface LLMResponse {
+  content: string;
+  stopReason?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+}
+```
+
+### 使用示例
+
+```typescript
+import { LLMClient } from '@/core/agent/llm-client';
+
+const llmClient = new LLMClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-5',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  maxTokens: 4096,
+  temperature: 0.7,
+});
+
+const response = await llmClient.complete([
+  { role: 'system', content: '你是一个代码分析专家' },
+  { role: 'user', content: '分析这个函数' },
+]);
+
+]);
+
+console.log('响应:', response.content);
+console.log('Token 使用:', response.usage);
+```
+
+### 流式响应
+
+```typescript
+const stream = llmClient.stream([
+  { role: 'system', content: '你是一个代码分析专家' },
+  { role: 'user', content: '分析这个函数' },
+]);
+
+for await (const chunk of stream) {
+  console.log('实时输出:', chunk.content);
+}
+```
+
+## PTC Generator
+
+### 概述
+
+PTC (Python Task Code) Generator 负责生成 Python 代码，用于执行复杂的委派计划。
+
+### 生成的 PTC 结构
+
+```python
+# PTC 模板
+import json
+from typing import Dict, Any
+
+def execute_task(context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    执行委派计划的主函数
+
+    Args:
+        context: 包含任务信息、可用技能、子代理等的上下文
+
+    Returns:
+        执行结果字典
+    """
+    task = context['task']
+    available_skills = context['available_skills']
+    subagents = context['subagents']
+
+    # 1. 分析任务
+    # ...
+
+    # 2. 选择子代理
+    # ...
+
+    # 3. 调用技能
+    # ...
+
+    # 4. 返回结果
+    return {
+        'success': True,
+        'output': '...',
+        'metadata': {...}
+    }
+```
+
+### 使用示例
+
+```typescript
+import { PTCGenerator } from '@/core/agent/ptc-generator';
+
+const ptcGenerator = new PTCGenerator();
+
+const context = {
+  task: '审查这段代码的安全性',
+  availableSkills: ['code-analysis', 'web-search'],
+  subagents: ['code-reviewer', 'security-auditor'],
+};
+
+const ptcCode = await ptcGenerator.generate(context);
+
+// 在沙箱中执行
+const sandbox = new LocalSandbox();
+const result = await sandbox.execute(ptcCode, 30000);
+```
+
+## Retry Mechanism
+
+### 重试策略
+
+| 策略 | 描述 |
+|------|------|
+| **线性重试** | 固定延迟重试 |
+| **指数退避** | 延迟指数增长 |
+| **随机抖动** | 延迟加上随机值 |
+
+### 核心接口
+
+```typescript
+interface RetryConfig {
+  maxRetries: number;           // 最大重试次数
+  baseDelay: number;            // 基础延迟（毫秒）
+  exponentialBackoff: boolean;  // 是否指数退避
+  jitter: boolean;              // 是否随机抖动
+}
+
+interface RetryMetadata {
+  attempts: number;             // 实际尝试次数
+  totalDelay: number;           // 总延迟时间
+  recovered: boolean;           // 是否恢复成功
+}
+```
+
+### 使用示例
+
+```typescript
+import { RetryMechanism } from '@/core/agent/retry';
+
+const retry = new RetryMechanism({
+  maxRetries: 3,
+  baseDelay: 1000,
+  exponentialBackoff: true,
+  jitter: true,
+});
+
+const result = await retry.execute(
+  async () => {
+    // 可能失败的操作
+    return await someOperation();
+  },
+  (error) => {
+    // 判断是否可重试
+    return isRetryable(error);
+  }
+);
+
+if (result.metadata.recovered) {
+  console.log('重试成功');
+}
+```
+
+### 延迟计算
+
+```typescript
+class RetryMechanism {
+  private calculateDelay(attempt: number): number {
+    let delay = this.config.baseDelay;
+
+    // 指数退避
+    if (this.config.exponentialBackoff) {
+      delay *= Math.pow(2, attempt);
+    }
+
+    // 随机抖动
+    if (this.config.jitter) {
+      delay *= 0.5 + Math.random(); // 0.5x - 1.5x
+    }
+
+    return delay;
+  }
+}
+```
+
+## 类型定义
+
+### Agent 相关类型
+
+```typescript
+/**
+ * Agent 配置
+ */
+export interface AgentConfig {
+  systemPrompt: string;
+  availableSkills: string[];
+  llm?: {
+    provider: 'anthropic' | 'openai-compatible';
+    model: string;
+    apiKey?: string;
+    baseURL?: string;
+    maxTokens?: number;
+    temperature?: number;
+  };
+  sandbox?: {
+    type: 'local' | 'daytona' | 'e2b' | 'modal';
+    local?: { pythonPath: string };
+    daytona?: { projectId: string; };
+    e2b?: { apiKey: string; };
+    modal?: { functionName: string; };
+  };
+  constraints?: {
+    maxIterations?: number;
+    timeout?: number;
+    retry?: {
+      maxRetries?: number;
+      baseDelay?: number;
+      exponentialBackoff?: boolean;
+      jitter?: boolean;
+    };
+  };
+}
+
+/**
+ * MasterAgent 配置
+ */
+export interface MasterAgentConfig extends AgentConfig {
+  subagents: string[];
+}
+
+/**
+ * Agent 执行结果
+ */
+export interface AgentResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  steps: AgentStep[];
+  executionTime: number;
+  metadata: {
+    llmCalls: number;
+    skillCalls: number;
+    totalTokens: number;
+    skillNames?: string[];
+    delegates?: string[];
+    retries?: RetryMetadata;
+    ptcRetries?: RetryMetadata;
+  };
+}
+
+/**
+ * Agent 执行步骤
+ */
+export interface AgentStep {
+  type: 'planning' | 'ptc-generation' | 'execution' | 'delegation' | 'error';
+  content: string;
+  timestamp: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * 重试元数据
+ */
+export interface RetryMetadata {
+  attempts: number;
+  totalDelay: number;
+  recovered: boolean;
+}
+```
+
+## 相关文档
+
+- `project-overview.mdc` - 项目概览
+- `architecture.mdc` - 架构设计
+- `task-hooks.mdc` - 任务钩子系统
+- `sandbox-system.mdc` - 沙箱执行环境
+- `state-management.mdc` - 状态管理
+- `concurrency-safety.mdc` - 并发安全
