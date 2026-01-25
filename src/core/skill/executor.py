@@ -133,16 +133,34 @@ class SkillExecutor:
                 execution_time = time.time() - start_time
 
                 # Convert hook result to SkillResult
+                # 支持两种格式：旧格式（直接 output/error）和 OutputBuilder 统一格式
                 if result.get("success"):
+                    # 成功：提取 output 或 content
+                    output = result.get("output")
+                    if output is None:
+                        # OutputBuilder 统一格式：内容在 content 字段
+                        output = result.get("content")
+
                     return SkillResult(
                         success=True,
-                        output=result.get("output"),
+                        output=output,
                         execution_time=execution_time
                     )
                 else:
+                    # 失败：提取 error
+                    error = result.get("error")
+                    if error is None:
+                        # OutputBuilder 统一格式：错误信息在 content 字段
+                        content = result.get("content", {})
+                        if isinstance(content, dict):
+                            # 从 content 中提取错误信息
+                            error = content.get("message") or content.get("details") or str(content)
+                        else:
+                            error = str(content)
+
                     return SkillResult(
                         success=False,
-                        error=result.get("error"),
+                        error=error,
                         execution_time=execution_time
                     )
             except Exception as e:

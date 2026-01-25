@@ -14,6 +14,8 @@ function TaskDetail() {
   const [loading, setLoading] = useState(true)
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
+  const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
   const [messages, setMessages] = useState([]) // 进度流消息
   const [chatMessages, setChatMessages] = useState([]) // 对话消息
   const [inputValue, setInputValue] = useState('') // 聊天输入框内容
@@ -46,7 +48,11 @@ function TaskDetail() {
       setMessages(entries)
 
       // 过滤出聊天消息
-      const chatEntries = entries.filter(entry => entry.type === 'chat')
+      const chatEntries = entries.filter(entry => entry.progressType === 'chat').map(entry => ({
+        ...entry,
+        role: entry.metadata?.data?.sender === 'user' ? 'user' : 'assistant',
+        content: entry.metadata?.data?.message || entry.task
+      }))
       setChatMessages(chatEntries)
     })
 
@@ -223,20 +229,553 @@ function TaskDetail() {
     return `${hours}小时${mins}分${secs}秒`
   }
 
-  // 消息气泡组件
-  const MessageBubble = ({ message }) => {
-    const styles = {
-      status: 'status-message',
-      step: 'step-message',
-      heartbeat: 'heartbeat-message',
-      chat: 'chat-message',
+  // 检测结果类型
+  const getResultType = (result) => {
+    if (!result) return 'text'
+
+    // 如果是字符串，尝试检测URL或路径
+    if (typeof result === 'string') {
+      // 尝试解析字符串中的URL
+      const urlMatch = result.match(/(?:png_url|video_url|html_url|svg_url)['":\s]*['"]([^'"]+)['"]/)
+      if (urlMatch) {
+        const url = urlMatch[1]
+        if (url.includes('.mp4') || url.includes('.webm') || url.includes('.mov')) {
+          return 'video'
+        }
+        if (url.includes('.png') || url.includes('.jpg') || url.includes('.jpeg') || url.includes('.gif') || url.includes('.svg')) {
+          return 'image'
+        }
+      }
+
+      // 检测视频路径
+      if (result.includes('.mp4') || result.includes('.webm') || result.includes('.mov')) {
+        return 'video'
+      }
+      // 检测图片路径
+      if (result.includes('.png') || result.includes('.jpg') || result.includes('.jpeg') || result.includes('.gif') || result.includes('.svg')) {
+        return 'image'
+      }
+      return 'text'
+    }
+
+    // 如果是对象，检查result_type字段
+    if (typeof result === 'object') {
+      const resultType = result.result_type || result.type
+
+      // 统一结果格式
+      if (resultType === 'video') return 'video'
+      if (resultType === 'infographic') return 'image'
+      if (resultType === 'table') return 'table'
+      if (resultType === 'text') return 'text'
+
+      // 检查content字段
+      if (result.content) {
+        const { path, mime_type } = result.content
+        if (path) {
+          if (path.includes('.mp4') || path.includes('.webm') || mime_type?.startsWith('video/')) {
+            return 'video'
+          }
+          if (path.includes('.png') || path.includes('.jpg') || mime_type?.startsWith('image/')) {
+            return 'image'
+          }
+        }
+      }
+    }
+
+    return 'text'
+  }
+
+  // 从output字符串中提取URL和统一结果
+  const extractParsedResult = (result) => {
+    // 如果已经是对象格式（统一结果格式）
+    if (typeof result === 'object' && result.result_type && result.content) {
+      return result
+    }
+
+    // 如果是字符串，尝试解析
+    if (typeof result === 'string') {
+      // 方法1: 直接匹配 'result_type': 'video', 'content': {'path': '...'
+      const typeMatch = result.match(/'result_type':\s*'(video|infographic|image|table|text)'/)
+      const pathMatch = result.match(/'path':\s*'([^']+\.(?:mp4|png|jpg|jpeg|gif|svg|webm|mov))'/)
+
+      if (typeMatch && pathMatch) {
+        const resultType = typeMatch[1]
+        const path = pathMatch[1]
+
+        // 提取其他元数据
+        const durationMatch = result.match(/'duration':\s*([\d.]+)/)
+        const fpsMatch = result.match(/'fps':\s*(\d+)/)
+        const sizeMatch = result.match(/'size':\s*(\d+)/)
+
+        return {
+          result_type: resultType === 'infographic' ? 'image' : resultType,
+          content: {
+            path: path,
+            mime_type: path.endsWith('.mp4') ? 'video/mp4' : 'image/png',
+            ...(durationMatch && { duration: parseFloat(durationMatch[1]) }),
+            ...(fpsMatch && { fps: parseInt(fpsMatch[1], 10) }),
+            ...(sizeMatch && { size: parseInt(sizeMatch[1], 10) })
+          }
+        }
+      }
+
+      // 方法2: 尝试匹配 outputs 目录中的路径
+      const outputPathMatch = result.match(/outputs\/([^'\s]+\.(?:mp4|png|jpg|jpeg|gif|svg))/)
+      if (outputPathMatch) {
+        const path = outputPathMatch[1]
+        const isVideo = path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov')
+
+        return {
+          result_type: isVideo ? 'video' : 'image',
+          content: {
+            path: path,
+            mime_type: isVideo ? 'video/mp4' : 'image/png'
+          }
+        }
+      }
+    }
+
+    // 如果是对象但没有result_type
+    if (typeof result === 'object' && result.content?.path) {
+      return result
+    }
+
+    // 返回原始结果
+    return result
+  }
+
+  // 获取媒体文件的Blob URL
+  // 渲染 Stream 内容（实时日志）
+  const renderStreamContent = () => {
+    // streamData 是来自 Motia SDK 的对象数组，每个对象包含 id 和其他字段
+    const entries = Array.isArray(messages) ? messages : []
+
+    if (entries.length === 0) {
+      return (
+        <div className="stream-content">
+          <div className="no-stream-data">
+            <p>暂无实时日志数据</p>
+            <p className="hint">任务执行时会显示实时进度和心跳信息</p>
+          </div>
+        </div>
+      )
     }
 
     return (
-      <div className={`${styles[message.type || 'status']} message`}>
-        <span className="timestamp">{new Date(message.timestamp).toLocaleTimeString()}</span>
-        <span className="content">{message.message || message.content}</span>
-        {message.skill && <span className="badge">{message.skill}</span>}
+      <div className="stream-content">
+        <div className="stream-header">
+          <h3>任务执行日志</h3>
+          <div className="stream-info">
+            <span className="stream-count">{entries.length} 条记录</span>
+            <span className="stream-live">● WebSocket 实时连接</span>
+          </div>
+        </div>
+        <div className="stream-entries">
+          {entries.map((entry) => {
+            // entry 是对象，包含 id, type, status, message, timestamp 等字段
+            return (
+              <div key={entry.id} className={`stream-entry stream-entry-${entry.status || 'info'}`}>
+                <div className="entry-header">
+                  <span className="entry-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                  <span className={`entry-status status-${entry.status || 'info'}`}>
+                    {entry.status || 'pending'}
+                  </span>
+                  {entry.type && <span className="entry-type">{entry.type === 'task' ? '任务' : '技能'}</span>}
+                  {entry.skill && <span className="entry-skill">{entry.skill}</span>}
+                  {entry.stage && <span className="entry-stage">{entry.stage}</span>}
+                  {entry.progressType && <span className="entry-progress-type">{entry.progressType}</span>}
+                </div>
+                {entry.task && <div className="entry-task">{entry.task}</div>}
+                {entry.message && <div className="entry-output">{entry.message}</div>}
+                {entry.error && <div className="entry-error">{entry.error}</div>}
+                {entry.metadata?.data && (
+                  <div className="entry-metadata">
+                    <pre>{JSON.stringify(entry.metadata.data, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const getMediaBlobUrl = async (path) => {
+    if (mediaUrls[path]) {
+      return mediaUrls[path]
+    }
+
+    try {
+      // 使用查询参数格式：/media?path=xxx 而不是 /media/xxx
+      const response = await fetch(`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch file')
+      }
+
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+
+      setMediaUrls(prev => ({ ...prev, [path]: blobUrl }))
+      return blobUrl
+    } catch (error) {
+      console.error('Error fetching media file:', error)
+      return null
+    }
+  }
+
+  // 渲染可视化内容（视频、图片等）
+  const renderVisualContent = (result) => {
+    const parsedResult = extractParsedResult(result)
+    const resultType = getResultType(result)
+
+    if (resultType === 'video' && parsedResult.content?.path) {
+      // 处理视频
+      let videoPath = parsedResult.content.path
+      // 移除前导的/outputs/如果存在
+      videoPath = videoPath.replace(/^\/?outputs\//, '')
+
+      return (
+        <div className="result-visual">
+          <VideoPlayer
+            videoPath={videoPath}
+            duration={parsedResult.content.duration}
+            fps={parsedResult.content.fps}
+            size={parsedResult.content.size}
+            getBlobUrl={getMediaBlobUrl}
+          />
+        </div>
+      )
+    }
+
+    if (resultType === 'image' && parsedResult.content?.path) {
+      // 处理图片
+      let imagePath = parsedResult.content.path
+      // 移除前导的/outputs/如果存在
+      imagePath = imagePath.replace(/^\/?outputs\//, '')
+
+      return (
+        <div className="result-visual">
+          <ImagePlayer
+            imagePath={imagePath}
+            getBlobUrl={getMediaBlobUrl}
+          />
+        </div>
+      )
+    }
+
+    if (resultType === 'table' && typeof result === 'object') {
+      // 处理表格
+      const { content } = result
+      if (!content || !content.columns || !content.rows) {
+        return <div className="no-result">无效的表格数据</div>
+      }
+
+      return (
+        <div className="result-table">
+          <div className="table-controls">
+            <input
+              type="text"
+              placeholder="搜索表格..."
+              className="table-search"
+              onChange={(e) => {
+                const query = e.target.value.toLowerCase()
+                const rows = document.querySelectorAll('.data-table tbody tr')
+                rows.forEach(row => {
+                  const text = row.textContent.toLowerCase()
+                  row.style.display = text.includes(query) ? '' : 'none'
+                })
+              }}
+            />
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  {content.columns.map((col, i) => (
+                    <th key={i}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {content.rows.map((row, i) => (
+                  <tr key={i}>
+                    {row.map((cell, j) => (
+                      <td key={j}>{String(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )
+    }
+
+    return <div className="no-visual">此结果类型不支持可视化预览</div>
+  }
+
+  // 渲染文本内容
+  const renderTextContent = (result) => {
+    let textContent = ''
+
+    if (typeof result === 'string') {
+      // 过滤掉调试信息和多余内容
+      textContent = result
+        .split('\n')
+        .filter(line => {
+          // 过滤掉DEBUG信息
+          if (line.trim().startsWith('[DEBUG]')) return false
+          // 过滤掉成功消息
+          if (line.trim().startsWith('success=True')) return false
+          if (line.trim().startsWith('✅')) return false
+          if (line.trim().startsWith('📸')) return false
+          // 过滤掉长输出语句
+          if (line.includes('export=') && line.length > 200) return false
+          return true
+        })
+        .join('\n')
+        .trim()
+
+      // 如果过滤后为空或太短，显示有用的信息
+      if (textContent.length < 10) {
+        // 尝试提取关键信息
+        const urlMatch = result.match(/(https?:\/\/[^\s]+)/)
+        if (urlMatch) {
+          textContent = `结果URL: ${urlMatch[1]}`
+        } else if (result.includes('output=')) {
+          // 如果有output=，提取这个值
+          const outputMatch = result.match(/output\s*=\s*({[^}]+})/s)
+          if (outputMatch) {
+            textContent = `任务执行成功\n\n${outputMatch[1]}`
+          }
+        } else {
+          textContent = result || '暂无文本内容'
+        }
+      }
+    } else if (typeof result === 'object') {
+      if (result.text) {
+        textContent = result.text
+      } else if (result.content?.text) {
+        textContent = result.content.text
+      } else {
+        textContent = JSON.stringify(result, null, 2)
+      }
+    }
+
+    return (
+      <div className="result-text-content">
+        <pre className="result-text">{textContent || '暂无文本内容'}</pre>
+      </div>
+    )
+  }
+
+  const renderResult = (result) => {
+    if (!result) {
+      return <div className="no-result">暂无结果</div>
+    }
+
+    const resultType = getResultType(result)
+    const hasVisual = ['video', 'image', 'table'].includes(resultType)
+
+    return (
+      <div className="result-container">
+        {/* Tab切换 */}
+        <div className="result-tabs">
+          {hasVisual && (
+            <>
+              <button
+                className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
+                onClick={() => setActiveTab('visual')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                  <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+                </svg>
+                多媒体
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
+                onClick={() => setActiveTab('text')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+                  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                  <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                </svg>
+                JSON
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* 内容区域 */}
+        <div className="result-content">
+          {hasVisual ? (
+            <>
+              {activeTab === 'visual' && renderVisualContent(result)}
+              {activeTab === 'text' && renderTextContent(result)}
+            </>
+          ) : (
+            renderTextContent(result)
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // 消息气泡组件 - 统一的对话流样式
+  const MessageBubble = ({ message }) => {
+    // 获取类型图标
+    const getTypeIcon = () => {
+      if (message.type === 'task') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
+            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9l2 2 4-4"/>
+          </svg>
+        )
+      }
+      if (message.type === 'skill') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        )
+      }
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4M12 8h.01"/>
+        </svg>
+      )
+    }
+
+    // 获取状态配置
+    const getStatusConfig = () => {
+      const status = message.status?.toLowerCase() || 'pending'
+      switch (status) {
+        case 'pending':
+          return {
+            label: '等待中',
+            color: '#F59E0B',
+            bgColor: '#FEF3C7',
+            icon: (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            )
+          }
+        case 'started':
+          return {
+            label: '已开始',
+            color: '#64748B',
+            bgColor: '#F1F5F9',
+            icon: (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            )
+          }
+        case 'running':
+          return {
+            label: '执行中',
+            color: '#3B82F6',
+            bgColor: '#DBEAFE',
+            icon: (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
+                <path d="M12 2v4m0 4v4m0 4h4m-4 0h4"/>
+              </svg>
+            )
+          }
+        case 'completed':
+          return {
+            label: '已完成',
+            color: '#22C55E',
+            bgColor: '#D1FAE5',
+            icon: (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
+              </svg>
+            )
+          }
+        case 'failed':
+          return {
+            label: '失败',
+            color: '#DC2626',
+            bgColor: '#FEE2E2',
+            icon: (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4m0 4h.01"/>
+              </svg>
+            )
+          }
+        default:
+          return null
+      }
+    }
+
+    // 获取阶段图标（小）
+    const getStageIcon = () => {
+      if (message.stage === 'pre') {
+        return (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2">
+            <path d="M5 12h14"/>
+          </svg>
+        )
+      }
+      if (message.stage === 'post') {
+        return (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2">
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        )
+      }
+      if (message.stage === 'processing') {
+        return (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" className="stage-icon spinning">
+            <path d="M12 2v4m0 4v4m0 4h4m-4 0h4"/>
+          </svg>
+        )
+      }
+      return null
+    }
+
+    const typeIcon = getTypeIcon()
+    const stageIcon = getStageIcon()
+    const statusConfig = getStatusConfig()
+    const content = message.task || message.message || ''
+
+    return (
+      <div className="chat-bubble assistant">
+        <div className="chat-avatar">
+          {typeIcon}
+        </div>
+        <div className="chat-content">
+          <div className="chat-message-header">
+            {statusConfig && (
+              <span
+                className="chat-status-badge"
+                style={{
+                  color: statusConfig.color,
+                  backgroundColor: statusConfig.bgColor
+                }}
+              >
+                {statusConfig.icon}
+                <span>{statusConfig.label}</span>
+              </span>
+            )}
+            {message.type === 'skill' && message.skill && (
+              <span className="chat-skill-name">{message.skill}</span>
+            )}
+            {stageIcon && <span className="chat-stage-icon">{stageIcon}</span>}
+            <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <div className="chat-message">{content}</div>
+          {message.error && <div className="message-error">{message.error}</div>}
+        </div>
       </div>
     )
   }
@@ -244,14 +783,38 @@ function TaskDetail() {
   // 聊天气泡组件
   const ChatBubble = ({ message }) => {
     const isUser = message.role === 'user'
+
+    // 用户消息显示用户图标，助手消息显示机器人图标
+    const getAvatar = () => {
+      if (isUser) {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        )
+      }
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2">
+          <rect x="3" y="11" width="18" height="10" rx="2"/>
+          <circle cx="12" cy="5" r="2"/>
+          <path d="M12 7v4"/>
+          <line x1="8" y1="16" x2="8" y2="16"/>
+          <line x1="16" y1="16" x2="16" y2="16"/>
+        </svg>
+      )
+    }
+
     return (
       <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
         <div className="chat-avatar">
-          {isUser ? '👤' : '🤖'}
+          {getAvatar()}
         </div>
         <div className="chat-content">
+          <div className="chat-message-header">
+            <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+          </div>
           <div className="chat-message">{message.content}</div>
-          <div className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
         </div>
       </div>
     )
@@ -435,28 +998,25 @@ function TaskDetail() {
         <Link to="/tasks" className="back-link">
           ← 返回任务列表
         </Link>
-        <div className="header-title-action">
-          <h1>任务详情</h1>
-          <button
-            className="delete-button-detail"
-            onClick={handleDeleteTask}
-            title="删除任务"
-            aria-label="删除任务"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-          </button>
-        </div>
+        <button
+          className="delete-button-detail"
+          onClick={handleDeleteTask}
+          title="删除任务"
+          aria-label="删除任务"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </div>
 
       {/* 任务信息 */}
       <div className="task-info">
         <div className="info-section">
-          <h2>基本信息</h2>
+          <h2>任务信息</h2>
           <div className="info-grid">
             <div className="info-item">
               <span className="info-label">任务 ID:</span>
@@ -522,72 +1082,212 @@ function TaskDetail() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 任务内容 */}
-        <div className="info-section">
-          <h2>任务内容</h2>
-          <div className="task-content">
-            <pre>{task.task}</pre>
+            <div className="info-item full-width">
+              <span className="info-label">任务内容:</span>
+              <div className="task-content">
+                <pre>{task.task}</pre>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 混合UI区域：左侧进度流 + 底部对话区 */}
-      <div className="hybrid-ui-container">
-        {/* 左侧进度流区域 */}
-        <div className="progress-stream">
-          <div className="progress-stream-header">
-            <h3>任务执行进度</h3>
-            <span className="stream-count">{messages.length} 条消息</span>
+          {/* 混合UI区域：左侧进度流 + 右侧结果区 */}
+        <div className="hybrid-ui-container">
+          {/* 左侧进度流区域 */}
+          <div className="progress-stream">
+            <div className="progress-stream-header">
+              <h3>任务执行进度</h3>
+              <span className="stream-count">{messages.length + chatMessages.length} 条消息</span>
+            </div>
+            <div className="progress-stream-content">
+              {/* 统一的消息列表：进度流 + 聊天 */}
+              {messages.map(msg => (
+                <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+              ))}
+              {chatMessages.map(msg => (
+                <ChatBubble key={msg.id || msg.timestamp} message={msg} />
+              ))}
+              {messages.length === 0 && chatMessages.length === 0 && (
+                <div className="no-progress-data">
+                  <p>暂无任务执行数据</p>
+                  <p className="hint">任务执行时会显示实时进度信息</p>
+                </div>
+              )}
+            </div>
+
+            {/* 聊天输入框 */}
+            <div className="chat-input-group">
+              <input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="输入问题或指令..."
+                disabled={!task}
+                className="chat-input-field"
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || !task}
+                title="发送消息"
+                className="chat-send-button"
+              >
+                <svg className="send-icon" width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="progress-stream-content">
-            {messages.map(msg => (
-              <MessageBubble key={msg.id || msg.timestamp} message={msg} />
-            ))}
-            {messages.length === 0 && (
-              <div className="no-progress-data">
-                <p>暂无任务执行数据</p>
-                <p className="hint">任务执行时会显示实时进度信息</p>
+
+          {/* 右侧结果区 */}
+          <div className="task-result-right">
+            {/* 任务结果 */}
+            {task.output && (
+              <div className="info-section">
+                <h2>任务结果</h2>
+                <div className="task-result">
+                  {renderResult(task.output)}
+                </div>
+              </div>
+            )}
+
+            {/* 错误信息 */}
+            {task.error && (
+              <div className="info-section">
+                <h2>错误信息</h2>
+                <div className="task-error">
+                  <pre>{task.error}</pre>
+                </div>
               </div>
             )}
           </div>
         </div>
-
-        {/* 底部对话区域 */}
-        <div className="chat-area">
-          <div className="chat-messages">
-            {chatMessages.map(msg => (
-              <ChatBubble key={msg.id || msg.timestamp} message={msg} />
-            ))}
-            {chatMessages.length === 0 && (
-              <div className="no-chat-data">
-                <p>开始与任务进行对话</p>
-                <p className="hint">输入问题或指令，获取实时反馈</p>
-              </div>
-            )}
-          </div>
-
-          <div className="chat-input">
-            <input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="输入问题或指令..."
-              disabled={!task}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || !task}
-              title="发送消息"
-            >
-              发送
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
+  )
+}
+
+// Video Player Component
+function VideoPlayer({ videoPath, duration, fps, size, getBlobUrl }) {
+  const [videoUrl, setVideoUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [debugInfo, setDebugInfo] = useState('')
+
+  useEffect(() => {
+    const loadVideo = async () => {
+      setLoading(true)
+      setError(false)
+      setDebugInfo(`开始加载视频: ${videoPath}`)
+
+      try {
+        const url = await getBlobUrl(videoPath)
+
+        if (url) {
+          setVideoUrl(url)
+          setDebugInfo(`视频加载成功: ${url.substring(0, 50)}...`)
+        } else {
+          setError(true)
+          setDebugInfo('getBlobUrl返回null')
+        }
+      } catch (err) {
+        console.error('加载视频失败:', err)
+        setError(true)
+        setDebugInfo(`加载失败: ${err.message}`)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadVideo()
+  }, [videoPath, getBlobUrl])
+
+  if (loading) {
+    return (
+      <div className="media-loading">
+        <div className="loading-spinner"></div>
+        <p>加载视频中...</p>
+        {debugInfo && <small style={{color: '#999'}}>{debugInfo}</small>}
+      </div>
+    )
+  }
+
+  if (error || !videoUrl) {
+    return (
+      <div className="media-error">
+        <p>视频加载失败</p>
+        <small>路径: {videoPath}</small>
+        {debugInfo && <p><small>{debugInfo}</small></p>}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <video
+        controls
+        className="video-player"
+        preload="metadata"
+        controlsList="nodownload"
+        onLoadedMetadata={(e) => {
+          console.log('视频元数据加载完成:', e.target.duration)
+        }}
+        onError={(e) => {
+          console.error('视频加载错误:', e)
+          setError(true)
+          setDebugInfo(`视频元素错误: ${e.target.error?.message || '未知错误'}`)
+        }}
+      >
+        <source src={videoUrl} type="video/mp4" />
+        您的浏览器不支持视频标签。
+      </video>
+      {duration && (
+        <div className="media-metadata">
+          <p>时长: {duration}秒</p>
+          {fps && <p>帧率: {fps} FPS</p>}
+          {size && <p>大小: {(size / 1024 / 1024).toFixed(2)} MB</p>}
+        </div>
+      )}
+    </>
+  )
+}
+
+// Image Player Component
+function ImagePlayer({ imagePath, getBlobUrl }) {
+  const [imageUrl, setImageUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const loadImage = async () => {
+      setLoading(true)
+      setError(false)
+      const url = await getBlobUrl(imagePath)
+      if (url) {
+        setImageUrl(url)
+      } else {
+        setError(true)
+      }
+      setLoading(false)
+    }
+
+    loadImage()
+  }, [imagePath, getBlobUrl])
+
+  if (loading) {
+    return <div className="media-loading">加载图片...</div>
+  }
+
+  if (error || !imageUrl) {
+    return <div className="media-error">图片加载失败</div>
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt="任务结果"
+      className="image-result"
+      onClick={() => window.open(imageUrl, '_blank')}
+    />
   )
 }
 
