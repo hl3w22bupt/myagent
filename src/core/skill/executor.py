@@ -29,22 +29,33 @@ class SkillExecutor:
     def __init__(
         self,
         skills_dir: str = 'skills/',
-        hook: Optional[BaseHook] = None,
-        notify_api_url: Optional[str] = None
+        hooks: Optional[List[BaseHook]] = None,
+        notify_hook_api_url: Optional[str] = None
     ):
         """
         Initialize the Skill Executor.
 
         Args:
             skills_dir: Path to the skills directory
-            hook: Optional hook instance for pre/post execution callbacks
-            notify_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
+            hooks: Optional list of hook instances for pre/post execution callbacks
+            notify_hook_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
         """
         self.registry = SkillRegistry(skills_dir)
         self._loaded = False
-        self.hook = hook or NoOpHook()
-        self.notify_api_url = notify_api_url
-        self.hook_executor = SkillHookExecutor(hook=self.hook, notify_api_url=notify_api_url)
+
+        # Get default hook configuration
+        from config.hooks import get_default_hooks
+        default_hooks = get_default_hooks(notify_hook_api_url)
+
+        # Merge user custom hooks (deduplication handled in SkillHookExecutor)
+        if hooks:
+            default_hooks.extend(hooks)
+
+        # Create hook executor
+        self.hook_executor = SkillHookExecutor(
+            hooks=default_hooks,
+            notify_hook_api_url=notify_hook_api_url
+        )
 
     async def ensure_loaded(self):
         """Ensure registry is initialized and scanned."""
@@ -89,8 +100,10 @@ class SkillExecutor:
             else:
                 raise ValueError(f"Unknown skill type: {skill.type}")
 
-        # Execute with hooks if notify_api_url is provided
-        if self.notify_api_url:
+        # Execute with hooks if there are any hooks configured
+        from config.hooks import HOOK_CONFIG
+        has_hooks_configured = len(self.hook_executor.hook_manager.hooks) > 0
+        if has_hooks_configured:
             try:
                 result = await self.hook_executor.execute_with_hooks(
                     skill_name=skill_name,

@@ -310,8 +310,8 @@ from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
 
 # Get notify API URL from environment
-notify_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
-executor = SkillExecutor(notify_api_url=notify_api_url)
+notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 ` : `
 # No skills provided, skipping SkillExecutor import
 `;

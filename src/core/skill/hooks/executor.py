@@ -4,11 +4,12 @@ Skill Hook Executor
 Manages hook execution and progress reporting.
 """
 import asyncio
-import httpx
 import os
 import time
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List
 from core.skill.hooks.base import BaseHook, SkillContext, HookResult, NoOpHook
+from core.skill.hooks.manager import HookManager
+from core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
 
 
 class SkillHookExecutor:
@@ -16,65 +17,31 @@ class SkillHookExecutor:
 
     def __init__(
         self,
-        hook: Optional[BaseHook] = None,
-        notify_api_url: Optional[str] = None
+        hooks: Optional[List[BaseHook]] = None,
+        notify_hook_api_url: Optional[str] = None
     ):
         """
         Initialize the hook executor.
 
         Args:
-            hook: Optional hook instance
-            notify_api_url: Motia Notify API URL
+            hooks: List of hook instances to register
+            notify_hook_api_url: Motia Notify API URL (for automatic ProgressNotificationHook)
         """
-        self.hook = hook or NoOpHook()
-        self.notify_api_url = notify_api_url
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self.hook_manager = HookManager()
 
-    async def _notify_progress(
-        self,
-        task_id: str,
-        progress_type: str,
-        data: Dict[str, Any],
-        stage: str = "processing"
-    ):
-        """
-        Send progress notification to Motia.
+        # 自动注册系统基础的进度通知 hook
+        if notify_hook_api_url:
+            progress_hook = ProgressNotificationHook(notify_hook_api_url)
+            self.hook_manager.register(progress_hook)
 
-        Args:
-            task_id: Task ID
-            progress_type: Type of progress ('step', 'heartbeat', 'status', 'chat')
-            data: Progress data
-            stage: Execution stage ('pre', 'processing', 'post')
-        """
-        if not self.notify_api_url:
-            print(f"[DEBUG] _notify_progress skipped: no notify_api_url")
-            return
-
-        print(f"[DEBUG] _notify_progress called: task_id={task_id}, type={progress_type}, stage={stage}")
-
-        if not self._http_client:
-            self._http_client = httpx.AsyncClient(timeout=5.0)
-
-        try:
-            payload = {
-                "taskId": task_id,
-                "type": progress_type,
-                "timestamp": time.time(),  # Unix timestamp in seconds
-                "stage": stage,
-                **data
-            }
-            print(f"[DEBUG] Sending POST to {self.notify_api_url}")
-            print(f"[DEBUG] Payload: {payload}")
-
-            response = await self._http_client.post(
-                self.notify_api_url,
-                json=payload
-            )
-            response.raise_for_status()
-            print(f"[DEBUG] Notification sent successfully: {response.status_code}")
-        except Exception as e:
-            # Silent failure, don't interrupt main flow
-            print(f"[DEBUG] Failed to send progress notification: {e}")
+        # 注册用户提供的其他 hook（去重逻辑）
+        if hooks:
+            for hook in hooks:
+                # 检查是否已存在同类型的 hook，避免重复注册
+                if not any(isinstance(existing, type(hook)) for existing in self.hook_manager.hooks):
+                    self.hook_manager.register(hook)
+                else:
+                    print(f"[SkillHookExecutor] Skipping duplicate hook: {type(hook).__name__}")
 
     async def report_progress(
         self,
@@ -92,15 +59,11 @@ class SkillHookExecutor:
             data: Progress data
             stage: Execution stage ('pre', 'processing', 'post')
         """
-        print(f"[DEBUG] report_progress called: task_id={context.task_id}, type={progress_type}, stage={stage}")
-
-        # Call hook's progress callback
-        progress_mods = await self.hook.on_progressing_notify(context, data)
-        if progress_mods:
-            data.update(progress_mods)
-
-        # Send to Motia Notify API
-        await self._notify_progress(context.task_id, progress_type, data, stage)
+        # 调用所有注册的 hook 的进度通知方法
+        await self.hook_manager.on_progressing_notify(
+            context,
+            {**data, "type": progress_type, "stage": stage}
+        )
 
     async def execute_with_hooks(
         self,
@@ -146,16 +109,16 @@ class SkillHookExecutor:
             # Report pre-exec stage
             await self.report_progress(context, "step", {"message": "Pre-execution hook started"}, stage="pre")
 
-            pre_result = await self.hook.pre_exec(context)
-            if pre_result and pre_result.action == "stop":
+            pre_result = await self.hook_manager.pre_exec(context)
+            if pre_result.get("action") == "stop":
                 return {
                     "success": False,
-                    "error": f"Stopped by pre-hook: {pre_result.reason}" if pre_result.reason else "Stopped by pre-hook",
-                    "reason": pre_result.reason
+                    "error": f"Stopped by pre-hook: {pre_result.get('reason')}" if pre_result.get('reason') else "Stopped by pre-hook",
+                    "reason": pre_result.get('reason')
                 }
-            if pre_result and pre_result.modified_input:
+            if pre_result.get("modified_input"):
                 # Update input_data with modifications
-                input_data = pre_result.modified_input
+                input_data = pre_result.get("modified_input")
                 # Also update enhanced_input
                 enhanced_input = {
                     "_skill_name": skill_name,
@@ -185,7 +148,7 @@ class SkillHookExecutor:
             # Report post-exec stage
             await self.report_progress(context, "step", {"message": "Post-execution hook started"}, stage="post")
 
-            post_result = await self.hook.post_exec(context, result)
+            post_result = await self.hook_manager.post_exec(context, result)
             if post_result:
                 result.update(post_result)
 
@@ -197,7 +160,11 @@ class SkillHookExecutor:
         return result
 
     async def close(self):
-        """Close HTTP client."""
-        if self._http_client:
-            await self._http_client.aclose()
-            self._http_client = None
+        """Close hook resources."""
+        # 关闭所有 hook 的资源
+        for hook in self.hook_manager.hooks:
+            if hasattr(hook, 'close') and callable(getattr(hook, 'close')):
+                try:
+                    await hook.close()
+                except Exception as e:
+                    print(f"[SkillHookExecutor] Error closing hook: {e}")

@@ -39,10 +39,11 @@ export const handler = async (request: any, { logger, streams }: any) => {
       status: stage === 'post' ? 'running' : 'running',
       sessionId: request.body?.sessionId || '',
       timestamp: new Date(data.timestamp * 1000).toISOString(),
+      type: 'skill',
+      skill: data.skill,
+      stage: stage,
+      progressType: data.type,
       metadata: {
-        type: data.type,
-        stage: stage,
-        skill: data.skill,
         data: data.data,
       }
     });

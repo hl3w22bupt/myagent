@@ -19,10 +19,15 @@ export class DefaultTaskHook extends BaseTaskHook {
 
     // 1. Send initial status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
-      type: 'status',
+      type: 'task',
       status: 'running',
-      message: 'Task started',
+      task: task,
       timestamp: new Date().toISOString(),
+      metadata: {
+        llmCalls: context.metadata.llmCalls,
+        skillCalls: context.metadata.skillCalls,
+        totalTokens: context.metadata.totalTokens,
+      },
     });
 
     // 2. Log task start
@@ -40,11 +45,16 @@ export class DefaultTaskHook extends BaseTaskHook {
 
     // 2. Send completion status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
-      type: 'status',
+      type: 'task',
       status,
-      message: result.success ? 'Task completed successfully' : 'Task failed',
+      task: context.task,
       timestamp: new Date().toISOString(),
-      data: result,
+      metadata: {
+        llmCalls: context.metadata.llmCalls,
+        skillCalls: context.metadata.skillCalls,
+        totalTokens: context.metadata.totalTokens,
+        data: result,
+      },
     });
 
     // 3. Log task completion

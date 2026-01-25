@@ -8,7 +8,7 @@ import { EventHandler, ApiRouteHandler, ApiResponse, MotiaStream, CronHandler } 
 
 declare module 'motia' {
   interface FlowContextStateStreams {
-    'taskExecution': MotiaStream<{ taskId: string; task: string; status: 'pending' | 'running' | 'completed' | 'failed'; output?: string; error?: string; currentStep?: string; executionTime?: number; sessionId?: string; timestamp: string; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number } }>
+    'taskExecution': MotiaStream<{ taskId: string; task: string; status: 'pending' | 'running' | 'completed' | 'failed'; output?: string; error?: string; currentStep?: string; executionTime?: number; sessionId?: string; timestamp: string; type: 'task' | 'skill'; skill?: string; stage?: 'pre' | 'processing' | 'post'; progressType?: 'step' | 'heartbeat' | 'status' | 'chat'; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number; data?: unknown } }>
   }
 
   interface Handlers {
