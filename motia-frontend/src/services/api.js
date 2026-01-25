@@ -64,7 +64,9 @@ export const agentsAPI = {
     apiClient.get('/api/agents').then(response => ({
       ...response,
       data: response.data.agents || []
-    }))
+    })),
+  sendChatMessage: (taskId, message) =>
+    apiClient.post(`/api/tasks/${taskId}/chat`, { message })
 }
 
 // 任务相关 API

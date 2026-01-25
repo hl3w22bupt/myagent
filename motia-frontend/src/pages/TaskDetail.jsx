@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { tasksAPI } from '../services/api'
+import { tasksAPI, agentsAPI } from '../services/api'
 import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
 
 // 使用与 API 配置相同的基础 URL
@@ -14,8 +14,9 @@ function TaskDetail() {
   const [loading, setLoading] = useState(true)
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
-  const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
+  const [messages, setMessages] = useState([]) // 进度流消息
+  const [chatMessages, setChatMessages] = useState([]) // 对话消息
+  const [inputValue, setInputValue] = useState('') // 聊天输入框内容
   const [retrying, setRetrying] = useState(false) // 重试状态
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
   const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
@@ -25,8 +26,6 @@ function TaskDetail() {
 
   // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
   // 只在 stream 存在时订阅，避免初始化时的错误警告
-  // 需要直接在组件内部处理，因为 useStreamGroup 内部会处理 args || {}
-  const [streamData, setStreamData] = useState([])
   const subscriptionRef = useRef(null)
 
   useEffect(() => {
@@ -35,43 +34,39 @@ function TaskDetail() {
       return
     }
 
-    // DEBUG: 打印订阅信息
-    console.log('[DEBUG] Subscribing to taskExecution stream:', {
-      streamName: 'taskExecution',
-      groupId: id,
-      fullId: id,
-      idType: typeof id
-    })
-
     // 订阅 stream
     subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
 
     // 监听数据变化
     subscriptionRef.current.addChangeListener((data) => {
-      console.log('[DEBUG] Received stream data:', {
-        count: data?.length || 0,
-        data: data,
-        firstItem: data?.[0]
-      })
-      setStreamData(data)
+      // 处理实时消息
+      const entries = Array.isArray(data) ? data : []
+
+      // 更新进度流消息
+      setMessages(entries)
+
+      // 过滤出聊天消息
+      const chatEntries = entries.filter(entry => entry.type === 'chat')
+      setChatMessages(chatEntries)
     })
 
     // 清理订阅
     return () => {
       subscriptionRef.current?.close()
       subscriptionRef.current = null
-      setStreamData([])
+      setMessages([])
+      setChatMessages([])
     }
   }, [stream, id])
 
   // 监听 Stream 数据，当检测到任务完成时，重新获取任务详情
   useEffect(() => {
-    if (!streamData || streamData.length === 0 || completedFetchedRef.current) {
+    if (!messages || messages.length === 0 || completedFetchedRef.current) {
       return
     }
 
     // 查找最后一个 entry
-    const lastEntry = streamData[streamData.length - 1]
+    const lastEntry = messages[messages.length - 1]
 
     // 如果检测到完成状态，重新获取任务详情
     if (lastEntry?.status === 'completed' || lastEntry?.status === 'failed') {
@@ -101,7 +96,7 @@ function TaskDetail() {
 
       fetchUpdatedDetails()
     }
-  }, [streamData, id])
+  }, [messages, id])
 
   useEffect(() => {
     // 清理之前的 interval
@@ -180,6 +175,33 @@ function TaskDetail() {
     }
   }, [id])
 
+  // 发送对话消息
+  const handleSendMessage = async () => {
+    if (!inputValue.trim()) return
+
+    const userMessage = {
+      type: 'chat',
+      role: 'user',
+      content: inputValue,
+      timestamp: new Date().toISOString(),
+      id: Date.now().toString() // 临时ID
+    }
+
+    // 立即显示在UI上（乐观更新）
+    setMessages(prev => [...prev, userMessage])
+    setChatMessages(prev => [...prev, userMessage])
+
+    // 发送到后端
+    try {
+      await agentsAPI.sendChatMessage(id, inputValue)
+    } catch (error) {
+      console.error('发送消息失败:', error)
+      alert('发送消息失败，请重试')
+    } finally {
+      setInputValue('')
+    }
+  }
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString()
   }
@@ -201,441 +223,36 @@ function TaskDetail() {
     return `${hours}小时${mins}分${secs}秒`
   }
 
-  // 检测结果类型
-  const getResultType = (result) => {
-    if (!result) return 'text'
-
-    // 如果是字符串，尝试检测URL或路径
-    if (typeof result === 'string') {
-      // 尝试解析字符串中的URL
-      const urlMatch = result.match(/(?:png_url|video_url|html_url|svg_url)['":\s]*['"]([^'"]+)['"]/)
-      if (urlMatch) {
-        const url = urlMatch[1]
-        if (url.includes('.mp4') || url.includes('.webm') || url.includes('.mov')) {
-          return 'video'
-        }
-        if (url.includes('.png') || url.includes('.jpg') || url.includes('.jpeg') || url.includes('.gif') || url.includes('.svg')) {
-          return 'image'
-        }
-      }
-
-      // 检测视频路径
-      if (result.includes('.mp4') || result.includes('.webm') || result.includes('.mov')) {
-        return 'video'
-      }
-      // 检测图片路径
-      if (result.includes('.png') || result.includes('.jpg') || result.includes('.jpeg') || result.includes('.gif') || result.includes('.svg')) {
-        return 'image'
-      }
-      return 'text'
-    }
-
-    // 如果是对象，检查result_type字段
-    if (typeof result === 'object') {
-      const resultType = result.result_type || result.type
-
-      // 统一结果格式
-      if (resultType === 'video') return 'video'
-      if (resultType === 'infographic') return 'image'
-      if (resultType === 'table') return 'table'
-      if (resultType === 'text') return 'text'
-
-      // 检查content字段
-      if (result.content) {
-        const { path, mime_type } = result.content
-        if (path) {
-          if (path.includes('.mp4') || path.includes('.webm') || mime_type?.startsWith('video/')) {
-            return 'video'
-          }
-          if (path.includes('.png') || path.includes('.jpg') || mime_type?.startsWith('image/')) {
-            return 'image'
-          }
-        }
-      }
-    }
-
-    return 'text'
-  }
-
-  // 从output字符串中提取URL和统一结果
-  const extractParsedResult = (result) => {
-    // 如果已经是对象格式（统一结果格式）
-    if (typeof result === 'object' && result.result_type && result.content) {
-      return result
-    }
-
-    // 如果是字符串，尝试解析
-    if (typeof result === 'string') {
-      // 方法1: 直接匹配 'result_type': 'video', 'content': {'path': '...'
-      const typeMatch = result.match(/'result_type':\s*'(video|infographic|image|table|text)'/)
-      const pathMatch = result.match(/'path':\s*'([^']+\.(?:mp4|png|jpg|jpeg|gif|svg|webm|mov))'/)
-
-      if (typeMatch && pathMatch) {
-        const resultType = typeMatch[1]
-        const path = pathMatch[1]
-
-        // 提取其他元数据
-        const durationMatch = result.match(/'duration':\s*([\d.]+)/)
-        const fpsMatch = result.match(/'fps':\s*(\d+)/)
-        const sizeMatch = result.match(/'size':\s*(\d+)/)
-
-        return {
-          result_type: resultType === 'infographic' ? 'image' : resultType,
-          content: {
-            path: path,
-            mime_type: path.endsWith('.mp4') ? 'video/mp4' : 'image/png',
-            ...(durationMatch && { duration: parseFloat(durationMatch[1]) }),
-            ...(fpsMatch && { fps: parseInt(fpsMatch[1], 10) }),
-            ...(sizeMatch && { size: parseInt(sizeMatch[1], 10) })
-          }
-        }
-      }
-
-      // 方法2: 尝试匹配 outputs 目录中的路径
-      const outputPathMatch = result.match(/outputs\/([^'\s]+\.(?:mp4|png|jpg|jpeg|gif|svg))/)
-      if (outputPathMatch) {
-        const path = outputPathMatch[1]
-        const isVideo = path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov')
-
-        return {
-          result_type: isVideo ? 'video' : 'image',
-          content: {
-            path: path,
-            mime_type: isVideo ? 'video/mp4' : 'image/png'
-          }
-        }
-      }
-    }
-
-    // 如果是对象但没有result_type
-    if (typeof result === 'object' && result.content?.path) {
-      return result
-    }
-
-    // 返回原始结果
-    return result
-  }
-
-  // 获取媒体文件的Blob URL
-  // 渲染 Stream 内容（实时日志）
-  const renderStreamContent = () => {
-    // streamData 是来自 Motia SDK 的对象数组，每个对象包含 id 和其他字段
-    const entries = Array.isArray(streamData) ? streamData : []
-
-    if (entries.length === 0) {
-      return (
-        <div className="stream-content">
-          <div className="no-stream-data">
-            <p>暂无实时日志数据</p>
-            <p className="hint">任务执行时会显示实时进度和心跳信息</p>
-          </div>
-        </div>
-      )
+  // 消息气泡组件
+  const MessageBubble = ({ message }) => {
+    const styles = {
+      status: 'status-message',
+      step: 'step-message',
+      heartbeat: 'heartbeat-message',
+      chat: 'chat-message',
     }
 
     return (
-      <div className="stream-content">
-        <div className="stream-header">
-          <h3>任务执行日志</h3>
-          <div className="stream-info">
-            <span className="stream-count">{entries.length} 条记录</span>
-            <span className="stream-live">● WebSocket 实时连接</span>
-          </div>
-        </div>
-        <div className="stream-entries">
-          {entries.map((entry) => {
-            // entry 是对象，包含 id, type, status, message, timestamp 等字段
-            return (
-              <div key={entry.id} className={`stream-entry stream-entry-${entry.status || 'info'}`}>
-                <div className="entry-header">
-                  <span className="entry-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                  <span className={`entry-status status-${entry.status || 'info'}`}>
-                    {entry.status || 'pending'}
-                  </span>
-                  {entry.type && <span className="entry-type">{entry.type === 'task' ? '任务' : '技能'}</span>}
-                  {entry.skill && <span className="entry-skill">{entry.skill}</span>}
-                  {entry.stage && <span className="entry-stage">{entry.stage}</span>}
-                  {entry.progressType && <span className="entry-progress-type">{entry.progressType}</span>}
-                </div>
-                {entry.task && <div className="entry-task">{entry.task}</div>}
-                {entry.message && <div className="entry-output">{entry.message}</div>}
-                {entry.error && <div className="entry-error">{entry.error}</div>}
-                {entry.metadata?.data && (
-                  <div className="entry-metadata">
-                    <pre>{JSON.stringify(entry.metadata.data, null, 2)}</pre>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+      <div className={`${styles[message.type || 'status']} message`}>
+        <span className="timestamp">{new Date(message.timestamp).toLocaleTimeString()}</span>
+        <span className="content">{message.message || message.content}</span>
+        {message.skill && <span className="badge">{message.skill}</span>}
       </div>
     )
   }
 
-  const getMediaBlobUrl = async (path) => {
-    if (mediaUrls[path]) {
-      return mediaUrls[path]
-    }
-
-    try {
-      // 使用查询参数格式：/media?path=xxx 而不是 /media/xxx
-      const response = await fetch(`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch file')
-      }
-
-      const blob = await response.blob()
-      const blobUrl = URL.createObjectURL(blob)
-
-      setMediaUrls(prev => ({ ...prev, [path]: blobUrl }))
-      return blobUrl
-    } catch (error) {
-      console.error('Error fetching media file:', error)
-      return null
-    }
-  }
-
-  // 渲染可视化内容（视频、图片等）
-  const renderVisualContent = (result) => {
-    const parsedResult = extractParsedResult(result)
-    const resultType = getResultType(result)
-
-    if (resultType === 'video' && parsedResult.content?.path) {
-      // 处理视频
-      let videoPath = parsedResult.content.path
-      // 移除前导的/outputs/如果存在
-      videoPath = videoPath.replace(/^\/?outputs\//, '')
-
-      return (
-        <div className="result-visual">
-          <VideoPlayer
-            videoPath={videoPath}
-            duration={parsedResult.content.duration}
-            fps={parsedResult.content.fps}
-            size={parsedResult.content.size}
-            getBlobUrl={getMediaBlobUrl}
-          />
-        </div>
-      )
-    }
-
-    if (resultType === 'image' && parsedResult.content?.path) {
-      // 处理图片
-      let imagePath = parsedResult.content.path
-      // 移除前导的/outputs/如果存在
-      imagePath = imagePath.replace(/^\/?outputs\//, '')
-
-      return (
-        <div className="result-visual">
-          <ImagePlayer
-            imagePath={imagePath}
-            getBlobUrl={getMediaBlobUrl}
-          />
-        </div>
-      )
-    }
-
-    if (resultType === 'table' && typeof result === 'object') {
-      // 处理表格
-      const { content } = result
-      if (!content || !content.columns || !content.rows) {
-        return <div className="no-result">无效的表格数据</div>
-      }
-
-      return (
-        <div className="result-table">
-          <div className="table-controls">
-            <input
-              type="text"
-              placeholder="搜索表格..."
-              className="table-search"
-              onChange={(e) => {
-                const query = e.target.value.toLowerCase()
-                const rows = document.querySelectorAll('.data-table tbody tr')
-                rows.forEach(row => {
-                  const text = row.textContent.toLowerCase()
-                  row.style.display = text.includes(query) ? '' : 'none'
-                })
-              }}
-            />
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  {content.columns.map((col, i) => (
-                    <th key={i}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {content.rows.map((row, i) => (
-                  <tr key={i}>
-                    {row.map((cell, j) => (
-                      <td key={j}>{String(cell)}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )
-    }
-
-    return <div className="no-visual">此结果类型不支持可视化预览</div>
-  }
-
-  // 渲染文本内容
-  const renderTextContent = (result) => {
-    let textContent = ''
-
-    if (typeof result === 'string') {
-      // 过滤掉调试信息和多余内容
-      textContent = result
-        .split('\n')
-        .filter(line => {
-          // 过滤掉DEBUG信息
-          if (line.trim().startsWith('[DEBUG]')) return false
-          // 过滤掉成功消息
-          if (line.trim().startsWith('success=True')) return false
-          if (line.trim().startsWith('✅')) return false
-          if (line.trim().startsWith('📸')) return false
-          // 过滤掉长输出语句
-          if (line.includes('export=') && line.length > 200) return false
-          return true
-        })
-        .join('\n')
-        .trim()
-
-      // 如果过滤后为空或太短，显示有用的信息
-      if (textContent.length < 10) {
-        // 尝试提取关键信息
-        const urlMatch = result.match(/(https?:\/\/[^\s]+)/)
-        if (urlMatch) {
-          textContent = `结果URL: ${urlMatch[1]}`
-        } else if (result.includes('output=')) {
-          // 如果有output=，提取这个值
-          const outputMatch = result.match(/output\s*=\s*({[^}]+})/s)
-          if (outputMatch) {
-            textContent = `任务执行成功\n\n${outputMatch[1]}`
-          }
-        } else {
-          textContent = result || '暂无文本内容'
-        }
-      }
-    } else if (typeof result === 'object') {
-      if (result.text) {
-        textContent = result.text
-      } else if (result.content?.text) {
-        textContent = result.content.text
-      } else {
-        textContent = JSON.stringify(result, null, 2)
-      }
-    }
-
+  // 聊天气泡组件
+  const ChatBubble = ({ message }) => {
+    const isUser = message.role === 'user'
     return (
-      <div className="result-text-content">
-        <pre className="result-text">{textContent || '暂无文本内容'}</pre>
-      </div>
-    )
-  }
-
-  const renderResult = (result) => {
-    if (!result) {
-      return <div className="no-result">暂无结果</div>
-    }
-
-    const resultType = getResultType(result)
-    const hasVisual = ['video', 'image', 'table'].includes(resultType)
-    const hasStream = streamData && Array.isArray(streamData) && streamData.length > 0
-
-    return (
-      <div className="result-container">
-        {/* Tab切换 */}
-        <div className="result-tabs">
-          {hasVisual && (
-            <>
-              <button
-                className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
-                onClick={() => setActiveTab('visual')}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                  <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
-                </svg>
-                多媒体
-              </button>
-              <button
-                className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
-                onClick={() => setActiveTab('text')}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                  <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                </svg>
-                JSON
-              </button>
-            </>
-          )}
-          {hasStream && (
-            <button
-              className={`tab-button ${activeTab === 'stream' ? 'active' : ''}`}
-              onClick={() => setActiveTab('stream')}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
-                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
-              </svg>
-              实时日志
-              <span className="stream-indicator">●</span>
-            </button>
-          )}
+      <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
+        <div className="chat-avatar">
+          {isUser ? '👤' : '🤖'}
         </div>
-
-        {/* 内容区域 */}
-        <div className="result-content">
-          {activeTab === 'stream' ? (
-            renderStreamContent()
-          ) : hasVisual ? (
-            <>
-              {activeTab === 'visual' && renderVisualContent(result)}
-              {activeTab === 'text' && renderTextContent(result)}
-            </>
-          ) : (
-            renderTextContent(result)
-          )}
+        <div className="chat-content">
+          <div className="chat-message">{message.content}</div>
+          <div className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
         </div>
-      </div>
-    )
-  }
-
-  if (loading || polling) {
-    return (
-      <div className="task-detail">
-        <div className="loading">
-          {polling ? (
-            <div className="polling-status">
-              <span className="spinner"></span>
-              <span>任务执行中，请稍候...</span>
-            </div>
-          ) : (
-            '加载中...'
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  if (!task) {
-    return (
-      <div className="task-detail">
-        {error ? (
-          <div className="error">{error}</div>
-        ) : (
-          <div className="error">任务不存在</div>
-        )}
       </div>
     )
   }
@@ -783,6 +400,35 @@ function TaskDetail() {
     }
   }
 
+  if (loading || polling) {
+    return (
+      <div className="task-detail">
+        <div className="loading">
+          {polling ? (
+            <div className="polling-status">
+              <span className="spinner"></span>
+              <span>任务执行中，请稍候...</span>
+            </div>
+          ) : (
+            '加载中...'
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (!task) {
+    return (
+      <div className="task-detail">
+        {error ? (
+          <div className="error">{error}</div>
+        ) : (
+          <div className="error">任务不存在</div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="task-detail">
       <div className="task-detail-header">
@@ -886,153 +532,62 @@ function TaskDetail() {
             <pre>{task.task}</pre>
           </div>
         </div>
+      </div>
 
-        {/* 任务结果 */}
-        {task.output && (
-          <div className="info-section">
-            <h2>任务结果</h2>
-            <div className="task-result">
-              {renderResult(task.output)}
-            </div>
+      {/* 混合UI区域：左侧进度流 + 底部对话区 */}
+      <div className="hybrid-ui-container">
+        {/* 左侧进度流区域 */}
+        <div className="progress-stream">
+          <div className="progress-stream-header">
+            <h3>任务执行进度</h3>
+            <span className="stream-count">{messages.length} 条消息</span>
           </div>
-        )}
+          <div className="progress-stream-content">
+            {messages.map(msg => (
+              <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+            ))}
+            {messages.length === 0 && (
+              <div className="no-progress-data">
+                <p>暂无任务执行数据</p>
+                <p className="hint">任务执行时会显示实时进度信息</p>
+              </div>
+            )}
+          </div>
+        </div>
 
-        {/* 错误信息 */}
-        {task.error && (
-          <div className="info-section">
-            <h2>错误信息</h2>
-            <div className="task-error">
-              <pre>{task.error}</pre>
-            </div>
+        {/* 底部对话区域 */}
+        <div className="chat-area">
+          <div className="chat-messages">
+            {chatMessages.map(msg => (
+              <ChatBubble key={msg.id || msg.timestamp} message={msg} />
+            ))}
+            {chatMessages.length === 0 && (
+              <div className="no-chat-data">
+                <p>开始与任务进行对话</p>
+                <p className="hint">输入问题或指令，获取实时反馈</p>
+              </div>
+            )}
           </div>
-        )}
+
+          <div className="chat-input">
+            <input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="输入问题或指令..."
+              disabled={!task}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || !task}
+              title="发送消息"
+            >
+              发送
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  )
-}
-
-// Video Player Component
-function VideoPlayer({ videoPath, duration, fps, size, getBlobUrl }) {
-  const [videoUrl, setVideoUrl] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [debugInfo, setDebugInfo] = useState('')
-
-  useEffect(() => {
-    const loadVideo = async () => {
-      setLoading(true)
-      setError(false)
-      setDebugInfo(`开始加载视频: ${videoPath}`)
-
-      try {
-        const url = await getBlobUrl(videoPath)
-
-        if (url) {
-          setVideoUrl(url)
-          setDebugInfo(`视频加载成功: ${url.substring(0, 50)}...`)
-        } else {
-          setError(true)
-          setDebugInfo('getBlobUrl返回null')
-        }
-      } catch (err) {
-        console.error('加载视频失败:', err)
-        setError(true)
-        setDebugInfo(`加载失败: ${err.message}`)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadVideo()
-  }, [videoPath, getBlobUrl])
-
-  if (loading) {
-    return (
-      <div className="media-loading">
-        <div className="loading-spinner"></div>
-        <p>加载视频中...</p>
-        {debugInfo && <small style={{color: '#999'}}>{debugInfo}</small>}
-      </div>
-    )
-  }
-
-  if (error || !videoUrl) {
-    return (
-      <div className="media-error">
-        <p>视频加载失败</p>
-        <small>路径: {videoPath}</small>
-        {debugInfo && <p><small>{debugInfo}</small></p>}
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <video
-        controls
-        className="video-player"
-        preload="metadata"
-        controlsList="nodownload"
-        onLoadedMetadata={(e) => {
-          console.log('视频元数据加载完成:', e.target.duration)
-        }}
-        onError={(e) => {
-          console.error('视频加载错误:', e)
-          setError(true)
-          setDebugInfo(`视频元素错误: ${e.target.error?.message || '未知错误'}`)
-        }}
-      >
-        <source src={videoUrl} type="video/mp4" />
-        您的浏览器不支持视频标签。
-      </video>
-      {duration && (
-        <div className="media-metadata">
-          <p>时长: {duration}秒</p>
-          {fps && <p>帧率: {fps} FPS</p>}
-          {size && <p>大小: {(size / 1024 / 1024).toFixed(2)} MB</p>}
-        </div>
-      )}
-    </>
-  )
-}
-
-// Image Player Component
-function ImagePlayer({ imagePath, getBlobUrl }) {
-  const [imageUrl, setImageUrl] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    const loadImage = async () => {
-      setLoading(true)
-      setError(false)
-      const url = await getBlobUrl(imagePath)
-      if (url) {
-        setImageUrl(url)
-      } else {
-        setError(true)
-      }
-      setLoading(false)
-    }
-
-    loadImage()
-  }, [imagePath, getBlobUrl])
-
-  if (loading) {
-    return <div className="media-loading">加载图片...</div>
-  }
-
-  if (error || !imageUrl) {
-    return <div className="media-error">图片加载失败</div>
-  }
-
-  return (
-    <img
-      src={imageUrl}
-      alt="任务结果"
-      className="image-result"
-      onClick={() => window.open(imageUrl, '_blank')}
-    />
   )
 }
 
