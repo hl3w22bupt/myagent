@@ -79,6 +79,7 @@ class ProgressNotificationHook(BaseHook):
 
     async def pre_exec(self, context: SkillContext) -> None:
         """Notify pre-execution start"""
+        print(f"[ProgressNotificationHook] pre_exec called: skill={context.skill_name}, task_id={context.task_id}")
         await self._send_notification(
             context,
             "step",
@@ -93,6 +94,10 @@ class ProgressNotificationHook(BaseHook):
         result: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Notify execution completion"""
+        # Handle case where result might be None
+        if result is None:
+            result = {}
+
         success = result.get("success", False)
         message = f"{context.skill_name} {'succeeded' if success else 'failed'}"
 

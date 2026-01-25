@@ -38,7 +38,7 @@ describe('DefaultTaskHook', () => {
   });
 
   describe('preExec', () => {
-    it('should send running status to stream', async () => {
+    it('should send started status to stream', async () => {
       await hook.preExec(mockContext);
 
       expect(mockContext.services.streams.taskExecution.set).toHaveBeenCalledWith(
@@ -46,7 +46,7 @@ describe('DefaultTaskHook', () => {
         'test-1-default-pre',
         expect.objectContaining({
           type: 'task',
-          status: 'running',
+          status: 'started',
           task: 'test task',
           metadata: expect.objectContaining({
             llmCalls: 5,

@@ -7,6 +7,7 @@ The Executor provides a consistent interface for executing all types of Skills:
 - hybrid: Combined script and prompt execution
 """
 
+import os
 import importlib
 import json
 import time
@@ -39,22 +40,33 @@ class SkillExecutor:
             skills_dir: Path to the skills directory
             hooks: Optional list of hook instances for pre/post execution callbacks
             notify_hook_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
+                              If not provided, will try to get from MOTIA_NOTIFY_API_URL environment variable
         """
         self.registry = SkillRegistry(skills_dir)
         self._loaded = False
 
+        # Get notify_hook_api_url from parameter or environment variable
+        if notify_hook_api_url is None:
+            notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL', 'http://localhost:3000/api/notify')
+
         # Get default hook configuration
         from config.hooks import get_default_hooks
-        default_hooks = get_default_hooks(notify_hook_api_url)
 
-        # Merge user custom hooks (deduplication handled in SkillHookExecutor)
-        if hooks:
-            default_hooks.extend(hooks)
+        # Hook configuration logic:
+        # - hooks=None (default): Auto-register default hooks (ProgressNotificationHook if notify_api_url is set)
+        # - hooks=[] (explicit empty): Disable all hooks
+        # - hooks=[...]: Use custom hooks
+        if hooks is None:
+            default_hooks = get_default_hooks(notify_hook_api_url)
+        elif hooks == []:  # Explicitly empty list - disable all hooks
+            default_hooks = []
+        else:  # User provided custom hooks
+            default_hooks = hooks
 
         # Create hook executor
         self.hook_executor = SkillHookExecutor(
             hooks=default_hooks,
-            notify_hook_api_url=notify_hook_api_url
+            notify_hook_api_url=notify_hook_api_url if default_hooks else None
         )
 
     async def ensure_loaded(self):
@@ -103,6 +115,13 @@ class SkillExecutor:
         # Execute with hooks if there are any hooks configured
         from config.hooks import HOOK_CONFIG
         has_hooks_configured = len(self.hook_executor.hook_manager.hooks) > 0
+
+        print(f"[DEBUG] SkillExecutor.execute: skill_name={skill_name}")
+        print(f"[DEBUG]   has_hooks_configured={has_hooks_configured}")
+        print(f"[DEBUG]   hook_manager.hooks count={len(self.hook_executor.hook_manager.hooks)}")
+        for i, hook in enumerate(self.hook_executor.hook_manager.hooks):
+            print(f"[DEBUG]     hook[{i}]: {type(hook).__name__}")
+
         if has_hooks_configured:
             try:
                 result = await self.hook_executor.execute_with_hooks(

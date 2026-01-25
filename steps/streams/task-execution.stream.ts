@@ -24,7 +24,7 @@ export const taskExecutionSchema = z.object({
   /**
    * Current status: pending, running, completed, failed
    */
-  status: z.enum(['pending', 'running', 'completed', 'failed']),
+  status: z.enum(['pending', 'started', 'running', 'completed', 'failed']),
 
   /**
    * Current output being generated.

@@ -819,8 +819,8 @@ function TaskDetail() {
             <div className="info-item">
               <span className="info-label">状态:</span>
               <div className="info-value-with-action">
-                <span className={`info-value status status-${task.executionTime === null ? 'running' : (task.success ? 'completed' : 'failed')}`}>
-                  {task.executionTime === null ? '执行中' : (task.success ? '成功' : '失败')}
+                <span className={`info-value status status-${task.executionTime === null ? (task.status === 'started' ? 'started' : 'running') : (task.success ? 'completed' : 'failed')}`}>
+                  {task.executionTime === null ? (task.status === 'started' ? '已开始' : '执行中') : (task.success ? '成功' : '失败')}
                 </span>
                 {task.executionTime !== null && !task.success && (
                   <button

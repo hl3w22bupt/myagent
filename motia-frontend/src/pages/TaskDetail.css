@@ -772,6 +772,11 @@
   border-left-color: #94a3b8;
 }
 
+.stream-entry-started {
+  border-left-color: #f59e0b;
+  background-color: #fef3c7;
+}
+
 .stream-entry-running {
   border-left-color: #3b82f6;
   background-color: #eff6ff;
@@ -812,6 +817,11 @@
 .status-pending {
   background-color: #f1f5f9;
   color: #64748b;
+}
+
+.status-started {
+  background-color: #fef3c7;
+  color: #92400e;
 }
 
 .status-running {

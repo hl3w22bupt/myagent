@@ -20,7 +20,7 @@ export class DefaultTaskHook extends BaseTaskHook {
     // 1. Send initial status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
       type: 'task',
-      status: 'running',
+      status: 'started',
       task: task,
       timestamp: new Date().toISOString(),
       metadata: {

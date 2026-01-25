@@ -32,17 +32,26 @@ def get_default_hooks(notify_hook_api_url: Optional[str] = None) -> List[BaseHoo
     Returns:
         List of default hook instances
     """
+    print(f"[DEBUG] get_default_hooks called with notify_hook_api_url={notify_hook_api_url}")
+
     hooks = []
 
     enabled_hooks = HOOK_CONFIG["enabled"]
+    print(f"[DEBUG]   enabled_hooks={enabled_hooks}")
 
     # Progress notification hook
     if "progress_notification" in enabled_hooks:
+        print(f"[DEBUG]   Progress notification is enabled")
         if notify_hook_api_url is not None:
             api_url = notify_hook_api_url or HOOK_CONFIG["settings"]["progress_notification"]["api_url"]
+            print(f"[DEBUG]   api_url={api_url}")
             if api_url:
                 hooks.append(ProgressNotificationHook(api_url))
+                print(f"[DEBUG]   Added ProgressNotificationHook")
+        else:
+            print(f"[DEBUG]   notify_hook_api_url is None, skipping ProgressNotificationHook")
 
+    print(f"[DEBUG]   Returning {len(hooks)} hooks")
     return hooks
 
 
