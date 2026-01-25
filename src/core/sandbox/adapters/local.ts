@@ -108,6 +108,8 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_TASK_ID: options.metadata?.taskId || '',
           MOTIA_SKILL_PATH: skillPath,
+          MOTIA_NOTIFY_API_URL: 'http://localhost:3000/api/notify',
+          MOTIA_SESSION_ID: options.sessionId,
           PYTHONPATH: pythonPathEnv,
           ...options.env,
         },
@@ -306,7 +308,10 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 # Import and create SkillExecutor instance for skill execution
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
-executor = SkillExecutor()
+
+# Get notify API URL from environment
+notify_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+executor = SkillExecutor(notify_api_url=notify_api_url)
 ` : `
 # No skills provided, skipping SkillExecutor import
 `;

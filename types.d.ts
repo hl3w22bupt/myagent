@@ -13,6 +13,7 @@ declare module 'motia' {
 
   interface Handlers {
     'media-serve-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

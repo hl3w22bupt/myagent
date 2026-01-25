@@ -304,7 +304,11 @@ ${
     ? `Available skills to use:
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
-executor = SkillExecutor()
+import os
+
+# Get notify API URL from environment
+notify_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+executor = SkillExecutor(notify_api_url=notify_api_url)
 
 # CRITICAL - Skill execution with RETRY logic:
 # All skill executions MUST use execute_with_retry() function

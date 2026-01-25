@@ -37,6 +37,13 @@ class ExecutionConfig(BaseModel):
     timeout: int = Field(default=30000, description="Timeout in milliseconds")
 
 
+class HookConfig(BaseModel):
+    """Hook configuration for Skills."""
+    handler: str = Field(description="Hook Python module file")
+    class_name: str = Field(alias="class", description="Hook class name")
+    enabled: bool = Field(default=True, description="Whether hook is enabled")
+
+
 class SkillMetadata(BaseModel):
     """
     Level 1: Lightweight metadata loaded at startup.

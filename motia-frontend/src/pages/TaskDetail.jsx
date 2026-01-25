@@ -35,11 +35,24 @@ function TaskDetail() {
       return
     }
 
+    // DEBUG: 打印订阅信息
+    console.log('[DEBUG] Subscribing to taskExecution stream:', {
+      streamName: 'taskExecution',
+      groupId: id,
+      fullId: id,
+      idType: typeof id
+    })
+
     // 订阅 stream
     subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
 
     // 监听数据变化
     subscriptionRef.current.addChangeListener((data) => {
+      console.log('[DEBUG] Received stream data:', {
+        count: data?.length || 0,
+        data: data,
+        firstItem: data?.[0]
+      })
       setStreamData(data)
     })
 

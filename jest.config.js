@@ -4,6 +4,7 @@ export default {
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^steps/(.*)$': '<rootDir>/steps/$1',
   },
   transform: {
     '^.+\\.tsx?$': [

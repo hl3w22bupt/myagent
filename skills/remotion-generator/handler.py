@@ -84,7 +84,7 @@ class RemotionVideoGenerator:
         # Track video count per task
         self.task_video_counts = {}
 
-    async def generate_video(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_video(self, input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
         """
         Generate video using Remotion from natural language.
 
@@ -106,6 +106,10 @@ class RemotionVideoGenerator:
             print(f"[DEBUG] input_data keys: {input_data.keys() if isinstance(input_data, dict) else 'N/A'}")
             desc = input_data.get('description', 'N/A')
             logging.info(f"[DEBUG] Starting generate_video with description: {str(desc)[:100]}")
+
+            # Report progress
+            if context:
+                await context.report_step("Extracting video parameters...")
 
             # Extract parameters with fallback for flexible input
             description = input_data.get('description', '')
@@ -155,6 +159,8 @@ class RemotionVideoGenerator:
                 remotion_code = composition_code
                 # Use provided duration_frames if available, otherwise calculate from duration
                 duration_frames = input_data.get('duration_frames', duration * fps)
+                if context:
+                    await context.report_step("Using direct composition code...")
             else:
                 # Description-based generation mode
                 if not description:
@@ -163,6 +169,8 @@ class RemotionVideoGenerator:
                     raise ValueError("Duration must be between 1 and 300 seconds")
 
                 # Generate Remotion code from description
+                if context:
+                    await context.report_step("Generating Remotion code...")
                 print(f"[DEBUG] About to call _generate_remotion_code...")
                 logging.info(f"[DEBUG] About to call _generate_remotion_code with description: {str(description)[:100]}")
                 remotion_code = await self._generate_remotion_code(
@@ -175,17 +183,24 @@ class RemotionVideoGenerator:
             # Create Remotion project and render
             # For direct code mode, calculate duration from duration_frames
             render_duration = duration_frames / fps if composition_code else duration
+            if context:
+                await context.report_step("Creating Remotion project...")
             video_info = await self._render_video(
                 remotion_code, render_duration, fps, resolution, output_format, quality, input_data
             )
 
             # Generate thumbnail
+            if context:
+                await context.report_step("Generating video thumbnail...")
             thumbnail_info = await self._generate_thumbnail(video_info['video_path'])
 
             # Get file info
             file_size = video_info['video_path'].stat().st_size if video_info['video_path'].exists() else 0
 
             # Use OutputBuilder if available
+            if context:
+                await context.report_step("Finalizing video generation...")
+
             if OUTPUT_BUILDER_AVAILABLE:
                 # Get relative path for output
                 relative_video_path = get_relative_path(video_info['video_path'])
@@ -1864,7 +1879,7 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
 
 
 # Main skill function - PTC will call this
-async def generate_video(input_data: Dict[str, Any]) -> Dict[str, Any]:
+async def generate_video(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
     """
     Main entry point for remotion-generator skill.
 
@@ -1874,7 +1889,10 @@ async def generate_video(input_data: Dict[str, Any]) -> Dict[str, Any]:
     generator = RemotionVideoGenerator()
 
     try:
-        result = await generator.generate_video(input_data)
+        if context:
+            await context.report_step("Initializing video generator...")
+
+        result = await generator.generate_video(input_data, context)
         return result
     finally:
         # Ensure cleanup

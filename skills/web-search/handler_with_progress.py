@@ -1,20 +1,24 @@
 """
-Web Search Skill - Mock Implementation
+Example: Web Search Handler with Progress Reporting
 
-This is a mock implementation for demonstration purposes.
-In production, this would integrate with a real search API.
+This example shows how to use the SkillExecutionContext to report progress
+during skill execution.
 """
 
 import asyncio
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
-# Add parent lib for OutputBuilder (absolute path to skills/lib)
+# Add parent lib for OutputBuilder
 lib_dir = Path(__file__).parent.parent / "lib"
 if lib_dir.exists():
     sys.path.insert(0, str(lib_dir))
+
+# Import SkillExecutionContext for type hints
+if TYPE_CHECKING:
+    from src.core.skill.context import SkillExecutionContext
 
 try:
     from output_builder import OutputBuilder
@@ -23,27 +27,31 @@ except ImportError:
     OUTPUT_BUILDER_AVAILABLE = False
 
 
-async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
+async def execute(
+    input_data: Dict[str, Any],
+    context: Optional['SkillExecutionContext'] = None
+) -> Dict[str, Any]:
     """
-    Execute web search using a search API.
+    Execute web search with progress reporting.
 
     Args:
-        input_data: Dictionary containing:
-            - query: Search query string (preferred)
-            - task: Task description (fallback for query)
-            - description: Description of what to search (fallback)
-            - limit: Maximum number of results (default: 5)
+        input_data: Search parameters (query, limit, etc.)
+        context: Optional execution context for progress reporting
 
     Returns:
-        Dictionary with search results in unified format
+        Search results
     """
     start_time = time.time()
 
-    # Try multiple field names for query (in order of preference)
+    # Report initial step
+    if context:
+        await context.report_step("Starting web search...")
+
+    # Try multiple field names for query
     query = input_data.get('query') or input_data.get('task') or input_data.get('description')
     limit = input_data.get('limit', 5)
 
-    # Input validation with smart fallback
+    # Input validation
     if not query or not query.strip():
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder() \
@@ -59,35 +67,19 @@ async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
         else:
             return {"error": "Query is required"}
 
-    # Query length validation (moved from WebSearchHook)
-    MIN_QUERY_LENGTH = 3
-    if len(query.strip()) < MIN_QUERY_LENGTH:
-        if OUTPUT_BUILDER_AVAILABLE:
-            return OutputBuilder() \
-                .set_error(
-                    error=ValueError(f"Query too short (minimum {MIN_QUERY_LENGTH} characters)"),
-                    suggestions=[
-                        f"Provide a query with at least {MIN_QUERY_LENGTH} characters",
-                        "Try a more specific search term"
-                    ]
-                ) \
-                .build()
-        else:
-            return {"error": f"Query too short (minimum {MIN_QUERY_LENGTH} characters)"}
-
     try:
-        # Report progress
+        # Report query validation
         if context:
-            await context.report_step("Initializing search...")
+            await context.report_step(f"Searching for: {query}")
 
         # Simulate API call delay
         await asyncio.sleep(0.5)
 
+        # Report progress during result processing
         if context:
-            await context.report_step(f"Searching for: {query}")
+            await context.report_step(f"Processing top {limit} results...")
 
         # Mock search results
-        # In production, replace with actual search API call
         mock_results = [
             {
                 "title": f"Result {i+1} for '{query}'",
@@ -99,12 +91,13 @@ async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
             for i in range(limit)
         ]
 
+        # Report completion
         if context:
             await context.report_step(f"Found {len(mock_results)} results")
+            await context.report_status("completed", result_count=len(mock_results))
 
         # Use OutputBuilder if available
         if OUTPUT_BUILDER_AVAILABLE:
-            # Convert results to table format
             columns = ["Title", "URL", "Snippet", "Source"]
             rows = [
                 [result["title"], result["url"], result["snippet"], result["source"]]
@@ -122,7 +115,6 @@ async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
                 .add_standard_metadata("result_count", len(mock_results)) \
                 .build()
         else:
-            # Fallback to old format
             return {
                 "results": mock_results,
                 "total": len(mock_results),
@@ -130,7 +122,10 @@ async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        # Error handling with OutputBuilder
+        # Report error
+        if context:
+            await context.report_status("error", error=str(e))
+
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder() \
                 .set_error(
@@ -150,10 +145,20 @@ async def execute(input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
 # For testing purposes
 if __name__ == "__main__":
     import asyncio
-    import json
+
+    # Mock context for testing
+    class MockContext:
+        async def report_step(self, message, **data):
+            print(f"[STEP] {message}")
+
+        async def report_status(self, status, **data):
+            print(f"[STATUS] {status}: {data}")
 
     async def test():
-        result = await execute({"query": "Python programming", "limit": 3})
-        print(json.dumps(result, indent=2))
+        result = await execute(
+            {"query": "Python programming", "limit": 3},
+            context=MockContext()
+        )
+        print("Result:", result)
 
     asyncio.run(test())

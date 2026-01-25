@@ -14,6 +14,8 @@ import asyncio
 from typing import Any, Dict, Optional, List
 from .registry import SkillRegistry
 from .types import SkillType, SkillResult, SkillContext
+from .hooks.base import BaseHook, NoOpHook
+from .hooks.executor import SkillHookExecutor
 
 
 class SkillExecutor:
@@ -24,15 +26,25 @@ class SkillExecutor:
     and returns consistent results.
     """
 
-    def __init__(self, skills_dir: str = 'skills/'):
+    def __init__(
+        self,
+        skills_dir: str = 'skills/',
+        hook: Optional[BaseHook] = None,
+        notify_api_url: Optional[str] = None
+    ):
         """
         Initialize the Skill Executor.
 
         Args:
             skills_dir: Path to the skills directory
+            hook: Optional hook instance for pre/post execution callbacks
+            notify_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
         """
         self.registry = SkillRegistry(skills_dir)
         self._loaded = False
+        self.hook = hook or NoOpHook()
+        self.notify_api_url = notify_api_url
+        self.hook_executor = SkillHookExecutor(hook=self.hook, notify_api_url=notify_api_url)
 
     async def ensure_loaded(self):
         """Ensure registry is initialized and scanned."""
@@ -65,32 +77,66 @@ class SkillExecutor:
         skill = await self.registry.load_full(skill_name)
         start_time = time.time()
 
-        try:
+        # Define the skill execution function
+        async def _skill_func(enhanced_input: Dict[str, Any]) -> Any:
+            """Internal skill execution function"""
             if skill.type == SkillType.PURE_PROMPT:
-                output = await self._execute_prompt_skill(skill, input_data)
+                return await self._execute_prompt_skill(skill, enhanced_input)
             elif skill.type == SkillType.PURE_SCRIPT:
-                output = await self._execute_script_skill(skill, input_data)
+                return await self._execute_script_skill(skill, enhanced_input)
             elif skill.type == SkillType.HYBRID:
-                output = await self._execute_hybrid_skill(skill, input_data)
+                return await self._execute_hybrid_skill(skill, enhanced_input)
             else:
                 raise ValueError(f"Unknown skill type: {skill.type}")
 
-            execution_time = time.time() - start_time
+        # Execute with hooks if notify_api_url is provided
+        if self.notify_api_url:
+            try:
+                result = await self.hook_executor.execute_with_hooks(
+                    skill_name=skill_name,
+                    skill_func=_skill_func,
+                    input_data=input_data
+                )
 
-            return SkillResult(
-                success=True,
-                output=output,
-                execution_time=execution_time
-            )
+                execution_time = time.time() - start_time
 
-        except Exception as e:
-            execution_time = time.time() - start_time
-
-            return SkillResult(
-                success=False,
-                error=str(e),
-                execution_time=execution_time
-            )
+                # Convert hook result to SkillResult
+                if result.get("success"):
+                    return SkillResult(
+                        success=True,
+                        output=result.get("output"),
+                        execution_time=execution_time
+                    )
+                else:
+                    return SkillResult(
+                        success=False,
+                        error=result.get("error"),
+                        execution_time=execution_time
+                    )
+            except Exception as e:
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=False,
+                    error=str(e),
+                    execution_time=execution_time
+                )
+        else:
+            # Execute without hooks (backward compatibility)
+            try:
+                output = await _skill_func(input_data)
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=True,
+                    output=output,
+                    execution_time=execution_time
+                )
+            except Exception as e:
+                execution_time = time.time() - start_time
+                return SkillResult(
+                    success=False,
+                    error=str(e),
+                    execution_time=execution_time
+                )
 
     async def _execute_prompt_skill(
         self,
