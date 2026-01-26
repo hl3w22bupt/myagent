@@ -40,32 +40,37 @@ export class LLMClient {
    * 调用LLM API
    */
   async chat(messages: LLMMessage[]): Promise<LLMResponse> {
-    // 实际实现应该调用真实的LLM API
-    // 这里提供简化版本用于开发测试
-
     try {
-      // TODO: 集成真实的LLM API（OpenAI, Anthropic等）
-      // const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer ${this.config.apiKey}`,
-      //   },
-      //   body: JSON.stringify({
-      //     model: this.config.model,
-      //     messages,
-      //   }),
-      // });
+      const response = await fetch(this.config.baseURL || 'https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.config.model || 'gpt-4',
+          messages,
+        }),
+        signal: AbortSignal.timeout(this.config.timeout || 30000),
+      });
 
-      // const data = await response.json();
-      // return {
-      //   content: data.choices[0].message.content,
-      //   usage: data.usage,
-      // };
+      if (!response.ok) {
+        throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
+      }
 
-      // 临时占位实现
-      throw new Error('LLM API not implemented yet');
+      const data = await response.json();
+      return {
+        content: data.choices[0].message.content,
+        usage: data.usage ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens,
+        } : undefined,
+      };
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('LLM API call timed out');
+      }
       throw new Error(`LLM API call failed: ${(error as Error).message}`);
     }
   }
