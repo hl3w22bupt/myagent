@@ -268,7 +268,7 @@ export const handler = async (
     hookExecutor.startProgressingHooks(taskContext);
     logger.info('Progressing hooks started', { taskId });
 
-    const result = await agent.run(taskContext.task, taskId);
+    const result = await agent.run(taskContext.task, taskId, taskContext.context);
 
     logger.info('Task execution completed', {
       sessionId,

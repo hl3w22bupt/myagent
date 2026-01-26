@@ -108,6 +108,39 @@ export class Agent {
   }
 
   /**
+   * Format context for LLM consumption
+   * Provides structured summary + recent messages
+   */
+  private formatContextForLLM(context: any): string {
+    const parts: string[] = [];
+
+    // Part 1: Summary (if available)
+    if (context.summary) {
+      parts.push('## Task Context');
+      parts.push(`- Current Task: ${context.summary.currentTask}`);
+      parts.push(`- Status: ${context.summary.currentStatus}`);
+
+      if (context.summary.completedSteps?.length > 0) {
+        parts.push(`- Completed: ${context.summary.completedSteps.join(', ')}`);
+      }
+
+      if (context.summary.filesModified?.length > 0) {
+        parts.push(`- Modified Files: ${context.summary.filesModified.map(f => f.path).join(', ')}`);
+      }
+    }
+
+    // Part 2: Recent messages (last 10)
+    const recentMessages = context.messages.slice(-10);
+    if (recentMessages.length > 0) {
+      parts.push('');
+      parts.push('## Recent Conversation');
+      parts.push(recentMessages.map(m => `[${m.role}]: ${m.content}`).join('\n'));
+    }
+
+    return parts.join('\n');
+  }
+
+  /**
    * Initialize skills registry by discovering skills from filesystem.
    * This is a one-time initialization on first Agent instantiation.
    */
@@ -156,9 +189,10 @@ export class Agent {
    *
    * @param task - User task description
    * @param taskId - Optional task ID for tracking and naming outputs
+   * @param context - Optional task context from database (for persistent context)
    * @returns Execution result
    */
-  async run(task: string, taskId?: string): Promise<AgentResult> {
+  async run(task: string, taskId?: string, context?: any): Promise<AgentResult> {
     console.log('[Agent] agent.run() called', { sessionId: this.sessionId, task, taskId });
 
     // CRITICAL FIX: Wait for skills to be initialized before task execution
@@ -179,6 +213,27 @@ export class Agent {
       content: task,
       timestamp: Date.now(),
     });
+
+    // If context is provided, use it for LLM calls
+    if (context && context.messages && context.messages.length > 0) {
+      console.log('[Agent] Using database context', {
+        totalMessages: context.messages.length,
+        currentTurn: context.currentTurn,
+        summary: context.summary
+      });
+
+      // Override conversationHistory with database context
+      // This provides persistent, compressed context
+      this.state.conversationHistory = context.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.metadata?.timestamp || Date.now()
+      }));
+
+      console.log('[Agent] Updated conversationHistory with database context', {
+        historyLength: this.state.conversationHistory.length
+      });
+    }
 
     const startTime = Date.now();
     const steps: AgentStep[] = [];
