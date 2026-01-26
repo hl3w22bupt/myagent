@@ -89,6 +89,7 @@ export interface StructuredSummary {
  * Artifact索引
  */
 export interface ArtifactIndex {
+  id: string;
   taskId: string;
   artifactType: 'file' | 'function' | 'variable' | 'error';
   action: 'created' | 'modified' | 'read' | 'deleted';
@@ -132,6 +133,7 @@ export interface ErrorAndSolution {
  * 上下文压缩历史
  */
 export interface CompressionHistory {
+  id: string;
   taskId: string;
   compressedAt: Date;
   originalTokenCount: number;

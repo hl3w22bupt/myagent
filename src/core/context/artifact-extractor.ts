@@ -25,6 +25,7 @@ export class ArtifactExtractor {
     if (message.metadata.skillCalls) {
       for (const skill of message.metadata.skillCalls) {
         artifacts.push({
+          id: `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           artifactType: 'function',
           action: 'read',
           path: skill,
@@ -54,6 +55,7 @@ export class ArtifactExtractor {
 
       for (const path of matches) {
         artifacts.push({
+          id: `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           artifactType: 'file',
           action,
           path,
@@ -86,6 +88,7 @@ export class ArtifactExtractor {
       }
 
       artifacts.push({
+        id: `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         artifactType: 'function',
         action: 'read',
         path: funcName,

@@ -1,6 +1,6 @@
 import type { APIConfig } from 'motia';
 import { z } from 'zod';
-import { getContextStore } from '../../src/core/database/context-store';
+import { getUnifiedStore } from '../../src/core/database/unified-store';
 import { ContextManager } from '../../src/core/context/manager';
 
 export const config: APIConfig = {
@@ -13,8 +13,8 @@ export const config: APIConfig = {
 
 const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
-const contextStore = getContextStore();
-const contextManager = new ContextManager(contextStore);
+const unifiedStore = getUnifiedStore();
+const contextManager = new ContextManager(unifiedStore);
 
 export const handler = async (
   request: any,

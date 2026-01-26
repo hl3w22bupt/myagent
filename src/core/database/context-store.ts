@@ -149,6 +149,7 @@ export class ContextStore extends ContextStoreBase {
     if (!this.db) return;
 
     // 任务上下文表
+    // Note: No FOREIGN KEY to tasks table because tasks are in a separate database (tasks.db)
     this.db.run(`
       CREATE TABLE IF NOT EXISTS task_contexts (
         task_id TEXT PRIMARY KEY,
@@ -158,8 +159,7 @@ export class ContextStore extends ContextStoreBase {
         working_memory TEXT,
         metadata TEXT,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        updated_at INTEGER NOT NULL
       )
     `);
 
@@ -172,8 +172,7 @@ export class ContextStore extends ContextStoreBase {
         content TEXT NOT NULL,
         metadata TEXT,
         compressed INTEGER DEFAULT 0,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (task_id) REFERENCES task_contexts(task_id) ON DELETE CASCADE
+        created_at INTEGER NOT NULL
       )
     `);
 
@@ -187,8 +186,7 @@ export class ContextStore extends ContextStoreBase {
         path TEXT NOT NULL,
         description TEXT,
         commit_hash TEXT,
-        timestamp INTEGER NOT NULL,
-        FOREIGN KEY (task_id) REFERENCES task_contexts(task_id) ON DELETE CASCADE
+        timestamp INTEGER NOT NULL
       )
     `);
 
@@ -202,8 +200,7 @@ export class ContextStore extends ContextStoreBase {
         compressed_token_count INTEGER NOT NULL,
         compression_ratio REAL NOT NULL,
         summary TEXT NOT NULL,
-        truncated_message_ids TEXT,
-        FOREIGN KEY (task_id) REFERENCES task_contexts(task_id) ON DELETE CASCADE
+        truncated_message_ids TEXT
       )
     `);
 

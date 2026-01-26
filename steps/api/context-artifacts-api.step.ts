@@ -1,6 +1,6 @@
 import type { APIConfig } from 'motia';
 import { z } from 'zod';
-import { getContextStore } from '../../src/core/database/context-store';
+import { getUnifiedStore } from '../../src/core/database/unified-store';
 
 export const config: APIConfig = {
   type: 'api',
@@ -12,7 +12,7 @@ export const config: APIConfig = {
 
 const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
-const contextStore = getContextStore();
+const unifiedStore = getUnifiedStore();
 
 export const handler = async (
   request: any,
@@ -33,7 +33,7 @@ export const handler = async (
     const taskId = validationResult.data;
 
     // 获取Artifacts
-    const artifacts = await contextStore.getArtifacts(taskId);
+    const artifacts = await unifiedStore.getArtifacts(taskId);
 
     logger.info('Artifacts retrieved', {
       taskId,

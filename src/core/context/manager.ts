@@ -5,19 +5,19 @@
  */
 
 import type { TaskContext, Message } from '../database/context-types';
-import { ContextStore } from '../database/context-store';
+import { UnifiedStore } from '../database/unified-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';
 import { LLMSummarizer } from '../llm/summarizer';
 
 export class ContextManager {
-  private store: ContextStore;
+  private store: UnifiedStore;
   private compressor: ContextCompressor;
   private artifactExtractor: ArtifactExtractor;
   private summarizer?: LLMSummarizer;
 
-  constructor(store?: ContextStore, summarizer?: LLMSummarizer) {
-    this.store = store || new ContextStore();
+  constructor(store?: UnifiedStore, summarizer?: LLMSummarizer) {
+    this.store = store || new UnifiedStore();
     this.compressor = new ContextCompressor();
     this.artifactExtractor = new ArtifactExtractor();
     this.summarizer = summarizer;
@@ -88,6 +88,7 @@ export class ContextManager {
 
       // 5. 保存压缩历史
       await this.store.saveCompressionHistory({
+        id: `comp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         taskId,
         compressedAt: new Date(),
         originalTokenCount: updatedContext.metadata.totalTokens,

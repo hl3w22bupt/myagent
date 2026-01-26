@@ -49,6 +49,11 @@ export interface Task {
 }
 
 /**
+ * Create task data (without auto-generated fields)
+ */
+export type CreateTaskData = Omit<Task, 'createdAt' | 'updatedAt' | 'retryCount' | 'isRetry'>;
+
+/**
  * Task Store abstract base class
  */
 abstract class TaskStore {

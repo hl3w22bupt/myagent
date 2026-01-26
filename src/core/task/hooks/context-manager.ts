@@ -2,7 +2,7 @@ import { BaseTaskHook } from './base';
 import { TaskContext } from './types';
 import { ContextManager } from '../../context/manager';
 import { LLMSummarizer } from '../../llm/summarizer';
-import { getContextStore } from '../../database/context-store';
+import { getUnifiedStore } from '../../database/unified-store';
 
 /**
  * Context Manager TaskHook
@@ -20,7 +20,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
       // 创建默认的ContextManager，配置LLM摘要器
       const apiKey = process.env.LLM_API_KEY || '';
       const summarizer = apiKey ? new LLMSummarizer({ apiKey }) : undefined;
-      this.contextManager = new ContextManager(getContextStore(), summarizer);
+      this.contextManager = new ContextManager(getUnifiedStore(), summarizer);
     }
   }
 
