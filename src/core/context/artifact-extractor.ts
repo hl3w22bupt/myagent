@@ -46,7 +46,7 @@ export class ArtifactExtractor {
     const artifacts: Omit<ArtifactIndex, 'taskId'>[] = [];
 
     // 正则匹配文件路径
-    const filePathPattern = /([\/.][^\s,]+\.[a-z]{2,4})/gi;
+    const filePathPattern = /([/.][^\s,]+\.[a-z]{2,4})/gi;
     const matches = content.match(filePathPattern);
 
     if (matches) {

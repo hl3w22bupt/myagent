@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { getUnifiedStore } from '../../src/core/database/unified-store';
+import { getDataStore } from '../../src/core/database/data-store';
 
 /**
  * Query parameters schema for retry API.
@@ -75,7 +75,7 @@ export const handler = async (request: any, { logger, emit }: any) => {
 
   try {
     // 从数据库查找要重试的任务
-    const unifiedStore = getUnifiedStore();
+    const unifiedStore = getDataStore();
     const foundTask = await unifiedStore.getTask(id);
 
     if (!foundTask) {

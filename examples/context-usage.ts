@@ -3,14 +3,13 @@
  */
 
 import { ContextManager } from '../src/core/context/manager';
-import { ContextStore } from '../src/core/database/context-store';
-import { LLMSummarizer } from '../src/core/llm/summarizer';
+import { getDataStore } from '../src/core/database/data-store';
 import type { Message } from '../src/core/database/context-types';
 
 async function basicUsageExample() {
   console.log('=== 基本使用示例 ===');
 
-  const store = new ContextStore(':memory:');
+  const store = getDataStore(':memory:');
   await store.initialize();
 
   const manager = new ContextManager(store);
@@ -57,7 +56,7 @@ async function basicUsageExample() {
 
   // 5. 获取LLM格式的上下文
   const llmContext = await manager.getContextForLLM('task-1');
-  console.log('LLM上下文已生成');
+  console.log('LLM上下文已生成:', llmContext);
 
   await store.close();
 }
@@ -65,7 +64,7 @@ async function basicUsageExample() {
 async function multiTurnExample() {
   console.log('\n=== 多轮对话示例 ===');
 
-  const store = new ContextStore(':memory:');
+  const store = getDataStore(':memory:');
   await store.initialize();
 
   const manager = new ContextManager(store);
@@ -83,15 +82,16 @@ async function multiTurnExample() {
   for (let i = 0; i < turns.length; i++) {
     await manager.addMessage('task-2', {
       id: `msg-${i + 1}`,
-      taskId: 'task-2',
       ...turns[i],
       metadata: { timestamp: new Date(), tokens: 50 },
     });
   }
 
   const context = await manager.getContext('task-2');
-  console.log('对话轮次:', context.currentTurn);
-  console.log('消息数量:', context.messages.length);
+  if (context) {
+    console.log('对话轮次:', context.currentTurn);
+    console.log('消息数量:', context.messages.length);
+  }
 
   await store.close();
 }
@@ -99,7 +99,7 @@ async function multiTurnExample() {
 async function compressionExample() {
   console.log('\n=== 上下文压缩示例 ===');
 
-  const store = new ContextStore(':memory:');
+  const store = getDataStore(':memory:');
   await store.initialize();
 
   const manager = new ContextManager(store);
@@ -109,7 +109,6 @@ async function compressionExample() {
   for (let i = 0; i < 25; i++) {
     await manager.addMessage('task-3', {
       id: `msg-${i}`,
-      taskId: 'task-3',
       role: 'assistant',
       content: `处理第${i}个文件`,
       metadata: { timestamp: new Date(), tokens: 5000 },
@@ -117,9 +116,11 @@ async function compressionExample() {
   }
 
   const context = await manager.getContext('task-3');
-  console.log('总token数:', context.metadata.totalTokens);
-  console.log('最后压缩时间:', context.metadata.lastCompressedAt);
-  console.log('当前消息数:', context.messages.length);
+  if (context) {
+    console.log('总token数:', context.metadata.totalTokens);
+    console.log('最后压缩时间:', context.metadata.lastCompressedAt);
+    console.log('当前消息数:', context.messages.length);
+  }
 
   // 查看压缩历史
   const history = await store.getCompressionHistory('task-3');
@@ -134,7 +135,7 @@ async function compressionExample() {
 async function artifactTrackingExample() {
   console.log('\n=== Artifact跟踪示例 ===');
 
-  const store = new ContextStore(':memory:');
+  const store = getDataStore(':memory:');
   await store.initialize();
 
   const manager = new ContextManager(store);
@@ -151,7 +152,6 @@ async function artifactTrackingExample() {
   for (let i = 0; i < messages.length; i++) {
     await manager.addMessage('task-4', {
       id: `msg-${i}`,
-      taskId: 'task-4',
       role: 'assistant',
       content: messages[i],
       metadata: { timestamp: new Date(), tokens: 30 },

@@ -1,8 +1,8 @@
-import type { APIConfig } from 'motia';
+import { ApiRouteConfig } from 'motia';
 import { z } from 'zod';
-import { getUnifiedStore } from '../../src/core/database/unified-store';
+import { getDataStore } from '../../src/core/database/data-store';
 
-export const config: APIConfig = {
+export const config: ApiRouteConfig = {
   type: 'api',
   name: 'context-artifacts-api',
   path: '/api/contexts/:id/artifacts',
@@ -12,7 +12,7 @@ export const config: APIConfig = {
 
 const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
-const unifiedStore = getUnifiedStore();
+const unifiedStore = getDataStore();
 
 export const handler = async (
   request: any,

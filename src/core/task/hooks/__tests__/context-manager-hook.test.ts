@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { ContextManagerTaskHook } from '../context-manager';
-import { ContextStore } from '../../database/context-store';
-import { TaskContext } from '../types';
-import { ContextManager } from '../../context/manager';
+import { getDataStore } from '@/core/database/data-store';
+import type { TaskContext } from '../types';
+import { ContextManager } from '@/core/context/manager';
 
 describe('ContextManagerTaskHook Integration', () => {
   let hook: ContextManagerTaskHook;
-  let store: ContextStore;
+  let store: ReturnType<typeof getDataStore>;
   let contextManager: ContextManager;
 
   beforeEach(async () => {
-    store = new ContextStore(':memory:');
+    store = getDataStore(':memory:');
     await store.initialize();
     contextManager = new ContextManager(store);
     hook = new ContextManagerTaskHook(contextManager);
@@ -44,8 +44,10 @@ describe('ContextManagerTaskHook Integration', () => {
     await hook.preExec(taskContext);
 
     expect(taskContext.context).toBeDefined();
-    expect(taskContext.context.messages).toEqual([]);
-    expect(taskContext.context.summary.currentTask).toBe('测试任务');
+    if (taskContext.context) {
+      expect(taskContext.context.messages).toEqual([]);
+      expect(taskContext.context.summary.currentTask).toBe('测试任务');
+    }
   });
 
   it('should save context in postExec', async () => {

@@ -5,19 +5,19 @@
  */
 
 import type { TaskContext, Message } from '../database/context-types';
-import { UnifiedStore } from '../database/unified-store';
+import { DataStore } from '../database/data-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';
 import { LLMSummarizer } from '../llm/summarizer';
 
 export class ContextManager {
-  private store: UnifiedStore;
+  private store: DataStore;
   private compressor: ContextCompressor;
   private artifactExtractor: ArtifactExtractor;
   private summarizer?: LLMSummarizer;
 
-  constructor(store?: UnifiedStore, summarizer?: LLMSummarizer) {
-    this.store = store || new UnifiedStore();
+  constructor(store?: DataStore, summarizer?: LLMSummarizer) {
+    this.store = store || new DataStore();
     this.compressor = new ContextCompressor();
     this.artifactExtractor = new ArtifactExtractor();
     this.summarizer = summarizer;

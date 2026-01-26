@@ -38,7 +38,7 @@ describe('LLMSummarizer', () => {
     ];
 
     // Mock LLM调用
-    summarizer.callLLM = async (prompt: string) => {
+    summarizer.callLLM = async (_prompt: string) => {
       return JSON.stringify({
         sessionIntent: '创建React用户列表组件',
         currentTask: '创建UserList组件',

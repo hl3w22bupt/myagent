@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { ContextManager } from '../manager';
-import { ContextStore } from '../../database/context-store';
-import type { TaskContext, Message } from '../../database/context-types';
+import { getDataStore } from '../../database/data-store';
+import type { Message } from '../../database/context-types';
 
 describe('ContextManager', () => {
   let manager: ContextManager;
-  let store: ContextStore;
+  let store: ReturnType<typeof getDataStore>;
 
   beforeEach(async () => {
-    store = new ContextStore(':memory:');
+    store = getDataStore(':memory:');
     await store.initialize();
     manager = new ContextManager(store);
   });
@@ -62,8 +62,11 @@ describe('ContextManager', () => {
     const context = await manager.getContext('task-3');
 
     // 应该触发压缩
-    expect(context.messages.length).toBeLessThan(25);
-    expect(context.metadata.lastCompressedAt).toBeDefined();
+    expect(context).not.toBeNull();
+    if (context) {
+      expect(context.messages.length).toBeLessThan(25);
+      expect(context.metadata.lastCompressedAt).toBeDefined();
+    }
   });
 
   it('should extract and track artifacts from messages', async () => {

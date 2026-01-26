@@ -4,7 +4,7 @@
  * 使用LLM生成上下文的结构化摘要
  */
 
-import { LLMClient, LLMMessage } from './client';
+import { LLMClient } from './client';
 import type { Message, StructuredSummary } from '../database/context-types';
 
 export interface LLMSummarizerConfig {
@@ -45,7 +45,7 @@ export class LLMSummarizer {
     try {
       const summary = JSON.parse(response) as StructuredSummary;
       return summary;
-    } catch (error) {
+    } catch {
       // 如果JSON解析失败，返回默认摘要
       return this.getDefaultSummary(messages);
     }

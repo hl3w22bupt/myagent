@@ -3,7 +3,6 @@ import { TaskContext } from '@/core/task/hooks/types';
 
 // Mock ContextManager
 jest.mock('@/core/context/manager');
-jest.mock('@/core/database/context-store');
 
 describe('ContextManagerTaskHook', () => {
   let hook: ContextManagerTaskHook;

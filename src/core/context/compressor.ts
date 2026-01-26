@@ -127,7 +127,7 @@ export class ContextCompressor {
   /**
    * 估算压缩后的token数
    */
-  private estimateCompressedTokens(messages: Message[], summary: StructuredSummary): number {
+  private estimateCompressedTokens(messages: Message[], _summary: StructuredSummary): number {
     // 简单估算：每条消息平均1000 tokens，摘要5000 tokens
     const messageTokens = messages.length * 1000;
     const summaryTokens = 5000;

@@ -1,7 +1,7 @@
 /**
- * Unified Store - 统一数据库存储层
+ * Data Store - 数据库存储层
  *
- * 合并 TaskStore 和 ContextStore，使用单一数据库文件
+ * 提供任务、上下文、会话的持久化存储
  * 支持外键约束和级联删除，保证数据完整性
  *
  * 数据库文件: data/myagent.db
@@ -10,8 +10,50 @@
 import initSqlJs, { Database } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
-import { Task, TaskStatus } from './task-store';
-import type { CreateTaskData } from './task-store';
+
+/**
+ * Task status enum
+ */
+export enum TaskStatus {
+  PENDING = 'pending',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+/**
+ * Task interface
+ */
+export interface Task {
+  id: string;
+  task: string;
+  sessionId: string;
+  status: TaskStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  output?: string;
+  error?: string;
+  executionTime?: number;
+  metadata?: {
+    llmCalls?: number;
+    skillCalls?: number;
+    totalTokens?: number;
+    retries?: {
+      attempts: number;
+      totalDelay: number;
+      recovered: boolean;
+    };
+  };
+  retryCount: number;
+  isRetry: boolean;
+}
+
+/**
+ * Create task data (without auto-generated fields)
+ */
+export type CreateTaskData = Omit<Task, 'createdAt' | 'updatedAt' | 'retryCount' | 'isRetry'>;
+
 import type {
   TaskContext,
   Message,
@@ -30,9 +72,9 @@ export interface Session {
 }
 
 /**
- * 统一数据库存储
+ * 数据库存储
  */
-export class UnifiedStore {
+export class DataStore {
   private db: Database | null = null;
   private dbPath: string;
   private initPromise: Promise<void>;
@@ -75,10 +117,13 @@ export class UnifiedStore {
       if (this.db) {
         // Enable foreign keys
         this.db.run('PRAGMA foreign_keys = ON');
-        console.log(`[UnifiedStore] Database initialized: ${this.dbPath}`);
+        // 在测试环境中禁用日志输出，避免 "Cannot log after tests are done" 警告
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(`[DataStore] Database initialized: ${this.dbPath}`);
+        }
       }
     } catch (error) {
-      console.error('[UnifiedStore] Failed to initialize database:', error);
+      console.error('[DataStore] Failed to initialize database:', error);
       throw error;
     }
   }
@@ -101,7 +146,7 @@ export class UnifiedStore {
   private initSchema() {
     if (!this.db) return;
 
-    console.log('[UnifiedStore] Initializing database schema...');
+    console.log('[DataStore] Initializing database schema...');
 
     // 1. 任务表 (核心表)
     this.db.run(`
@@ -200,7 +245,7 @@ export class UnifiedStore {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)`);
 
-    console.log('[UnifiedStore] Schema initialized successfully');
+    console.log('[DataStore] Schema initialized successfully');
   }
 
   // ============================================================================
@@ -546,6 +591,13 @@ export class UnifiedStore {
 
     const messageId = message.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+    // 先获取当前 context
+    const context = await this.getContext(taskId);
+    if (!context) {
+      throw new Error(`Task context not found: ${taskId}`);
+    }
+
+    // 插入消息
     this.db.run(
       `INSERT INTO messages (id, task_id, role, content, metadata, compressed, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -557,6 +609,25 @@ export class UnifiedStore {
         message.metadata ? JSON.stringify(message.metadata) : null,
         message.compressed ? 1 : 0,
         Date.now(),
+      ]
+    );
+
+    // 更新 currentTurn 和 metadata
+    const newCurrentTurn = context.currentTurn + 1;
+    const newTotalTokens = context.metadata.totalTokens + (message.metadata?.tokens || 0);
+
+    this.db.run(
+      `UPDATE task_contexts
+       SET current_turn = ?, metadata = ?, updated_at = ?
+       WHERE task_id = ?`,
+      [
+        newCurrentTurn,
+        JSON.stringify({
+          ...context.metadata,
+          totalTokens: newTotalTokens,
+        }),
+        Date.now(),
+        taskId,
       ]
     );
 
@@ -786,17 +857,22 @@ export class UnifiedStore {
 }
 
 /**
- * 获取全局 UnifiedStore 实例
+ * 获取全局 DataStore 实例
  */
-let globalStore: UnifiedStore | null = null;
+let globalStore: DataStore | null = null;
 
-export function getUnifiedStore(): UnifiedStore {
+export function getDataStore(dbPath?: string): DataStore {
+  // 如果传入了明确的 dbPath 参数，创建新实例（用于测试）
+  if (dbPath) {
+    return new DataStore(dbPath);
+  }
+  // 否则返回全局单例实例
   if (!globalStore) {
-    globalStore = new UnifiedStore();
+    globalStore = new DataStore();
   }
   return globalStore;
 }
 
-export function setUnifiedStore(store: UnifiedStore): void {
+export function setDataStore(store: DataStore): void {
   globalStore = store;
 }

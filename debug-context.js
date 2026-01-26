@@ -3,7 +3,7 @@
  * 测试上下文管理是否正常工作
  */
 
-const { ContextStore } = require('./src/core/database/context-store');
+const { DataStore } = require('./src/core/database/data-store');
 const { ContextManager } = require('./src/core/context/manager');
 const { LLMSummarizer } = require('./src/core/llm/summarizer');
 
@@ -11,11 +11,11 @@ async function testContextManager() {
   console.log('=== Context Manager Debug Test ===\n');
 
   try {
-    // 1. 初始化 ContextStore
-    console.log('1. 初始化 ContextStore...');
-    const contextStore = new ContextStore();
+    // 1. 初始化 DataStore
+    console.log('1. 初始化 DataStore...');
+    const contextStore = new DataStore();
     await contextStore.initialize();
-    console.log('✅ ContextStore 初始化成功\n');
+    console.log('✅ DataStore 初始化成功\n');
 
     // 2. 创建 ContextManager
     console.log('2. 创建 ContextManager...');
@@ -76,7 +76,7 @@ async function testContextManager() {
 
     // 7. 查询所有上下文
     console.log('7. 查询数据库中的所有任务上下文...');
-    // 注意：ContextStore 没有提供 listAll 方法，这个可能需要手动查询
+    // 注意：DataStore 没有提供 listAll 方法，这个可能需要手动查询
 
     console.log('\n=== 测试完成 ===');
     console.log('✅ ContextManager 工作正常！');

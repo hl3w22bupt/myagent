@@ -78,7 +78,7 @@ export class LLMClient {
   /**
    * 流式调用LLM API
    */
-  async *chatStream(messages: LLMMessage[]): AsyncGenerator<string, void, unknown> {
+  async chatStream(_messages: LLMMessage[]): Promise<string> {
     // TODO: 实现流式响应
     throw new Error('Streaming not implemented yet');
   }
