@@ -290,6 +290,15 @@ ${skillsBlock}
 ${selectedSkills.join(', ')}
 </available_skills>
 
+CRITICAL LANGUAGE REQUIREMENT:
+- You MUST generate Python code ONLY
+- Even if the task mentions TypeScript, JavaScript, or other languages
+- This is a Python-only execution environment
+- If the task asks for TypeScript/JavaScript code, you should:
+  1. Generate Python equivalent code
+  2. Add comments explaining the Python implementation
+  3. Focus on logic/algorithm rather than language-specific syntax
+
 Generate Python code to accomplish the task.
 
 IMPORTANT - Code structure requirements:
@@ -411,17 +420,54 @@ Generate the code now:`;
 
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
 
-    // Extract code from ```python code blocks (strict format as requested in prompt)
-    const codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
+    // Extract code from code blocks - support multiple languages
+    // Priority: python > typescript > javascript > generic
+    let codeMatch: RegExpMatchArray | null = null;
+    let matchedLanguage = '';
+
+    // Try Python first (preferred for this system)
+    codeMatch = response.content.match(/```python\s*(.*?)\s*```/s);
+    if (codeMatch) {
+      matchedLanguage = 'python';
+    }
+
+    // Try TypeScript (for frontend/Node.js tasks)
+    if (!codeMatch) {
+      codeMatch = response.content.match(/```typescript\s*(.*?)\s*```/s);
+      if (codeMatch) matchedLanguage = 'typescript';
+    }
+
+    // Try JavaScript
+    if (!codeMatch) {
+      codeMatch = response.content.match(/```javascript\s*(.*?)\s*```/s);
+      if (codeMatch) matchedLanguage = 'javascript';
+    }
+
+    // Try generic code block (```)
+    if (!codeMatch) {
+      codeMatch = response.content.match(/```\s*(.*?)\s*```/s);
+      if (codeMatch) matchedLanguage = 'generic';
+    }
 
     if (!codeMatch) {
       console.error('[PTC Generator] Failed to parse code. Response:', response.content);
       throw new Error(
-        `Failed to parse code from LLM response. Expected \`\`\`python code blocks. Got: ${response.content.substring(0, 200)}`
+        `Failed to parse code from LLM response. Expected code blocks (python/typescript/javascript). Got: ${response.content.substring(0, 200)}`
       );
     }
 
+    console.log(`[PTC Generator] Parsed ${matchedLanguage} code block`);
+
     let code = codeMatch[1].trim();
+
+    // Validate: If code is TypeScript/JavaScript but this is a Python-only system,
+    // we should inform the user and potentially retry
+    if (matchedLanguage === 'typescript' || matchedLanguage === 'javascript') {
+      console.warn(`[PTC Generator] Warning: Generated ${matchedLanguage} code but this system only supports Python execution`);
+      console.warn(`[PTC Generator] The task may require functionality that cannot be expressed in Python`);
+      // Note: We don't throw here - let the sandbox handle it with a clear error message
+      // This allows for future extension to Node.js sandbox
+    }
 
     // Clean up: remove common unwanted patterns
     code = code

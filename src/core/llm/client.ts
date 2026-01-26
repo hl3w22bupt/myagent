@@ -58,7 +58,7 @@ export class LLMClient {
         throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       return {
         content: data.choices[0].message.content,
         usage: data.usage ? {

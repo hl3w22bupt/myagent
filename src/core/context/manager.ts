@@ -157,8 +157,8 @@ ${messages}
 - Current Task: ${summary.currentTask}
 - Status: ${summary.currentStatus}
 - Completed Steps: ${summary.completedSteps.join(', ')}
-- Files Modified: ${summary.filesModified.map(f => `${f.action}: ${f.path}`).join(', ')}
-- Decisions: ${summary.decisionsMade.map(d => d.topic).join(', ')}
+- Files Modified: ${summary.filesModified.map((f: any) => `${f.action}: ${f.path}`).join(', ')}
+- Decisions: ${summary.decisionsMade.map((d: any) => d.topic).join(', ')}
 `.trim();
   }
 

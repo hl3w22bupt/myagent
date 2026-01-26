@@ -125,7 +125,7 @@ export class Agent {
       }
 
       if (context.summary.filesModified?.length > 0) {
-        parts.push(`- Modified Files: ${context.summary.filesModified.map(f => f.path).join(', ')}`);
+        parts.push(`- Modified Files: ${context.summary.filesModified.map((f: any) => f.path).join(', ')}`);
       }
     }
 
@@ -134,7 +134,7 @@ export class Agent {
     if (recentMessages.length > 0) {
       parts.push('');
       parts.push('## Recent Conversation');
-      parts.push(recentMessages.map(m => `[${m.role}]: ${m.content}`).join('\n'));
+      parts.push(recentMessages.map((m: any) => `[${m.role}]: ${m.content}`).join('\n'));
     }
 
     return parts.join('\n');
@@ -224,7 +224,7 @@ export class Agent {
 
       // Override conversationHistory with database context
       // This provides persistent, compressed context
-      this.state.conversationHistory = context.messages.map(msg => ({
+      this.state.conversationHistory = context.messages.map((msg: any) => ({
         role: msg.role,
         content: msg.content,
         timestamp: msg.metadata?.timestamp || Date.now()
