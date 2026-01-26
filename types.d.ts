@@ -18,18 +18,19 @@ declare module 'motia' {
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'context-compression-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'subagents-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'result-logger': EventHandler<never, never>
+    'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
     'failure-handler': EventHandler<never, never>
     'agent-task-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-results-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
   }
     
 }

@@ -128,8 +128,7 @@ export class UnifiedStore {
         session_id TEXT PRIMARY KEY,
         created_at INTEGER NOT NULL,
         last_active_at INTEGER NOT NULL,
-        metadata TEXT,
-        FOREIGN KEY (session_id) REFERENCES tasks(session_id) ON DELETE SET NULL
+        metadata TEXT
       )
     `);
 
