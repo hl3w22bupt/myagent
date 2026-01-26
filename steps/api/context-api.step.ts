@@ -11,6 +11,8 @@ export const config: APIConfig = {
   emits: [],
 };
 
+const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
+
 const contextStore = getContextStore();
 const contextManager = new ContextManager(contextStore);
 
@@ -19,7 +21,18 @@ export const handler = async (
   { logger }: any
 ) => {
   try {
-    const taskId = request.params.id;
+    // Validate taskId
+    const validationResult = taskIdSchema.safeParse(request.params.id);
+    if (!validationResult.success) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: 'Invalid taskId format',
+        },
+      };
+    }
+    const taskId = validationResult.data;
 
     // 获取上下文
     const context = await contextManager.getContext(taskId);
