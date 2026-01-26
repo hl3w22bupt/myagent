@@ -65,6 +65,7 @@ export const handler = async (
   } catch (error) {
     logger.error('Failed to retrieve context', {
       error: (error as Error).message,
+      stack: (error as Error).stack,
     });
 
     return {
@@ -72,6 +73,7 @@ export const handler = async (
       body: {
         success: false,
         error: (error as Error).message,
+        stack: (error as Error).stack,
       },
     };
   }
