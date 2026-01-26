@@ -1,22 +1,20 @@
 /**
  * MasterAgent Delegation API Step.
  *
- * Provides REST API endpoint for executing tasks with MasterAgent delegation.
- * This endpoint directly uses the MasterAgent class to enable intelligent task
- * delegation to specialized subagents.
+ * REST API endpoint for executing tasks with MasterAgent delegation.
+ * Emits events to trigger task execution through the event system,
+ * ensuring all tasks go through TaskHook for unified context management.
  *
  * Features:
- * - Direct MasterAgent instantiation (not through AgentManager)
+ * - Event-driven task execution (emits 'agent.task.execute')
  * - Intelligent task delegation to subagents
  * - Multi-turn conversation support
  * - Session management for conversation context
+ * - Unified with /agent/execute execution model
  */
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { v4 as uuidv4 } from 'uuid';
-import { MasterAgent } from '../../src/core/agent/master-agent';
-import type { MasterAgentConfig } from '../../src/core/agent/types';
 
 /**
  * Request body schema for MasterAgent Delegation API.
@@ -75,9 +73,9 @@ export const config: ApiRouteConfig = {
   method: 'POST',
 
   /**
-   * No events emitted - direct execution for synchronous response.
+   * Emit agent task execution event (same as /agent/execute).
    */
-  emits: [],
+  emits: [{ topic: 'agent.task.execute', label: 'Execute agent task with delegation' }],
 
   /**
    * Virtual connections.
@@ -91,29 +89,25 @@ export const config: ApiRouteConfig = {
 };
 
 /**
- * Helper function to get Python path.
+ * Task counter for generating unique task IDs.
  */
-function getPythonPath(): string {
-  return (
-    process.env.PYTHON_PATH ||
-    process.cwd() + '/python_modules/bin/python3' ||
-    process.cwd() + '/.venv/bin/python3' ||
-    'python3'
-  );
-}
+let taskCounter = 0;
 
 /**
  * MasterAgent Delegation API handler.
  *
- * Directly uses MasterAgent to execute tasks with intelligent delegation.
+ * Emits events to trigger task execution through master-agent.step.ts.
+ * This ensures all tasks go through TaskHook for unified context management.
  *
  * Execution flow:
- * 1. Create or reuse session
- * 2. Instantiate MasterAgent with subagent configs
- * 3. Execute task (MasterAgent plans and delegates)
- * 4. Return results with delegation metadata
+ * 1. Validate request
+ * 2. Emit 'agent.task.execute' event
+ * 3. master-agent.step.ts processes the event
+ * 4. TaskHook executes (context management, metrics, etc.)
+ * 5. MasterAgent runs with delegation
+ * 6. Results available via API or stream
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (request: any, { emit, logger }: any) => {
   // Validate request body
   const validationResult = bodySchema.safeParse(request.body);
   if (!validationResult.success) {
@@ -133,107 +127,53 @@ export const handler = async (request: any, { logger }: any) => {
 
   const { task, sessionId, subagents, systemPrompt, availableSkills } = validationResult.data;
 
-  // Generate or reuse sessionId
-  const effectiveSessionId = sessionId || uuidv4();
-  const taskId = `master-task-${Date.now()}`;
+  // Generate unique taskId with counter to prevent conflicts
+  const taskId = `delegate-${Date.now()}-${++taskCounter}`;
 
-  logger.info('MasterAgent Delegation API: Starting task execution', {
+  logger.info('MasterAgent Delegation API: Received task request', {
     task,
-    sessionId: effectiveSessionId,
+    sessionId,
     taskId,
     subagents: subagents || DEFAULT_SUBAGENTS,
   });
 
   try {
-    // Prepare MasterAgent configuration
-    const masterConfig: MasterAgentConfig = {
-      systemPrompt: systemPrompt || 'You are a helpful assistant with delegation capabilities.',
-      availableSkills: availableSkills || ['*'],
-      llm: {
-        provider: 'anthropic',
-        model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
+    // Emit event to trigger task through master-agent.step.ts
+    await emit({
+      topic: 'agent.task.execute',
+      data: {
+        taskId,
+        task,
+        sessionId,
+        systemPrompt,
+        availableSkills,
+        useDelegation: true, // Enable delegation
+        subagents: subagents || DEFAULT_SUBAGENTS,
       },
-      sandbox: {
-        type: 'local',
-        local: {
-          pythonPath: getPythonPath(),
-          timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
-        },
-      },
-      subagents: subagents || DEFAULT_SUBAGENTS,
-    };
-
-    // Create MasterAgent instance
-    // Note: We create a new instance for each request
-    // In production, you might want to cache instances per session
-    const masterAgent = new MasterAgent(masterConfig, effectiveSessionId);
-
-    // Verify subagents loaded successfully
-    const masterInfo = masterAgent.getInfo();
-    logger.info('MasterAgent initialized', {
-      type: masterInfo.type,
-      subagents: masterInfo.subagents,
-      subagentCount: masterInfo.subagents.length,
     });
 
-    // Execute task with delegation
-    // MasterAgent will:
-    // 1. Plan the task using LLM
-    // 2. Decide which subagents to delegate to
-    // 3. Execute delegated tasks
-    // 4. Synthesize results
-    const result = await masterAgent.run(task, taskId);
-
-    logger.info('MasterAgent task execution completed', {
-      sessionId: effectiveSessionId,
+    logger.info('Task execution event emitted', {
       taskId,
-      success: result.success,
-      executionTime: result.executionTime,
-      hasOutput: !!result.output,
+      sessionId,
+      useDelegation: true,
+      subagents: subagents || DEFAULT_SUBAGENTS,
     });
 
-    // Cleanup session (in production, you might want to keep sessions alive)
-    await masterAgent.cleanup();
-
-    // Return successful response with delegation metadata
+    // Return immediate response
     return {
       status: 200,
       body: {
         success: true,
-        message: 'Task executed with MasterAgent delegation',
-
-        // Task information
+        message: 'Task execution started with MasterAgent delegation',
         taskId,
-        task,
-        sessionId: effectiveSessionId,
-
-        // Execution results
-        result: {
-          success: result.success,
-          output: result.output,
-          error: result.error,
-
-          // Metadata including delegation information
-          executionTime: result.executionTime,
-          metadata: result.metadata,
-
-          // Agent state
-          state: result.state,
-        },
-
-        // Delegation information
-        delegation: {
-          masterAgentType: masterInfo.type,
-          availableSubagents: masterInfo.subagents,
-          delegatedTasks: result.metadata?.delegates || [],
-        },
+        sessionId,
+        note: 'Task is running asynchronously. Check /api/results/:id for progress.',
       },
     };
   } catch (error: any) {
-    logger.error('MasterAgent Delegation API: Execution failed', {
+    logger.error('MasterAgent Delegation API: Event emission failed', {
       error: error.message,
       stack: error.stack,
-      sessionId: effectiveSessionId,
       taskId,
     });
 
@@ -242,10 +182,9 @@ export const handler = async (request: any, { logger }: any) => {
       status: 500,
       body: {
         success: false,
-        message: 'Task execution failed',
+        message: 'Failed to start task execution',
         error: error.message,
         taskId,
-        sessionId: effectiveSessionId,
       },
     };
   }
