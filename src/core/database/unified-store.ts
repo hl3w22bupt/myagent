@@ -254,10 +254,12 @@ export class UnifiedStore {
     const stmt = this.db.prepare('SELECT * FROM tasks WHERE id = ?');
     stmt.bind([taskId]);
 
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
     const result = stmt.getAsObject() as any;
     stmt.free();
-
-    if (!result) return null;
 
     return this.mapDbTaskToTask(result);
   }
@@ -450,10 +452,12 @@ export class UnifiedStore {
     // 获取上下文
     const contextStmt = this.db.prepare('SELECT * FROM task_contexts WHERE task_id = ?');
     contextStmt.bind([taskId]);
+    if (!contextStmt.step()) {
+      contextStmt.free();
+      return null;
+    }
     const contextRow = contextStmt.getAsObject() as any;
     contextStmt.free();
-
-    if (!contextRow) return null;
 
     // 获取消息
     const messagesStmt = this.db.prepare('SELECT * FROM messages WHERE task_id = ? ORDER BY created_at ASC');
@@ -690,10 +694,12 @@ export class UnifiedStore {
     const stmt = this.db.prepare('SELECT * FROM sessions WHERE session_id = ?');
     stmt.bind([sessionId]);
 
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
     const result = stmt.getAsObject() as any;
     stmt.free();
-
-    if (!result) return null;
 
     return {
       sessionId: result.session_id,
