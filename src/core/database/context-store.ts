@@ -16,6 +16,18 @@ import type {
 } from './context-types';
 
 /**
+ * 安全的 JSON 解析辅助函数
+ */
+function safeJSONParse<T>(json: string | null, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Context Store抽象基类
  */
 abstract class ContextStoreBase {
@@ -283,7 +295,7 @@ export class ContextStore extends ContextStoreBase {
         taskId: msgRow.task_id,
         role: msgRow.role,
         content: msgRow.content,
-        metadata: JSON.parse(msgRow.metadata),
+        metadata: safeJSONParse(msgRow.metadata, { timestamp: new Date(), tokens: 0 }),
         compressed: msgRow.compressed === 1,
       });
     }
@@ -312,10 +324,24 @@ export class ContextStore extends ContextStoreBase {
       sessionId: row.session_id,
       currentTurn: row.current_turn,
       messages,
-      summary: JSON.parse(row.summary),
+      summary: safeJSONParse(row.summary, {
+        sessionIntent: '',
+        currentTask: '',
+        completedSteps: [],
+        filesModified: [],
+        decisionsMade: [],
+        currentStatus: 'pending',
+        nextSteps: [],
+        errorsAndSolutions: [],
+        technicalDetails: {},
+      }),
       artifactIndex,
-      workingMemory: JSON.parse(row.working_memory),
-      metadata: JSON.parse(row.metadata),
+      workingMemory: safeJSONParse(row.working_memory, {}),
+      metadata: safeJSONParse(row.metadata, {
+        totalTokens: 0,
+        llmCallsCount: 0,
+        skillCallsCount: 0,
+      }),
     };
   }
 
@@ -480,8 +506,18 @@ export class ContextStore extends ContextStoreBase {
         originalTokenCount: row.original_token_count,
         compressedTokenCount: row.compressed_token_count,
         compressionRatio: row.compression_ratio,
-        summary: JSON.parse(row.summary),
-        truncatedMessageIds: JSON.parse(row.truncated_message_ids),
+        summary: safeJSONParse(row.summary, {
+          sessionIntent: '',
+          currentTask: '',
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'pending',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        }),
+        truncatedMessageIds: safeJSONParse(row.truncated_message_ids, []),
       });
     }
     stmt.free();
