@@ -10,8 +10,23 @@ export interface TaskContext {
   // Execution state
   status: 'pending' | 'running' | 'completed' | 'failed';
 
-  // Task context data (for ContextManager, etc.)
-  context: any;
+  // Task context data (for ContextManager)
+  // 现在支持完整的TaskContext结构
+  context: {
+    taskId: string;
+    sessionId: string;
+    currentTurn: number;
+    messages: any[];
+    summary: any;
+    artifactIndex: any[];
+    workingMemory: Record<string, any>;
+    metadata: {
+      totalTokens: number;
+      llmCallsCount: number;
+      skillCallsCount: number;
+      lastCompressedAt?: Date;
+    };
+  } | null;
 
   // Execution metadata
   metadata: {
