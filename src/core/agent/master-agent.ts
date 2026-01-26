@@ -70,124 +70,37 @@ export class MasterAgent extends Agent {
         },
       });
 
-      // Step 2: Execute plan
-      const results: any[] = [];
-      let totalSkillCalls = 0;
-      const allSkillNames: string[] = [];  // Collect all skill names from subagents
+      // Step 2: Combine all steps into a single task
+      const combinedTask = plan.steps.map((step, index) => {
+        return `Step ${index + 1}: ${step.task} (${step.delegateTo ? `Delegate to ${step.delegateTo}` : 'Execute directly'})`;
+      }).join('\n\n');
 
-      for (const step of plan.steps) {
-        try {
-          if (step.delegateTo) {
-            // Delegate to subagent
-            steps.push({
-              type: 'delegation',
-              content: `Delegating to ${step.delegateTo}: ${step.task}`,
-              timestamp: Date.now(),
-            });
+      console.log('[MasterAgent] Combined task:', combinedTask);
 
-            // Check if task mentions a file and enhance with file content
-            let enhancedTask = step.task;
-            const fileMatch = step.task.match(/(\S+\.ts|\.js|\.py|\.json|\.csv|\.txt|\.md)/);
-            if (fileMatch) {
-              const filePath = fileMatch[1];
-              const resolvedPath = path.resolve(process.cwd(), filePath);
-              try {
-                if (fs.existsSync(resolvedPath)) {
-                  const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
-                  // Truncate if too large (max 2000 chars)
-                  const truncatedContent = fileContent.length > 2000
-                    ? fileContent.substring(0, 2000) + '\n... (truncated)'
-                    : fileContent;
+      // Step 3: Execute combined task with single PTC generation
+      steps.push({
+        type: 'execution',
+        content: 'Executing combined task',
+        timestamp: Date.now(),
+      });
 
-                  enhancedTask = `${step.task}\n\nFile content (${filePath}):\n${truncatedContent}`;
-
-                  console.log(`[MasterAgent] Enhanced task with file content: ${filePath}`);
-                } else {
-                  console.warn(`[MasterAgent] File not found: ${resolvedPath}`);
-                }
-              } catch (error: any) {
-                console.warn(`[MasterAgent] Failed to read file ${filePath}:`, error.message);
-              }
-            }
-
-            const subagent = await this.getOrCreateSubagent(step.delegateTo);
-            const result = await subagent.run(enhancedTask);
-
-            results.push({
-              subagent: step.delegateTo,
-              result,
-            });
-
-            totalSkillCalls += result.metadata.skillCalls;
-
-            // Collect skill names from subagent result
-            if (result.metadata.skillNames && Array.isArray(result.metadata.skillNames)) {
-              allSkillNames.push(...result.metadata.skillNames);
-            }
-          } else {
-            // Execute self
-            steps.push({
-              type: 'execution',
-              content: `Executing self: ${step.task}`,
-              timestamp: Date.now(),
-            });
-
-            const result = await super.run(step.task);
-
-            results.push({
-              self: true,
-              result,
-            });
-
-            totalSkillCalls += result.metadata.skillCalls;
-
-            // Collect skill names from master agent result
-            if (result.metadata.skillNames && Array.isArray(result.metadata.skillNames)) {
-              allSkillNames.push(...result.metadata.skillNames);
-            }
-          }
-        } catch (error: any) {
-          // Handle execution errors gracefully
-          console.error('[MasterAgent] Step execution failed:', {
-            step: step.task,
-            delegateTo: step.delegateTo,
-            error: error.message,
-          });
-
-          // Add error as a failed result
-          results.push({
-            subagent: step.delegateTo || 'master',
-            result: {
-              success: false,
-              error: error.message,
-              output: `Failed to execute: ${error.message}`,
-            },
-          });
-        }
-      }
-
-      // Step 3: Synthesize results
-      const finalResult = await this.synthesizeResults(results);
+      const result = await super.run(combinedTask);
 
       const executionTime = Date.now() - startTime;
 
-      // Extract delegated subagents (filter out undefined values)
-      const delegates = plan.steps
-        .filter((s) => s.delegateTo)
-        .map((s) => s.delegateTo)
-        .filter((d): d is string => d !== undefined);
-
       return {
         success: true,
-        output: finalResult,
+        output: result.output,
         steps,
         executionTime,
         metadata: {
           llmCalls: 1,
-          skillCalls: totalSkillCalls,
+          skillCalls: result.metadata.skillCalls,
           totalTokens: 0,
-          delegates,
-          skillNames: [...new Set(allSkillNames)],  // Unique skill names
+          delegates: plan.steps
+            .filter((s) => s.delegateTo !== undefined)
+            .map((s) => s.delegateTo as string),
+          skillNames: result.metadata.skillNames,
         },
       };
     } catch (error: any) {
