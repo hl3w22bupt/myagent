@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { getTaskStore } from '../../src/core/database/task-store';
+import { getUnifiedStore } from '../../src/core/database/unified-store';
 
 /**
  * Query parameters schema for single result API.
@@ -75,8 +75,8 @@ export const handler = async (request: any, { logger }: any) => {
 
   try {
     // Query from database
-    const taskStore = getTaskStore();
-    const task = await taskStore.get(id);
+    const unifiedStore = getUnifiedStore();
+    const task = await unifiedStore.getTask(id);
 
     if (!task) {
       return {
