@@ -22,7 +22,7 @@ export const handler = async (
 ) => {
   try {
     // Validate taskId
-    const validationResult = taskIdSchema.safeParse(request.params.id);
+    const validationResult = taskIdSchema.safeParse(request.pathParams.id);
     if (!validationResult.success) {
       return {
         status: 400,
