@@ -336,7 +336,7 @@ export class UnifiedStore {
     status?: TaskStatus;
     limit?: number;
     offset?: number;
-  }): Promise<Task[]> {
+  }): Promise<{ tasks: Task[]; total: number }> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
@@ -354,6 +354,16 @@ export class UnifiedStore {
 
     query += ' ORDER BY created_at DESC';
 
+    // Get total count
+    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
+    const countStmt = this.db.prepare(countQuery);
+    countStmt.bind(params);
+    countStmt.step();
+    const countRow = countStmt.getAsObject() as { count: number };
+    const total = countRow.count;
+    countStmt.free();
+
+    // Add pagination
     if (filters?.limit) {
       query += ' LIMIT ?';
       params.push(filters.limit);
@@ -373,7 +383,7 @@ export class UnifiedStore {
     }
     stmt.free();
 
-    return tasks;
+    return { tasks, total };
   }
 
   async deleteTask(taskId: string): Promise<boolean> {
