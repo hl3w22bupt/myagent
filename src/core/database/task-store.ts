@@ -9,6 +9,7 @@ import initSqlJs, { Database } from 'sql.js';
 import { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
+import { UnifiedStore } from './unified-store';
 
 /**
  * Task status enum
@@ -749,20 +750,21 @@ export class PostgresTaskStore extends TaskStore {
 
 /**
  * Get task store instance based on environment
+ *
+ * @deprecated Use getUnifiedStore() instead. This function now returns UnifiedStore
+ * for backward compatibility, but the old TaskStore/SQLiteTaskStore are deprecated.
  */
 export function getTaskStore(): TaskStore {
-  const dbType = process.env.DB_TYPE || 'sqlite';
+  // Return UnifiedStore for all cases
+  // UnifiedStore implements all TaskStore methods plus context management
+  return getUnifiedStore() as any;
+}
 
-  if (dbType === 'postgres') {
-    const connectionString = process.env.DATABASE_URL || 'postgresql://localhost:5432/motia';
-    const store = new PostgresTaskStore(connectionString);
-    // Initialize schema for Postgres
-    if (store instanceof PostgresTaskStore) {
-      store.initSchema();
-    }
-    return store;
-  }
-
-  // Default to SQLite
-  return new SQLiteTaskStore();
+/**
+ * Get unified store instance (singleton)
+ */
+export function getUnifiedStore(): UnifiedStore {
+  // Reuse the global store instance from unified-store.ts
+  const { getUnifiedStore: getUnifiedStoreImpl } = require('./unified-store');
+  return getUnifiedStoreImpl();
 }
