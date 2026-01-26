@@ -9,7 +9,6 @@ import initSqlJs, { Database } from 'sql.js';
 import { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
-import { UnifiedStore, getUnifiedStore as getUnifiedStoreImpl } from './unified-store';
 
 /**
  * Task status enum
@@ -746,23 +745,4 @@ export class PostgresTaskStore extends TaskStore {
       client.release();
     }
   }
-}
-
-/**
- * Get task store instance based on environment
- *
- * @deprecated Use getUnifiedStore() instead. This function now returns UnifiedStore
- * for backward compatibility, but the old TaskStore/SQLiteTaskStore are deprecated.
- */
-export function getTaskStore(): TaskStore {
-  // Return UnifiedStore for all cases
-  // UnifiedStore implements all TaskStore methods plus context management
-  return getUnifiedStoreImpl() as any;
-}
-
-/**
- * Get unified store instance (singleton)
- */
-export function getUnifiedStore(): UnifiedStore {
-  return getUnifiedStoreImpl();
 }
