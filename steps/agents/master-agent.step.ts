@@ -16,7 +16,7 @@ import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
 import { getUnifiedStore } from '../../src/core/database/unified-store';
-import { TaskStatus } from '../../src/core/database/task-types';
+import { TaskStatus } from '../../src/core/database/task-store';
 import {
   TaskHookExecutor,
   DefaultTaskHook,
