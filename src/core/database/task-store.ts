@@ -9,7 +9,7 @@ import initSqlJs, { Database } from 'sql.js';
 import { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
-import { UnifiedStore } from './unified-store';
+import { UnifiedStore, getUnifiedStore as getUnifiedStoreImpl } from './unified-store';
 
 /**
  * Task status enum
@@ -757,14 +757,12 @@ export class PostgresTaskStore extends TaskStore {
 export function getTaskStore(): TaskStore {
   // Return UnifiedStore for all cases
   // UnifiedStore implements all TaskStore methods plus context management
-  return getUnifiedStore() as any;
+  return getUnifiedStoreImpl() as any;
 }
 
 /**
  * Get unified store instance (singleton)
  */
 export function getUnifiedStore(): UnifiedStore {
-  // Reuse the global store instance from unified-store.ts
-  const { getUnifiedStore: getUnifiedStoreImpl } = require('./unified-store');
   return getUnifiedStoreImpl();
 }
