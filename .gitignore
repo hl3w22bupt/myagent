@@ -1,5 +1,7 @@
 # Dependencies
+node_modules
 node_modules/
+python_modules
 python_modules/
 .venv/
 venv/
@@ -39,6 +41,7 @@ Thumbs.db
 /tmp/motia-sandbox-test/
 
 # Video output (project root)
+outputs
 outputs/
 
 # Jupyter
@@ -72,4 +75,5 @@ motia-workbench.json
 .cache
 
 # data
+data
 data/
