@@ -5,7 +5,7 @@
  */
 
 import type { TaskContext, Message } from '../database/context-types';
-import { DataStore } from '../database/data-store';
+import { DataStore, getDataStore } from '../database/data-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';
 import { LLMSummarizer } from '../llm/summarizer';
@@ -17,7 +17,8 @@ export class ContextManager {
   private summarizer?: LLMSummarizer;
 
   constructor(store?: DataStore, summarizer?: LLMSummarizer) {
-    this.store = store || new DataStore();
+    // 使用全局单例 DataStore，确保数据一致性
+    this.store = store || getDataStore();
     this.compressor = new ContextCompressor();
     this.artifactExtractor = new ArtifactExtractor();
     this.summarizer = summarizer;
@@ -25,11 +26,90 @@ export class ContextManager {
 
   /**
    * 创建任务上下文
+   *
+   * 如果该 session 已有历史任务，则继承其上下文（messages, summary等）
    */
   async createTaskContext(taskId: string, sessionId: string, input: string): Promise<TaskContext> {
+    // 1. 尝试获取该 session 最近的任务上下文
+    const previousContext = await this.getMostRecentSessionContext(sessionId);
+
+    // 2. 创建新上下文
     const context = await this.store.createTaskContext(taskId, sessionId, input);
 
+    // 3. 如果有历史上下文，继承其 messages 和 summary
+    if (previousContext) {
+      console.log('[ContextManager] Found previous context for session', {
+        sessionId,
+        previousTaskId: previousContext.taskId,
+        messagesCount: previousContext.messages.length,
+        currentTurn: previousContext.currentTurn
+      });
+
+      // 继承 messages 和 summary，但使用新的 taskId
+      context.messages = [...previousContext.messages];
+      context.currentTurn = previousContext.currentTurn;
+      context.summary = { ...previousContext.summary };
+      context.summary.currentTask = input; // 更新当前任务
+      context.artifactIndex = [...previousContext.artifactIndex];
+      context.workingMemory = { ...previousContext.workingMemory };
+      context.metadata = { ...previousContext.metadata };
+
+      // 保存更新后的上下文
+      await this.store.saveContext(context);
+
+      console.log('[ContextManager] Inherited context from previous task', {
+        taskId,
+        inheritedMessages: context.messages.length,
+        inheritedTurn: context.currentTurn
+      });
+    }
+
     return context;
+  }
+
+  /**
+   * 获取指定 session 最近的任务上下文
+   */
+  private async getMostRecentSessionContext(sessionId: string): Promise<TaskContext | null> {
+    console.log('[ContextManager] Looking for previous context in session:', sessionId);
+
+    // 查询该 session 最近的任务
+    const tasksResult = await this.store.listTasks({
+      sessionId,
+      limit: 10,
+      status: undefined as any // 获取所有状态的任务
+    });
+
+    console.log('[ContextManager] Found tasks in session:', {
+      sessionId,
+      totalTasks: tasksResult.total,
+      taskIds: tasksResult.tasks.map(t => t.id)
+    });
+
+    if (tasksResult.tasks.length === 0) {
+      console.log('[ContextManager] No tasks found in session');
+      return null;
+    }
+
+    // 找到最近一个有上下文的任务
+    for (const task of tasksResult.tasks) {
+      console.log('[ContextManager] Checking task for context:', task.id);
+      const context = await this.store.getContext(task.id);
+      if (context) {
+        console.log('[ContextManager] Found context for task:', {
+          taskId: task.id,
+          messagesCount: context.messages.length,
+          currentTurn: context.currentTurn
+        });
+        if (context.messages.length > 0) {
+          console.log('[ContextManager] Using this context as previous context');
+          return context;
+        }
+      }
+    }
+
+    console.log('[ContextManager] No task with messages found in session');
+    return null;
   }
 
   /**

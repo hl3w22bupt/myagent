@@ -3,6 +3,7 @@ import { TaskContext } from './types';
 import { ContextManager } from '../../context/manager';
 import { LLMSummarizer } from '../../llm/summarizer';
 import { getDataStore } from '../../database/data-store';
+import { agentManager } from '../../../index';
 
 /**
  * Context Manager TaskHook
@@ -85,7 +86,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
   }
 
   async postExec(context: TaskContext, result: any): Promise<void> {
-    const { taskId, services } = context;
+    const { taskId, sessionId, services } = context;
 
     try {
       // 更新上下文的最终状态
@@ -97,6 +98,55 @@ export class ContextManagerTaskHook extends BaseTaskHook {
           context.context.summary.completedSteps.push(context.task);
         }
 
+        // ⭐ 关键修复：从 Agent 获取最新的对话消息并保存到 context
+        try {
+          const agent = await agentManager.acquire(sessionId);
+
+          if (agent) {
+            const conversationHistory = agent.getState().conversationHistory;
+
+            console.log('[ContextManagerTaskHook] Syncing conversationHistory to database context', {
+              taskId,
+              historyLength: conversationHistory.length,
+              contextMessages: context.context.messages.length
+            });
+
+            // 将 Agent 的 conversationHistory 同步到 context.messages
+            // 只保留在数据库中还没有的消息
+            const existingMessageIds = new Set(
+              context.context.messages.map(m => `${m.role}:${m.content.substring(0, 50)}`)
+            );
+
+            const newMessages = conversationHistory.filter((msg: any) => {
+              const key = `${msg.role}:${msg.content.substring(0, 50)}`;
+              return !existingMessageIds.has(key);
+            });
+
+            // 添加新消息到数据库
+            for (const msg of newMessages) {
+              await this.contextManager.addMessage(taskId, {
+                id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content,
+                metadata: {
+                  timestamp: new Date(msg.timestamp),
+                  tokens: 0 // TODO: 可以计算实际 token 数
+                },
+                compressed: false
+              });
+            }
+
+            // 更新 context 以反映新添加的消息
+            const updatedContext = await this.contextManager.getContext(taskId);
+            if (updatedContext) {
+              context.context = updatedContext;
+            }
+          }
+        } catch (error) {
+          console.error('[ContextManagerTaskHook] Failed to sync Agent conversationHistory:', error);
+          // 继续执行，不要因为同步失败而中断整个流程
+        }
+
         // 保存上下文
         await this.contextManager.saveContext(context.context);
 
@@ -104,6 +154,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
           taskId,
           currentTurn: context.context.currentTurn,
           totalTokens: context.context.metadata.totalTokens,
+          messagesCount: context.context.messages.length,
           hasCompression: !!context.context.metadata.lastCompressedAt,
         });
       }
