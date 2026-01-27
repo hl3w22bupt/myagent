@@ -15,7 +15,7 @@ declare module 'motia' {
     'media-serve-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.chat'; data: never }>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

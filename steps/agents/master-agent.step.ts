@@ -27,10 +27,14 @@ import {
 import { ContextManager } from '../../src/core/context/manager';
 import {
   AgentMonitoringHook,
+} from '../../src/core/agent/hooks/monitoring';
+import {
   AgentContextSyncHook,
+} from '../../src/core/agent/hooks/context-sync';
+import {
   AgentProgressNotifyHook,
   setAgentStreams,
-} from '../../src/core/agent/hooks';
+} from '../../src/core/agent/hooks/progress-notify';
 
 /**
  * Input schema for Master Agent step.

@@ -112,7 +112,8 @@ export class AgentMonitoringHook extends BaseAgentHook {
     agent: Agent,
     sessionId: string
   ): Promise<void | undefined> {
-    const agentId = agent.getId();
+    // Use sessionId as agentId since Agent doesn't have getId() method
+    const agentId = sessionId;
     const now = Date.now();
 
     if (!this.monitoringData.has(sessionId)) {

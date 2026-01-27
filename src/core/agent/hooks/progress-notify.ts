@@ -121,7 +121,8 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
 
     try {
       const agentState = agent.getState();
-      const agentId = agent.getId();
+      // Use sessionId as agentId since Agent doesn't have getId() method
+      const agentId = sessionId;
       const agentType = agent.constructor.name;
 
       const event = {
