@@ -172,11 +172,19 @@ Output format (JSON):
       }
     }
 
+    // Try format 4: Plain JSON object (wrapped in braces)
+    if (!jsonString) {
+      const plainJsonMatch = response.content.match(/^\s*\{\s*["'].*?["']\s*:\s*.*?\}\s*$/s);
+      if (plainJsonMatch) {
+        jsonString = plainJsonMatch[0].trim();
+      }
+    }
+
     // If still no match, throw error
     if (!jsonString) {
       console.error('[PTC Generator] Failed to parse plan. Response:', response.content);
       throw new Error(
-        `Failed to parse plan from LLM response. Expected <plan>{...}</plan> or \`\`\`json format. Got: ${response.content.substring(0, 200)}`
+        `Failed to parse plan from LLM response. Expected <plan>{...}</plan>, \`\`\`json format, or plain JSON. Got: ${response.content.substring(0, 200)}`
       );
     }
 

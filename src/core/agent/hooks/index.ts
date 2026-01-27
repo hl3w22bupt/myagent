@@ -6,7 +6,7 @@
  */
 
 // Base interface
-export { BaseAgentHook, type AgentContext, type HookResult } from './base';
+export { BaseAgentHook, type AgentContext } from './base';
 
 // Manager
 export { AgentHookManager } from './manager';

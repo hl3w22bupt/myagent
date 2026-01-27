@@ -10,8 +10,10 @@ import { Agent } from '@/core/agent/agent';
 import * as path from 'path';
 import { existsSync } from 'fs';
 
-// Helper to skip tests if no API key
-const withApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+// Helper to skip tests if no valid API key
+// Only accept Anthropic format (sk-ant-xxx) as valid for these tests
+const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const withApiKey = hasValidApiKey ? describe : describe.skip;
 
 withApiKey('End-to-End Agent Flow', () => {
   let agent: Agent;

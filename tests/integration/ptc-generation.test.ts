@@ -9,16 +9,16 @@ import { describe, it, expect, beforeAll } from '@jest/globals';
 import { PTCGenerator } from '@/core/agent/ptc-generator';
 import { LLMClient } from '@/core/agent/llm-client';
 
-describe('PTC Generation and Execution', () => {
+// Helper to skip tests if no valid API key
+// Only accept Anthropic format (sk-ant-xxx) as valid for these tests
+const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const withApiKey = hasValidApiKey ? describe : describe.skip;
+
+withApiKey('PTC Generation and Execution', () => {
   let ptcGenerator: PTCGenerator;
   let llm: LLMClient;
 
   beforeAll(() => {
-    // Check if API key is available
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.warn('⚠️  ANTHROPIC_API_KEY not set - PTC generation tests will be skipped');
-    }
-
     // Initialize LLM client
     llm = new LLMClient({
       provider: 'anthropic',
@@ -51,12 +51,6 @@ describe('PTC Generation and Execution', () => {
 
   describe('PTC Code Generation', () => {
     it('should generate valid Python PTC code', async () => {
-      // Skip if no API key
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Search for "TypeScript best practices" and summarize the results';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -75,10 +69,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should generate code with correct skill usage', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
 
       const task = 'Summarize this text: Hello world, this is a test.';
 
@@ -97,11 +87,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should handle multi-step tasks', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Search for "AI trends" and analyze the code quality of the results';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -115,11 +100,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should include error handling in generated code', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Execute web-search with query "test"';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -133,11 +113,6 @@ describe('PTC Generation and Execution', () => {
 
   describe('PTC Code Validation', () => {
     it('should generate code with proper imports', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Test task';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -157,11 +132,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should use skill names correctly', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // Test with known skill names
       const task = 'Use the summarize skill';
 
@@ -177,11 +147,6 @@ describe('PTC Generation and Execution', () => {
 
   describe('PTC Execution Characteristics', () => {
     it('should generate code that prints results', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Summarize: This is a test document.';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -194,11 +159,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should generate async code structure', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Any task';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -217,11 +177,6 @@ describe('PTC Generation and Execution', () => {
 
   describe('Edge Cases', () => {
     it('should handle very short tasks', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task = 'Test';
 
       const ptcCode = await ptcGenerator.generate(task);
@@ -231,11 +186,6 @@ describe('PTC Generation and Execution', () => {
     }, 60000);
 
     it('should handle complex multi-skill tasks', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const task =
         'Search for "Python async programming", summarize the top 3 results, and analyze the code quality';
 

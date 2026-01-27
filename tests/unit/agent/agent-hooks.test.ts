@@ -9,8 +9,6 @@
  * - AgentProgressNotifyHook
  */
 
-// @ts-nocheck - Disable strict type checking for test mocks
-
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { AgentHookManager } from '@/core/agent/hooks/manager';
 import {
@@ -75,7 +73,7 @@ describe('AgentHookManager', () => {
   it('should register and manage hooks', () => {
     const mockHook: any = {};
     ['onAgentCreate', 'onAgentAcquire', 'onTaskStart', 'onTaskComplete', 'onAgentStatusCheck', 'onAgentDestroy']
-      .forEach(method => { mockHook[method] = jest.fn().mockResolvedValue(undefined); });
+      .forEach(method => { mockHook[method] = jest.fn<any>(); });
 
     manager.register(mockHook);
     expect(manager.getHookCount()).toBe(1);
@@ -87,8 +85,8 @@ describe('AgentHookManager', () => {
   it('should execute hooks and aggregate results', async () => {
     const mockHook: any = {};
     ['onAgentAcquire', 'onTaskStart', 'onTaskComplete', 'onAgentStatusCheck', 'onAgentDestroy']
-      .forEach(method => { mockHook[method] = jest.fn().mockResolvedValue(undefined); });
-    mockHook.onAgentCreate = jest.fn().mockResolvedValue({ abort: true, reason: 'Test' });
+      .forEach(method => { mockHook[method] = jest.fn<any>(); });
+    mockHook.onAgentCreate = jest.fn<any>().mockResolvedValue({ abort: true, reason: 'Test' });
 
     manager.register(mockHook);
 
@@ -215,7 +213,7 @@ describe('AgentProgressNotifyHook', () => {
     // Mock streams
     mockStreams = {
       agentProgress: {
-        set: jest.fn().mockResolvedValue(Promise.resolve()),
+        set: jest.fn<any>().mockResolvedValue(Promise.resolve()),
       },
     };
 

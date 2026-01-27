@@ -53,13 +53,6 @@ export interface AgentContext {
   createdAt: number;
 }
 
-/**
- * Return type for hook methods.
- * Hooks can return values to modify behavior or abort operations.
- * For async methods, use Promise<T | undefined>.
- * For sync methods, use T | undefined.
- */
-export type HookResult<T = any> = T | undefined;
 
 /**
  * Abstract base class for Agent Hooks.

@@ -136,7 +136,17 @@ export function getAgentManager(): AgentManager {
  * For backward compatibility with existing code that imports agentManager.
  * This is a reference to the singleton instance.
  */
-export const agentManager = getAgentManager() as AgentManager;
+/**
+ * Legacy export: AgentManager instance (lazy getter).
+ *
+ * @deprecated Use getAgentManager() instead.
+ */
+export const agentManager = new Proxy({} as AgentManager, {
+  get: (target, prop) => {
+    const manager = getAgentManager();
+    return (manager as any)[prop];
+  },
+});
 
 /**
  * Graceful shutdown handler for SIGTERM.

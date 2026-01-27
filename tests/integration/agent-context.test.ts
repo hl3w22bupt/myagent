@@ -11,15 +11,15 @@ import { Agent } from '@/core/agent/agent';
 import { LocalSandboxAdapter } from '@/core/sandbox';
 void LocalSandboxAdapter; // Mark as used
 
-describe('Agent Context Integration', () => {
+// Helper to skip tests if no valid API key
+// Only accept Anthropic format (sk-ant-xxx) as valid for these tests
+const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const withApiKey = hasValidApiKey ? describe : describe.skip;
+
+withApiKey('Agent Context Integration', () => {
   let agent: Agent;
 
   beforeAll(() => {
-    // Check if API key is available
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.warn('⚠️  ANTHROPIC_API_KEY not set - Agent context tests will be skipped');
-    }
-
     // Initialize Agent with session support
     const sessionId = 'test-context-session';
 
@@ -46,11 +46,6 @@ describe('Agent Context Integration', () => {
 
   describe('Conversation History', () => {
     it('should maintain conversation history across multiple executions', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // First task
       const result1 = await agent.run('What is 2 + 2?');
 
@@ -73,11 +68,6 @@ describe('Agent Context Integration', () => {
     }, 120000);
 
     it('should track both user and assistant messages', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // Execute a simple task
       const result = await agent.run('Say hello');
 
@@ -90,11 +80,6 @@ describe('Agent Context Integration', () => {
 
   describe('Variable Persistence', () => {
     it('should persist variables across executions', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // Execute a task that might set variables
       const result1 = await agent.run('Store the value 42 in a variable named test_var');
 
@@ -107,11 +92,6 @@ describe('Agent Context Integration', () => {
     }, 120000);
 
     it('should track variable count in state', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const result = await agent.run('Create variables x=1, y=2, z=3');
 
       expect(result.success).toBe(true);
@@ -123,11 +103,6 @@ describe('Agent Context Integration', () => {
 
   describe('Context-Aware Generation', () => {
     it('should use conversation context when generating PTC', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // First interaction
       const result1 = await agent.run('My name is Alice');
 
@@ -144,11 +119,6 @@ describe('Agent Context Integration', () => {
     }, 120000);
 
     it('should pass both history and variables to PTCGenerator', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       // Execute multiple tasks to build up history and variables
       await agent.run('Set x = 10');
       await agent.run('Set y = 20');
@@ -170,11 +140,6 @@ describe('Agent Context Integration', () => {
 
   describe('Session Management', () => {
     it('should maintain consistent session ID across executions', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       const result1 = await agent.run('Task 1');
       const result2 = await agent.run('Task 2');
       const result3 = await agent.run('Task 3');
@@ -189,11 +154,6 @@ describe('Agent Context Integration', () => {
     }, 180000);
 
     it('should track execution count across session', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
-        return;
-      }
-
       await agent.run('Task A');
       const result = await agent.run('Task B');
 

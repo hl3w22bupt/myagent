@@ -23,7 +23,7 @@
  * ```
  */
 
-import { BaseAgentHook, HookResult, type Agent } from './base';
+import { BaseAgentHook, type Agent } from './base';
 import type { AgentConfig, AgentResult } from '../types';
 
 /**

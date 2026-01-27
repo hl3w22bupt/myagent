@@ -265,6 +265,7 @@ export class AgentManager {
     // Stop cleanup timer
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
     }
 
     // Release all sessions

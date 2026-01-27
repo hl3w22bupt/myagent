@@ -25,7 +25,8 @@ export class LocalSandboxAdapter implements SandboxAdapter {
   private activeSessions: Map<string, ChildProcess>;
 
   constructor(config: LocalSandboxConfig = {}) {
-    this.pythonPath = config.pythonPath || 'python3';
+    // Default to python3.12 for compatibility with pydantic v2.12
+    this.pythonPath = config.pythonPath || 'python3.12';
     this.workspace = config.workspace || '/tmp/motia-sandbox';
     this.maxSessions = config.maxSessions || 10;
     this.activeSessions = new Map();
