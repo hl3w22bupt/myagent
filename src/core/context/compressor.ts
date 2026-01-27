@@ -22,10 +22,33 @@ export class ContextCompressor {
   }
 
   /**
-   * 检查是否需要压缩
+   * 检查是否需要压缩（智能触发）
    */
   shouldCompress(context: TaskContext): boolean {
-    return context.metadata.totalTokens > this.maxTokens * this.threshold;
+    const { totalTokens, lastCompressedAt } = context.metadata;
+
+    // 条件1: Token数超过阈值
+    if (totalTokens > this.maxTokens * this.threshold) {
+      return true;
+    }
+
+    // 条件2: 最近一次压缩后超过50条新消息
+    if (lastCompressedAt && context.messages.length > 50) {
+      const messagesSinceCompression = context.messages.filter(
+        m => new Date(m.metadata.timestamp) > new Date(lastCompressedAt)
+      );
+      if (messagesSinceCompression.length > 50) {
+        return true;
+      }
+    }
+
+    // 条件3: 任务状态为completed或failed时
+    if (context.summary.currentStatus === 'completed' ||
+        context.summary.currentStatus === 'failed') {
+      return true;
+    }
+
+    return false;
   }
 
   /**
