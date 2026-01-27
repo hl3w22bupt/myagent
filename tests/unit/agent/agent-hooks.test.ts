@@ -12,14 +12,14 @@
 // @ts-nocheck - Disable strict type checking for test mocks
 
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import { AgentHookManager } from '../../src/core/agent/hooks/manager';
+import { AgentHookManager } from '@/core/agent/hooks/manager';
 import {
   AgentMonitoringHook,
   AgentContextSyncHook,
   AgentProgressNotifyHook,
   setAgentStreams,
-} from '../../src/core/agent/hooks';
-import type { AgentResult } from '../../src/core/agent/types';
+} from '@/core/agent/hooks';
+import type { AgentResult } from '@/core/agent/types';
 
 // Mock Agent class
 class MockAgent {
