@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { getTaskStore } from '../../src/core/database/task-store';
+import { getDataStore } from '../../src/core/database/data-store';
 
 /**
  * Query parameters schema for results API.
@@ -101,12 +101,12 @@ export const handler = async (request: any, { logger }: any) => {
 
   try {
     // Query from database
-    const taskStore = getTaskStore();
+    const unifiedStore = getDataStore();
 
     // Map status filter to TaskStatus
     const taskStatus = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : undefined;
 
-    const { tasks, total } = await taskStore.list({
+    const { tasks, total } = await unifiedStore.listTasks({
       sessionId,
       limit: resultLimit,
       offset: resultOffset,

@@ -15,7 +15,7 @@ import type { EventConfig } from 'motia';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
-import { getTaskStore, TaskStatus } from '../../src/core/database/task-store';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 import {
   TaskHookExecutor,
   DefaultTaskHook,
@@ -140,18 +140,18 @@ export const handler = async (
     },
   };
 
-  // Initialize task store and create task record
-  const taskStore = getTaskStore();
+  // Initialize data store and create task record
+  const store = getDataStore();
 
   // 检查任务是否已存在（可能因为 BullMQ 重试）
-  const existingTask = await taskStore.get(taskId).catch(() => null);
+  const existingTask = await store.getTask(taskId).catch(() => null);
   if (existingTask) {
     logger.info('Task already exists in database, skipping creation', {
       taskId,
       existingStatus: existingTask.status,
     });
   } else {
-    await taskStore.create({
+    await store.createTask({
       id: taskId,
       task: input.task,
       sessionId: sessionId,
@@ -261,14 +261,14 @@ export const handler = async (
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
 
     // Update task status to RUNNING
-    await taskStore.update(taskId, { status: TaskStatus.RUNNING });
+    await store.updateTask(taskId, { status: TaskStatus.RUNNING });
     logger.info('Task status updated to RUNNING', { taskId });
 
     // === Start progressing hooks ===
     hookExecutor.startProgressingHooks(taskContext);
     logger.info('Progressing hooks started', { taskId });
 
-    const result = await agent.run(taskContext.task, taskId);
+    const result = await agent.run(taskContext.task, taskId, taskContext.context);
 
     logger.info('Task execution completed', {
       sessionId,

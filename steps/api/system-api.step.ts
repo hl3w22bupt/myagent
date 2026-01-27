@@ -8,7 +8,7 @@
 
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { getTaskStore } from '../../src/core/database/task-store';
+import { getDataStore } from '../../src/core/database/data-store';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
@@ -141,8 +141,9 @@ export const handler = async (request: any, { logger }: any) => {
     let activeSessions = 0;
 
     try {
-      const taskStore = getTaskStore();
-      const { tasks } = await taskStore.list({ limit: 10000 });
+      const unifiedStore = getDataStore();
+      const result = await unifiedStore.listTasks({ limit: 10000 });
+      const tasks = result.tasks;
 
       totalTasks = tasks.length;
       successfulTasks = tasks.filter(t => t.status === 'completed').length;

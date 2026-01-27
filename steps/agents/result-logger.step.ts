@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { EventConfig } from 'motia';
 import { hasCircularReference } from '../../src/utils/state-safety';
 import { stateLockManager } from '../../src/utils/state-lock';
-import { getTaskStore, TaskStatus } from '../../src/core/database/task-store';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 
 /**
  * Configuration for execution history limits.
@@ -304,10 +304,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   // Update task record in database AFTER status override
   if (taskId) {
     try {
-      const taskStore = getTaskStore();
+      const store = getDataStore();
       const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
 
-      await taskStore.update(taskId, {
+      await store.updateTask(taskId, {
         status: finalStatus,
         output: normalizedResult.output,
         error: normalizedResult.error,

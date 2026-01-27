@@ -36,4 +36,6 @@ export default {
   coverageReporters: ['text', 'lcov', 'html'],
   verbose: true,
   testTimeout: 60000,
+  detectOpenHandles: true,
+  forceExit: true,
 };
