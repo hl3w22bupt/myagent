@@ -25,8 +25,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
   private activeSessions: Map<string, ChildProcess>;
 
   constructor(config: LocalSandboxConfig = {}) {
-    // Default to python3.12 for compatibility with pydantic v2.12
-    this.pythonPath = config.pythonPath || 'python3.12';
+    // Default to venv python for dependency isolation
+    const venvPython = join(process.cwd(), 'python_modules', 'bin', 'python3');
+    this.pythonPath = config.pythonPath || (existsSync(venvPython) ? venvPython : 'python3');
     this.workspace = config.workspace || '/tmp/motia-sandbox';
     this.maxSessions = config.maxSessions || 10;
     this.activeSessions = new Map();
@@ -72,28 +73,17 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
         // Search up to 5 levels upward
         for (let i = 0; i < 5 && !foundSitePackages; i++) {
-          // Check both python3.11 and python3.13
-          const sitePackages11 = join(
-            searchPath,
-            'python_modules',
-            'lib',
-            'python3.11',
-            'site-packages'
-          );
-          const sitePackages13 = join(
-            searchPath,
-            'python_modules',
-            'lib',
-            'python3.13',
-            'site-packages'
+          // Check python3.11, python3.12, python3.13, and python3.14
+          const sitePackagesPaths = ['3.11', '3.12', '3.13', '3.14'].map(ver =>
+            join(searchPath, 'python_modules', 'lib', `python${ver}`, 'site-packages')
           );
 
-          if (existsSync(sitePackages11)) {
-            pythonPaths.push(sitePackages11);
-            foundSitePackages = true;
-          } else if (existsSync(sitePackages13)) {
-            pythonPaths.push(sitePackages13);
-            foundSitePackages = true;
+          for (const sitePackages of sitePackagesPaths) {
+            if (existsSync(sitePackages)) {
+              pythonPaths.push(sitePackages);
+              foundSitePackages = true;
+              break;
+            }
           }
 
           // Move up one directory
