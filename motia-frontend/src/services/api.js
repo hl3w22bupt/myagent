@@ -67,8 +67,8 @@ export const agentsAPI = {
       ...response,
       data: response.data.agents || []
     })),
-  sendChatMessage: (taskId, message) =>
-    apiClient.post(`/api/tasks/${taskId}/chat`, { message })
+  sendChatMessage: (taskId, message, sessionId) =>
+    apiClient.post(`/api/tasks/${taskId}/chat`, { message, sessionId })
 }
 
 // 任务相关 API
@@ -82,7 +82,7 @@ export const tasksAPI = {
     })),
   getTaskDetails: (id) =>
     apiClient.get('/agent/result', { params: { id } }).then(response => response.data.result),
-  submitTask: (task) => apiClient.post('/agent/execute', { task }),
+  submitTask: (task, sessionId) => apiClient.post('/agent/execute', { task, sessionId }),
   deleteTask: (id) => {
     console.log('=== deleteTask 被调用 ===')
     console.log('删除任务 ID:', id)

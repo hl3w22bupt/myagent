@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { v4 as uuidv4 } from 'uuid'
 import { systemAPI, tasksAPI, skillsAPI, agentsAPI } from '../services/api'
 import './Home.css'
 
@@ -54,9 +55,14 @@ function Home() {
     setError('')
 
     try {
-      const response = await tasksAPI.submitTask(taskContent.trim())
+      // 生成新的sessionId
+      const sessionId = uuidv4()
+      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId)
 
       if (response.data && response.data.taskId) {
+        // 保存sessionId到sessionStorage
+        sessionStorage.setItem(`sessionId_${response.data.taskId}`, sessionId)
+
         // 清空输入框
         setTaskContent('')
         // 跳转到任务详情页
