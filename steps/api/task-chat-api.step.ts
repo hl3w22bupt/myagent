@@ -22,9 +22,9 @@ export const config: ApiRouteConfig = {
   method: 'POST',
 
   /**
-   * No events emitted.
+   * Emit chat event for Agent to process.
    */
-  emits: [],
+  emits: ['agent.task.chat'],
 
   /**
    * Virtual connections.
@@ -52,7 +52,7 @@ export const inputSchema = _z.object({
  *
  * Handles sending chat messages to a specific task.
  */
-export const handler = async (request: any, { logger, streams }: any) => {
+export const handler = async (request: any, { logger, streams, emit }: any) => {
   logger.info('Task Chat API: Received request', { request });
 
   try {
@@ -174,6 +174,19 @@ export const handler = async (request: any, { logger, streams }: any) => {
     }
 
     logger.info('Task Chat API: Message processing complete', { taskId, message });
+
+    // 发送chat事件让Agent处理
+    await emit({
+      topic: 'agent.task.chat',
+      data: {
+        taskId,
+        sessionId: request.body?.sessionId || '',
+        message,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    logger.info('Task Chat API: Chat event emitted', { taskId, message });
 
     return {
       status: 200,
