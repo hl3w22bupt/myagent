@@ -106,12 +106,13 @@ export const config: EventConfig = {
  * - Maintains session state (no release in finally)
  */
 export const handler = async (
-  input: _z.infer<typeof inputSchema>,
+  input: any,
   { emit, logger, state: _state, streams: _streams }: any
 ) => {
   // === 处理聊天消息 ===
-  if (input.topic === 'agent.task.chat') {
-    const { taskId, sessionId, message } = input.data;
+  // 检查是否有message字段来判断是否是聊天事件
+  if (input.message && !input.task) {
+    const { taskId, sessionId, message } = input;
 
     logger.info('Master Agent: Processing chat message', {
       taskId,
@@ -177,7 +178,7 @@ export const handler = async (
       logger.info('Agent chat response completed', {
         taskId,
         success: result.success,
-        hasResponse: !!(result.response || result.text),
+        hasOutput: !!result.output,
       });
 
       // 触发Agent Hook: onTaskComplete
@@ -190,7 +191,7 @@ export const handler = async (
       // 发送回复到Stream
       const timestamp = Date.now();
       const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
-      const responseContent = result.response || result.text || '抱歉，我没有生成回复。';
+      const responseContent = result.output?.text || result.output?.content || '抱歉，我没有生成回复。';
 
       await _streams.taskExecution.set(taskId, uniqueId, {
         progressType: 'chat',
@@ -203,14 +204,16 @@ export const handler = async (
       logger.info('Chat response sent to stream', { taskId, uniqueId });
 
       // 保存用户消息到上下文
-      await contextManager.addMessage(context, {
+      await contextManager.addMessage(taskId, {
+        id: `msg-${Date.now()}-user`,
         role: 'user',
         content: message,
         metadata: { timestamp: new Date() },
       });
 
       // 保存Agent回复到上下文
-      await contextManager.addMessage(context, {
+      await contextManager.addMessage(taskId, {
+        id: `msg-${Date.now()}-assistant`,
         role: 'assistant',
         content: responseContent,
         metadata: { timestamp: new Date() },

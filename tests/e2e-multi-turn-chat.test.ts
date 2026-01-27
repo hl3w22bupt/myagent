@@ -4,7 +4,7 @@ import {
   sendChatMessage,
   getContext,
   sleep,
-} from '../helpers';
+} from './helpers';
 
 describe('Multi-turn Chat E2E Tests', () => {
   describe('Basic Multi-turn Conversation', () => {
