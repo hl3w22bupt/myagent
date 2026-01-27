@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { v4 as uuidv4 } from 'uuid'
 import { tasksAPI, agentsAPI } from '../services/api'
 import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
 
@@ -11,6 +12,7 @@ import './TaskDetail.css'
 function TaskDetail() {
   const { id } = useParams()
   const [task, setTask] = useState(null)
+  const [sessionId, setSessionId] = useState('')
   const [loading, setLoading] = useState(true)
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
@@ -20,6 +22,8 @@ function TaskDetail() {
   const [chatMessages, setChatMessages] = useState([]) // 对话消息
   const [inputValue, setInputValue] = useState('') // 聊天输入框内容
   const [retrying, setRetrying] = useState(false) // 重试状态
+  const [errors, setErrors] = useState([]) // 错误消息列表
+  const [isSending, setIsSending] = useState(false) // 发送状态
   const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
   const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
 
@@ -181,9 +185,34 @@ function TaskDetail() {
     }
   }, [id])
 
+  // 获取或生成sessionId
+  useEffect(() => {
+    if (!id) return
+
+    // 1. 尝试从sessionStorage获取
+    const storedSessionId = sessionStorage.getItem(`sessionId_${id}`)
+    if (storedSessionId) {
+      setSessionId(storedSessionId)
+      console.log('使用已存在的sessionId:', storedSessionId)
+      return
+    }
+
+    // 2. 如果没有存储的sessionId，生成新的
+    const newSessionId = uuidv4()
+    setSessionId(newSessionId)
+    sessionStorage.setItem(`sessionId_${id}`, newSessionId)
+    console.log('生成新的sessionId:', newSessionId)
+  }, [id])
+
   // 发送对话消息
   const handleSendMessage = async () => {
-    if (!inputValue.trim()) return
+    if (!inputValue.trim() || !sessionId) {
+      if (!sessionId) {
+        console.error('sessionId未初始化')
+        alert('会话未初始化，请刷新页面重试')
+      }
+      return
+    }
 
     const userMessage = {
       type: 'chat',
@@ -197,13 +226,25 @@ function TaskDetail() {
     setMessages(prev => [...prev, userMessage])
     setChatMessages(prev => [...prev, userMessage])
 
-    // 发送到后端
+    // 发送到后端，包含sessionId
+    setIsSending(true)
     try {
-      await agentsAPI.sendChatMessage(id, inputValue)
+      await agentsAPI.sendChatMessage(id, inputValue, sessionId)
+      console.log('消息已发送，sessionId:', sessionId)
+      // 清除之前的发送错误
+      setErrors(prev => prev.filter(e => e.type !== 'send'))
     } catch (error) {
       console.error('发送消息失败:', error)
-      alert('发送消息失败，请重试')
+      const errorObj = {
+        type: 'send',
+        message: '发送消息失败，请重试',
+        timestamp: new Date(),
+        id: Date.now().toString(),
+        retry: () => handleSendMessage()
+      }
+      setErrors(prev => [...prev, errorObj])
     } finally {
+      setIsSending(false)
       setInputValue('')
     }
   }
@@ -227,6 +268,51 @@ function TaskDetail() {
     const mins = Math.floor((totalSeconds % 3600) / 60)
     const secs = totalSeconds % 60
     return `${hours}小时${mins}分${secs}秒`
+  }
+
+  // 消息分组辅助函数（将时间接近的消息分组）
+  const groupMessagesByTime = (messages, groupInterval = 60000) => {
+    if (messages.length === 0) return []
+
+    const groups = []
+    let currentGroup = [messages[0]]
+
+    for (let i = 1; i < messages.length; i++) {
+      const currentMsg = messages[i]
+      const prevMsg = currentGroup[currentGroup.length - 1]
+
+      const currentTime = new Date(currentMsg.timestamp).getTime()
+      const prevTime = new Date(prevMsg.timestamp).getTime()
+
+      // 如果时间间隔小于阈值，添加到当前分组
+      if (currentTime - prevTime < groupInterval) {
+        currentGroup.push(currentMsg)
+      } else {
+        // 否则，开始新分组
+        groups.push(currentGroup)
+        currentGroup = [currentMsg]
+      }
+    }
+
+    // 添加最后一个分组
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup)
+    }
+
+    return groups
+  }
+
+  // 格式化分组时间戳
+  const formatGroupTimestamp = (timestamp) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now - date
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 1) return '刚刚'
+    if (diffMins < 60) return `${diffMins}分钟前`
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}小时前`
+    return date.toLocaleDateString()
   }
 
   // 检测结果类型
@@ -619,6 +705,23 @@ function TaskDetail() {
             renderTextContent(result)
           )}
         </div>
+      </div>
+    )
+  }
+
+  // 消息分组组件
+  const MessageGroup = ({ group }) => {
+    if (group.length === 0) return null
+
+    const firstMessage = group[0]
+    const groupTimestamp = formatGroupTimestamp(firstMessage.timestamp)
+
+    return (
+      <div className="message-group">
+        <div className="group-timestamp">{groupTimestamp}</div>
+        {group.map(msg => (
+          <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+        ))}
       </div>
     )
   }
@@ -1101,40 +1204,76 @@ function TaskDetail() {
               <span className="stream-count">{messages.length + chatMessages.length} 条消息</span>
             </div>
             <div className="progress-stream-content">
-              {/* 统一的消息列表：进度流 + 聊天 */}
-              {messages.map(msg => (
-                <MessageBubble key={msg.id || msg.timestamp} message={msg} />
-              ))}
-              {chatMessages.map(msg => (
-                <ChatBubble key={msg.id || msg.timestamp} message={msg} />
-              ))}
-              {messages.length === 0 && chatMessages.length === 0 && (
-                <div className="no-progress-data">
-                  <p>暂无任务执行数据</p>
-                  <p className="hint">任务执行时会显示实时进度信息</p>
-                </div>
-              )}
+              {/* 统一的消息列表：进度流 + 聊天（使用分组） */}
+              {(() => {
+                // 合并所有消息并按时间排序
+                const allMessages = [...messages, ...chatMessages].sort((a, b) =>
+                  new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                )
+
+                // 分组消息
+                const groupedMessages = groupMessagesByTime(allMessages)
+
+                return groupedMessages.length > 0 ? (
+                  groupedMessages.map((group, index) => (
+                    <MessageGroup key={`group-${index}`} group={group} />
+                  ))
+                ) : (
+                  <div className="no-progress-data">
+                    <p>暂无任务执行数据</p>
+                    <p className="hint">任务执行时会显示实时进度信息</p>
+                  </div>
+                )
+              })()}
             </div>
+
+            {/* 错误消息显示 */}
+            {errors.length > 0 && (
+              <div className="error-messages">
+                {errors.map(error => (
+                  <div key={error.id} className="error-message-item">
+                    <span className="error-text">{error.message}</span>
+                    {error.retry && (
+                      <button onClick={error.retry} className="error-retry-button">
+                        重试
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setErrors(prev => prev.filter(e => e.id !== error.id))}
+                      className="error-dismiss-button"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* 聊天输入框 */}
             <div className="chat-input-group">
               <input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyPress={(e) => e.key === 'Enter' && !isSending && handleSendMessage()}
                 placeholder="输入问题或指令..."
-                disabled={!task}
+                disabled={!task || isSending}
                 className="chat-input-field"
               />
               <button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || !task}
-                title="发送消息"
+                disabled={!inputValue.trim() || !task || isSending}
+                title={isSending ? "发送中..." : "发送消息"}
                 className="chat-send-button"
               >
-                <svg className="send-icon" width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
+                {isSending ? (
+                  <svg className="send-icon spinning" width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : (
+                  <svg className="send-icon" width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
