@@ -81,8 +81,36 @@ class RemotionVideoGenerator:
         # Persistent output directory (project root, not skills/ subdirectory)
         self.output_dir = Path(__file__).parent.parent.parent / "outputs" / "videos"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        # Track video count per task
-        self.task_video_counts = {}
+        # Persistent counter file for tracking video counts across processes
+        self.counter_file = self.output_dir / ".video_counts.json"
+
+    def _load_video_counts(self) -> Dict[str, int]:
+        """Load video counts from persistent storage (file)."""
+        if self.counter_file.exists():
+            try:
+                with open(self.counter_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                pass
+        return {}
+
+    def _save_video_counts(self, counts: Dict[str, int]) -> None:
+        """Save video counts to persistent storage (file)."""
+        try:
+            # Create parent directory if needed
+            self.counter_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.counter_file, 'w') as f:
+                json.dump(counts, f, indent=2)
+        except IOError as e:
+            logging.warning(f"Failed to save video counts: {e}")
+
+    def _get_next_video_number(self, task_id: str) -> int:
+        """Get next video number for a task, incrementing the counter."""
+        counts = self._load_video_counts()
+        video_number = counts.get(task_id, 0) + 1
+        counts[task_id] = video_number
+        self._save_video_counts(counts)
+        return video_number
 
     async def generate_video(self, input_data: Dict[str, Any], context=None) -> Dict[str, Any]:
         """
@@ -1551,11 +1579,8 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
             )
 
             # Generate unique filename for this task
-            if task_id not in self.task_video_counts:
-                self.task_video_counts[task_id] = 0
-            self.task_video_counts[task_id] += 1
-
-            video_number = self.task_video_counts[task_id]
+            # Use persistent file-based counter to share counts across processes (multi-turn conversations)
+            video_number = self._get_next_video_number(task_id)
             output_filename = f"{task_id}_video_{video_number}.{output_format}"
             persistent_video_path = self.output_dir / output_filename
 
@@ -1578,12 +1603,52 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         except Exception as e:
             raise Exception(f"Video rendering failed: {str(e)}")
 
+    def _check_chrome_installation(self) -> None:
+        """
+        Check if Chrome headless shell is properly installed.
+
+        Raises:
+            Exception: If Chrome is not installed or not accessible
+        """
+        chrome_wrapper = self.template_dir / ".cache" / "remotion" / "chrome" / "chrome-headless-shell" / "chrome-headless-shell"
+        chrome_launcher = self.template_dir / "chrome-launcher.sh"
+
+        # Check Chrome wrapper
+        if not chrome_wrapper.exists():
+            raise Exception(
+                f"Chrome headless shell not found at: {chrome_wrapper}\n"
+                f"Please ensure Chrome is properly installed in the template directory.\n"
+                f"You may need to run: cd {self.template_dir} && npx @remotion/cli install"
+            )
+
+        # Check if wrapper is executable
+        if not os.access(chrome_wrapper, os.X_OK):
+            logging.warning(f"Chrome wrapper is not executable: {chrome_wrapper}")
+            try:
+                os.chmod(chrome_wrapper, 0o755)
+                logging.info(f"Made Chrome wrapper executable: {chrome_wrapper}")
+            except Exception as e:
+                raise Exception(f"Failed to make Chrome wrapper executable: {e}")
+
+        # Check Chrome launcher
+        if not chrome_launcher.exists():
+            raise Exception(
+                f"Chrome launcher script not found: {chrome_launcher}\n"
+                f"Please ensure chrome-launcher.sh exists in the template directory."
+            )
+
+        logging.info(f"✓ Chrome installation validated: {chrome_wrapper}")
+
     async def _create_remotion_project(self, code: str):
         """Create Remotion project by copying pre-installed template."""
 
         # Check if template exists
         if not self.template_dir.exists():
             raise Exception(f"Template directory not found: {self.template_dir}")
+
+        # NEW: Check Chrome installation before rendering
+        logging.info("Checking Chrome installation...")
+        self._check_chrome_installation()
 
         # Copy template to project directory
         if self.project_dir.exists():
@@ -1680,10 +1745,13 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         env['BROWSER_EXECUTABLE_PATH'] = str(chrome_wrapper)
         env['REMONITION_BROWSER_PATH'] = str(chrome_wrapper)
 
-        # Skip Chrome download
+        # Skip Chrome download - ENHANCED: Add more variables to prevent any Chrome download attempts
         env['PUPPETEER_SKIP_CHROMIUM_DOWNLOAD'] = 'true'
         env['PUPPETEER_SKIP_DOWNLOAD'] = 'true'
         env['REMONITION_SKIP_BROWSER_DOWNLOAD'] = 'true'
+        env['CHROME_SKIP_DOWNLOAD'] = 'true'
+        env['NODE_ENV'] = 'production'  # Avoid dev mode auto-downloads
+        env['REMONITION_SKIP_BUNDLE_DOWNLOAD'] = 'true'  # Skip bundle downloads
 
         # Use Chrome launcher script that adds --headless=new
         chrome_launcher = self.template_dir / "chrome-launcher.sh"
@@ -1719,6 +1787,7 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         print(f"[DEBUG] Working directory: {self.project_dir}")
         print(f"[DEBUG] Duration: {duration}, FPS: {fps}, Frame range: 0-{duration * fps - 1}")
 
+        logging.info("Starting Remotion render...")
         result = subprocess.run(
             render_args,
             cwd=self.project_dir,
@@ -1728,10 +1797,90 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
             timeout=600  # 10 minute timeout
         )
 
-        if result.returncode != 0:
-            raise Exception(f"Remotion render failed: {result.stderr}")
+        # ENHANCED: Log complete stdout and stderr
+        logging.info(f"Remotion render completed with exit code: {result.returncode}")
 
-        return self.project_dir / "out" / f"video.{output_format}"
+        # Log full output (truncated for readability)
+        if result.stdout:
+            stdout_preview = result.stdout[-1000:] if len(result.stdout) > 1000 else result.stdout
+            logging.info(f"STDOUT (last 1000 chars):\n{stdout_preview}")
+
+        if result.stderr:
+            stderr_preview = result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr
+            logging.warning(f"STDERR (last 1000 chars):\n{stderr_preview}")
+
+        # ENHANCED: Check stderr for errors even if returncode is 0
+        if result.stderr:
+            error_keywords = ['error', 'failed', 'exception', 'chrome', 'download', 'ECONNRESET', 'ETIMEDOUT']
+            stderr_lower = result.stderr.lower()
+            found_errors = [kw for kw in error_keywords if kw in stderr_lower]
+
+            if found_errors:
+                error_msg = f"Potential errors detected in Remotion output (exit code was {result.returncode}):\n"
+                error_msg += f"Found keywords: {', '.join(found_errors)}\n"
+                error_msg += f"STDERR: {result.stderr}\n"
+                error_msg += f"STDOUT: {result.stdout[-500:] if result.stdout else ''}"
+                logging.error(error_msg)
+                raise Exception(error_msg)
+
+        # Check exit code
+        if result.returncode != 0:
+            error_msg = self._format_render_error(result, "rendering")
+            raise Exception(error_msg)
+
+        # ENHANCED: Validate output file exists and is valid
+        output_path = self.project_dir / "out" / f"video.{output_format}"
+        logging.info(f"Validating output file: {output_path}")
+
+        if not output_path.exists():
+            error_msg = f"Remotion completed (exit code 0) but no output file found!\n"
+            error_msg += f"Expected: {output_path}\n"
+            error_msg += f"STDERR: {result.stderr}\n"
+            error_msg += f"STDOUT: {result.stdout[-500:] if result.stdout else ''}"
+            logging.error(error_msg)
+            raise Exception(error_msg)
+
+        # Validate file size (must be at least 1KB)
+        file_size = output_path.stat().st_size
+        if file_size < 1024:
+            error_msg = f"Generated video is too small: {file_size} bytes\n"
+            error_msg += f"File: {output_path}\n"
+            error_msg += f"STDERR: {result.stderr}\n"
+            error_msg += f"This usually indicates rendering failed silently."
+            logging.error(error_msg)
+            raise Exception(error_msg)
+
+        logging.info(f"✓ Output file validated: {output_path} ({file_size} bytes)")
+        return output_path
+
+    def _format_render_error(self, result, phase: str = "render") -> str:
+        """
+        Format Remotion render error with complete context.
+
+        Args:
+            result: subprocess result object
+            phase: Phase where error occurred
+
+        Returns:
+            Formatted error message
+        """
+        error_msg = f"""
+=== Remotion Video Generation Error ===
+Phase: {phase}
+Exit Code: {result.returncode}
+
+STDERR:
+{result.stderr}
+
+STDOUT (last 1000 chars):
+{result.stdout[-1000:] if result.stdout else ''}
+
+Environment:
+- CHROME_EXECUTABLE_PATH: {os.environ.get('CHROME_EXECUTABLE_PATH', 'NOT SET')}
+- PUPPETEER_SKIP_DOWNLOAD: {os.environ.get('PUPPETEER_SKIP_DOWNLOAD', 'NOT SET')}
+- Working Directory: {self.project_dir}
+"""
+        return error_msg
 
     async def _generate_thumbnail(self, video_path: Path) -> Optional[Dict[str, Path]]:
         """Generate thumbnail from video."""

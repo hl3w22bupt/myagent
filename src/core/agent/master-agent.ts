@@ -84,7 +84,14 @@ export class MasterAgent extends Agent {
         timestamp: Date.now(),
       });
 
-      const result = await super.run(combinedTask);
+      // Pass original task in context for better PTC generation
+      const executionContext = {
+        originalTask: task,  // Original user request
+        combinedTask: combinedTask,  // MasterAgent's plan
+        delegationPlan: plan  // Full delegation plan
+      };
+
+      const result = await super.run(combinedTask, _taskId, executionContext);
 
       const executionTime = Date.now() - startTime;
 
@@ -327,6 +334,12 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 2. The task is too vague (e.g., "review the code" without specifying which file)
 3. The task requires general capabilities not tied to any subagent
 4. Multiple subagents could handle it - better to handle with master
+5. **VIDEO GENERATION OR ENHANCEMENT TASKS** - These should ALWAYS be handled directly using remotion-generator skill:
+   - Tasks mentioning "video", "animation", "visual", "render", "motion graphics"
+   - Tasks to "create", "generate", "enhance", "add to", "modify", "update" videos
+   - Tasks involving Remotion, video editing, visual effects, animations
+   - Example: "Add animation highlights to the video", "Create a Pascal Triangle video"
+   - **DO NOT delegate video tasks to subagents - handle them directly**
 
 ### Decision Process:
 1. Extract key concepts and requirements from the task
@@ -364,6 +377,11 @@ Task: "Review the code"
 Example 3 - No Match:
 Task: "Calculate the meaning of life"
 → Handle directly: "No subagent specializes in philosophical questions"
+
+Example 4 - Video Task (HANDLE DIRECTLY):
+Task: "Add animation highlights to the Pascal Triangle video"
+Handle directly: "Video enhancement task - use remotion-generator skill directly, DO NOT delegate"
+Reason: "Video generation/enhancement tasks should always be handled directly using skills"
 
 ## Important Rules:
 - Output ONLY valid JSON inside <plan> tags

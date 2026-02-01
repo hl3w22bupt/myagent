@@ -46,8 +46,8 @@ export interface AgentProgressNotifyConfig {
  * Streams interface for progress notifications.
  */
 interface Streams {
-  agentProgress?: {
-    set: (key: string, value: any) => Promise<void>;
+  taskExecution?: {
+    set: (groupId: string, entryId: string, value: any) => Promise<void>;
   };
 }
 
@@ -80,7 +80,7 @@ export function getAgentStreams(): Streams | undefined {
 /**
  * Sends progress notifications to Stream.
  *
- * This hook sends structured event data to the agentProgress stream
+ * This hook sends structured event data to the taskExecution stream
  * for real-time UI updates.
  */
 export class AgentProgressNotifyHook extends BaseAgentHook {
@@ -98,12 +98,43 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
 
   /**
    * Called when Agent is created.
-   * No notification needed (Agent doesn't exist yet).
+   * Sends notification with Agent creation details.
    */
   async onAgentCreate(
-    _config: AgentConfig,
-    _sessionId: string
+    config: AgentConfig,
+    sessionId: string
   ): Promise<{ abort?: boolean; reason?: string } | undefined> {
+    try {
+      // AgentConfig doesn't have agentType or skills, use availableSkills
+      const agentType = 'Agent'; // Default agent type
+      const skillsCount = config.availableSkills?.length || 0;
+
+      const event = {
+        type: 'agent_created',
+        sessionId,
+        agentType,
+        timestamp: new Date().toISOString(),
+        data: {
+          agentType,
+          skillsCount,
+          hasSystemPrompt: !!config.systemPrompt,
+        },
+      };
+
+      await this.sendNotification(sessionId, event);
+
+      console.log('[AgentProgressNotifyHook] Agent created notification sent', {
+        sessionId,
+        agentType,
+        skillsCount,
+      });
+    } catch (error) {
+      console.error('[AgentProgressNotifyHook] Failed to send created notification', {
+        error,
+      });
+      // Don't throw - Agent should still be created
+    }
+
     return undefined;
   }
 
@@ -156,6 +187,9 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
   /**
    * Called before task execution.
    * Sends notification with task details.
+   *
+   * 同时发送 Agent 生命周期事件和任务开始事件，统一使用 taskId 作为 groupId
+   * 这样前端只需订阅 taskId 就能接收到所有事件。
    */
   async onTaskStart(
     task: string,
@@ -167,21 +201,38 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
     }
 
     try {
-      const event = {
-        type: 'task_start',
-        sessionId: context.sessionId,
-        taskId,
-        timestamp: new Date().toISOString(),
-        data: {
-          task: task.substring(0, 200), // Limit task length
-          taskLength: task.length,
+      const sessionId = context.sessionId;
+
+      // 发送三个事件：agent_created、agent_acquired、task_start
+      // 这样可以确保前端通过 taskId 订阅接收到完整的 Agent 生命周期事件
+      const events = [
+        {
+          type: 'agent_created',
+          data: { agentType: 'Agent', skillsCount: 0, hasSystemPrompt: false },
         },
-      };
+        {
+          type: 'agent_acquired',
+          data: { conversationLength: 0, executionCount: 0, variablesCount: 0 },
+        },
+        {
+          type: 'task_start',
+          data: { task: task.substring(0, 200), taskLength: task.length },
+        },
+      ];
 
-      await this.sendNotification(context.sessionId, event);
+      for (const eventDef of events) {
+        const event = {
+          type: eventDef.type,
+          sessionId,
+          taskId,
+          timestamp: new Date().toISOString(),
+          data: eventDef.data,
+        };
+        await this.sendNotification(sessionId, event);
+      }
 
-      console.log('[AgentProgressNotifyHook] Task start notification sent', {
-        sessionId: context.sessionId,
+      console.log('[AgentProgressNotifyHook] Agent lifecycle and task start notifications sent', {
+        sessionId,
         taskId,
       });
     } catch (error) {
@@ -278,26 +329,49 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
 
   /**
    * Called before Agent is destroyed.
-   * No notification needed (Agent is being destroyed).
+   * 不发送通知（Agent 在多轮对话中会复用，不会立即销毁）
    */
   async onAgentDestroy(_sessionId: string): Promise<void | undefined> {
-    // No notification on destroy
+    // No notification needed
   }
 
   /**
    * Send notification to stream.
    *
+   * 使用 taskExecution stream 发送所有 Agent Hook 事件，
+   * 与 task hook 和 skill hook 统一使用同一个 stream。
+   *
    * @param sessionId - Session identifier
-   * @param event - Event data
+   * @param event - Event data (must contain taskId)
    */
   private async sendNotification(sessionId: string, event: any): Promise<void> {
-    if (!globalStreams?.agentProgress) {
-      console.warn('[AgentProgressNotifyHook] No agentProgress stream available');
+    if (!globalStreams?.taskExecution) {
+      console.warn('[AgentProgressNotifyHook] No taskExecution stream available');
       return;
     }
 
     try {
-      await globalStreams.agentProgress.set(sessionId, event);
+      // Use taskId as groupId (to match frontend subscription)
+      const groupId = event.taskId || sessionId;
+
+      // Create a unique entryId for each event
+      const timestamp = Date.now();
+      const entryId = `agent-${event.type}-${groupId}-${timestamp}`;
+
+      console.log('[AgentProgressNotifyHook] Sending to taskExecution stream:', {
+        groupId,
+        entryId,
+        eventType: event.type,
+        taskId: event.taskId,
+      });
+
+      // 发送到 taskExecution stream（与 task hook 和 skill hook 统一）
+      await globalStreams.taskExecution.set(groupId, entryId, {
+        ...event,
+        category: 'agent_hook', // 标识为 agent hook 事件
+      });
+
+      console.log('[AgentProgressNotifyHook] ✅ Data sent to taskExecution stream successfully');
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send notification to stream', {
         sessionId,

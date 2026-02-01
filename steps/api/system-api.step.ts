@@ -9,6 +9,7 @@
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import type { Task } from '../../src/core/database/data-store';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
@@ -146,11 +147,11 @@ export const handler = async (request: any, { logger }: any) => {
       const tasks = result.tasks;
 
       totalTasks = tasks.length;
-      successfulTasks = tasks.filter(t => t.status === 'completed').length;
-      failedTasks = tasks.filter(t => t.status === 'failed').length;
+      successfulTasks = tasks.filter((t: Task) => t.status === 'completed').length;
+      failedTasks = tasks.filter((t: Task) => t.status === 'failed').length;
 
       // Count unique sessions
-      const sessions = new Set(tasks.map(t => t.sessionId).filter(Boolean));
+      const sessions = new Set(tasks.map((t: Task) => t.sessionId).filter(Boolean));
       activeSessions = sessions.size;
     } catch (error: any) {
       logger.error('System API: Error reading from database', { error: error.message });

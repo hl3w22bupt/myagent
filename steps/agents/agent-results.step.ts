@@ -10,6 +10,7 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import type { Task } from '../../src/core/database/data-store';
 
 /**
  * Query parameters schema for results API.
@@ -123,7 +124,7 @@ export const handler = async (request: any, { logger }: any) => {
       return date.toISOString();
     };
 
-    const results = tasks.map(task => ({
+    const results = tasks.map((task: Task) => ({
       taskId: task.id,
       task: task.task,
       success: task.status === 'completed',

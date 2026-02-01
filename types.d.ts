@@ -13,10 +13,12 @@ declare module 'motia' {
 
   interface Handlers {
     'media-serve-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'output-history-tracker': EventHandler<never, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.chat'; data: never }>
+    'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'stream-history-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>

@@ -1,0 +1,895 @@
+/**
+ * PostgreSQL Data Store
+ *
+ * PostgreSQL implementation of the Database interface.
+ * Supports concurrent writes and proper transaction handling.
+ */
+
+import { Pool } from 'pg';
+import type { Database } from './database.interface';
+import type {
+  Task,
+  TaskStatus,
+  Session,
+  CreateTaskData,
+} from './data-store';
+import type {
+  TaskContext,
+  Message,
+  ArtifactIndex,
+  CompressionHistory,
+} from './context-types';
+
+/**
+ * PostgreSQL DataStore configuration
+ */
+export interface PostgresDataStoreConfig {
+  /** PostgreSQL connection URL or config */
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  /** Connection pool size */
+  max?: number;
+  /** Connection timeout in milliseconds */
+  connectionTimeoutMillis?: number;
+}
+
+/**
+ * PostgreSQL DataStore
+ *
+ * Uses connection pooling for better performance.
+ * All operations are transactional and thread-safe.
+ */
+export class PostgresDataStore implements Database {
+  private pool: Pool;
+  private initialized = false;
+
+  constructor(config: PostgresDataStoreConfig = {}) {
+    // Use connection string or individual parameters
+    const poolConfig: any = {};
+
+    if (config.connectionString) {
+      poolConfig.connectionString = config.connectionString;
+    } else {
+      poolConfig.host = config.host || process.env.PG_HOST || 'localhost';
+      poolConfig.port = config.port || parseInt(process.env.PG_PORT || '5432');
+      poolConfig.database = config.database || process.env.PG_DATABASE || 'myagent';
+      poolConfig.user = config.user || process.env.PG_USER || 'postgres';
+      poolConfig.password = config.password || process.env.PG_PASSWORD || 'postgres';
+    }
+
+    poolConfig.max = config.max || 20;
+    poolConfig.connectionTimeoutMillis = config.connectionTimeoutMillis || 10000;
+
+    this.pool = new Pool(poolConfig);
+
+    // Handle pool errors
+    this.pool.on('error', (err) => {
+      console.error('[PostgresDataStore] Unexpected error on idle client', err);
+    });
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    console.log('[PostgresDataStore] Initializing PostgreSQL connection...');
+
+    try {
+      // Test connection
+      const client = await this.pool.connect();
+      await client.query('SELECT NOW()');
+      client.release();
+
+      // Initialize schema
+      await this.initSchema();
+
+      this.initialized = true;
+      console.log('[PostgresDataStore] Initialized successfully');
+    } catch (error: any) {
+      console.error('[PostgresDataStore] Failed to initialize:', error);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+    console.log('[PostgresDataStore] Connection pool closed');
+  }
+
+  private async initSchema(): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Tasks table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id TEXT PRIMARY KEY,
+          task TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL,
+          completed_at BIGINT,
+          output TEXT,
+          error TEXT,
+          execution_time INTEGER,
+          metadata JSONB,
+          retry_count INTEGER DEFAULT 0,
+          is_retry BOOLEAN DEFAULT FALSE
+        )
+      `);
+
+      // Indexes
+      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)');
+
+      // Task contexts table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_contexts (
+          task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL,
+          current_turn INTEGER DEFAULT 1,
+          summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+          working_memory JSONB NOT NULL DEFAULT '{}'::jsonb,
+          metadata JSONB NOT NULL DEFAULT '{"totalTokens": 0, "llmCallsCount": 0, "skillCallsCount": 0}'::jsonb,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL
+        )
+      `);
+
+      // Messages table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS messages (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+          content TEXT NOT NULL,
+          metadata JSONB,
+          compressed BOOLEAN DEFAULT FALSE,
+          created_at BIGINT NOT NULL
+        )
+      `);
+
+      await client.query('CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id)');
+
+      // Artifacts table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS artifacts (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          artifact_type TEXT NOT NULL,
+          action TEXT NOT NULL,
+          path TEXT NOT NULL,
+          description TEXT,
+          commit_hash TEXT,
+          timestamp BIGINT NOT NULL
+        )
+      `);
+
+      await client.query('CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id)');
+
+      // Compression history table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS compression_history (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          compressed_at BIGINT NOT NULL,
+          original_token_count INTEGER NOT NULL,
+          compressed_token_count INTEGER NOT NULL,
+          compression_ratio REAL NOT NULL,
+          summary JSONB NOT NULL,
+          truncated_message_ids JSONB
+        )
+      `);
+
+      await client.query('CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)');
+
+      // Sessions table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          session_id TEXT PRIMARY KEY,
+          created_at BIGINT NOT NULL,
+          last_active_at BIGINT NOT NULL,
+          metadata JSONB
+        )
+      `);
+
+      await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
+
+      await client.query('COMMIT');
+      console.log('[PostgresDataStore] Schema initialized');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Task Operations
+  // ============================================================================
+
+  async createTask(data: CreateTaskData): Promise<Task> {
+    const client = await this.pool.connect();
+
+    try {
+      const now = Date.now();
+      const result = await client.query(
+        `INSERT INTO tasks (id, task, session_id, status, created_at, updated_at, completed_at, output, error, execution_time, metadata, retry_count, is_retry)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING *`,
+        [
+          data.id,
+          data.task,
+          data.sessionId,
+          data.status,
+          now,
+          now,
+          data.completedAt?.getTime(),
+          data.output,
+          data.error,
+          data.executionTime,
+          data.metadata ? JSON.stringify(data.metadata) : null,
+          data.retryCount || 0,
+          // Convert boolean to integer for PostgreSQL
+          data.isRetry ? 1 : 0,
+        ]
+      );
+
+      return this.mapDbTaskToTask(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTask(taskId: string): Promise<Task | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return this.mapDbTaskToTask(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateTask(taskId: string, updates: Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Task> {
+    const client = await this.pool.connect();
+
+    try {
+      const current = await this.getTask(taskId);
+      if (!current) {
+        throw new Error(`Task not found: ${taskId}`);
+      }
+
+      const updated = {
+        ...current,
+        ...updates,
+        updatedAt: new Date(),
+      };
+
+      const fields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (updates.status !== undefined) {
+        fields.push(`status = $${paramIndex++}`);
+        values.push(updates.status);
+      }
+      if (updates.output !== undefined) {
+        fields.push(`output = $${paramIndex++}`);
+        values.push(updates.output);
+      }
+      if (updates.error !== undefined) {
+        fields.push(`error = $${paramIndex++}`);
+        values.push(updates.error);
+      }
+      if (updates.executionTime !== undefined) {
+        fields.push(`execution_time = $${paramIndex++}`);
+        values.push(updates.executionTime);
+      }
+      if (updates.metadata !== undefined) {
+        fields.push(`metadata = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.metadata));
+      }
+      if (updates.completedAt !== undefined) {
+        fields.push(`completed_at = $${paramIndex++}`);
+        values.push(updates.completedAt.getTime());
+      }
+      if (updates.retryCount !== undefined) {
+        fields.push(`retry_count = $${paramIndex++}`);
+        values.push(updates.retryCount);
+      }
+      if (updates.isRetry !== undefined) {
+        fields.push(`is_retry = $${paramIndex++}`);
+        // Convert boolean to integer (PostgreSQL stores as INTEGER)
+        values.push(updates.isRetry ? 1 : 0);
+      }
+
+      fields.push(`updated_at = $${paramIndex++}`);
+      values.push(updated.updatedAt.getTime());
+      values.push(taskId);
+
+      const result = await client.query(
+        `UPDATE tasks SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+        values
+      );
+
+      return this.mapDbTaskToTask(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async listTasks(filters?: {
+    sessionId?: string;
+    status?: TaskStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ tasks: Task[]; total: number }> {
+    const client = await this.pool.connect();
+
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (filters?.sessionId) {
+        conditions.push(`session_id = $${paramIndex++}`);
+        values.push(filters.sessionId);
+      }
+      if (filters?.status) {
+        conditions.push(`status = $${paramIndex++}`);
+        values.push(filters.status);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Get total count
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM tasks ${whereClause}`,
+        values
+      );
+      const total = parseInt(countResult.rows[0].count);
+
+      // Get paginated results
+      let query = `SELECT * FROM tasks ${whereClause} ORDER BY created_at DESC`;
+      if (filters?.limit) {
+        query += ` LIMIT $${paramIndex++}`;
+        values.push(filters.limit);
+        if (filters?.offset) {
+          query += ` OFFSET $${paramIndex++}`;
+          values.push(filters.offset);
+        }
+      }
+
+      const result = await client.query(query, values);
+      const tasks = result.rows.map(row => this.mapDbTaskToTask(row));
+
+      return { tasks, total };
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteTask(taskId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('DELETE FROM tasks WHERE id = $1', [taskId]);
+      return (result.rowCount || 0) > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Context Operations
+  // ============================================================================
+
+  async createTaskContext(taskId: string, sessionId: string, input: string): Promise<TaskContext> {
+    const client = await this.pool.connect();
+
+    try {
+      const now = Date.now();
+
+      await client.query(
+        `INSERT INTO task_contexts (task_id, session_id, current_turn, summary, working_memory, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          taskId,
+          sessionId,
+          1,
+          JSON.stringify({}),
+          JSON.stringify({}),
+          JSON.stringify({
+            totalTokens: 0,
+            llmCallsCount: 0,
+            skillCallsCount: 0,
+          }),
+          now,
+          now,
+        ]
+      );
+
+      // Create initial user message
+      const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await client.query(
+        `INSERT INTO messages (id, task_id, role, content, created_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [messageId, taskId, 'user', input, now]
+      );
+
+      return {
+        taskId,
+        sessionId,
+        currentTurn: 1,
+        messages: [
+          {
+            id: messageId,
+            taskId,
+            role: 'user',
+            content: input,
+            metadata: {
+              timestamp: new Date(),
+              tokens: 0,
+            },
+          },
+        ],
+        summary: {
+          sessionIntent: '',
+          currentTask: input,
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: '',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {
+            functionNames: [],
+            errorCodes: [],
+            dependencies: [],
+          },
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {
+          totalTokens: 0,
+          llmCallsCount: 0,
+          skillCallsCount: 0,
+        },
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getContext(taskId: string): Promise<TaskContext | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const contextResult = await client.query(
+        'SELECT * FROM task_contexts WHERE task_id = $1',
+        [taskId]
+      );
+
+      if (contextResult.rows.length === 0) {
+        return null;
+      }
+
+      const contextRow = contextResult.rows[0];
+
+      // Get messages
+      const messagesResult = await client.query(
+        'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
+        [taskId]
+      );
+
+      const messages: Message[] = messagesResult.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        role: row.role,
+        content: row.content,
+        metadata: row.metadata,
+        compressed: row.compressed,
+      }));
+
+      // Get artifacts
+      const artifactsResult = await client.query(
+        'SELECT * FROM artifacts WHERE task_id = $1',
+        [taskId]
+      );
+
+      const artifacts: ArtifactIndex[] = artifactsResult.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        action: row.action,
+        path: row.path,
+        description: row.description,
+        commitHash: row.commit_hash,
+        // PostgreSQL returns bigint as string, need to convert to number then Date
+        timestamp: new Date(parseInt(row.timestamp)),
+      }));
+
+      return {
+        taskId: contextRow.task_id,
+        sessionId: contextRow.session_id,
+        currentTurn: contextRow.current_turn,
+        messages,
+        summary: contextRow.summary,
+        artifactIndex: artifacts,
+        workingMemory: contextRow.working_memory,
+        metadata: contextRow.metadata,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateContext(taskId: string, updates: Partial<TaskContext>): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (updates.currentTurn !== undefined) {
+        fields.push(`current_turn = $${paramIndex++}`);
+        values.push(updates.currentTurn);
+      }
+      if (updates.summary !== undefined) {
+        fields.push(`summary = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.summary));
+      }
+      if (updates.workingMemory !== undefined) {
+        fields.push(`working_memory = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.workingMemory));
+      }
+      if (updates.metadata !== undefined) {
+        fields.push(`metadata = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.metadata));
+      }
+
+      fields.push(`updated_at = $${paramIndex++}`);
+      values.push(Date.now());
+      values.push(taskId);
+
+      await client.query(
+        `UPDATE task_contexts SET ${fields.join(', ')} WHERE task_id = $${paramIndex}`,
+        values
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveContext(context: TaskContext): Promise<void> {
+    // Alias for updateContext - saves the entire context
+    await this.updateContext(context.taskId, context);
+  }
+
+  async addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext> {
+    const client = await this.pool.connect();
+
+    try {
+      // Add message to the messages table
+      await client.query(
+        `INSERT INTO messages (id, task_id, role, content, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          message.id,
+          taskId,
+          message.role,
+          message.content,
+          JSON.stringify(message.metadata),
+          message.metadata.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
+        ]
+      );
+
+      // Update the context's current turn
+      const context = await this.getContext(taskId);
+      if (!context) {
+        throw new Error(`Context not found for task: ${taskId}`);
+      }
+
+      return context;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteContext(taskId: string): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('DELETE FROM task_contexts WHERE task_id = $1', [taskId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Artifact Operations
+  // ============================================================================
+
+  async createArtifact(artifact: Omit<ArtifactIndex, 'id'>): Promise<ArtifactIndex> {
+    const client = await this.pool.connect();
+
+    try {
+      const id = `artifact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await client.query(
+        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          artifact.taskId,
+          artifact.artifactType,
+          artifact.action,
+          artifact.path,
+          artifact.description,
+          artifact.commitHash,
+          artifact.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
+        ]
+      );
+
+      return { ...artifact, id };
+    } finally {
+      client.release();
+    }
+  }
+
+  async addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void> {
+    // Implementation that matches Database interface
+    const client = await this.pool.connect();
+
+    try {
+      const id = artifact.id || `artifact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await client.query(
+        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          artifact.taskId,
+          artifact.artifactType,
+          artifact.action,
+          artifact.path,
+          artifact.description,
+          artifact.commitHash,
+          artifact.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
+        ]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async getArtifacts(taskId: string): Promise<ArtifactIndex[]> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM artifacts WHERE task_id = $1',
+        [taskId]
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        action: row.action,
+        path: row.path,
+        description: row.description,
+        commitHash: row.commit_hash,
+        // PostgreSQL returns bigint as string, need to convert to number then Date
+        timestamp: new Date(parseInt(row.timestamp)),
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Compression History Operations
+  // ============================================================================
+
+  async saveCompressionHistory(history: CompressionHistory): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const id = `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      await client.query(
+        `INSERT INTO compression_history (id, task_id, compressed_at, original_token_count, compressed_token_count, compression_ratio, summary, truncated_message_ids)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          history.taskId,
+          history.compressedAt.getTime(),
+          history.originalTokenCount,
+          history.compressedTokenCount,
+          history.compressionRatio,
+          JSON.stringify(history.summary),
+          history.truncatedMessageIds ? JSON.stringify(history.truncatedMessageIds) : null,
+        ]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async getCompressionHistory(taskId: string): Promise<CompressionHistory[]> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM compression_history WHERE task_id = $1 ORDER BY compressed_at DESC',
+        [taskId]
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        // PostgreSQL returns bigint as string, need to convert to number then Date
+        compressedAt: new Date(parseInt(row.compressed_at)),
+        originalTokenCount: row.original_token_count,
+        compressedTokenCount: row.compressed_token_count,
+        compressionRatio: row.compression_ratio,
+        summary: row.summary,
+        truncatedMessageIds: row.truncated_message_ids,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Session Operations
+  // ============================================================================
+
+  async upsertSession(sessionId: string, metadata?: Record<string, any>): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const now = Date.now();
+
+      // Check if session exists
+      const checkResult = await client.query(
+        'SELECT session_id FROM sessions WHERE session_id = $1',
+        [sessionId]
+      );
+
+      if (checkResult.rows.length > 0) {
+        // Update
+        await client.query(
+          'UPDATE sessions SET last_active_at = $1, metadata = $2 WHERE session_id = $3',
+          [now, JSON.stringify(metadata || {}), sessionId]
+        );
+      } else {
+        // Insert
+        await client.query(
+          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES ($1, $2, $3, $4)',
+          [sessionId, now, now, JSON.stringify(metadata || {})]
+        );
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  async getSession(sessionId: string): Promise<Session | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM sessions WHERE session_id = $1',
+        [sessionId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        sessionId: row.session_id,
+        // PostgreSQL returns bigint as string, need to convert to number then Date
+        createdAt: new Date(parseInt(row.created_at)),
+        lastActiveAt: new Date(parseInt(row.last_active_at)),
+        metadata: row.metadata,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async listSessions(limit: number = 50, offset: number = 0): Promise<Session[]> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM sessions ORDER BY last_active_at DESC LIMIT $1 OFFSET $2',
+        [limit, offset]
+      );
+
+      return result.rows.map(row => ({
+        sessionId: row.session_id,
+        // PostgreSQL returns bigint as string, need to convert to number then Date
+        createdAt: new Date(parseInt(row.created_at)),
+        lastActiveAt: new Date(parseInt(row.last_active_at)),
+        metadata: row.metadata,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('DELETE FROM sessions WHERE session_id = $1', [sessionId]);
+      return (result.rowCount || 0) > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Cleanup Operations
+  // ============================================================================
+
+  async cleanupOldData(olderThanDays: number = 7): Promise<number> {
+    const client = await this.pool.connect();
+
+    try {
+      const cutoffTime = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
+
+      const result = await client.query(
+        'DELETE FROM tasks WHERE created_at < $1 AND status = $2',
+        [cutoffTime, 'completed']
+      );
+
+      return result.rowCount || 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Helper Methods
+  // ============================================================================
+
+  private mapDbTaskToTask(row: any): Task {
+    return {
+      id: row.id,
+      task: row.task,
+      sessionId: row.session_id,
+      status: row.status as TaskStatus,
+      // PostgreSQL returns bigint as string, need to convert to number
+      createdAt: new Date(parseInt(row.created_at)),
+      updatedAt: new Date(parseInt(row.updated_at)),
+      completedAt: row.completed_at ? new Date(parseInt(row.completed_at)) : undefined,
+      output: row.output,
+      error: row.error,
+      executionTime: row.execution_time,
+      metadata: row.metadata,
+      retryCount: row.retry_count,
+      // Convert integer to boolean (PostgreSQL stores as INTEGER)
+      isRetry: row.is_retry === 1,
+    };
+  }
+}

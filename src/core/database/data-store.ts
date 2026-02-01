@@ -11,6 +11,9 @@ import initSqlJs, { Database } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 
+// Import PostgreSQL store (will be used if DATABASE_BACKEND=postgres)
+import { PostgresDataStore } from './postgres-store';
+
 /**
  * Task status enum
  */
@@ -44,6 +47,12 @@ export interface Task {
       totalDelay: number;
       recovered: boolean;
     };
+    outputHistory?: Array<{
+      round: number;
+      output: string;
+      timestamp: string;
+      executionTime?: number;
+    }>;
   };
   retryCount: number;
   isRetry: boolean;
@@ -52,7 +61,7 @@ export interface Task {
 /**
  * Create task data (without auto-generated fields)
  */
-export type CreateTaskData = Omit<Task, 'createdAt' | 'updatedAt' | 'retryCount' | 'isRetry'>;
+export type CreateTaskData = Omit<Task, 'createdAt' | 'updatedAt'>;
 
 import type {
   TaskContext,
@@ -78,6 +87,8 @@ export class DataStore {
   private db: Database | null = null;
   private dbPath: string;
   private initPromise: Promise<void>;
+  private saveLock: Promise<void> = Promise.resolve(); // Save lock to prevent concurrent saves
+  private dbLock: Promise<void> = Promise.resolve(); // Global DB lock to serialize all updates
 
   constructor(dbPath?: string) {
     const dataDir = path.join(process.cwd(), 'data');
@@ -101,27 +112,33 @@ export class DataStore {
     }
   }
 
+  /**
+   * Initialize SQLite database using sql.js.
+   *
+   * Uses file-based persistence with save lock to prevent concurrent saves.
+   */
   private async init() {
     try {
       const SQL = await initSqlJs();
 
+      console.log('[DataStore] Initializing SQLite database:', this.dbPath);
+
+      // Load existing database or create new one
       if (fs.existsSync(this.dbPath)) {
         const buffer = fs.readFileSync(this.dbPath);
         this.db = new SQL.Database(buffer);
+        console.log('[DataStore] Loaded existing database');
       } else {
         this.db = new SQL.Database();
         this.initSchema();
         await this.save();
+        console.log('[DataStore] Created new database');
       }
 
-      if (this.db) {
-        // Enable foreign keys
-        this.db.run('PRAGMA foreign_keys = ON');
-        // 在测试环境中禁用日志输出，避免 "Cannot log after tests are done" 警告
-        if (process.env.NODE_ENV !== 'test') {
-          console.log(`[DataStore] Database initialized: ${this.dbPath}`);
-        }
-      }
+      // Enable foreign keys
+      this.db.run('PRAGMA foreign_keys = ON');
+
+      console.log('[DataStore] Database initialized successfully');
     } catch (error) {
       console.error('[DataStore] Failed to initialize database:', error);
       throw error;
@@ -135,12 +152,30 @@ export class DataStore {
     }
   }
 
-  private async save() {
-    if (this.db) {
-      const data = this.db.export();
-      const buffer = Buffer.from(data);
-      fs.writeFileSync(this.dbPath, buffer);
-    }
+  /**
+   * Save database to disk with lock to prevent concurrent saves.
+   *
+   * CRITICAL: This ensures that concurrent updates don't overwrite each other.
+   * The saveLock serializes save operations.
+   */
+  private async save(): Promise<void> {
+    const saveId = Math.random().toString(36).substr(2, 9);
+    console.log(`[DataStore] save() START [${saveId}]`);
+
+    // Use promise chain to serialize saves
+    this.saveLock = this.saveLock.then(async () => {
+      console.log(`[DataStore] save() EXECUTING [${saveId}]`);
+      if (this.db) {
+        const data = this.db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(this.dbPath, buffer);
+        console.log(`[DataStore] save() COMPLETED [${saveId}] - size: ${buffer.length} bytes`);
+      }
+    });
+
+    // Wait for save to complete
+    await this.saveLock;
+    console.log(`[DataStore] save() WAIT DONE [${saveId}]`);
   }
 
   private initSchema() {
@@ -367,12 +402,25 @@ export class DataStore {
     values.push(updated.updatedAt.getTime());
     values.push(taskId);
 
-    this.db.run(
-      `UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
+    // CRITICAL: Use global DB lock to serialize all updates
+    // This prevents race conditions where multiple updateTask() calls
+    // interleave their db.run() and save() operations
+    this.dbLock = this.dbLock.then(async () => {
+      console.log('[DataStore] updateTask: Updating task', taskId, 'fields:', fields.join(', '));
+      if (!this.db) {
+        throw new Error('Database not initialized');
+      }
+      this.db.run(
+        `UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`,
+        values
+      );
 
-    await this.save();
+      console.log('[DataStore] updateTask: Calling save() for task', taskId);
+      await this.save();
+      console.log('[DataStore] updateTask: save() completed for task', taskId);
+    });
+
+    await this.dbLock;
     return updated;
   }
 
@@ -635,7 +683,7 @@ export class DataStore {
     return (await this.getContext(taskId))!;
   }
 
-  async addArtifact(artifact: Omit<ArtifactIndex, 'taskId'> & { taskId?: string }): Promise<void> {
+  async addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
@@ -857,22 +905,56 @@ export class DataStore {
 }
 
 /**
- * 获取全局 DataStore 实例
+ * Get DataStore instance (supports multiple backends)
+ *
+ * Automatically selects backend based on DATABASE_BACKEND environment variable:
+ * - "postgres" → PostgreSQL
+ * - "sqlite" or undefined → SQLite
+ *
+ * This function provides backward compatibility while supporting the new
+ * database abstraction layer.
  */
-let globalStore: DataStore | null = null;
+export function getDataStore(dbPath?: string): any {
+  const backend = process.env.DATABASE_BACKEND || 'sqlite';
 
-export function getDataStore(dbPath?: string): DataStore {
-  // 如果传入了明确的 dbPath 参数，创建新实例（用于测试）
+  // Use PostgreSQL if requested
+  if (backend === 'postgres') {
+    const globalKey = '__database_postgres';
+
+    if (!(global as any)[globalKey]) {
+      console.log('[getDataStore] Creating PostgreSQL database instance');
+      const instance = new PostgresDataStore();
+      // Initialize asynchronously in background
+      instance.initialize().catch(err => {
+        console.error('[getDataStore] Failed to initialize PostgreSQL:', err);
+      });
+      (global as any)[globalKey] = instance;
+    } else {
+      console.log('[getDataStore] Reusing PostgreSQL database instance');
+    }
+
+    return (global as any)[globalKey];
+  }
+
+  // Fall back to SQLite
+  const globalKey = '__database_sqlite';
+
   if (dbPath) {
+    console.log('[DataStore] Creating new SQLite instance with path:', dbPath);
     return new DataStore(dbPath);
   }
-  // 否则返回全局单例实例
-  if (!globalStore) {
-    globalStore = new DataStore();
+
+  if (!(global as any)[globalKey]) {
+    console.log('[DataStore] Creating global SQLite singleton instance');
+    (global as any)[globalKey] = new DataStore();
+  } else {
+    console.log('[DataStore] Reusing global SQLite singleton instance');
   }
-  return globalStore;
+
+  return (global as any)[globalKey];
 }
 
 export function setDataStore(store: DataStore): void {
-  globalStore = store;
+  (global as any).__motiaDataStore = store;
 }
+

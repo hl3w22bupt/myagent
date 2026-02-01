@@ -1,16 +1,33 @@
 import { ContextManagerTaskHook } from '@/core/task/hooks/context-manager';
 import { TaskContext } from '@/core/task/hooks/types';
 
-// Mock ContextManager
+// Mock ContextManager and DataStore to avoid creating real database connections
 jest.mock('@/core/context/manager');
+jest.mock('@/core/database/data-store', () => ({
+  getDataStore: jest.fn(() => ({
+    initialize: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+    createTaskContext: jest.fn().mockResolvedValue({
+      taskId: 'test-1',
+      sessionId: 'session-1',
+      currentTurn: 1,
+      messages: [],
+      summary: {},
+      artifactIndex: [],
+      workingMemory: {},
+      metadata: {},
+    }),
+    getContext: jest.fn().mockResolvedValue(null),
+    saveContext: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
 
 describe('ContextManagerTaskHook', () => {
   let hook: ContextManagerTaskHook;
   let mockContext: TaskContext;
 
   beforeEach(() => {
-    // Create hook without ContextManager (it will try to create real one)
-    // We'll test the behavior through method calls
+    // Create hook without ContextManager (it will use the mocked getDataStore)
     hook = new ContextManagerTaskHook(undefined as any);
 
     mockContext = {

@@ -127,6 +127,29 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
       // Cleanup temporary script
       await unlink(scriptPath).catch(() => {});
+
+      // DEBUG: Log execution result details BEFORE deleting session
+      console.log('[Sandbox] Execution result:', {
+        sessionId,
+        exitCode: result.exitCode,
+        stdoutLength: result.stdout?.length || 0,
+        stderrLength: result.stderr?.length || 0,
+        hasStdout: !!result.stdout,
+        hasStderr: !!result.stderr,
+        stdoutPreview: result.stdout?.substring(0, 500),
+        stderrPreview: result.stderr?.substring(0, 500),
+      });
+
+      // If execution failed, log full stderr for debugging
+      if (result.exitCode !== 0) {
+        console.error('[Sandbox] Execution FAILED - Full stderr:', {
+          sessionId,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      }
+
       this.activeSessions.delete(sessionId);
 
       const executionTime = Date.now() - startTime;
@@ -322,6 +345,7 @@ from core.sandbox.retry_utils import execute_with_retry
 # Get notify API URL from environment (set by LocalSandboxAdapter)
 # This enables automatic hook registration for progress notifications
 notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
 executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 `;
 

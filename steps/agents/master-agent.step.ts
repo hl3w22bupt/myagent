@@ -114,9 +114,15 @@ export const handler = async (
   { emit, logger, state: _state, streams: _streams }: any
 ) => {
   // === 处理聊天消息 ===
-  // 检查是否有message字段来判断是否是聊天事件
-  if (input.message && !input.task) {
-    const { taskId, sessionId, message } = input;
+  // 检查是否有 message 字段来判断是否是聊天事件
+  // 注意：由于事件已经根据 subscribes 配置路由到这里，不需要检查 input.topic
+  // 对于聊天事件，Motia 会将 emit({ topic: 'agent.task.chat', data }) 中的 data 传递给 handler
+  const message = input.message || input.data?.message;
+
+  if (message) {
+    // 这是一个聊天事件
+    const taskId = input.taskId || input.data?.taskId;
+    const sessionId = input.sessionId || input.data?.sessionId;
 
     logger.info('Master Agent: Processing chat message', {
       taskId,
@@ -195,7 +201,53 @@ export const handler = async (
       // 发送回复到Stream
       const timestamp = Date.now();
       const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
-      const responseContent = result.output?.text || result.output?.content || '抱歉，我没有生成回复。';
+
+      // 处理不同格式的输出
+      logger.info('处理Agent回复', {
+        taskId,
+        outputType: typeof result.output,
+        hasOutput: !!result.output,
+        outputPreview: result.output ? (typeof result.output === 'string' ? result.output.substring(0, 100) : JSON.stringify(result.output).substring(0, 100)) : 'undefined'
+      });
+
+      let rawContent = '抱歉，我没有生成回复。';
+      if (typeof result.output === 'string') {
+        // 如果 output 是字符串，直接使用
+        rawContent = result.output;
+      } else if (result.output?.text) {
+        rawContent = result.output.text;
+      } else if (result.output?.content) {
+        rawContent = result.output.content;
+      }
+
+      // 过滤掉DEBUG信息，只保留实际回复内容
+      let responseContent = rawContent
+        .split('\n')
+        .filter(line => {
+          // 过滤掉DEBUG信息
+          if (line.trim().startsWith('[DEBUG]')) return false;
+          // 过滤掉成功消息
+          if (line.trim().startsWith('success=True')) return false;
+          // 过滤掉SkillHookExecutor消息
+          if (line.includes('SkillHookExecutor')) return false;
+          // 过滤掉空行
+          if (line.trim() === '') return false;
+          return true;
+        })
+        .join('\n')
+        .trim();
+
+      // 如果过滤后内容为空，使用原始内容
+      if (!responseContent) {
+        responseContent = rawContent;
+      }
+
+      logger.info('提取的回复内容', {
+        taskId,
+        originalLength: rawContent.length,
+        filteredLength: responseContent.length,
+        contentPreview: responseContent.substring(0, 100)
+      });
 
       await _streams.taskExecution.set(taskId, uniqueId, {
         progressType: 'chat',
@@ -203,6 +255,12 @@ export const handler = async (
         role: 'assistant',
         content: responseContent,
         timestamp: new Date(timestamp).toISOString(),
+        metadata: {
+          data: {
+            message: responseContent,
+            sender: 'assistant'
+          }
+        }
       });
 
       logger.info('Chat response sent to stream', { taskId, uniqueId });
@@ -443,9 +501,15 @@ export const handler = async (
     await updateStream('running', { currentStep: 'Executing task' });
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
 
-    // Update task status to RUNNING
-    await store.updateTask(taskId, { status: TaskStatus.RUNNING });
-    logger.info('Task status updated to RUNNING', { taskId });
+    // Update task status to RUNNING (only if not already completed)
+    // This prevents resetting status for multi-turn conversations
+    const currentTask = await store.getTask(taskId);
+    if (currentTask && currentTask.status !== 'completed') {
+      await store.updateTask(taskId, { status: TaskStatus.RUNNING });
+      logger.info('Task status updated to RUNNING', { taskId });
+    } else if (currentTask && currentTask.status === 'completed') {
+      logger.warn('Task already completed, not resetting status to RUNNING', { taskId });
+    }
 
     // === 获取历史上下文 ===
     const contextManager = new ContextManager();

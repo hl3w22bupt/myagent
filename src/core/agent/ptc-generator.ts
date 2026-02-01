@@ -93,8 +93,17 @@ export class PTCGenerator {
 
     // Build context section
     let contextSection = '';
+
+    // IMPORTANT: If originalTask is provided (from MasterAgent), use it as the primary task
+    // This ensures the PTC code generator respects the original user request
+    const originalTask = options?.variables?.originalTask || options?.originalTask;
+    if (originalTask) {
+      contextSection += `<original_task>\n${originalTask}\n</original_task>\n\n`;
+      console.log('[PTC Generator] Using originalTask from context:', originalTask.substring(0, 100));
+    }
+
     if (options?.history && options.history.length > 0) {
-      contextSection = '<conversation_history>\n';
+      contextSection += '<conversation_history>\n';
       for (const msg of options.history.slice(-5)) {
         // Last 5 messages
         contextSection += `${msg.role}: ${msg.content}\n`;
@@ -126,6 +135,15 @@ IMPORTANT GUIDELINES:
 2. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
 3. For calculations, you can compute directly, but if uncertain, use appropriate skills
 4. NEVER return an empty selected_skills array - at least use web-search for factual queries
+
+5. VIDEO GENERATION AND MODIFICATION:
+   - ALL video creation, enhancement, or modification tasks MUST use remotion-generator skill
+   - When user asks to "add to video", "enhance video", "modify animation", or similar:
+     * Use remotion-generator to regenerate the ENTIRE video with new features
+     * DO NOT attempt to read or modify temporary Remotion code files (they are ephemeral)
+     * DO NOT use read-file, code-analysis, or other file manipulation skills for video tasks
+   - remotion-generator can handle the complete video generation process from description
+   - Include all desired features in the description rather than trying to modify existing code
 
 Please output:
 1. Which skills to use (in order)
@@ -265,8 +283,17 @@ Output format (JSON):
 
     // Build context section
     let contextSection = '';
+
+    // IMPORTANT: If originalTask is provided (from MasterAgent), use it as the primary task
+    // This ensures the PTC code generator respects the original user request
+    const originalTask = options?.variables?.originalTask || options?.originalTask;
+    if (originalTask) {
+      contextSection += `<original_task>\n${originalTask}\n</original_task>\n\n`;
+      console.log('[PTC Generator] Using originalTask from context:', originalTask.substring(0, 100));
+    }
+
     if (options?.history && options.history.length > 0) {
-      contextSection = '<conversation_history>\n';
+      contextSection += '<conversation_history>\n';
       for (const msg of options.history.slice(-5)) {
         // Last 5 messages
         contextSection += `${msg.role}: ${msg.content}\n`;
@@ -290,7 +317,21 @@ ${contextSection}
 ${task}
 </task>
 
-<skills>
+${originalTask ? `IMPORTANT INSTRUCTION:
+The <original_task> in the <context> section above contains the USER'S ACTUAL REQUEST.
+The <task> section is MasterAgent's execution plan.
+
+YOU MUST:
+1. Follow MasterAgent's execution plan (the <task> section)
+2. But use the <original_task> to understand the TRUE INTENT and SPECIFIC REQUIREMENTS
+3. If there's a conflict, prioritize the original_task's specific requirements over general plan steps
+
+Example:
+- If original_task says "Add animation highlights to emphasize number relationships"
+- And task says "Step 1: Add animation highlights (Execute directly)"
+- You MUST generate code that ADDS ANIMATIONS, not a generic Pascal Triangle video
+
+` : ''}<skills>
 ${skillsBlock}
 </skills>
 
@@ -325,6 +366,7 @@ import os
 
 # Get notify API URL from environment
 notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
 executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 
 # CRITICAL - Skill execution with RETRY logic:
@@ -423,6 +465,14 @@ IMPORTANT REMINDERS:
 - Check the skill's input schema to understand expected parameter types
 - The retry logic will automatically handle transient failures (timeout, network errors)
 - Non-retryable errors (validation, permission, not found) will fail immediately
+
+TIPS FOR FILE/VIDEO GENERATION:
+- Use 'task_id' variable for file naming: f"video_{task_id}.mp4" or f"output_{task_id}.txt"
+- Available environment variables:
+  - MOTIA_TASK_ID: Current task ID (use for file naming to track outputs)
+  - MOTIA_NOTIFY_API_URL: API endpoint for progress notifications
+  - MOTIA_SESSION_ID: Current session ID for multi-turn conversations
+  - MOTIA_TRACE_ID: Trace ID for debugging
 
 Generate the code now:`;
 

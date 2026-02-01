@@ -212,7 +212,7 @@ describe('AgentProgressNotifyHook', () => {
 
     // Mock streams
     mockStreams = {
-      agentProgress: {
+      taskExecution: {
         set: jest.fn<any>().mockResolvedValue(Promise.resolve()),
       },
     };
@@ -223,12 +223,14 @@ describe('AgentProgressNotifyHook', () => {
   it('should send notification on agent acquire', async () => {
     await hook.onAgentAcquire(mockAgent as any, 'session-1');
 
-    expect(mockStreams.agentProgress.set).toHaveBeenCalledWith(
-      'session-1',
+    expect(mockStreams.taskExecution.set).toHaveBeenCalledWith(
+      'session-1', // groupId
+      expect.any(String), // entryId (dynamic timestamp)
       expect.objectContaining({
         type: 'agent_acquired',
         sessionId: 'session-1',
         agentId: expect.any(String),
+        category: 'agent_hook',
       })
     );
   });
@@ -238,12 +240,14 @@ describe('AgentProgressNotifyHook', () => {
       sessionId: 'session-1',
     });
 
-    expect(mockStreams.agentProgress.set).toHaveBeenCalledWith(
-      'session-1',
+    expect(mockStreams.taskExecution.set).toHaveBeenCalledWith(
+      'task-1', // groupId (taskId takes precedence)
+      expect.any(String), // entryId (dynamic timestamp)
       expect.objectContaining({
         type: 'task_start',
         sessionId: 'session-1',
         taskId: 'task-1',
+        category: 'agent_hook',
       })
     );
   });
@@ -266,12 +270,14 @@ describe('AgentProgressNotifyHook', () => {
       taskId: 'task-1',
     });
 
-    expect(mockStreams.agentProgress.set).toHaveBeenCalledWith(
-      'session-1',
+    expect(mockStreams.taskExecution.set).toHaveBeenCalledWith(
+      'task-1', // groupId (taskId takes precedence)
+      expect.any(String), // entryId (dynamic timestamp)
       expect.objectContaining({
         type: 'task_complete',
         sessionId: 'session-1',
         taskId: 'task-1',
+        category: 'agent_hook',
       })
     );
   });

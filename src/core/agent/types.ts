@@ -193,6 +193,9 @@ export interface PTCGenerationOptions {
 
   /** Variables available for reference */
   variables?: Record<string, any>;
+
+  /** Original task (for multi-turn conversations) */
+  originalTask?: string;
 }
 
 /**

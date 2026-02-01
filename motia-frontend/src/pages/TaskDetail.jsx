@@ -9,6 +9,50 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 
 import './TaskDetail.css'
 
+/**
+ * 格式化 Agent Hook 事件为人类可读的消息
+ */
+const formatAgentHookMessage = (event) => {
+  const { type, agentType, data, taskId } = event
+  // metadata 实际上在 data 字段中
+  const metadata = data?.metadata || data || {}
+
+  console.log('[formatAgentHookMessage] 收到事件:', {
+    type,
+    agentType,
+    taskId,
+    data,
+    metadata,
+    fullEvent: event
+  })
+
+  switch (type) {
+    case 'agent_acquired':
+      return `🤖 系统: ${agentType || 'Agent'} 已分配`
+
+    case 'agent_created':
+      const skills = metadata?.skillsCount || 0
+      return `✨ 系统: ${agentType || 'Agent'} 已创建 (技能: ${skills})`
+
+    case 'task_start':
+      return `🚀 系统: 开始执行任务 ${taskId || ''}`
+
+    case 'task_complete':
+      const success = data?.success ? '成功' : '失败'
+      const time = metadata?.executionTime || data?.executionTime ? ` (${metadata?.executionTime || data?.executionTime}ms)` : ''
+      const tokens = metadata?.totalTokens || data?.totalTokens ? `, ${metadata?.totalTokens || data?.totalTokens} tokens` : ''
+      return data?.success !== false ? `✅ 系统: 任务成功${time}${tokens}` : `❌ 系统: 任务失败`
+
+    case 'agent_released':
+      const taskCount = metadata?.taskCount || 0
+      return `🔚 系统: ${agentType || 'Agent'} 已释放 (处理了 ${taskCount} 个任务)`
+
+    default:
+      console.warn('[formatAgentHookMessage] 未知事件类型:', type)
+      return `ℹ️ 系统: ${type || '未知事件'}`
+  }
+}
+
 function TaskDetail() {
   const { id } = useParams()
   const [task, setTask] = useState(null)
@@ -18,78 +62,247 @@ function TaskDetail() {
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
   const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
-  const [messages, setMessages] = useState([]) // 进度流消息
-  const [chatMessages, setChatMessages] = useState([]) // 对话消息
+  const [messages, setMessages] = useState([]) // 所有消息（包括进度和聊天）
   const [inputValue, setInputValue] = useState('') // 聊天输入框内容
   const [retrying, setRetrying] = useState(false) // 重试状态
   const [errors, setErrors] = useState([]) // 错误消息列表
   const [isSending, setIsSending] = useState(false) // 发送状态
-  const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
-  const completedFetchedRef = useRef(false) // 记录是否已经获取过完成状态的任务详情
+  const [selectedVideoIndex, setSelectedVideoIndex] = useState(null) // 当前选择的视频轮次
+  const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
 
-  // 获取 stream 实例，避免初始化时的竞态条件
+  // 获取 stream 实例
   const { stream } = useMotiaStream()
+
+  // 渲染追踪日志
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[🔄 TaskDetail 组件渲染]', {
+      inputValueLength: inputValue.length,
+      hasStream: !!stream
+    })
+  }
+
+  const pollIntervalRef = useRef(null) // 使用 ref 来管理 interval
 
   // 使用 Motia Stream SDK 获取实时数据（WebSocket 连接，无需轮询）
   // 只在 stream 存在时订阅，避免初始化时的错误警告
   const subscriptionRef = useRef(null)
+  const isSubscribedRef = useRef(false) // 追踪是否已订阅，避免重复订阅
+  const streamRef = useRef(null) // 保存上一个 stream 对象引用
 
+  // 在渲染时检测 stream 对象引用变化（每次渲染都会执行）
+  const streamChanged = streamRef.current !== stream
+  if (streamChanged) {
+    console.log('[🔴 Stream 对象引用变化]', {
+      hadStream: !!streamRef.current,
+      hasStream: !!stream,
+      changed: streamChanged
+    })
+
+    // 如果之前订阅过且 stream 改变了，重置订阅状态并更新版本号
+    if (isSubscribedRef.current) {
+      console.log('[🔴 Stream 改变，重置订阅并触发重新渲染]')
+      isSubscribedRef.current = false
+      setStreamVersion(v => v + 1) // 触发重新渲染，让 useEffect 重新执行
+    } else if (!streamRef.current && stream) {
+      // 如果之前没有 stream（不可用），现在 stream 变为可用了
+      console.log('[🔴 Stream 从不可用变为可用，触发重新订阅]')
+      setStreamVersion(v => v + 1) // 触发重新渲染，让 useEffect 重新执行
+    }
+
+    // 更新 streamRef
+    streamRef.current = stream
+  } else {
+    // Stream 对象没变
+    // console.log('[✅ Stream 对象引用稳定，不会触发重新订阅]')
+  }
+  const messagesRef = useRef([]) // 用 ref 保存消息列表，避免重新渲染时重新计算
+
+  // 获取Stream历史数据的函数
+  const fetchStreamHistory = async (taskId) => {
+    try {
+      console.log('[Stream History] 正在获取Stream历史数据:', taskId)
+
+      // 获取 taskExecution stream 历史数据（包含所有类型的 hook：task、skill、agent）
+      const response = await fetch('http://localhost:3000/api/tasks/' + taskId + '/stream-history')
+      const result = await response.json()
+      console.log('[Stream History] API响应:', result)
+
+      if (result.success && result.data) {
+        const historyEntries = Array.isArray(result.data) ? result.data : []
+        console.log('[Stream History] 历史数据数量:', historyEntries.length)
+
+        // 处理所有类型的事件
+        const processedEntries = historyEntries.map(entry => {
+          // 如果是 agent hook 事件（通过 category 字段标识）
+          if (entry.category === 'agent_hook' || entry.id?.startsWith('agent-')) {
+            return {
+              id: entry.id,
+              type: 'agent_hook',
+              message: formatAgentHookMessage(entry),
+              timestamp: entry.timestamp,
+              originalEvent: entry,
+            }
+          }
+          // 其他类型的事件保持原样
+          return entry
+        })
+
+        // 处理历史数据（去重）
+        const uniqueEntries = []
+        const seenIds = new Set()
+        for (const entry of processedEntries) {
+          const entryId = entry.id || `${entry.timestamp}-${entry.task || entry.message || entry.type}`
+          if (!seenIds.has(entryId)) {
+            seenIds.add(entryId)
+            uniqueEntries.push(entry)
+          }
+        }
+
+        console.log('[Stream History] 去重后历史数据数量:', uniqueEntries.length)
+        messagesRef.current = uniqueEntries
+        setMessages(prev => [...uniqueEntries])
+      }
+    } catch (error) {
+      console.error('[Stream History] 获取历史数据失败:', error)
+    }
+  }
+
+  // 当 id 变化时，重置订阅状态和清空消息
   useEffect(() => {
-    // 如果 stream 或 id 不存在，直接返回
-    if (!stream || !id) {
+    console.log('[TaskDetail] id 变化，重置订阅状态并清空消息:', id)
+    isSubscribedRef.current = false
+    setMessages([])
+    messagesRef.current = []
+  }, [id])
+
+  // 监听 stream 可用性并订阅
+  useEffect(() => {
+    console.log('[🟡 useEffect 执行]', { id, streamVersion, hasStream: !!stream })
+
+    // 如果 id 不存在，直接返回
+    if (!id) {
       return
     }
 
-    // 订阅 stream
-    subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
+    // 如果已经订阅过，直接返回（避免重复订阅）
+    if (isSubscribedRef.current) {
+      console.log('[✅ 已订阅，跳过重复订阅]')
+      return
+    }
 
-    // 监听数据变化
+    // 如果 stream 不可用，设置定时器定期检查
+    if (!stream) {
+      console.log('[⏳ Stream 不可用，等待 stream 变为可用...')
+
+      // 设置一个定时器，每 100ms 检查一次 stream 是否可用
+      const checkInterval = setInterval(() => {
+        // 当 stream 变为可用时，useEffect 会因为组件重新渲染而重新执行
+        // 这里我们什么都不做，只是等待组件重新渲染
+      }, 100)
+
+      // 清理定时器
+      return () => clearInterval(checkInterval)
+    }
+
+    // stream 可用，进行订阅
+    console.log('[🟢 Stream 可用，开始订阅...', { stream: 'taskExecution', groupId: id })
+
+    // 用于保存所有订阅，便于统一清理
+    const subscriptions = []
+
+    try {
+      // 订阅 taskExecution stream（统一处理所有事件：task、skill、agent）
+      subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
+      subscriptions.push(subscriptionRef.current)
+      console.log('[✅ taskExecution 订阅成功]', subscriptionRef.current)
+    } catch (error) {
+      console.error('[❌ taskExecution 订阅失败]', error)
+      return
+    }
+
+    // 标记已订阅
+    isSubscribedRef.current = true
+
+    // 订阅成功后，立即获取历史数据
+    fetchStreamHistory(id)
+
+    // 监听 taskExecution 数据变化（统一处理所有类型的事件）
     subscriptionRef.current.addChangeListener((data) => {
+      console.log('[Stream] 收到数据更新，类型:', typeof data)
+      console.log('[Stream] 数据:', data)
+
       // 处理实时消息
       const entries = Array.isArray(data) ? data : []
+      console.log('[Stream] entries数量:', entries.length)
 
-      // 更新进度流消息
-      setMessages(entries)
+      // 统一处理所有类型的事件（task hook、skill hook、agent hook）
+      const processedEntries = entries.map(entry => {
+        // 如果是 agent hook 事件（通过 category 字段标识）
+        if (entry.category === 'agent_hook' || entry.id?.startsWith('agent-')) {
+          return {
+            id: entry.id,
+            type: 'agent_hook',
+            message: formatAgentHookMessage(entry),
+            timestamp: entry.timestamp,
+            originalEvent: entry,
+          }
+        }
+        // 其他类型的事件保持原样
+        return entry
+      })
 
-      // 过滤出聊天消息
-      const chatEntries = entries.filter(entry => entry.progressType === 'chat').map(entry => ({
-        ...entry,
-        role: entry.metadata?.data?.sender === 'user' ? 'user' : 'assistant',
-        content: entry.metadata?.data?.message || entry.task
-      }))
-      setChatMessages(chatEntries)
+      console.log('[Stream] 处理后entries:', processedEntries)
+
+      // 更新所有消息（去重）
+      const uniqueEntries = []
+      const seenIds = new Set()
+      for (const entry of processedEntries) {
+        const entryId = entry.id || `${entry.timestamp}-${entry.task || entry.message}`
+        if (!seenIds.has(entryId)) {
+          seenIds.add(entryId)
+          uniqueEntries.push(entry)
+        }
+      }
+      console.log('[Stream] 去重后entries数量:', uniqueEntries.length)
+      messagesRef.current = uniqueEntries
+      setMessages(prev => [...uniqueEntries]) // 浅拷贝确保组件更新
     })
 
-    // 清理订阅
+    // 清理所有订阅
     return () => {
-      subscriptionRef.current?.close()
+      subscriptions.forEach(sub => sub?.close())
       subscriptionRef.current = null
-      setMessages([])
-      setChatMessages([])
+      isSubscribedRef.current = false // 重置订阅标志
     }
-  }, [stream, id])
+  }, [id, streamVersion]) // 依赖 id 和 streamVersion，当 stream 改变时会重新订阅
 
   // 监听 Stream 数据，当检测到任务完成时，重新获取任务详情
   useEffect(() => {
-    if (!messages || messages.length === 0 || completedFetchedRef.current) {
+    if (!messages || messages.length === 0) {
       return
     }
 
     // 查找最后一个 entry
     const lastEntry = messages[messages.length - 1]
 
-    // 如果检测到完成状态，重新获取任务详情
-    if (lastEntry?.status === 'completed' || lastEntry?.status === 'failed') {
-      console.log('检测到任务状态变化:', lastEntry.status, '，重新获取任务详情')
+    // FIX: 支持多轮对话的自动刷新
+    // 检测到完成状态（completed/failed）或 agent hook 的 task_complete 事件时刷新
+    const isCompletedStatus = lastEntry?.status === 'completed' || lastEntry?.status === 'failed'
+    const isTaskCompleteEvent = lastEntry?.type === 'agent_hook' && lastEntry?.originalEvent?.type === 'task_complete'
 
-      // 标记已处理，避免重复请求
-      completedFetchedRef.current = true
+    if (isCompletedStatus || isTaskCompleteEvent) {
+      console.log('✅ 检测到任务完成事件:', {
+        status: lastEntry?.status,
+        type: lastEntry?.type,
+        eventType: lastEntry?.originalEvent?.type,
+        message: '，重新获取任务详情'
+      })
 
       // 重新获取任务详情
       const fetchUpdatedDetails = async () => {
         try {
           const updatedTask = await tasksAPI.getTaskDetails(id)
-          console.log('已获取更新后的任务详情:', updatedTask)
+          console.log('✅ 已获取更新后的任务详情:', updatedTask)
           setTask(updatedTask)
           setLoading(false)
           setPolling(false)
@@ -100,7 +313,7 @@ function TaskDetail() {
             pollIntervalRef.current = null
           }
         } catch (error) {
-          console.error('获取更新后的任务详情失败:', error)
+          console.error('❌ 获取更新后的任务详情失败:', error)
         }
       }
 
@@ -114,19 +327,23 @@ function TaskDetail() {
       clearInterval(pollIntervalRef.current)
       pollIntervalRef.current = null
     }
+
     const fetchTaskDetails = async () => {
       try {
+        console.log('正在查询任务详情:', id)
         const task = await tasksAPI.getTaskDetails(id)
+        console.log('任务详情查询成功:', task)
         setTask(task)
         setError('')
         setLoading(false)
         return { found: true, error: null }
       } catch (error) {
-        console.error('Error fetching task details:', error)
+        console.error('查询任务详情失败:', error)
         setLoading(false)
 
         // 处理 404 错误：404 = Not Found，直接停止轮询
         if (error.response?.status === 404) {
+          console.error('任务不存在:', id)
           setError('任务不存在')
           return { found: false, error: true, taskNotFound: true }
         }
@@ -146,6 +363,7 @@ function TaskDetail() {
 
       const poll = async () => {
         pollCount++
+        console.log('轮询次数:', pollCount, '任务ID:', id)
         const result = await fetchTaskDetails()
 
         // 如果找到任务、出错、任务不存在或达到最大轮询次数，停止轮询
@@ -185,6 +403,17 @@ function TaskDetail() {
     }
   }, [id])
 
+  // 重置视频版本选择当任务更新时
+  useEffect(() => {
+    if (task?.artifacts) {
+      const videoCount = task.artifacts.filter(a => a.type === 'video').length
+      if (videoCount > 0) {
+        // 重置为null，这样会自动选择最新的轮次
+        setSelectedVideoIndex(null)
+      }
+    }
+  }, [task?.artifacts])
+
   // 获取或生成sessionId
   useEffect(() => {
     if (!id) return
@@ -206,6 +435,12 @@ function TaskDetail() {
 
   // 发送对话消息
   const handleSendMessage = async () => {
+    // 防止重复发送
+    if (isSending) {
+      console.warn('消息正在发送中，请勿重复点击')
+      return
+    }
+
     if (!inputValue.trim() || !sessionId) {
       if (!sessionId) {
         console.error('sessionId未初始化')
@@ -213,18 +448,6 @@ function TaskDetail() {
       }
       return
     }
-
-    const userMessage = {
-      type: 'chat',
-      role: 'user',
-      content: inputValue,
-      timestamp: new Date().toISOString(),
-      id: Date.now().toString() // 临时ID
-    }
-
-    // 立即显示在UI上（乐观更新）
-    setMessages(prev => [...prev, userMessage])
-    setChatMessages(prev => [...prev, userMessage])
 
     // 发送到后端，包含sessionId
     setIsSending(true)
@@ -515,21 +738,91 @@ function TaskDetail() {
     const parsedResult = extractParsedResult(result)
     const resultType = getResultType(result)
 
-    if (resultType === 'video' && parsedResult.content?.path) {
-      // 处理视频
-      let videoPath = parsedResult.content.path
+    // 检查是否有多个视频版本（从 artifacts）
+    const videoArtifacts = task?.artifacts
+      ? task.artifacts
+          .filter(artifact => artifact.type === 'video')
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+
+    const hasMultipleVersions = videoArtifacts.length > 1;
+
+    // 如果有多个版本，使用选中的版本
+    let currentVideoPath = parsedResult.content?.path;
+    let currentVideoMetadata = parsedResult.content;
+
+    // 优先使用 artifacts 中的视频（如果有）
+    if (videoArtifacts.length > 0) {
+      const currentIndex = selectedVideoIndex !== null
+        ? selectedVideoIndex
+        : videoArtifacts.length - 1; // 默认最后一轮
+
+      const selectedArtifact = videoArtifacts[currentIndex];
+      currentVideoPath = selectedArtifact.path;
+      // 从 artifact 获取元数据（如果有）
+      currentVideoMetadata = {
+        path: selectedArtifact.path,
+        mime_type: 'video/mp4',
+        description: selectedArtifact.description,
+      };
+    }
+
+    if (videoArtifacts.length > 0 && currentVideoPath) {
+      // 处理视频（优先从 artifacts）
+      let videoPath = currentVideoPath
       // 移除前导的/outputs/如果存在
       videoPath = videoPath.replace(/^\/?outputs\//, '')
 
       return (
         <div className="result-visual">
-          <VideoPlayer
-            videoPath={videoPath}
-            duration={parsedResult.content.duration}
-            fps={parsedResult.content.fps}
-            size={parsedResult.content.size}
-            getBlobUrl={getMediaBlobUrl}
-          />
+          {/* 版本选择器 */}
+          {videoArtifacts.length > 1 && (
+            <div className="video-version-selector">
+              <span className="version-label">轮次</span>
+              <div className="version-dropdown-wrapper">
+                <select
+                  value={selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1}
+                  onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
+                  className="version-dropdown"
+                >
+                  {videoArtifacts.map((artifact, index) => {
+                    const isLatest = index === videoArtifacts.length - 1;
+                    const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    });
+
+                    return (
+                      <option key={artifact.id} value={index}>
+                        第 {index + 1} 轮 · {time}
+                        {isLatest ? ' · 最新' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                  <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              {/* 版本描述 - 内联显示 */}
+              <span className="version-description-inline">
+                {videoArtifacts[selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1]?.description}
+              </span>
+            </div>
+          )}
+
+          {/* 视频播放器 */}
+          <div className="video-player-wrapper">
+            <VideoPlayer
+              key={videoPath}
+              videoPath={videoPath}
+              duration={currentVideoMetadata.duration}
+              fps={currentVideoMetadata.fps}
+              size={currentVideoMetadata.size}
+              getBlobUrl={getMediaBlobUrl}
+            />
+          </div>
         </div>
       )
     }
@@ -720,7 +1013,11 @@ function TaskDetail() {
       <div className="message-group">
         <div className="group-timestamp">{groupTimestamp}</div>
         {group.map(msg => (
-          <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+          msg.progressType === 'chat' ? (
+            <ChatBubble key={msg.id || msg.timestamp} message={msg} />
+          ) : (
+            <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+          )
         ))}
       </div>
     )
@@ -742,6 +1039,15 @@ function TaskDetail() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
             <path d="M12 2L2 7l10 5 10-5-10-5z"/>
             <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        )
+      }
+      if (message.type === 'agent_hook') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <path d="M12 22v-6M12 12v-2"/>
           </svg>
         )
       }
@@ -849,7 +1155,11 @@ function TaskDetail() {
     const typeIcon = getTypeIcon()
     const stageIcon = getStageIcon()
     const statusConfig = getStatusConfig()
-    const content = message.task || message.message || ''
+    // 对于 agent_hook 类型的消息，优先显示 message.message（格式化后的消息）
+    // 对于其他类型的消息，显示 task 或 message
+    const content = message.type === 'agent_hook'
+      ? (message.message || '')
+      : (message.task || message.message || '')
 
     return (
       <div className="chat-bubble assistant">
@@ -885,7 +1195,9 @@ function TaskDetail() {
 
   // 聊天气泡组件
   const ChatBubble = ({ message }) => {
-    const isUser = message.role === 'user'
+    // 从后端数据结构中提取 role 和 content
+    const isUser = message.metadata?.data?.sender === 'user' || message.role === 'user'
+    const content = message.content || message.metadata?.data?.message || message.task || ''
 
     // 用户消息显示用户图标，助手消息显示机器人图标
     const getAvatar = () => {
@@ -917,7 +1229,7 @@ function TaskDetail() {
           <div className="chat-message-header">
             <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
           </div>
-          <div className="chat-message">{message.content}</div>
+          <div className="chat-message">{content}</div>
         </div>
       </div>
     )
@@ -1023,9 +1335,6 @@ function TaskDetail() {
     setRetrying(true)
     try {
       await tasksAPI.retryTask(task.taskId)
-
-      // 重置完成标记，以便新的任务执行完成时可以再次触发自动获取
-      completedFetchedRef.current = false
 
       // 重试成功，显示提示并保持当前页面状态
       alert('任务重试已启动，页面将自动更新')
@@ -1201,13 +1510,13 @@ function TaskDetail() {
           <div className="progress-stream">
             <div className="progress-stream-header">
               <h3>任务执行进度</h3>
-              <span className="stream-count">{messages.length + chatMessages.length} 条消息</span>
+              <span className="stream-count">{messages.length} 条消息</span>
             </div>
             <div className="progress-stream-content">
               {/* 统一的消息列表：进度流 + 聊天（使用分组） */}
               {(() => {
-                // 合并所有消息并按时间排序
-                const allMessages = [...messages, ...chatMessages].sort((a, b) =>
+                // 按时间排序所有消息
+                const allMessages = [...messages].sort((a, b) =>
                   new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                 )
 

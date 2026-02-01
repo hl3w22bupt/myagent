@@ -90,6 +90,6 @@ describe('ContextManager', () => {
 
     // 应该提取到文件artifact
     expect(artifacts.length).toBeGreaterThan(0);
-    expect(artifacts.some(a => a.artifactType === 'file')).toBe(true);
+    expect(artifacts.some((a: any) => a.artifactType === 'file')).toBe(true);
   });
 });
