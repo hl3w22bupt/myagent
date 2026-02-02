@@ -46,6 +46,7 @@ export interface PostgresDataStoreConfig {
 export class PostgresDataStore implements Database {
   private pool: Pool;
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor(config: PostgresDataStoreConfig = {}) {
     // Use connection string or individual parameters
@@ -73,8 +74,28 @@ export class PostgresDataStore implements Database {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    // If already initialized, return immediately
+    if (this.initialized) {
+      return;
+    }
 
+    // If initialization is in progress, wait for it
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    // Start initialization
+    this.initPromise = this.doInitialize();
+
+    try {
+      await this.initPromise;
+      this.initialized = true;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  private async doInitialize(): Promise<void> {
     console.log('[PostgresDataStore] Initializing PostgreSQL connection...');
 
     try {
@@ -86,7 +107,6 @@ export class PostgresDataStore implements Database {
       // Initialize schema
       await this.initSchema();
 
-      this.initialized = true;
       console.log('[PostgresDataStore] Initialized successfully');
     } catch (error: any) {
       console.error('[PostgresDataStore] Failed to initialize:', error);
@@ -105,8 +125,21 @@ export class PostgresDataStore implements Database {
     try {
       await client.query('BEGIN');
 
+      // Helper function to execute query and ignore "already exists" errors
+      const safeQuery = async (query: string) => {
+        try {
+          await client.query(query);
+        } catch (error: any) {
+          // Ignore errors if the object already exists
+          if (!error.message.includes('already exists') &&
+              !error.message.includes('duplicate key')) {
+            throw error;
+          }
+        }
+      };
+
       // Tasks table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS tasks (
           id TEXT PRIMARY KEY,
           task TEXT NOT NULL,
@@ -125,12 +158,12 @@ export class PostgresDataStore implements Database {
       `);
 
       // Indexes
-      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)');
-      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)');
-      await client.query('CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)');
 
       // Task contexts table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS task_contexts (
           task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
           session_id TEXT NOT NULL,
@@ -144,7 +177,7 @@ export class PostgresDataStore implements Database {
       `);
 
       // Messages table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS messages (
           id TEXT PRIMARY KEY,
           task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
@@ -156,10 +189,10 @@ export class PostgresDataStore implements Database {
         )
       `);
 
-      await client.query('CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id)');
 
       // Artifacts table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS artifacts (
           id TEXT PRIMARY KEY,
           task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
@@ -172,10 +205,10 @@ export class PostgresDataStore implements Database {
         )
       `);
 
-      await client.query('CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id)');
 
       // Compression history table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS compression_history (
           id TEXT PRIMARY KEY,
           task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
@@ -188,10 +221,10 @@ export class PostgresDataStore implements Database {
         )
       `);
 
-      await client.query('CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)');
 
       // Sessions table
-      await client.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS sessions (
           session_id TEXT PRIMARY KEY,
           created_at BIGINT NOT NULL,
@@ -200,7 +233,7 @@ export class PostgresDataStore implements Database {
         )
       `);
 
-      await client.query('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
 
       await client.query('COMMIT');
       console.log('[PostgresDataStore] Schema initialized');

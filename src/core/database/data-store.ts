@@ -924,11 +924,12 @@ export function getDataStore(dbPath?: string): any {
     if (!(global as any)[globalKey]) {
       console.log('[getDataStore] Creating PostgreSQL database instance');
       const instance = new PostgresDataStore();
-      // Initialize asynchronously in background
+      // Store instance BEFORE initializing to prevent race conditions
+      (global as any)[globalKey] = instance;
+      // Initialize synchronously (wait for it to complete)
       instance.initialize().catch(err => {
         console.error('[getDataStore] Failed to initialize PostgreSQL:', err);
       });
-      (global as any)[globalKey] = instance;
     } else {
       console.log('[getDataStore] Reusing PostgreSQL database instance');
     }

@@ -6,12 +6,14 @@ describe('DataStore', () => {
   let dataStore: ReturnType<typeof getDataStore>;
 
   beforeAll(async () => {
-    dataStore = getDataStore(':memory:');
+    // Don't pass :memory: for PostgreSQL - it will use the configured database
+    dataStore = getDataStore();
+    // Database is already initialized in jest.setup.ts
     await dataStore.initialize();
   });
 
   afterAll(async () => {
-    await dataStore.close();
+    // Don't close here - jest.setup.ts will handle cleanup
   });
 
   it('should create a task context with all required fields', async () => {
