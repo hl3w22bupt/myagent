@@ -6,6 +6,7 @@
  * - State management (Agent maintains conversation history, variables)
  * - Concurrent safety (different sessions are completely isolated)
  * - Automatic cleanup (expired sessions are removed)
+ * - Agent Hooks (lifecycle hooks for monitoring, state sync, progress notifications)
  *
  * This is NOT tied to Motia - can be used in any framework.
  */
@@ -13,6 +14,7 @@
 import { Agent } from './agent';
 import { MasterAgent } from './master-agent';
 import { AgentConfig, MasterAgentConfig } from './types';
+import { AgentHookManager } from './hooks/manager';
 
 /**
  * Configuration for AgentManager.
@@ -53,6 +55,7 @@ export interface AcquireOptions {
  * Automatically handles:
  * - Session expiration and cleanup
  * - Session limit enforcement (evicts oldest when full)
+ * - Agent Hook execution during lifecycle events
  */
 export class AgentManager {
   private sessions: Map<string, Agent | MasterAgent> = new Map();
@@ -60,14 +63,45 @@ export class AgentManager {
   private lastActivity: Map<string, number> = new Map();
   private config: AgentManagerConfig;
   private cleanupTimer?: NodeJS.Timeout;
+  private hookManager: AgentHookManager;
 
   constructor(config: AgentManagerConfig) {
     this.config = config;
+    this.hookManager = new AgentHookManager();
 
     // Periodic cleanup of expired sessions (every minute)
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpiredSessions();
     }, 60000);
+  }
+
+  /**
+   * Get the Agent Hook Manager.
+   *
+   * Use this to register hooks for Agent lifecycle events.
+   *
+   * @returns AgentHookManager instance
+   */
+  getHookManager(): AgentHookManager {
+    return this.hookManager;
+  }
+
+  /**
+   * Register an Agent Hook.
+   *
+   * @param hook - Hook instance to register
+   */
+  registerHook(hook: any): void {
+    this.hookManager.register(hook);
+  }
+
+  /**
+   * Unregister an Agent Hook.
+   *
+   * @param hook - Hook instance to unregister
+   */
+  unregisterHook(hook: any): void {
+    this.hookManager.unregister(hook);
   }
 
   /**
@@ -88,6 +122,10 @@ export class AgentManager {
     if (this.sessions.has(sessionId)) {
       const agent = this.sessions.get(sessionId)!;
       this.lastActivity.set(sessionId, Date.now());
+
+      // Execute onAgentAcquire hook (for reused Agent)
+      await this.hookManager.executeHook('onAgentAcquire', agent, sessionId);
+
       return agent;
     }
 
@@ -96,6 +134,27 @@ export class AgentManager {
       options?.agentType ||
       this.config.defaultAgentType ||
       'agent';
+
+    // Determine config to use
+    const config = agentType === 'master'
+      ? this.config.masterAgentConfig!
+      : this.config.agentConfig;
+
+    // Execute onAgentCreate hook
+    const createResult = await this.hookManager.executeHook<
+      { abort?: boolean; reason?: string } | undefined
+    >(
+      'onAgentCreate',
+      config,
+      sessionId
+    );
+
+    // Check if hook wants to abort creation
+    if (createResult?.abort) {
+      throw new Error(
+        `Agent creation aborted by hook: ${createResult.reason || 'Unknown reason'}`
+      );
+    }
 
     // Create new Agent or MasterAgent
     let agent: Agent | MasterAgent;
@@ -118,6 +177,9 @@ export class AgentManager {
     this.sessionTypes.set(sessionId, agentType);
     this.lastActivity.set(sessionId, Date.now());
 
+    // Execute onAgentAcquire hook (for new Agent)
+    await this.hookManager.executeHook('onAgentAcquire', agent, sessionId);
+
     // Enforce session limit
     if (this.sessions.size > this.config.maxSessions) {
       await this.evictOldestSession();
@@ -136,6 +198,10 @@ export class AgentManager {
       const agent = this.sessions.get(sessionId)!;
 
       try {
+        // Execute onAgentDestroy hook before cleanup
+        await this.hookManager.executeHook('onAgentDestroy', sessionId);
+
+        // Cleanup Agent
         await agent.cleanup();
       } catch (error) {
         console.error(`Error cleaning up session ${sessionId}:`, error);
@@ -199,6 +265,7 @@ export class AgentManager {
     // Stop cleanup timer
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
     }
 
     // Release all sessions

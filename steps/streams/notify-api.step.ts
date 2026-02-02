@@ -33,10 +33,32 @@ export const handler = async (request: any, { logger, streams }: any) => {
     // Send to Motia Stream
     // CRITICAL: Data must match taskExecutionSchema
     // IMPORTANT: Parameter order is (groupId, id, data) NOT (id, groupId, data)
+
+    // 过滤消息内容，只保留用户友好的信息
+    let displayMessage = data.message || `Skill execution (${data.type})`;
+
+    // 对于 step 类型的通知（skill执行日志），过滤掉DEBUG日志
+    if (data.type === 'step' && data.message) {
+      // 过滤掉以 [DEBUG] 开头的行
+      const lines = data.message.split('\n');
+      const filteredLines = lines.filter(line => !line.trim().startsWith('[DEBUG]'));
+
+      // 如果过滤后有内容，使用过滤后的内容；否则使用默认描述
+      if (filteredLines.length > 0 && filteredLines.some(line => line.trim())) {
+        displayMessage = filteredLines.join('\n').trim();
+      } else {
+        // 全是DEBUG日志，使用简洁的skill名称
+        displayMessage = data.skill ? `执行 ${data.skill}` : '执行技能';
+      }
+    }
+
     await streams.taskExecution.set(data.taskId, uniqueId, {
       taskId: data.taskId,
-      task: data.message || `Skill execution (${data.type})`,
-      status: stage === 'post' ? 'running' : 'running',
+      task: displayMessage,
+      // FIX: Send 'completed' status when post hook finishes successfully
+      // This allows frontend to detect task completion and refresh automatically
+      status: (stage === 'post' && data.data?.success === true) ? 'completed' :
+              (stage === 'post' && data.data?.success === false) ? 'failed' : 'running',
       sessionId: request.body?.sessionId || '',
       timestamp: new Date(data.timestamp * 1000).toISOString(),
       type: 'skill',

@@ -268,10 +268,19 @@ export class Agent {
           try {
             console.log(`[Agent] PTC generation attempt ${attempt}/${maxPtcRetries}`);
 
-            const result = await this.ptcGenerator.generateWithResult(task, {
+            // Build options for PTC generator
+            const ptcOptions: any = {
               history: this.state.conversationHistory,
               variables: Object.fromEntries(this.state.variables),
-            });
+            };
+
+            // If context contains originalTask (from MasterAgent), pass it directly
+            // This ensures PTC code generator respects the original user request
+            if (context && context.originalTask) {
+              ptcOptions.originalTask = context.originalTask;
+            }
+
+            const result = await this.ptcGenerator.generateWithResult(task, ptcOptions);
 
             console.log('[Agent] PTC code generated', {
               codeLength: result.code.length,
@@ -364,7 +373,7 @@ export class Agent {
             skills: ptcResult.selectedSkills || [],
             skillImplPath: process.cwd(),
             sessionId: this.sessionId,
-            timeout: this.config.constraints?.timeout || 60000,
+            timeout: this.config.constraints?.timeout || 600000, // 10 minutes default for video generation
             metadata: {
               traceId: this.sessionId,
               task,
@@ -380,7 +389,7 @@ export class Agent {
               skills: ptcResult.selectedSkills || [],
               skillImplPath: process.cwd(),
               sessionId: this.sessionId,
-              timeout: this.config.constraints?.timeout || 60000,
+              timeout: this.config.constraints?.timeout || 600000, // 10 minutes default for video generation
               metadata: {
                 traceId: this.sessionId,
                 task,
@@ -400,13 +409,31 @@ export class Agent {
           },
           {
             ...retryConfig,
-            isRetryable: retryConfig.isRetryable || isDefaultRetryableError,
+            // Custom retry logic for LLM-generated code:
+            // Retry SyntaxErrors because LLM has randomness - second attempt may succeed
+            isRetryable: retryConfig.isRetryable || ((error: Error) => {
+              const message = error.message.toLowerCase();
+
+              // Always retry sandbox execution errors for LLM-generated code
+              // LLM has randomness, so syntax errors may be temporary
+              if (message.includes('sandbox') || message.includes('execution')) {
+                return true;
+              }
+
+              // Retry syntax errors in generated code (LLM randomness)
+              if (message.includes('syntax error')) {
+                return true;
+              }
+
+              // Use default retry logic for other errors
+              return isDefaultRetryableError(error);
+            }),
             onRetry: (attempt, error, delay) => {
               console.log('[Agent] Retrying sandbox execution', {
                 attempt,
                 error: error.message,
                 delay,
-                maxRetries: retryConfig.maxRetries,
+                maxRetries: retryConfig?.maxRetries || 3,
               });
               steps.push({
                 type: 'execution',

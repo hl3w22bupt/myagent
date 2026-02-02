@@ -137,7 +137,7 @@ export const config: EventConfig = {
   subscribes: ['agent.task.completed', 'agent.task.failed'],
 
   /**
-   * Optionally emit analytics events.
+   * No events emitted (direct database access).
    */
   emits: [],
 
@@ -273,7 +273,23 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const sessionId = input.sessionId;
 
   // Parse unified format result from output FIRST (before database update)
+  logger.info('Parsing unified format result from task output', {
+    taskId,
+    hasOutput: !!normalizedResult.output,
+    outputLength: normalizedResult.output?.length || 0,
+    outputPreview: normalizedResult.output?.substring(0, 150) || 'no output',
+  });
+
   const structuredResult = parseUnifiedResult(normalizedResult.output);
+
+  logger.info('[🔍 DIAGNOSIS] Unified format result parsed', {
+    taskId,
+    hasStructuredResult: !!structuredResult,
+    resultType: structuredResult?.result_type,
+    hasContent: !!structuredResult?.content,
+    success: structuredResult?.success,
+    contentKeys: structuredResult?.content ? Object.keys(structuredResult.content) : [],
+  });
 
   // Override success status if unified format result has a success field
   // This is important for skills like remotion-generator that return error results
@@ -307,20 +323,267 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       const store = getDataStore();
       const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
 
-      await store.updateTask(taskId, {
-        status: finalStatus,
-        output: normalizedResult.output,
-        error: normalizedResult.error,
-        executionTime: normalizedResult.executionTime,
-        metadata: normalizedResult.metadata,
-        completedAt: new Date(),
+      // Check if this is a video output and save to artifacts
+      logger.info('[🔍 DIAGNOSIS] Checking for unified format video', {
+        taskId,
+        resultType: structuredResult?.result_type,
+        hasContent: !!structuredResult?.content,
       });
 
-      logger.info('Task record updated in database', {
+      if (structuredResult?.result_type === 'video' && structuredResult.content) {
+        const content = structuredResult.content as any;
+        let videoUrl = content.videoUrl || content.url || content.path;
+
+        logger.info('[🔍 DIAGNOSIS] ✅ Found unified format video', {
+          taskId,
+          videoUrl,
+          contentFields: Object.keys(content),
+        });
+
+        if (videoUrl) {
+          // Normalize the path: ensure it's a relative path without leading slash
+          // and includes videos/ prefix if it's a local file
+          const originalVideoUrl = videoUrl;
+          if (videoUrl.startsWith('/')) {
+            videoUrl = videoUrl.substring(1); // Remove leading slash
+          }
+          if (!videoUrl.startsWith('videos/') && !videoUrl.startsWith('outputs/')) {
+            videoUrl = 'videos/' + videoUrl; // Add videos/ prefix
+          }
+
+          logger.info('[🔍 DIAGNOSIS] Saving video artifact from unified format', {
+            taskId,
+            originalUrl: originalVideoUrl,
+            normalizedUrl: videoUrl,
+          });
+
+          await store.addArtifact({
+            taskId,
+            artifactType: 'video',
+            action: 'generated',
+            path: videoUrl,
+            description: content.description || `Video generated: ${task.substring(0, 50)}...`,
+            timestamp: new Date(),
+          });
+
+          logger.info('[🔍 DIAGNOSIS] ✅ Video artifact saved (unified format)', {
+            taskId,
+            videoUrl,
+          });
+        } else {
+          logger.warn('[🔍 DIAGNOSIS] ⚠️ Video result has no URL', {
+            taskId,
+            content: JSON.stringify(content).substring(0, 200),
+          });
+        }
+      } else {
+        logger.info('[🔍 DIAGNOSIS] No unified format video found', {
+          taskId,
+          resultType: structuredResult?.result_type,
+        });
+      }
+
+      // Also check if output contains video paths (for skills that don't use unified format)
+      // This handles cases where the skill returns plain text with embedded video paths
+      logger.info('[🔍 DIAGNOSIS] Checking output string for video paths', {
         taskId,
-        status: finalStatus,
-        success: normalizedResult.success,
+        hasOutput: !!normalizedResult.output,
+        outputType: typeof normalizedResult.output,
+        outputLength: normalizedResult.output?.length || 0,
       });
+
+      if (normalizedResult.output && typeof normalizedResult.output === 'string') {
+        // Find all unique video paths using regex
+        const videoPattern = /videos\/[\w-]+_video_(\d+)\.mp4/g;
+        let match;
+        const uniquePaths = new Map<string, number>(); // path -> number
+        let matchCount = 0;
+
+        logger.info('[🔍 DIAGNOSIS] Executing regex to find video paths', {
+          taskId,
+          pattern: videoPattern.source,
+          outputLength: normalizedResult.output.length,
+        });
+
+        while ((match = videoPattern.exec(normalizedResult.output)) !== null) {
+          matchCount++;
+          const path = match[0];
+          const number = parseInt(match[1], 10); // match[1] 是第一个捕获组
+          // 使用 Map 自动去重，保留唯一的路径
+          uniquePaths.set(path, number);
+
+          logger.info('[🔍 DIAGNOSIS] ✅ Found video path', {
+            taskId,
+            matchNumber: matchCount,
+            videoPath: path,
+            videoNumber: number,
+            matchIndex: match.index,
+          });
+        }
+
+        logger.info('[🔍 DIAGNOSIS] Regex matching completed', {
+          taskId,
+          totalMatches: matchCount,
+          uniquePaths: uniquePaths.size,
+          paths: Array.from(uniquePaths.entries()),
+        });
+
+        if (uniquePaths.size > 0) {
+          logger.info(`[🔍 DIAGNOSIS] Found ${uniquePaths.size} video paths, saving artifacts`, {
+            taskId,
+            paths: Array.from(uniquePaths.keys()),
+          });
+
+          for (const [videoPath, videoNumber] of uniquePaths.entries()) {
+            try {
+              logger.info('[🔍 DIAGNOSIS] Saving video artifact', {
+                taskId,
+                videoPath,
+                videoNumber,
+              });
+
+              // 只在任务描述超过50个字符时才添加省略号
+              const taskDesc = task.length > 50 ? `${task.substring(0, 50)}...` : task;
+
+              await store.addArtifact({
+                taskId,
+                artifactType: 'video',
+                action: 'generated',
+                path: videoPath,
+                description: `Video ${videoNumber}: ${taskDesc}`,
+                timestamp: new Date(),
+              });
+
+              logger.info('[🔍 DIAGNOSIS] ✅ Video artifact saved', {
+                taskId,
+                videoPath,
+                videoNumber,
+              });
+            } catch (error: any) {
+              logger.error('[🔍 DIAGNOSIS] ❌ Failed to save artifact', {
+                taskId,
+                videoPath,
+                error: error.message,
+                stack: error.stack,
+              });
+            }
+          }
+        } else {
+          logger.warn('[🔍 DIAGNOSIS] ⚠️ No video paths found in output', {
+            taskId,
+            outputPreview: normalizedResult.output.substring(0, 500),
+          });
+        }
+      } else {
+        logger.warn('[🔍 DIAGNOSIS] ⚠️ Output not a string', {
+          taskId,
+          outputType: typeof normalizedResult.output,
+        });
+      }
+
+      // Check if this is a multi-turn continuation (task already completed)
+      const currentTask = await store.getTask(taskId);
+
+      logger.info('[🔍 DIAGNOSIS] Current task from database', {
+        taskId,
+        hasCurrentTask: !!currentTask,
+        currentStatus: currentTask?.status,
+        currentOutputLength: currentTask?.output?.length || 0,
+      });
+
+      const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;
+
+      logger.info('[🔍 DIAGNOSIS] Multi-turn check', {
+        taskId,
+        isMultiTurnContinuation,
+        currentStatus: currentTask?.status,
+        finalStatus,
+        willUpdateOutput: !isMultiTurnContinuation,
+        explanation: isMultiTurnContinuation
+          ? 'Multi-turn: NOT updating output (preserving first round)'
+          : 'First round: updating all fields including output',
+      });
+
+      if (isMultiTurnContinuation) {
+        // Multi-turn continuation: don't overwrite output field
+        // This preserves the first round's text output while adding video artifacts
+        logger.info('[🔍 DIAGNOSIS] Multi-turn: updating (preserving output)', {
+          taskId,
+          updatingFields: ['status', 'executionTime', 'metadata', 'completedAt'],
+          preservingFields: ['output'],
+        });
+
+        await store.updateTask(taskId, {
+          // CRITICAL: Always set status to completed after successful execution
+          // This ensures the task status is correct even in multi-turn conversations
+          status: finalStatus,
+          // Don't update output - preserve first round's output
+          executionTime: (currentTask.executionTime || 0) + (normalizedResult.executionTime || 0),
+          // Merge metadata to preserve outputHistory from output-history-tracker
+          // Use currentTask metadata which may have been updated by other steps
+          metadata: {
+            ...(currentTask.metadata || {}),
+            ...normalizedResult.metadata,
+          },
+          completedAt: new Date(),
+        });
+
+        logger.info('[🔍 DIAGNOSIS] ✅ Multi-turn update completed', {
+          taskId,
+          finalStatus,
+          preservedOutputPreview: currentTask.output?.substring(0, 50),
+        });
+      } else {
+        // First round or new task: update normally
+        logger.info('[🔍 DIAGNOSIS] First round: updating all fields', {
+          taskId,
+          finalStatus,
+          outputLength: normalizedResult.output?.length || 0,
+          outputPreview: normalizedResult.output?.substring(0, 100),
+        });
+
+        // RELOAD task to get latest metadata (may have been updated by output-history-tracker)
+        // Retry up to 3 times with short delay to handle concurrent updates
+        let latestTask = await store.getTask(taskId);
+        let retryCount = 0;
+
+        while (retryCount < 3 && !latestTask?.metadata?.outputHistory) {
+          logger.info(`Retrying to get latest metadata (${retryCount + 1}/3)...`);
+          await new Promise(resolve => setTimeout(resolve, 50)); // Wait 50ms
+          latestTask = await store.getTask(taskId);
+          retryCount++;
+        }
+
+        await store.updateTask(taskId, {
+          status: finalStatus,
+          output: normalizedResult.output,
+          error: normalizedResult.error,
+          executionTime: normalizedResult.executionTime,
+          // Merge metadata to preserve outputHistory from output-history-tracker
+          // Use latestTask metadata which may have been updated by other steps
+          metadata: {
+            ...(latestTask?.metadata || {}),
+            ...normalizedResult.metadata,
+          },
+          completedAt: new Date(),
+        });
+
+        logger.info('Task record updated in database', {
+          taskId,
+          finalStatus,
+          hasOutputHistory: !!(latestTask?.metadata?.outputHistory),
+          retries: retryCount,
+        });
+
+        // Verify update
+        const updatedTask = await store.getTask(taskId);
+        logger.info('Task record updated in database - verification', {
+          taskId,
+          requestedStatus: finalStatus,
+          actualStatus: updatedTask?.status,
+          updateSuccess: updatedTask?.status === finalStatus,
+        });
+      }
     } catch (error: any) {
       logger.warn('Failed to update task record in database', {
         error: error.message,

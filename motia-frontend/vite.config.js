@@ -9,16 +9,19 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/agent': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3000',
         changeOrigin: true,
+        rewrite: (path) => path,
       },
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3000',
         changeOrigin: true,
+        rewrite: (path) => path,
       },
       '/media': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3000',
         changeOrigin: true,
+        rewrite: (path) => path,
       },
     },
   },

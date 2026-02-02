@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import type { ArtifactIndex } from '../../src/core/database/context-types';
 
 /**
  * Query parameters schema for single result API.
@@ -89,6 +90,9 @@ export const handler = async (request: any, { logger }: any) => {
       };
     }
 
+    // Get artifacts for this task
+    const artifacts = await unifiedStore.getArtifacts(id);
+
     // Map database task to API response format
     const success = task.status === 'completed';
 
@@ -116,6 +120,17 @@ export const handler = async (request: any, { logger }: any) => {
           metadata: task.metadata,
           sessionId: task.sessionId,
           timestamp: safeToISOString(task.createdAt) || new Date().toISOString(),
+          // Include artifacts array
+          artifacts: artifacts.map((artifact: ArtifactIndex) => ({
+            id: artifact.id,
+            type: artifact.artifactType,
+            action: artifact.action,
+            path: artifact.path,
+            description: artifact.description,
+            timestamp: artifact.timestamp instanceof Date
+              ? artifact.timestamp.toISOString()
+              : new Date(artifact.timestamp).toISOString(),
+          })),
         },
       },
     };

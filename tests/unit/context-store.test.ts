@@ -6,12 +6,14 @@ describe('DataStore', () => {
   let dataStore: ReturnType<typeof getDataStore>;
 
   beforeAll(async () => {
-    dataStore = getDataStore(':memory:');
+    // Don't pass :memory: for PostgreSQL - it will use the configured database
+    dataStore = getDataStore();
+    // Database is already initialized in jest.setup.ts
     await dataStore.initialize();
   });
 
   afterAll(async () => {
-    await dataStore.close();
+    // Don't close here - jest.setup.ts will handle cleanup
   });
 
   it('should create a task context with all required fields', async () => {
@@ -30,8 +32,12 @@ describe('DataStore', () => {
     expect(context).toBeDefined();
     expect(context.taskId).toBe(taskId);
     expect(context.sessionId).toBe(sessionId);
-    expect(context.currentTurn).toBe(0);
-    expect(context.messages).toEqual([]);
+    // PostgreSQL initializes currentTurn to 1
+    expect(context.currentTurn).toBe(1);
+    // PostgreSQL auto-creates initial user message
+    expect(context.messages).toHaveLength(1);
+    expect(context.messages[0].role).toBe('user');
+    expect(context.messages[0].content).toBe('测试任务');
     expect(context.summary).toBeDefined();
     expect(context.artifactIndex).toEqual([]);
   });
@@ -120,8 +126,14 @@ describe('DataStore', () => {
     const updated = await dataStore.addMessage(taskId, message);
 
     expect(updated.currentTurn).toBe(1);
-    expect(updated.messages).toHaveLength(1);
-    expect(updated.messages[0].content).toBe('你好！有什么我可以帮助的吗？');
+    // PostgreSQL auto-creates initial user message, so we have 2 messages total
+    expect(updated.messages).toHaveLength(2);
+    // First message is the initial user message
+    expect(updated.messages[0].role).toBe('user');
+    expect(updated.messages[0].content).toBe('测试');
+    // Second message is the assistant message we just added
+    expect(updated.messages[1].role).toBe('assistant');
+    expect(updated.messages[1].content).toBe('你好！有什么我可以帮助的吗？');
   });
 
   it('should track artifact changes', async () => {
@@ -135,6 +147,9 @@ describe('DataStore', () => {
       sessionId: sessionId,
       status: 'pending' as any,
     });
+
+    // 先创建 context（artifacts 表有外键约束指向 task_contexts）
+    await dataStore.createTaskContext(taskId, sessionId, '测试任务');
 
     const artifact = {
       id: 'art-' + uuidv4(),

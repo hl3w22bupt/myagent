@@ -6,6 +6,11 @@
 
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
+import { getDataStore } from '../../src/core/database/data-store';
+
+// 防重复请求存储，存储最近处理过的请求ID
+const processedRequests = new Map<string, number>();
+const DUPLICATE_REQUEST_WINDOW = 5000; // 5秒内防止重复请求
 
 /**
  * Task Chat API Step configuration.
@@ -22,9 +27,9 @@ export const config: ApiRouteConfig = {
   method: 'POST',
 
   /**
-   * No events emitted.
+   * Emit agent.task.execute event to trigger new execution round.
    */
-  emits: [],
+  emits: ['agent.task.execute'],
 
   /**
    * Virtual connections.
@@ -52,8 +57,46 @@ export const inputSchema = _z.object({
  *
  * Handles sending chat messages to a specific task.
  */
-export const handler = async (request: any, { logger, streams }: any) => {
+export const handler = async (request: any, { logger, streams, emit }: any) => {
   logger.info('Task Chat API: Received request', { request });
+
+  // 生成请求唯一标识符（基于taskId、message内容和sessionId）
+  const requestId = `${request.pathParams?.id || request.params?.id}_${request.body?.sessionId}_${request.body?.message}`;
+  const now = Date.now();
+
+  // 检查是否在防重复请求窗口内
+  if (processedRequests.has(requestId)) {
+    const lastProcessedTime = processedRequests.get(requestId)!;
+    if (now - lastProcessedTime < DUPLICATE_REQUEST_WINDOW) {
+      logger.warn('Task Chat API: Duplicate request detected', {
+        taskId: request.pathParams?.id || request.params?.id,
+        message: request.body?.message,
+        sessionId: request.body?.sessionId,
+        lastProcessedTime: new Date(lastProcessedTime).toISOString()
+      });
+      return {
+        status: 429, // 429 Too Many Requests
+        body: {
+          success: false,
+          message: 'Too many requests, please try again later'
+        }
+      };
+    }
+  }
+
+  // 立即存储请求处理时间，防止并发请求
+  processedRequests.set(requestId, now);
+
+  // 清理过期的请求记录
+  const keysToDelete: string[] = [];
+  for (const [key, timestamp] of processedRequests.entries()) {
+    if (now - timestamp > DUPLICATE_REQUEST_WINDOW) {
+      keysToDelete.push(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    processedRequests.delete(key);
+  }
 
   try {
     // Get task ID from path parameters
@@ -124,6 +167,36 @@ export const handler = async (request: any, { logger, streams }: any) => {
       };
     }
 
+    // 获取或生成 sessionId
+    let sessionId = request.body?.sessionId;
+
+    // 如果前端没有提供 sessionId，从数据库中获取任务信息
+    if (!sessionId) {
+      try {
+        const dataStore = getDataStore();
+        await dataStore.initialize(); // 确保 DataStore 已初始化
+        const taskResult = await dataStore.getTask(taskId);
+
+        if (taskResult && taskResult.sessionId) {
+          sessionId = taskResult.sessionId;
+          logger.info('Task Chat API: Retrieved sessionId from database', {
+            taskId,
+            sessionId
+          });
+        } else {
+          logger.warn('Task Chat API: No sessionId found in database', {
+            taskId,
+            hasResult: !!taskResult
+          });
+        }
+      } catch (dbError: any) {
+        logger.error('Task Chat API: Failed to retrieve sessionId from database', {
+          taskId,
+          error: dbError.message
+        });
+      }
+    }
+
     // Send chat message to task execution stream
     const timestamp = Date.now();
     const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
@@ -131,7 +204,8 @@ export const handler = async (request: any, { logger, streams }: any) => {
     logger.info('Task Chat API: Attempting to send message to stream', {
       taskId,
       uniqueId,
-      message
+      message,
+      sessionId
     });
 
     try {
@@ -139,7 +213,7 @@ export const handler = async (request: any, { logger, streams }: any) => {
         taskId: taskId,
         task: message,
         status: 'running',
-        sessionId: request.body?.sessionId || '',
+        sessionId: sessionId || '',
         timestamp: new Date(timestamp).toISOString(),
         type: 'skill',
         skill: 'chat',
@@ -173,7 +247,21 @@ export const handler = async (request: any, { logger, streams }: any) => {
       };
     }
 
-    logger.info('Task Chat API: Message processing complete', { taskId, message });
+    logger.info('Task Chat API: Message processing complete', { taskId, message, sessionId });
+
+    // CRITICAL: Trigger new task execution round
+    // This ensures the conversation continues and output is updated
+    await emit({
+      topic: 'agent.task.execute',
+      data: {
+        task: message,
+        sessionId: sessionId || '',
+        taskId, // Use same taskId to update the same task record
+        continue: true, // Indicate this is a continuation
+      },
+    });
+
+    logger.info('Task Chat API: Task execution event emitted', { taskId, message });
 
     return {
       status: 200,

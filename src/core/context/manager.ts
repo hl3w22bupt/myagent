@@ -123,10 +123,12 @@ export class ContextManager {
    * 添加消息到上下文
    */
   async addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext> {
-    // 1. 获取当前上下文
-    const context = await this.store.getContext(taskId);
+    // 1. 获取当前上下文，如果不存在则创建一个新的
+    let context = await this.store.getContext(taskId);
     if (!context) {
-      throw new Error(`Task context not found: ${taskId}`);
+      console.warn(`[ContextManager] Context not found for task ${taskId}, creating new context`);
+      // 创建一个新的任务上下文（使用默认值）
+      context = await this.store.createTaskContext(taskId, message.metadata?.sessionId || 'default-session', '');
     }
 
     // 2. 添加消息
@@ -234,12 +236,12 @@ ${messages}
    */
   private formatSummary(summary: any): string {
     return `
-- Session Intent: ${summary.sessionIntent}
-- Current Task: ${summary.currentTask}
-- Status: ${summary.currentStatus}
-- Completed Steps: ${summary.completedSteps.join(', ')}
-- Files Modified: ${summary.filesModified.map((f: any) => `${f.action}: ${f.path}`).join(', ')}
-- Decisions: ${summary.decisionsMade.map((d: any) => d.topic).join(', ')}
+- Session Intent: ${summary.sessionIntent || '未定义'}
+- Current Task: ${summary.currentTask || '未定义'}
+- Status: ${summary.currentStatus || 'pending'}
+- Completed Steps: ${summary.completedSteps?.join(', ') || '无'}
+- Files Modified: ${summary.filesModified?.map((f: any) => `${f.action}: ${f.path}`).join(', ') || '无'}
+- Decisions: ${summary.decisionsMade?.map((d: any) => d.topic).join(', ') || '无'}
 `.trim();
   }
 

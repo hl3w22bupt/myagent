@@ -45,6 +45,7 @@ export interface Message {
     tokens?: number;
     llmCalls?: number;
     skillCalls?: string[];
+    sessionId?: string;
   };
   compressed?: boolean;
 }
@@ -91,8 +92,8 @@ export interface StructuredSummary {
 export interface ArtifactIndex {
   id: string;
   taskId: string;
-  artifactType: 'file' | 'function' | 'variable' | 'error';
-  action: 'created' | 'modified' | 'read' | 'deleted';
+  artifactType: 'file' | 'function' | 'variable' | 'error' | 'video';
+  action: 'created' | 'modified' | 'read' | 'deleted' | 'generated';
   path: string;
   description?: string;
   commitHash?: string;

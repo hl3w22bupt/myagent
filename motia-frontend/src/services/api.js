@@ -60,6 +60,14 @@ export const skillsAPI = {
   getSkillDetails: (id) => apiClient.get(`/api/skills/${id}`)
 }
 
+// 防重复请求存储
+const pendingRequests = new Set()
+
+// 生成请求唯一标识符
+const generateRequestKey = (taskId, message) => {
+  return `${taskId}_${message}`
+}
+
 // 子代理相关 API
 export const agentsAPI = {
   getAgents: () =>
@@ -67,8 +75,24 @@ export const agentsAPI = {
       ...response,
       data: response.data.agents || []
     })),
-  sendChatMessage: (taskId, message) =>
-    apiClient.post(`/api/tasks/${taskId}/chat`, { message })
+  sendChatMessage: (taskId, message, sessionId) => {
+    const requestKey = generateRequestKey(taskId, message)
+
+    // 检查是否有相同的请求正在处理中
+    if (pendingRequests.has(requestKey)) {
+      console.warn('重复请求被阻止:', requestKey)
+      return Promise.reject(new Error('请求正在处理中'))
+    }
+
+    // 添加到待处理请求集合
+    pendingRequests.add(requestKey)
+
+    return apiClient.post(`/api/tasks/${taskId}/chat`, { message, sessionId })
+      .finally(() => {
+        // 请求完成后移除
+        pendingRequests.delete(requestKey)
+      })
+  }
 }
 
 // 任务相关 API
@@ -82,7 +106,24 @@ export const tasksAPI = {
     })),
   getTaskDetails: (id) =>
     apiClient.get('/agent/result', { params: { id } }).then(response => response.data.result),
-  submitTask: (task) => apiClient.post('/agent/execute', { task }),
+  submitTask: (task, sessionId) => {
+    const requestKey = `submit_${task}_${sessionId}`
+
+    // 检查是否有相同的请求正在处理中
+    if (pendingRequests.has(requestKey)) {
+      console.warn('重复的 submitTask 请求被阻止:', requestKey)
+      return Promise.reject(new Error('任务正在提交中，请稍候'))
+    }
+
+    // 添加到待处理请求集合
+    pendingRequests.add(requestKey)
+
+    return apiClient.post('/agent/execute', { task, sessionId })
+      .finally(() => {
+        // 请求完成后移除
+        pendingRequests.delete(requestKey)
+      })
+  },
   deleteTask: (id) => {
     console.log('=== deleteTask 被调用 ===')
     console.log('删除任务 ID:', id)

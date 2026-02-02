@@ -406,15 +406,27 @@ class CodeValidator:
         css_animations = re.findall(r'animation\s*:', code, re.IGNORECASE)
 
         if css_transitions:
+            # Find example of transition usage for better error message
+            transition_examples = re.findall(r'style=\{\{[^}]*transition[^}]*\}\}', code, re.DOTALL)
+            example = transition_examples[0][:80] + "..." if transition_examples else "style={{ transition: ... }}"
+
             errors.append(
-                "[FORBIDDEN-1] CSS transitions detected. Use Remotion's interpolate() or spring() instead. "
-                f"Found {len(css_transitions)} transition(s)."
+                f"[FORBIDDEN-1] CSS transitions detected. "
+                f"Use Remotion's interpolate() instead. "
+                f"Found example: {example}\n"
+                f"✅ Correct: style={{ opacity: interpolate(frame, [0, 30], [0, 1]) }}"
             )
 
         if css_animations:
+            # Find example of animation usage
+            animation_examples = re.findall(r'style=\{\{[^}]*animation[^}]*\}\}', code, re.DOTALL)
+            example = animation_examples[0][:80] + "..." if animation_examples else "style={{ animation: ... }}"
+
             errors.append(
-                "[FORBIDDEN-1] CSS animations detected. Use Remotion's Sequence and frame-based animation instead. "
-                f"Found {len(css_animations)} animation(s)."
+                f"[FORBIDDEN-1] CSS animations detected. "
+                f"Use Remotion's Sequence and frame-based animation instead. "
+                f"Found example: {example}\n"
+                f"✅ Correct: Use spring() for organic animations or Sequence() for timing"
             )
 
         # Forbidden 2: Tailwind 动画类
@@ -422,15 +434,21 @@ class CodeValidator:
         tailwind_transition = re.findall(r'className=["\'][^"\']*transition-[^"\']*["\']', code)
 
         if tailwind_animate:
+            example = tailwind_animate[0] if tailwind_animate else 'className="animate-*"'
             errors.append(
-                "[FORBIDDEN-2] Tailwind animate- classes detected. Use Remotion's spring() for animations. "
-                f"Found {len(tailwind_animate)}."
+                f"[FORBIDDEN-2] Tailwind animate- classes detected. "
+                f"Use Remotion's spring() for animations. "
+                f"Found example: {example}\n"
+                f"✅ Correct: const scale = spring({{ frame, fps, config: {{ damping: 10 }} }});"
             )
 
         if tailwind_transition:
+            example = tailwind_transition[0] if tailwind_transition else 'className="transition-*"'
             errors.append(
-                "[FORBIDDEN-2] Tailwind transition- classes detected. Use interpolate() for smooth transitions. "
-                f"Found {len(tailwind_transition)}."
+                f"[FORBIDDEN-2] Tailwind transition- classes detected. "
+                f"Use interpolate() for smooth transitions. "
+                f"Found example: {example}\n"
+                f"✅ Correct: style={{ opacity: interpolate(frame, [0, 30], [0, 1]) }}"
             )
 
         # Forbidden 3: setTimeout/setInterval

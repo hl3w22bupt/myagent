@@ -25,7 +25,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
   private activeSessions: Map<string, ChildProcess>;
 
   constructor(config: LocalSandboxConfig = {}) {
-    this.pythonPath = config.pythonPath || 'python3';
+    // Default to venv python for dependency isolation
+    const venvPython = join(process.cwd(), 'python_modules', 'bin', 'python3');
+    this.pythonPath = config.pythonPath || (existsSync(venvPython) ? venvPython : 'python3');
     this.workspace = config.workspace || '/tmp/motia-sandbox';
     this.maxSessions = config.maxSessions || 10;
     this.activeSessions = new Map();
@@ -71,28 +73,17 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
         // Search up to 5 levels upward
         for (let i = 0; i < 5 && !foundSitePackages; i++) {
-          // Check both python3.11 and python3.13
-          const sitePackages11 = join(
-            searchPath,
-            'python_modules',
-            'lib',
-            'python3.11',
-            'site-packages'
-          );
-          const sitePackages13 = join(
-            searchPath,
-            'python_modules',
-            'lib',
-            'python3.13',
-            'site-packages'
+          // Check python3.11, python3.12, python3.13, and python3.14
+          const sitePackagesPaths = ['3.11', '3.12', '3.13', '3.14'].map(ver =>
+            join(searchPath, 'python_modules', 'lib', `python${ver}`, 'site-packages')
           );
 
-          if (existsSync(sitePackages11)) {
-            pythonPaths.push(sitePackages11);
-            foundSitePackages = true;
-          } else if (existsSync(sitePackages13)) {
-            pythonPaths.push(sitePackages13);
-            foundSitePackages = true;
+          for (const sitePackages of sitePackagesPaths) {
+            if (existsSync(sitePackages)) {
+              pythonPaths.push(sitePackages);
+              foundSitePackages = true;
+              break;
+            }
           }
 
           // Move up one directory
@@ -136,6 +127,29 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
       // Cleanup temporary script
       await unlink(scriptPath).catch(() => {});
+
+      // DEBUG: Log execution result details BEFORE deleting session
+      console.log('[Sandbox] Execution result:', {
+        sessionId,
+        exitCode: result.exitCode,
+        stdoutLength: result.stdout?.length || 0,
+        stderrLength: result.stderr?.length || 0,
+        hasStdout: !!result.stdout,
+        hasStderr: !!result.stderr,
+        stdoutPreview: result.stdout?.substring(0, 500),
+        stderrPreview: result.stderr?.substring(0, 500),
+      });
+
+      // If execution failed, log full stderr for debugging
+      if (result.exitCode !== 0) {
+        console.error('[Sandbox] Execution FAILED - Full stderr:', {
+          sessionId,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      }
+
       this.activeSessions.delete(sessionId);
 
       const executionTime = Date.now() - startTime;
@@ -331,6 +345,7 @@ from core.sandbox.retry_utils import execute_with_retry
 # Get notify API URL from environment (set by LocalSandboxAdapter)
 # This enables automatic hook registration for progress notifications
 notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
 executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 `;
 

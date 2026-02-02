@@ -24,6 +24,17 @@ import {
   MetricsCollectorTaskHook,
   TaskContext,
 } from '../../src/core/task/hooks/index';
+import { ContextManager } from '../../src/core/context/manager';
+import {
+  AgentMonitoringHook,
+} from '../../src/core/agent/hooks/monitoring';
+import {
+  AgentContextSyncHook,
+} from '../../src/core/agent/hooks/context-sync';
+import {
+  AgentProgressNotifyHook,
+  setAgentStreams,
+} from '../../src/core/agent/hooks/progress-notify';
 
 /**
  * Input schema for Master Agent step.
@@ -84,7 +95,7 @@ export const config: EventConfig = {
   type: 'event',
   name: 'master-agent',
   description: 'Master agent that orchestrates task execution using PTC',
-  subscribes: ['agent.task.execute'],
+  subscribes: ['agent.task.execute', 'agent.task.chat'],
   emits: ['agent.task.completed', 'agent.task.failed'],
   flows: ['agent-workflow'],
 };
@@ -99,9 +110,212 @@ export const config: EventConfig = {
  * - Maintains session state (no release in finally)
  */
 export const handler = async (
-  input: _z.infer<typeof inputSchema>,
+  input: any,
   { emit, logger, state: _state, streams: _streams }: any
 ) => {
+  // === 处理聊天消息 ===
+  // 检查是否有 message 字段来判断是否是聊天事件
+  // 注意：由于事件已经根据 subscribes 配置路由到这里，不需要检查 input.topic
+  // 对于聊天事件，Motia 会将 emit({ topic: 'agent.task.chat', data }) 中的 data 传递给 handler
+  const message = input.message || input.data?.message;
+
+  if (message) {
+    // 这是一个聊天事件
+    const taskId = input.taskId || input.data?.taskId;
+    const sessionId = input.sessionId || input.data?.sessionId;
+
+    logger.info('Master Agent: Processing chat message', {
+      taskId,
+      sessionId,
+      message: message.substring(0, 50),
+    });
+
+    // 如果没有sessionId，返回错误
+    if (!sessionId) {
+      logger.error('Chat message missing sessionId', { taskId });
+      return {
+        success: false,
+        error: 'Session ID is required for chat messages',
+      };
+    }
+
+    // === Agent Hook Setup ===
+    // Set streams for progress notifications
+    setAgentStreams(_streams);
+
+    // Get hook manager
+    const hookManager = agentManager.getHookManager();
+
+    try {
+      // 获取Agent实例
+      const agent = await agentManager.acquire(sessionId, {
+        agentType: 'master',
+      });
+
+      logger.info('Agent acquired for chat', {
+        sessionId,
+        agentType: agent.constructor.name,
+      });
+
+      // 获取上下文
+      const contextManager = new ContextManager();
+      const context = await contextManager.getContext(taskId);
+      const contextStr = await contextManager.getContextForLLM(taskId);
+
+      logger.info('Context loaded for chat', {
+        taskId,
+        hasContext: !!contextStr,
+        contextLength: contextStr?.length || 0,
+      });
+
+      // 构造聊天提示词
+      const chatPrompt = contextStr
+        ? `## Conversation History\n${contextStr}\n\n## User Message\n${message}`
+        : message;
+
+      // 触发Agent Hook: onTaskStart
+      await hookManager.executeHook(
+        'onTaskStart',
+        chatPrompt,
+        taskId,
+        context
+      );
+
+      // 执行Agent回复
+      logger.info('Agent starting chat response', { taskId, sessionId });
+      const result = await agent.run(chatPrompt, taskId, context);
+
+      logger.info('Agent chat response completed', {
+        taskId,
+        success: result.success,
+        hasOutput: !!result.output,
+      });
+
+      // 触发Agent Hook: onTaskComplete
+      await hookManager.executeHook(
+        'onTaskComplete',
+        result,
+        context
+      );
+
+      // 发送回复到Stream
+      const timestamp = Date.now();
+      const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
+
+      // 处理不同格式的输出
+      logger.info('处理Agent回复', {
+        taskId,
+        outputType: typeof result.output,
+        hasOutput: !!result.output,
+        outputPreview: result.output ? (typeof result.output === 'string' ? result.output.substring(0, 100) : JSON.stringify(result.output).substring(0, 100)) : 'undefined'
+      });
+
+      let rawContent = '抱歉，我没有生成回复。';
+      if (typeof result.output === 'string') {
+        // 如果 output 是字符串，直接使用
+        rawContent = result.output;
+      } else if (result.output?.text) {
+        rawContent = result.output.text;
+      } else if (result.output?.content) {
+        rawContent = result.output.content;
+      }
+
+      // 过滤掉DEBUG信息，只保留实际回复内容
+      let responseContent = rawContent
+        .split('\n')
+        .filter(line => {
+          // 过滤掉DEBUG信息
+          if (line.trim().startsWith('[DEBUG]')) return false;
+          // 过滤掉成功消息
+          if (line.trim().startsWith('success=True')) return false;
+          // 过滤掉SkillHookExecutor消息
+          if (line.includes('SkillHookExecutor')) return false;
+          // 过滤掉空行
+          if (line.trim() === '') return false;
+          return true;
+        })
+        .join('\n')
+        .trim();
+
+      // 如果过滤后内容为空，使用原始内容
+      if (!responseContent) {
+        responseContent = rawContent;
+      }
+
+      logger.info('提取的回复内容', {
+        taskId,
+        originalLength: rawContent.length,
+        filteredLength: responseContent.length,
+        contentPreview: responseContent.substring(0, 100)
+      });
+
+      await _streams.taskExecution.set(taskId, uniqueId, {
+        progressType: 'chat',
+        type: 'chat',
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date(timestamp).toISOString(),
+        metadata: {
+          data: {
+            message: responseContent,
+            sender: 'assistant'
+          }
+        }
+      });
+
+      logger.info('Chat response sent to stream', { taskId, uniqueId });
+
+      // 保存用户消息到上下文
+      await contextManager.addMessage(taskId, {
+        id: `msg-${Date.now()}-user`,
+        role: 'user',
+        content: message,
+        metadata: { timestamp: new Date() },
+      });
+
+      // 保存Agent回复到上下文
+      await contextManager.addMessage(taskId, {
+        id: `msg-${Date.now()}-assistant`,
+        role: 'assistant',
+        content: responseContent,
+        metadata: { timestamp: new Date() },
+      });
+
+      logger.info('Chat messages saved to context', { taskId });
+
+      return {
+        success: true,
+        taskId,
+        sessionId,
+        response: responseContent,
+      };
+    } catch (error: any) {
+      logger.error('Chat processing failed', {
+        error: error.message,
+        stack: error.stack,
+        taskId,
+        sessionId,
+      });
+
+      // 发送错误消息到Stream
+      const timestamp = Date.now();
+      const uniqueId = `${taskId}-chat-error-${timestamp}`;
+      await _streams.taskExecution.set(taskId, uniqueId, {
+        progressType: 'chat',
+        type: 'error',
+        role: 'assistant',
+        content: `抱歉，处理消息时出错: ${error.message}`,
+        timestamp: new Date(timestamp).toISOString(),
+      });
+
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  // === 处理正常任务执行（现有代码） ===
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
   const taskId = input.taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -112,12 +326,38 @@ export const handler = async (
     taskId,
   });
 
+  // === Agent Hook Setup ===
+  // Set streams for progress notifications
+  setAgentStreams(_streams);
+
+  // Register Agent hooks
+  const hookManager = agentManager.getHookManager();
+  if (hookManager.getHookCount() === 0) {
+    // Only register hooks once
+    hookManager.register(new AgentMonitoringHook({
+      logMetrics: true,
+      trackPerformance: true,
+    }));
+    hookManager.register(new AgentContextSyncHook({
+      persistAfterTask: true,
+      restoreOnAcquire: true,
+    }));
+    hookManager.register(new AgentProgressNotifyHook({
+      notifyOnAcquire: true,
+      notifyOnTaskStart: true,
+      notifyOnTaskComplete: true,
+    }));
+    logger.info('Agent hooks registered', {
+      hookCount: hookManager.getHookCount(),
+    });
+  }
+
   // === TaskHook Setup ===
-  const hookExecutor = new TaskHookExecutor();
-  hookExecutor.registerHook(new DefaultTaskHook());
-  hookExecutor.registerHook(new ContextManagerTaskHook());
-  hookExecutor.registerHook(new UserAllowTaskHook());
-  hookExecutor.registerHook(new MetricsCollectorTaskHook());
+  const taskHookExecutor = new TaskHookExecutor();
+  taskHookExecutor.registerHook(new DefaultTaskHook());
+  taskHookExecutor.registerHook(new ContextManagerTaskHook());
+  taskHookExecutor.registerHook(new UserAllowTaskHook());
+  taskHookExecutor.registerHook(new MetricsCollectorTaskHook());
 
   // Build TaskContext
   const taskContext: TaskContext = {
@@ -193,7 +433,7 @@ export const handler = async (
   try {
     // === Execute pre-hooks ===
     logger.info('Executing pre-execution hooks', { taskId });
-    const preResult = await hookExecutor.executePreHooks(taskContext);
+    const preResult = await taskHookExecutor.executePreHooks(taskContext);
 
     if (preResult.stop) {
       logger.warn('Task stopped by pre-hook', { taskId, reason: preResult.reason });
@@ -228,6 +468,7 @@ export const handler = async (
 
     // Get Agent or MasterAgent from Manager
     // each session has independent Agent/MasterAgent instance
+    // Hook: onAgentCreate and onAgentAcquire are called here
     const agent = await agentManager.acquire(sessionId, {
       agentType,
     });
@@ -260,12 +501,40 @@ export const handler = async (
     await updateStream('running', { currentStep: 'Executing task' });
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
 
-    // Update task status to RUNNING
-    await store.updateTask(taskId, { status: TaskStatus.RUNNING });
-    logger.info('Task status updated to RUNNING', { taskId });
+    // Update task status to RUNNING (only if not already completed)
+    // This prevents resetting status for multi-turn conversations
+    const currentTask = await store.getTask(taskId);
+    if (currentTask && currentTask.status !== 'completed') {
+      await store.updateTask(taskId, { status: TaskStatus.RUNNING });
+      logger.info('Task status updated to RUNNING', { taskId });
+    } else if (currentTask && currentTask.status === 'completed') {
+      logger.warn('Task already completed, not resetting status to RUNNING', { taskId });
+    }
+
+    // === 获取历史上下文 ===
+    const contextManager = new ContextManager();
+    const contextStr = await contextManager.getContextForLLM(taskId);
+
+    // 将上下文添加到任务描述中
+    const taskWithContext = contextStr
+      ? `## Conversation History\n${contextStr}\n\n## Current Task\n${taskContext.task}`
+      : taskContext.task;
+
+    if (contextStr) {
+      logger.info('Loaded conversation history for task', {
+        taskId,
+        contextLength: contextStr.length,
+      });
+    }
+
+    taskContext.task = taskWithContext; // 更新任务描述
+
+    // === Agent Hook: onTaskStart ===
+    await hookManager.executeHook('onTaskStart', taskContext.task, taskId, taskContext.context);
+    logger.info('Agent onTaskStart hook executed', { taskId });
 
     // === Start progressing hooks ===
-    hookExecutor.startProgressingHooks(taskContext);
+    taskHookExecutor.startProgressingHooks(taskContext);
     logger.info('Progressing hooks started', { taskId });
 
     const result = await agent.run(taskContext.task, taskId, taskContext.context);
@@ -278,13 +547,21 @@ export const handler = async (
     });
 
     // === Stop progressing hooks ===
-    hookExecutor.stopProgressingHooks();
+    taskHookExecutor.stopProgressingHooks();
     logger.info('Progressing hooks stopped', { taskId });
+
+    // === Agent Hook: onTaskComplete ===
+    await hookManager.executeHook('onTaskComplete', result, {
+      ...taskContext.context,
+      sessionId,
+      taskId,
+    });
+    logger.info('Agent onTaskComplete hook executed', { taskId });
 
     // === Execute post-hooks ===
     logger.info('Executing post-execution hooks', { taskId });
     taskContext.status = result.success ? 'completed' : 'failed';
-    await hookExecutor.executePostHooks(taskContext, {
+    await taskHookExecutor.executePostHooks(taskContext, {
       success: result.success,
       executionTime: result.executionTime,
       output: result.output,
@@ -336,11 +613,11 @@ export const handler = async (
     });
 
     // === Clean up hooks on error ===
-    hookExecutor.stopProgressingHooks();
+    taskHookExecutor.stopProgressingHooks();
     taskContext.status = 'failed';
 
     // Execute post-hooks even on failure
-    await hookExecutor.executePostHooks(taskContext, {
+    await taskHookExecutor.executePostHooks(taskContext, {
       success: false,
       error: error.message,
       executionTime: 0,

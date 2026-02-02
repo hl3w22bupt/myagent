@@ -33,9 +33,10 @@ print(f"1 + 1 = {x}")
         temp_path = f.name
 
     try:
-        # Execute
+        # Execute using project's Python interpreter
+        python_path = os.path.join(os.getcwd(), 'python_modules', 'bin', 'python3')
         result = subprocess.run(
-            ['python3', temp_path],
+            [python_path, temp_path],
             capture_output=True,
             text=True,
             timeout=5
@@ -67,8 +68,9 @@ print(f"✓ SkillExecutor is accessible: {type(SkillExecutor).__name__}")
         temp_path = f.name
 
     try:
+        python_path = os.path.join(os.getcwd(), 'python_modules', 'bin', 'python3')
         result = subprocess.run(
-            ['python3', temp_path],
+            [python_path, temp_path],
             capture_output=True,
             text=True,
             timeout=10,
@@ -97,7 +99,7 @@ result = await executor.execute('summarize', {
     'max_length': 50
 })
 print(f"Success: {result.success}")
-print(f"Type: {result.output.get('type')}")
+print(f"Output type: {type(result.output).__name__}")
 """
 
     wrapped_code = wrap_code(code)
@@ -107,8 +109,9 @@ print(f"Type: {result.output.get('type')}")
         temp_path = f.name
 
     try:
+        python_path = os.path.join(os.getcwd(), 'python_modules', 'bin', 'python3')
         result = subprocess.run(
-            ['python3', temp_path],
+            [python_path, temp_path],
             capture_output=True,
             text=True,
             timeout=10,
@@ -121,7 +124,7 @@ print(f"Type: {result.output.get('type')}")
             print(f"Stderr:\n{result.stderr}")
             return False
 
-        return 'Success: True' in result.stdout and 'Type: prompt' in result.stdout
+        return 'Success: True' in result.stdout and 'Output type: str' in result.stdout
     finally:
         os.unlink(temp_path)
 
@@ -146,8 +149,9 @@ print(f"Score: {result.output.get('score')}")
         temp_path = f.name
 
     try:
+        python_path = os.path.join(os.getcwd(), 'python_modules', 'bin', 'python3')
         result = subprocess.run(
-            ['python3', temp_path],
+            [python_path, temp_path],
             capture_output=True,
             text=True,
             timeout=10,
@@ -171,15 +175,22 @@ def wrap_code(code: str) -> str:
 import asyncio
 import sys
 import os
+import glob
 
 # Add current directory to Python path
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
 
-# Add python_modules
-python_modules = os.path.join(os.getcwd(), 'python_modules', 'lib', 'python3.11', 'site-packages')
-if os.path.exists(python_modules) and python_modules not in sys.path:
-    sys.path.insert(0, python_modules)
+# Add src directory to Python path
+src_path = os.path.join(os.getcwd(), 'src')
+if os.path.exists(src_path) and src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+# Add python_modules (try all possible versions)
+python_modules_paths = glob.glob(os.path.join(os.getcwd(), 'python_modules', 'lib', 'python3.*', 'site-packages'))
+for python_modules in python_modules_paths:
+    if os.path.exists(python_modules) and python_modules not in sys.path:
+        sys.path.insert(0, python_modules)
 
 from core.skill.executor import SkillExecutor
 
