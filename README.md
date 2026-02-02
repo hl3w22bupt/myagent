@@ -82,7 +82,59 @@ npm run build
 yarn build
 # or
 pnpm build
+
+# Run tests (requires PostgreSQL for accurate results)
+npm run test
+# or
+yarn test
+# or
+pnpm test
+
+# Run tests with coverage
+npm run test:coverage
 ```
+
+## Testing with PostgreSQL
+
+This project uses PostgreSQL for testing to match production behavior. Tests will fall back to SQLite if PostgreSQL is unavailable, but some tests may fail.
+
+### Quick Start (Docker)
+
+```bash
+# Start PostgreSQL in Docker
+./scripts/start-postgres.sh
+
+# Set environment variables
+source scripts/set-postgres-env.sh
+
+# Run tests
+npm run test
+
+# Stop PostgreSQL when done
+./scripts/stop-postgres.sh
+```
+
+### Manual Setup
+
+If you have PostgreSQL installed locally:
+
+```bash
+# Create database
+createdb myagent_test
+
+# Set environment variables
+export DATABASE_BACKEND=postgres
+export PG_HOST=localhost
+export PG_PORT=5432
+export PG_DATABASE=myagent_test
+export PG_USER=postgres
+export PG_PASSWORD=postgres
+
+# Run tests
+npm run test
+```
+
+For detailed setup instructions, see [`.github/workflows/postgres-setup.md`](/.github/workflows/postgres-setup.md).
 
 ## Project Structure
 

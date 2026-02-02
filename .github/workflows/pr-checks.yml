@@ -82,6 +82,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: myagent_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -101,6 +116,12 @@ jobs:
         run: npm run test:coverage -- --passWithNoTests --maxWorkers=1
         env:
           CI: true
+          DATABASE_BACKEND: postgres
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_DATABASE: myagent_test
+          PG_USER: postgres
+          PG_PASSWORD: postgres
         continue-on-error: true
 
       - name: Check coverage threshold
