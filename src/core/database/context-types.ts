@@ -92,7 +92,19 @@ export interface StructuredSummary {
 export interface ArtifactIndex {
   id: string;
   taskId: string;
-  artifactType: 'file' | 'function' | 'variable' | 'error' | 'video';
+  artifactType:
+    | 'file'
+    | 'function'
+    | 'variable'
+    | 'error'
+    | 'video'
+    | 'image'
+    | 'audio'
+    | 'code'
+    | 'html'
+    | 'markdown'
+    | 'json'
+    | 'text';
   action: 'created' | 'modified' | 'read' | 'deleted' | 'generated';
   path: string;
   description?: string;

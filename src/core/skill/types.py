@@ -35,6 +35,8 @@ class ExecutionConfig(BaseModel):
     handler: str = Field(description="Python module or script file")
     function: str = Field(default="execute", description="Function name to call")
     timeout: int = Field(default=30000, description="Timeout in milliseconds")
+    script_path: Optional[str] = Field(None, description="Absolute path to script file (for Claude Skills)")
+    skill_name: Optional[str] = Field(None, description="Skill name (for Claude Skills)")
 
 
 class HookConfig(BaseModel):
@@ -56,6 +58,7 @@ class SkillMetadata(BaseModel):
     description: str = Field(description="Human-readable description")
     tags: List[str] = Field(default_factory=list, description="Searchable tags")
     type: SkillType = Field(description="Skill type")
+    artifact_type: Optional[str] = Field(None, description="Artifact output type (optional manual declaration)")
 
 
 class SkillDefinition(SkillMetadata):
@@ -76,6 +79,62 @@ class SkillDefinition(SkillMetadata):
         description="Execution config for pure-script and hybrid skills"
     )
 
+    def get_artifact_type(self) -> str:
+        """
+        获取 skill 的 artifact_type
+
+        优先级:
+        1. 手动声明的 artifact_type 字段（顶层）
+        2. 从 output_schema.result_type 推断
+        3. 从 tags 推断
+        4. 默认 'text'
+        """
+        # 1. 检查手动声明
+        if self.artifact_type:
+            return self.artifact_type
+
+        # 2. 从 output_schema.result_type 推断
+        if self.output_schema and self.output_schema.properties:
+            result_type = self.output_schema.properties.get('result_type', {})
+            # Handle both dict and object with enum attribute
+            enum_values = None
+            if isinstance(result_type, dict):
+                enum_values = result_type.get('enum', [])
+            elif hasattr(result_type, 'enum'):
+                enum_values = result_type.enum
+
+            if enum_values:
+                for t in enum_values:
+                    if t != 'error':
+                        return self._normalize_result_type(t)
+
+        # 3. 从 tags 推断（基本映射）
+        tag_mapping = {
+            'video': 'video', 'remotion': 'video', 'animation': 'video',
+            'image': 'image', 'infographic': 'image', 'svg': 'image',
+            'code': 'code', 'programming': 'code',
+            'markdown': 'markdown', 'documentation': 'markdown',
+            'html': 'html',
+            'json': 'json', 'data': 'json',
+            'audio': 'audio', 'music': 'audio', 'sound': 'audio',
+        }
+        for tag in self.tags:
+            tag_lower = tag.lower()
+            if tag_lower in tag_mapping:
+                return tag_mapping[tag_lower]
+
+        # 4. 默认值
+        return 'text'
+
+    def _normalize_result_type(self, result_type: str) -> str:
+        """标准化 result_type 到 artifact_type"""
+        mapping = {
+            'infographic': 'image',
+            'video': 'video',
+            'table': 'json',
+        }
+        return mapping.get(result_type, result_type)
+
 
 class SkillResult(BaseModel):
     """Result from executing a Skill."""
@@ -83,6 +142,12 @@ class SkillResult(BaseModel):
     output: Optional[Any] = Field(None, description="Skill output if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
     execution_time: float = Field(default=0.0, description="Execution time in seconds")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+    @property
+    def artifact_type(self) -> str:
+        """获取 artifact_type（从 metadata 或推断）"""
+        return self.metadata.get('artifact_type', 'text')
 
 
 class SkillContext(BaseModel):

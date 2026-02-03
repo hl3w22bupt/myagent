@@ -1,0 +1,75 @@
+# Claude Skills Adapter Configuration
+# This adapter enables Motia to discover and execute Claude Skills (SKILL.md files)
+
+# Directory paths for Claude Skills discovery
+claude_skills:
+  # Root directories to scan for Claude Skills (SKILL.md files)
+  # These will be searched recursively
+  scan_paths:
+    - claude_skills
+
+  # File name pattern for Claude Skills definition
+  skill_file_pattern: "SKILL.md"
+
+# Adapter behavior settings
+adapter:
+  # Strategy for analyzing Claude Skills
+  # Options:
+  #   - smart: Auto-analyze SKILL.md content to detect type, tags, and output
+  #   - manual: Require explicit configuration in skill mapping
+  analysis_strategy: smart
+
+  # Default tags to add to all adapted Claude Skills
+  default_tags:
+    - claude-skill
+    - adapted
+
+  # Output type detection when not explicitly specified in SKILL.md
+  # Options:
+  #   - text: Default to text output
+  #   - json: Default to JSON output
+  #   - auto: Detect from "Output Format" section (falls back to text)
+  default_output_type: auto
+
+# Execution settings
+execution:
+  # Handler for Claude Skills script execution
+  handler: src/core/skill/handlers/claude_skill_handler.py
+
+  # Script discovery strategy
+  # Options:
+  #   - main: Use main.py (Claude Code standard)
+  #   - named: Use {skill_name}.py
+  #   - first: Use the first .py file found
+  #   - auto: Try main.py > {skill_name}.py > first .py (in order)
+  script_discovery: auto
+
+  # Timeout for script execution (milliseconds)
+  timeout: 30000
+
+# Virtual skill registry settings
+registry:
+  # Enable in-memory skill mapping (no skill.yaml files generated)
+  # This is faster and recommended for development
+  use_virtual_registry: true
+
+  # If disabled, skill.yaml files will be generated in a temporary directory
+  # Not recommended for production
+  generate_yaml_files: false
+
+# Hot reload settings (not implemented in MVP)
+hot_reload:
+  enabled: false
+  # Watch for changes in SKILL.md files
+  watch_files: false
+
+# Feature flags
+features:
+  # Python script support (MVP only supports Python)
+  python_scripts: true
+
+  # JavaScript/TypeScript script support (not implemented)
+  js_scripts: false
+
+  # Claude Code tool-specific features (not implemented)
+  claude_code_tools: false

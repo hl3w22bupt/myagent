@@ -154,6 +154,46 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 
       const executionTime = Date.now() - startTime;
 
+      // ============ 新增：读取结构化输出文件 ============
+      let structuredOutput: any = undefined;
+
+      try {
+        // 从 stdout 中提取 [STRUCTURED_OUTPUT] 标记
+        const outputMatch = result.stdout.match(/\[STRUCTURED_OUTPUT\]\s+(.+?)(?:\n|$)/);
+
+        console.log('[Sandbox] Looking for [STRUCTURED_OUTPUT] marker in stdout...');
+        console.log('[Sandbox] stdout length:', result.stdout?.length);
+        console.log('[Sandbox] stdout preview:', result.stdout?.substring(0, 500));
+
+        if (outputMatch && outputMatch[1]) {
+          const outputFile = outputMatch[1].trim();
+          console.log('[Sandbox] Found [STRUCTURED_OUTPUT] marker, file:', outputFile);
+
+          // 读取 JSON 文件
+          const { existsSync } = await import('fs');
+          const { readFile } = await import('fs/promises');
+
+          if (existsSync(outputFile)) {
+            const jsonContent = await readFile(outputFile, 'utf-8');
+            structuredOutput = JSON.parse(jsonContent);
+
+            console.log('[Sandbox] ✅ Successfully read structured output file:', {
+              sessionId: options.sessionId,
+              resultType: structuredOutput?.result_type,
+              outputFile
+            });
+            console.log('[Sandbox] structuredOutput data:', JSON.stringify(structuredOutput, null, 2));
+          } else {
+            console.warn('[Sandbox] ❌ File does not exist:', outputFile);
+          }
+        } else {
+          console.warn('[Sandbox] ❌ No [STRUCTURED_OUTPUT] marker found in stdout');
+        }
+      } catch (error) {
+        console.warn('[Sandbox] ❌ Failed to read structured output:', error);
+      }
+      // ====================================================
+
       // Check for unified format result in stdout
       // Skills may return structured results like: output={'success': False, ...}
       // even when exiting cleanly (exitCode=0). We need to detect this.
@@ -260,6 +300,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         sessionId,
         stdout: result.stdout,
         stderr: result.stderr,
+        structuredOutput,  // 新增：结构化输出
       };
     } catch (error: any) {
       return {
@@ -342,11 +383,21 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
 
+# Import virtual skill registry for Claude Skills
+from core.skill.adapters.virtual_skill_registry import create_virtual_registry
+
 # Get notify API URL from environment (set by LocalSandboxAdapter)
 # This enables automatic hook registration for progress notifications
 notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
 task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
-executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
+
+# Create virtual registry for Claude Skills (async initialization happens in SkillExecutor)
+# Note: Virtual registry will be scanned automatically when needed
+import asyncio
+virtual_registry = asyncio.run(create_virtual_registry())
+
+# Create SkillExecutor with virtual registry support
+executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_registry=virtual_registry)
 `;
 
     return `
@@ -354,6 +405,10 @@ import asyncio
 import sys
 import os
 import json
+
+# 新增：创建结构化输出目录
+STRUCTURED_OUTPUT_DIR = '/tmp/motia-sandbox/structured_outputs'
+os.makedirs(STRUCTURED_OUTPUT_DIR, exist_ok=True)
 
 # Add skill path to Python path
 skill_path = os.getenv('MOTIA_SKILL_PATH', '${options.skillImplPath || ''}')
@@ -364,6 +419,11 @@ if skill_path and skill_path not in sys.path:
 src_path = os.path.join(skill_path if skill_path else '.', 'src')
 if os.path.exists(src_path) and src_path not in sys.path:
     sys.path.insert(0, src_path)
+
+# Also add skills/lib directory for OutputBuilder and shared utilities
+skills_lib_path = os.path.join(skill_path if skill_path else '.', 'skills', 'lib')
+if os.path.exists(skills_lib_path) and skills_lib_path not in sys.path:
+    sys.path.insert(0, skills_lib_path)
 
 # Also add python_modules to path (try both python3.11 and python3.13)
 import glob

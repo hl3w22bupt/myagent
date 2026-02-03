@@ -4,14 +4,20 @@ Skill Registry for automatic discovery and lazy loading of Skills.
 The Registry implements a two-level loading strategy:
 - Level 1 (Metadata): Scan all skills at startup, load only metadata
 - Level 2 (Full Definition): Load complete Skill definition on demand
+
+Supports both native Motia skills and adapted Claude Skills via VirtualSkillRegistry.
 """
 
 import os
 import yaml
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from .types import SkillMetadata, SkillDefinition, SkillType
+
+# Import VirtualSkillRegistry only when needed to avoid circular imports
+if TYPE_CHECKING:
+    from .adapters.virtual_skill_registry import VirtualSkillRegistry
 
 
 class SkillRegistry:
@@ -20,19 +26,30 @@ class SkillRegistry:
 
     Implements automatic discovery from a directory structure
     and lazy loading of Skill definitions.
+
+    Supports integration with Claude Skills via VirtualSkillRegistry.
     """
 
-    def __init__(self, skills_dir: str = 'skills/'):
+    def __init__(
+        self,
+        skills_dir: str = 'skills/',
+        virtual_registry: Optional['VirtualSkillRegistry'] = None
+    ):
         """
         Initialize the Skill Registry.
 
         Args:
             skills_dir: Path to the skills directory
+            virtual_registry: Optional VirtualSkillRegistry for Claude Skills
         """
         self.skills_dir = Path(skills_dir)
         self._metadata: Dict[str, SkillMetadata] = {}
         self._full_definitions: Dict[str, SkillDefinition] = {}
         self._loaded = False
+
+        # Virtual registry for Claude Skills (optional)
+        self._virtual_registry = virtual_registry
+        self._virtual_metadata: Dict[str, SkillMetadata] = {}
 
     async def scan(self) -> Dict[str, SkillMetadata]:
         """
@@ -40,6 +57,8 @@ class SkillRegistry:
 
         This is called at startup to quickly discover all available skills
         without loading their full definitions.
+
+        Also scans virtual registry if configured.
 
         Returns:
             Dictionary mapping skill names to their metadata
@@ -62,8 +81,36 @@ class SkillRegistry:
             if isinstance(result, SkillMetadata):
                 self._metadata[result.name] = result
 
+        # Scan virtual registry for Claude Skills
+        if self._virtual_registry:
+            await self._scan_virtual_skills()
+
         self._loaded = True
         return self._metadata
+
+    async def _scan_virtual_skills(self):
+        """
+        Scan virtual registry for Claude Skills metadata.
+
+        This integrates Claude Skills into the main registry.
+        """
+        if not self._virtual_registry:
+            return
+
+        try:
+            # Scan virtual registry
+            await self._virtual_registry.scan()
+
+            # Get metadata from all virtual skills
+            skill_names = self._virtual_registry.get_skill_names()
+
+            for skill_name in skill_names:
+                metadata = await self._virtual_registry.get_metadata(skill_name)
+                self._metadata[skill_name] = metadata
+                self._virtual_metadata[skill_name] = metadata
+
+        except Exception as e:
+            print(f"Warning: Failed to scan Claude Skills: {e}")
 
     async def _load_metadata(self, skill_path: Path) -> SkillMetadata:
         """
@@ -106,6 +153,8 @@ class SkillRegistry:
         This is called on-demand when a Skill needs to be executed.
         Loads schemas, prompts, and execution configuration.
 
+        Supports both native skills and virtual Claude Skills.
+
         Args:
             skill_name: Name of the skill to load
 
@@ -115,6 +164,11 @@ class SkillRegistry:
         Raises:
             ValueError: If skill not found in registry
         """
+        # Check if it's a virtual skill
+        if skill_name in self._virtual_metadata:
+            if self._virtual_registry:
+                return await self._virtual_registry.load_full(skill_name)
+
         # Return cached definition if available
         if skill_name in self._full_definitions:
             return self._full_definitions[skill_name]

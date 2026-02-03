@@ -5,6 +5,8 @@ The Executor provides a consistent interface for executing all types of Skills:
 - pure-prompt: Template-based, returns prompt for LLM
 - pure-script: Code-only execution
 - hybrid: Combined script and prompt execution
+
+Supports both native Motia skills and adapted Claude Skills.
 """
 
 import os
@@ -12,11 +14,16 @@ import importlib
 import json
 import time
 import asyncio
-from typing import Any, Dict, Optional, List
+from pathlib import Path
+from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from .registry import SkillRegistry
 from .types import SkillType, SkillResult, SkillContext
 from .hooks.base import BaseHook, NoOpHook
 from .hooks.executor import SkillHookExecutor
+
+# Import Claude Skills components only when needed
+if TYPE_CHECKING:
+    from .adapters.virtual_skill_registry import VirtualSkillRegistry
 
 
 class SkillExecutor:
@@ -25,13 +32,16 @@ class SkillExecutor:
 
     Provides a single `execute()` method that handles all Skill types
     and returns consistent results.
+
+    Supports both native Motia skills and adapted Claude Skills.
     """
 
     def __init__(
         self,
         skills_dir: str = 'skills/',
         hooks: Optional[List[BaseHook]] = None,
-        notify_hook_api_url: Optional[str] = None
+        notify_hook_api_url: Optional[str] = None,
+        virtual_registry: Optional['VirtualSkillRegistry'] = None
     ):
         """
         Initialize the Skill Executor.
@@ -41,9 +51,14 @@ class SkillExecutor:
             hooks: Optional list of hook instances for pre/post execution callbacks
             notify_hook_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
                               If not provided, will try to get from MOTIA_NOTIFY_API_URL environment variable
+            virtual_registry: Optional VirtualSkillRegistry for Claude Skills
         """
-        self.registry = SkillRegistry(skills_dir)
+        # Create registry with virtual registry support
+        self.registry = SkillRegistry(skills_dir, virtual_registry=virtual_registry)
         self._loaded = False
+
+        # Store virtual registry for Claude Skill execution
+        self._virtual_registry = virtual_registry
 
         # Get notify_hook_api_url from parameter or environment variable
         if notify_hook_api_url is None:
@@ -100,6 +115,9 @@ class SkillExecutor:
         skill = await self.registry.load_full(skill_name)
         start_time = time.time()
 
+        # Get artifact_type from skill
+        artifact_type = self._get_skill_artifact_type(skill)
+
         # Define the skill execution function
         async def _skill_func(enhanced_input: Dict[str, Any]) -> Any:
             """Internal skill execution function"""
@@ -141,10 +159,20 @@ class SkillExecutor:
                         # OutputBuilder 统一格式：内容在 content 字段
                         output = result.get("content")
 
+                    # 保留完整的 structured_output（如果存在）
+                    metadata = {'artifact_type': artifact_type}
+                    if 'result_type' in result:
+                        # 这是 OutputBuilder 格式，保存完整的 structured_output
+                        metadata['structured_output'] = {
+                            k: v for k, v in result.items()
+                            if k not in ['success']  # 排除 success 字段
+                        }
+
                     return SkillResult(
                         success=True,
                         output=output,
-                        execution_time=execution_time
+                        execution_time=execution_time,
+                        metadata=metadata
                     )
                 else:
                     # 失败：提取 error
@@ -158,17 +186,27 @@ class SkillExecutor:
                         else:
                             error = str(content)
 
+                    # 失败时也保留 structured_output（包含错误信息）
+                    metadata = {'artifact_type': artifact_type}
+                    if 'result_type' in result:
+                        metadata['structured_output'] = {
+                            k: v for k, v in result.items()
+                            if k not in ['success']
+                        }
+
                     return SkillResult(
                         success=False,
                         error=error,
-                        execution_time=execution_time
+                        execution_time=execution_time,
+                        metadata=metadata
                     )
             except Exception as e:
                 execution_time = time.time() - start_time
                 return SkillResult(
                     success=False,
                     error=str(e),
-                    execution_time=execution_time
+                    execution_time=execution_time,
+                    metadata={'artifact_type': artifact_type}
                 )
         else:
             # Execute without hooks (backward compatibility)
@@ -178,14 +216,16 @@ class SkillExecutor:
                 return SkillResult(
                     success=True,
                     output=output,
-                    execution_time=execution_time
+                    execution_time=execution_time,
+                    metadata={'artifact_type': artifact_type}
                 )
             except Exception as e:
                 execution_time = time.time() - start_time
                 return SkillResult(
                     success=False,
                     error=str(e),
-                    execution_time=execution_time
+                    execution_time=execution_time,
+                    metadata={'artifact_type': artifact_type}
                 )
 
     async def _execute_prompt_skill(
@@ -234,6 +274,8 @@ class SkillExecutor:
 
         Script skills execute Python code in a handler module.
 
+        Supports both native Motia skills and Claude Skills.
+
         Args:
             skill: Skill definition
             input_data: Input parameters
@@ -246,6 +288,16 @@ class SkillExecutor:
                 f"Script skill '{skill.name}' missing execution config"
             )
 
+        # Check if this is a Claude Skill
+        is_claude_skill = (
+            hasattr(skill.execution, 'handler') and
+            'claude_skill_handler' in str(skill.execution.handler)
+        )
+
+        if is_claude_skill:
+            return await self._execute_claude_skill(skill, input_data)
+
+        # Native Motia skill execution
         try:
             # Construct module path
             handler = skill.execution.handler
@@ -282,6 +334,58 @@ class SkillExecutor:
             raise AttributeError(
                 f"Handler function not found for skill '{skill.name}': {e}"
             )
+
+    async def _execute_claude_skill(
+        self,
+        skill,
+        input_data: Dict[str, Any]
+    ) -> Any:
+        """
+        Execute Claude Skill using the Claude Skill Handler.
+
+        Args:
+            skill: Skill definition
+            input_data: Input parameters
+
+        Returns:
+            Result from Claude Skill handler (full dict with success, output, error)
+        """
+        from .handlers.claude_skill_handler import ClaudeSkillHandler
+
+        # Get script path from execution config
+        script_path = skill.execution.script_path
+
+        # Create handler - pass the script path directly if available
+        if script_path:
+            # Extract the directory containing the script
+            script_path_obj = Path(script_path)
+            skill_root = script_path_obj.parent
+        else:
+            skill_root = None
+
+        handler = ClaudeSkillHandler(
+            skill_name=skill.name,
+            skill_root=skill_root,
+            timeout=skill.execution.timeout
+        )
+
+        # Execute skill
+        handler_input = {
+            'skill_name': skill.name,
+            'task': input_data.get('task', {}),
+            'context': input_data.get('context', {})
+        }
+
+        print(f"[DEBUG] _execute_claude_skill calling handler with: {handler_input}")
+        result = handler.execute(handler_input)
+        # 移除 result 的打印输出，避免干扰 [STRUCTURED_OUTPUT] 标记
+
+        if not result.get('success'):
+            raise Exception(result.get('error', 'Claude Skill execution failed'))
+
+        # Return the full result dict, not just the output
+        # This is important for hook processing
+        return result
 
     async def _execute_hybrid_skill(
         self,
@@ -378,3 +482,17 @@ class SkillExecutor:
             'has_prompt': skill.prompt_template is not None,
             'has_execution': skill.execution is not None
         }
+
+    def _get_skill_artifact_type(self, skill) -> str:
+        """
+        获取 skill 的 artifact_type
+
+        Args:
+            skill: SkillDefinition object
+
+        Returns:
+            Artifact type string (e.g., 'video', 'image', 'code', 'text')
+        """
+        if hasattr(skill, 'get_artifact_type'):
+            return skill.get_artifact_type()
+        return 'text'

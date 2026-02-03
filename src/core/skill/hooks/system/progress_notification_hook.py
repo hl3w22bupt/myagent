@@ -94,6 +94,8 @@ class ProgressNotificationHook(BaseHook):
         result: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Notify execution completion"""
+        print(f"[DEBUG] ProgressNotificationHook.post_exec received result: {result}")
+
         # Handle case where result might be None
         if result is None:
             result = {}
@@ -125,6 +127,7 @@ class ProgressNotificationHook(BaseHook):
 
         # Add notification metadata to result
         result.setdefault("metadata", {})["progress_notified"] = True
+        print(f"[DEBUG] ProgressNotificationHook.post_exec returning result: {result}")
         return result
 
     async def on_progressing_notify(

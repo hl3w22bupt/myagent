@@ -96,7 +96,7 @@ export class AgentMonitoringHook extends BaseAgentHook {
       console.log('[AgentMonitoringHook] Agent creation requested', {
         sessionId,
         systemPrompt: config.systemPrompt.substring(0, 100),
-        skillsCount: config.availableSkills.length,
+        skillsCount: config.availableSkills?.length || 0,
       });
     }
 

@@ -162,6 +162,17 @@ export class PostgresDataStore implements Database {
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)');
 
+      // Composite index for common query patterns
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_session_status_created ON tasks(session_id, status, created_at DESC)');
+
+      await client.query('COMMIT');
+
+      // Note: VACUUM ANALYZE should NOT be run in business initialization flow
+      // Use autovacuum or scheduled maintenance scripts instead
+      // See: /scripts/db-maintenance.ts or cron jobs
+
+      await client.query('BEGIN');
+
       // Task contexts table
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS task_contexts (
@@ -269,7 +280,7 @@ export class PostgresDataStore implements Database {
           data.output,
           data.error,
           data.executionTime,
-          data.metadata ? JSON.stringify(data.metadata) : null,
+          data.metadata || null,  // 直接传入对象，node-postgres 自动处理为 JSONB
           data.retryCount || 0,
           // Convert boolean to integer for PostgreSQL
           data.isRetry ? 1 : 0,
@@ -335,7 +346,7 @@ export class PostgresDataStore implements Database {
       }
       if (updates.metadata !== undefined) {
         fields.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.metadata));
+        values.push(updates.metadata);  // 直接传入对象，自动处理为 JSONB
       }
       if (updates.completedAt !== undefined) {
         fields.push(`completed_at = $${paramIndex++}`);
@@ -372,9 +383,13 @@ export class PostgresDataStore implements Database {
     limit?: number;
     offset?: number;
   }): Promise<{ tasks: Task[]; total: number }> {
+    const startTime = Date.now();
     const client = await this.pool.connect();
 
     try {
+      const connectTime = Date.now();
+      console.log('[PostgresDataStore] listTasks: Connected in', connectTime - startTime, 'ms');
+
       const conditions: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
@@ -391,11 +406,13 @@ export class PostgresDataStore implements Database {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
+      const countStart = Date.now();
       const countResult = await client.query(
         `SELECT COUNT(*) as count FROM tasks ${whereClause}`,
         values
       );
       const total = parseInt(countResult.rows[0].count);
+      console.log('[PostgresDataStore] listTasks: COUNT query took', Date.now() - countStart, 'ms, total:', total);
 
       // Get paginated results
       let query = `SELECT * FROM tasks ${whereClause} ORDER BY created_at DESC`;
@@ -408,8 +425,20 @@ export class PostgresDataStore implements Database {
         }
       }
 
+      const selectStart = Date.now();
       const result = await client.query(query, values);
+      const selectTime = Date.now() - selectStart;
+      // Log only if query is slow (> 500ms)
+      if (selectTime > 500) {
+        console.warn('[PostgresDataStore] Slow query detected:', selectTime, 'ms');
+      }
+
       const tasks = result.rows.map(row => this.mapDbTaskToTask(row));
+
+      const totalTime = Date.now() - startTime;
+      if (totalTime > 1000) {
+        console.warn('[PostgresDataStore] listTasks slow:', totalTime, 'ms');
+      }
 
       return { tasks, total };
     } finally {
@@ -594,7 +623,7 @@ export class PostgresDataStore implements Database {
       }
       if (updates.metadata !== undefined) {
         fields.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.metadata));
+        values.push(updates.metadata);  // 直接传入对象，自动处理为 JSONB
       }
 
       fields.push(`updated_at = $${paramIndex++}`);
@@ -628,7 +657,7 @@ export class PostgresDataStore implements Database {
           taskId,
           message.role,
           message.content,
-          JSON.stringify(message.metadata),
+          message.metadata,  // 直接传入对象，自动处理为 JSONB
           message.metadata.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
         ]
       );
@@ -809,13 +838,13 @@ export class PostgresDataStore implements Database {
         // Update
         await client.query(
           'UPDATE sessions SET last_active_at = $1, metadata = $2 WHERE session_id = $3',
-          [now, JSON.stringify(metadata || {}), sessionId]
+          [now, metadata || {}, sessionId]  // 直接传入对象，自动处理为 JSONB
         );
       } else {
         // Insert
         await client.query(
           'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES ($1, $2, $3, $4)',
-          [sessionId, now, now, JSON.stringify(metadata || {})]
+          [sessionId, now, now, metadata || {}]  // 直接传入对象，自动处理为 JSONB
         );
       }
     } finally {

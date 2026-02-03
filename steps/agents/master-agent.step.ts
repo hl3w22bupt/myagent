@@ -464,13 +464,20 @@ export const handler = async (
     const useMasterAgent = input.useDelegation || false;
     const agentType = useMasterAgent ? 'master' : 'agent';
 
-    logger.info('Acquiring agent', { sessionId, agentType, useDelegation: useMasterAgent });
+    logger.info('Acquiring agent', {
+      sessionId,
+      agentType,
+      useDelegation: useMasterAgent,
+      availableSkills: input.availableSkills,
+      skillCount: input.availableSkills?.length || 0
+    });
 
     // Get Agent or MasterAgent from Manager
     // each session has independent Agent/MasterAgent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
     const agent = await agentManager.acquire(sessionId, {
       agentType,
+      availableSkills: input.availableSkills,
     });
 
     // Verify agent type

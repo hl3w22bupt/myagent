@@ -7,9 +7,9 @@ import asyncio
 import os
 import time
 from typing import Callable, Optional, Dict, Any, List
-from core.skill.hooks.base import BaseHook, SkillContext, HookResult, NoOpHook
-from core.skill.hooks.manager import HookManager
-from core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
+from .base import BaseHook, SkillContext, HookResult, NoOpHook
+from .manager import HookManager
+from .system.progress_notification_hook import ProgressNotificationHook
 
 
 class SkillHookExecutor:
@@ -39,7 +39,8 @@ class SkillHookExecutor:
                 else:
                     print(f"[SkillHookExecutor] Skipping duplicate hook: {type(hook).__name__}")
         else:
-            print(f"[SkillHookExecutor] No hooks provided")
+            import sys
+            print(f"[SkillHookExecutor] No hooks provided", file=sys.stderr)
 
     async def report_progress(
         self,
@@ -129,16 +130,44 @@ class SkillHookExecutor:
         # Execute main logic
         try:
             result = await skill_func(enhanced_input)
+            print(f"[DEBUG] skill_func returned: {result}")
         except Exception as e:
             result = {"success": False, "error": str(e)}
 
         # Post-exec hook
         try:
             post_result = await self.hook_manager.post_exec(context, result)
+            print(f"[DEBUG] post_result from hook_manager: {post_result}")
             if post_result:
                 result.update(post_result)
+                print(f"[DEBUG] result after update: {result}")
         except Exception as e:
             print(f"Warning: Post-hook error: {e}")
+
+        # ============ 新增：强制验证 OutputBuilder 格式 ============
+        if not isinstance(result, dict) or 'result_type' not in result or 'content' not in result:
+            raise ValueError(
+                f"Skill {skill_name} MUST return OutputBuilder format: "
+                f"{{result_type, success, content, metadata}}. "
+                f"Got: {type(result)}"
+            )
+        # =========================================================
+
+        # 创建结构化输出目录
+        import json
+        output_dir = '/tmp/motia-sandbox/structured_outputs'
+        os.makedirs(output_dir, exist_ok=True)
+
+        # 获取 sessionId
+        sessionId = context.metadata.get('sessionId') or session_id or 'unknown'
+        output_file = os.path.join(output_dir, f'output_{sessionId}.json')
+
+        # 写入结构化输出到文件
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+
+        # 输出文件路径标记（唯一需要的 stdout 输出）
+        print(f"[STRUCTURED_OUTPUT] {output_file}")
 
         return result
 

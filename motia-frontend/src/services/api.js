@@ -2,7 +2,9 @@ import axios from 'axios'
 
 console.log('import.meta.env:', import.meta.env)
 console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+
+// 使用相对路径以便通过 Vite 代理，或者使用环境变量中的完整 URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -10,8 +12,10 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
     'X-API-Key': import.meta.env.VITE_API_KEY || ''
   },
-  timeout: 10000, // 10秒超时
-  maxRedirects: 5
+  timeout: 30000, // 增加到 30 秒超时
+  maxRedirects: 5,
+  // 开发环境下避免 CORS 问题
+  withCredentials: false
 })
 
 // 请求拦截器
@@ -55,7 +59,10 @@ export const skillsAPI = {
   getSkills: () =>
     apiClient.get('/api/skills').then(response => ({
       ...response,
-      data: response.data.skills || []
+      data: response.data.skills || [],
+      nativeCount: response.data.nativeCount || 0,
+      claudeCount: response.data.claudeCount || 0,
+      count: response.data.count || 0
     })),
   getSkillDetails: (id) => apiClient.get(`/api/skills/${id}`)
 }

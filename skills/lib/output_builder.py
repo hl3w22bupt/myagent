@@ -335,6 +335,7 @@ class OutputBuilder:
         self,
         code: str,
         language: str,
+        filename: str = '',
         highlight: Optional[List[int]] = None
     ) -> 'OutputBuilder':
         """
@@ -343,6 +344,7 @@ class OutputBuilder:
         Args:
             code: 代码内容
             language: 编程语言
+            filename: 文件名（可选）
             highlight: 高亮行号列表
 
         Returns:
@@ -352,7 +354,8 @@ class OutputBuilder:
 
         self._content = {
             "code": code,
-            "language": language
+            "language": language,
+            "filename": filename
         }
 
         if highlight is not None:

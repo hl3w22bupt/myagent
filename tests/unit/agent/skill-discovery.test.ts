@@ -53,13 +53,23 @@ describe('SkillDiscovery', () => {
       expect(remotion?.version).toBe('1.0.0');
     });
 
-    it('should handle missing skill.yaml gracefully', async () => {
-      // Create a temporary discovery instance pointing to a non-existent directory
-      const tempDiscovery = new SkillDiscovery('/non/existent/path');
-      const skills = await tempDiscovery.discover();
+    it('should load skills from both native and Claude sources', async () => {
+      // SkillDiscovery now uses unified skill-loader that loads from all sources
+      const skills = await discovery.discover();
 
-      // Should return empty array instead of throwing
-      expect(skills).toEqual([]);
+      // Should load skills from both /skills and /claude_skills directories
+      expect(skills.length).toBeGreaterThan(0);
+
+      // Check that we have skills from both sources
+      const skillNames = skills.map((s) => s.name);
+
+      // Native skills (from /skills directory)
+      expect(skillNames).toContain('web-search');
+      expect(skillNames).toContain('summarize');
+
+      // Claude Skills (from /claude_skills directory) - these should also be loaded
+      const claudeSkills = skills.filter((s) => s.tags.includes('claude-skill'));
+      expect(claudeSkills.length).toBeGreaterThan(0);
     });
   });
 

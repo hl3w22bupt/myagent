@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { tasksAPI, agentsAPI } from '../services/api'
 import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
+import CodePlayer from '../components/CodePlayer'
+import AudioPlayer from '../components/AudioPlayer'
+import HtmlRenderer from '../components/HtmlRenderer'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -58,6 +61,8 @@ function TaskDetail() {
   const [task, setTask] = useState(null)
   const [sessionId, setSessionId] = useState('')
   const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true) // 首次加载状态
+  const hasInitialData = useRef(false) // 追踪是否已成功获取过首次数据
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
@@ -305,6 +310,11 @@ function TaskDetail() {
           console.log('✅ 已获取更新后的任务详情:', updatedTask)
           setTask(updatedTask)
           setLoading(false)
+          // 只有在首次成功获取数据时才结束 initialLoading
+          if (!hasInitialData.current) {
+            hasInitialData.current = true
+            setInitialLoading(false)
+          }
           setPolling(false)
 
           // 清除轮询
@@ -336,15 +346,22 @@ function TaskDetail() {
         setTask(task)
         setError('')
         setLoading(false)
+        // 只有在首次成功获取数据时才结束 initialLoading
+        if (!hasInitialData.current) {
+          hasInitialData.current = true
+          setInitialLoading(false)
+        }
         return { found: true, error: null }
       } catch (error) {
         console.error('查询任务详情失败:', error)
         setLoading(false)
+        // 不要在失败时结束 initialLoading，让用户看到"加载中..."而不是"执行中"
 
         // 处理 404 错误：404 = Not Found，直接停止轮询
         if (error.response?.status === 404) {
           console.error('任务不存在:', id)
           setError('任务不存在')
+          setInitialLoading(false) // 404时结束加载，显示错误
           return { found: false, error: true, taskNotFound: true }
         }
 
@@ -538,118 +555,62 @@ function TaskDetail() {
     return date.toLocaleDateString()
   }
 
+  // 获取结果类型的显示标题
+  const getResultTypeLabel = (result) => {
+    const resultType = getResultType(result)
+
+    const typeLabels = {
+      'video': '📹 视频结果',
+      'image': '🖼️ 图片结果',
+      'code': '💻 代码结果',
+      'table': '📊 表格结果',
+      'audio': '🎵 音频结果',
+      'markdown': '📝 Markdown 结果',
+      'html': '🌐 HTML 结果',
+      'json': '📋 JSON 结果',
+    }
+
+    return typeLabels[resultType] || '📄 任务结果'
+  }
+
   // 检测结果类型
   const getResultType = (result) => {
-    if (!result) return 'text'
-
-    // 如果是字符串，尝试检测URL或路径
-    if (typeof result === 'string') {
-      // 尝试解析字符串中的URL
-      const urlMatch = result.match(/(?:png_url|video_url|html_url|svg_url)['":\s]*['"]([^'"]+)['"]/)
-      if (urlMatch) {
-        const url = urlMatch[1]
-        if (url.includes('.mp4') || url.includes('.webm') || url.includes('.mov')) {
-          return 'video'
-        }
-        if (url.includes('.png') || url.includes('.jpg') || url.includes('.jpeg') || url.includes('.gif') || url.includes('.svg')) {
-          return 'image'
-        }
-      }
-
-      // 检测视频路径
-      if (result.includes('.mp4') || result.includes('.webm') || result.includes('.mov')) {
-        return 'video'
-      }
-      // 检测图片路径
-      if (result.includes('.png') || result.includes('.jpg') || result.includes('.jpeg') || result.includes('.gif') || result.includes('.svg')) {
-        return 'image'
-      }
+    if (!result) {
       return 'text'
     }
 
-    // 如果是对象，检查result_type字段
-    if (typeof result === 'object') {
-      const resultType = result.result_type || result.type
+    // 优先：从 metadata.structuredOutput 获取（唯一来源）
+    if (typeof result === 'object' && result.metadata?.structuredOutput?.result_type) {
+      const resultType = result.metadata.structuredOutput.result_type
 
-      // 统一结果格式
-      if (resultType === 'video') return 'video'
-      if (resultType === 'infographic') return 'image'
-      if (resultType === 'table') return 'table'
-      if (resultType === 'text') return 'text'
-
-      // 检查content字段
-      if (result.content) {
-        const { path, mime_type } = result.content
-        if (path) {
-          if (path.includes('.mp4') || path.includes('.webm') || mime_type?.startsWith('video/')) {
-            return 'video'
-          }
-          if (path.includes('.png') || path.includes('.jpg') || mime_type?.startsWith('image/')) {
-            return 'image'
-          }
-        }
+      // 映射 result_type 到显示类型
+      const typeMapping = {
+        'infographic': 'image',
+        'video': 'video',
+        'image': 'image',
+        'audio': 'audio',
+        'table': 'table',
+        'code': 'code',
+        'markdown': 'markdown',
+        'html': 'html',
+        'json': 'json',
       }
+
+      return typeMapping[resultType] || resultType
     }
 
+    // 兜底：如果没有 structuredOutput，返回 'text'
     return 'text'
   }
 
   // 从output字符串中提取URL和统一结果
   const extractParsedResult = (result) => {
-    // 如果已经是对象格式（统一结果格式）
-    if (typeof result === 'object' && result.result_type && result.content) {
-      return result
+    // 直接使用 structuredOutput
+    if (typeof result === 'object' && result.metadata?.structuredOutput) {
+      return result.metadata.structuredOutput
     }
 
-    // 如果是字符串，尝试解析
-    if (typeof result === 'string') {
-      // 方法1: 直接匹配 'result_type': 'video', 'content': {'path': '...'
-      const typeMatch = result.match(/'result_type':\s*'(video|infographic|image|table|text)'/)
-      const pathMatch = result.match(/'path':\s*'([^']+\.(?:mp4|png|jpg|jpeg|gif|svg|webm|mov))'/)
-
-      if (typeMatch && pathMatch) {
-        const resultType = typeMatch[1]
-        const path = pathMatch[1]
-
-        // 提取其他元数据
-        const durationMatch = result.match(/'duration':\s*([\d.]+)/)
-        const fpsMatch = result.match(/'fps':\s*(\d+)/)
-        const sizeMatch = result.match(/'size':\s*(\d+)/)
-
-        return {
-          result_type: resultType === 'infographic' ? 'image' : resultType,
-          content: {
-            path: path,
-            mime_type: path.endsWith('.mp4') ? 'video/mp4' : 'image/png',
-            ...(durationMatch && { duration: parseFloat(durationMatch[1]) }),
-            ...(fpsMatch && { fps: parseInt(fpsMatch[1], 10) }),
-            ...(sizeMatch && { size: parseInt(sizeMatch[1], 10) })
-          }
-        }
-      }
-
-      // 方法2: 尝试匹配 outputs 目录中的路径
-      const outputPathMatch = result.match(/outputs\/([^'\s]+\.(?:mp4|png|jpg|jpeg|gif|svg))/)
-      if (outputPathMatch) {
-        const path = outputPathMatch[1]
-        const isVideo = path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov')
-
-        return {
-          result_type: isVideo ? 'video' : 'image',
-          content: {
-            path: path,
-            mime_type: isVideo ? 'video/mp4' : 'image/png'
-          }
-        }
-      }
-    }
-
-    // 如果是对象但没有result_type
-    if (typeof result === 'object' && result.content?.path) {
-      return result
-    }
-
-    // 返回原始结果
+    // 兜底：返回原始结果
     return result
   }
 
@@ -891,6 +852,73 @@ function TaskDetail() {
       )
     }
 
+    // 新增：代码渲染（使用新格式）
+    if (resultType === 'code') {
+      const structured = extractParsedResult(result)
+
+      // 新格式：structured.content 包含 {code, language, filename}
+      if (structured.content?.code) {
+        return (
+          <div className="result-visual">
+            <CodePlayer
+              code={structured.content.code}
+              language={structured.content.language || 'text'}
+              filename={structured.content.filename || ''}
+            />
+          </div>
+        )
+      }
+
+      // 兜底：显示错误信息
+      return (
+        <div className="result-error">
+          <p>Invalid code format: missing content.code</p>
+          <pre>{JSON.stringify(structured, null, 2)}</pre>
+        </div>
+      )
+    }
+
+    // 新增：音频渲染
+    if (resultType === 'audio') {
+      const audioPath = typeof result === 'object' ? (result.content?.path || result.path || result.audio_path) : null
+      const audioUrl = typeof result === 'object' ? result.url || result.audio_url : null
+      const filename = typeof result === 'object' ? result.filename || result.content?.filename : ''
+
+      return (
+        <div className="result-visual">
+          <AudioPlayer audioPath={audioPath} audioUrl={audioUrl} getBlobUrl={getMediaBlobUrl} filename={filename} />
+        </div>
+      )
+    }
+
+    // 新增：Markdown/HTML 渲染
+    if (resultType === 'markdown' || resultType === 'html') {
+      const content = typeof result === 'object' ? result.content || result.text || result.html : result
+      const filename = typeof result === 'object' ? result.filename || result.path : ''
+
+      return (
+        <div className="result-visual">
+          <HtmlRenderer content={content} type={resultType} filename={filename} />
+        </div>
+      )
+    }
+
+    // 新增：JSON 渲染（作为代码显示）
+    if (resultType === 'json') {
+      let jsonContent = ''
+      if (typeof result === 'object') {
+        jsonContent = result.content || result.data || result.json || JSON.stringify(result, null, 2)
+      } else {
+        jsonContent = result
+      }
+
+      return (
+        <div className="result-visual">
+          <CodePlayer code={jsonContent} language="json" filename="result.json" />
+        </div>
+      )
+    }
+
     return <div className="no-visual">此结果类型不支持可视化预览</div>
   }
 
@@ -933,7 +961,22 @@ function TaskDetail() {
         }
       }
     } else if (typeof result === 'object') {
-      if (result.text) {
+      // 新增：检查 output 属性（原始 stdout）
+      if (result.output && typeof result.output === 'string') {
+        // 对 output 应用相同的过滤逻辑
+        textContent = result.output
+          .split('\n')
+          .filter(line => {
+            if (line.trim().startsWith('[DEBUG]')) return false
+            if (line.trim().startsWith('success=True')) return false
+            if (line.trim().startsWith('✅')) return false
+            if (line.trim().startsWith('📸')) return false
+            if (line.includes('export=') && line.length > 200) return false
+            return true
+          })
+          .join('\n')
+          .trim()
+      } else if (result.text) {
         textContent = result.text
       } else if (result.content?.text) {
         textContent = result.content.text
@@ -949,13 +992,98 @@ function TaskDetail() {
     )
   }
 
+  // 获取 Tab 的配置信息（icon 和 label）
+  const getTabConfig = (tabName, resultType) => {
+    const tabConfigs = {
+      visual: {
+        video: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+              <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+            </svg>
+          ),
+          label: '视频'
+        },
+        image: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
+              <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 4.002 3a2 2 0 0 1 2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14.002 4l-.008 9a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1z"/>
+            </svg>
+          ),
+          label: '图片'
+        },
+        code: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/>
+              <path d="M6 4.5a.5.5 0 0 1 .5.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5zM3.646 6.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L5.293 9l-1.647-1.646a.5.5 0 0 1 0-.708zm5.5 0a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L11.293 9l1.647-1.646a.5.5 0 0 1 0-.708z"/>
+            </svg>
+          ),
+          label: '代码'
+        },
+        table: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm15-2h-3v3h3V0zm0 4h-3v3h3V4zm0 4h-3v3h3V8zM1 1h10v3H1V1zm0 4h10v3H1V5zm0 4h10v3H1V9zm11-3h3V5h-3v1zm0 4h3V9h-3v1zm0 4h3v-3h-3v1zM1 13h10v3H1v-3z"/>
+            </svg>
+          ),
+          label: '表格'
+        },
+        audio: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M11.536 14.01A8.473 8.473 0 0 1 8 15a8.473 8.473 0 0 1-8-8 8.473 8.473 0 0 1 .99-3.536l.705.707A7.476 7.476 0 0 0 1 7a7.476 7.476 0 0 0 7 7c1.928 0 3.694-.736 5.007-1.938l.705.707A8.473 8.473 0 0 1 8 15a8.473 8.473 0 0 1-3.536-.99l.705-.707A6.476 6.476 0 0 0 8 13a6.476 6.476 0 0 0 6-6c0-1.56-.56-3.001-1.492-4.14l.705-.707A7.476 7.476 0 0 1 15 8c0 2.086-.724 4.008-1.938 5.64l-.705-.707A6.476 6.476 0 0 0 14 8a6.476 6.476 0 0 0-6-6c-1.928 0-3.694.736-5.007 1.938l-.705-.707A8.473 8.473 0 0 1 8 1a8.473 8.473 0 0 1 8 8 8.473 8.473 0 0 1-.99 3.536l-.705-.707zM8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+            </svg>
+          ),
+          label: '音频'
+        },
+        markdown: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
+            </svg>
+          ),
+          label: 'Markdown'
+        },
+        html: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M1.5 0h11.586a1.5 1.5 0 0 1 1.06.44l1.414 1.414A1.5 1.5 0 0 1 16 2.914V14.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 14.5v-13A1.5 1.5 0 0 1 1.5 0zM1 1.5v13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5V2.914a.5.5 0 0 0-.146-.353l-1.415-1.415A.5.5 0 0 0 12.086 1H1.5a.5.5 0 0 0-.5.5zM4.5 5.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1h-5zM3 8a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 0-1h-6A.5.5 0 0 0 3 8zm0 2.5a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 0-1h-6a.5.5 0 0 0-.5.5z"/>
+            </svg>
+          ),
+          label: 'HTML'
+        },
+        json: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+              <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+          ),
+          label: 'JSON'
+        }
+      },
+      text: {
+        label: '原始数据'
+      }
+    }
+
+    // 返回对应类型的配置，如果没有匹配则返回默认配置
+    return tabConfigs[tabName]?.[resultType] || tabConfigs[tabName]?.video || { icon: null, label: '内容' }
+  }
+
   const renderResult = (result) => {
     if (!result) {
       return <div className="no-result">暂无结果</div>
     }
 
     const resultType = getResultType(result)
-    const hasVisual = ['video', 'image', 'table'].includes(resultType)
+    const hasVisual = ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json'].includes(resultType)
+
+    // 获取 visual tab 的配置
+    const visualTabConfig = getTabConfig('visual', resultType)
 
     return (
       <div className="result-container">
@@ -967,11 +1095,8 @@ function TaskDetail() {
                 className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
                 onClick={() => setActiveTab('visual')}
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                  <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
-                </svg>
-                多媒体
+                {visualTabConfig.icon}
+                {visualTabConfig.label}
               </button>
               <button
                 className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
@@ -981,7 +1106,7 @@ function TaskDetail() {
                   <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                   <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
                 </svg>
-                JSON
+                原始数据
               </button>
             </>
           )}
@@ -1375,19 +1500,27 @@ function TaskDetail() {
     }
   }
 
-  if (loading || polling) {
+  if (loading || polling || initialLoading) {
     return (
       <div className="task-detail">
-        <div className="loading">
-          {polling ? (
-            <div className="polling-status">
-              <span className="spinner"></span>
-              <span>任务执行中，请稍候...</span>
-            </div>
-          ) : (
-            '加载中...'
-          )}
-        </div>
+        {error ? (
+          <div className="error">{error}</div>
+        ) : initialLoading ? (
+          <>
+            <span className="spinner"></span>
+            <span style={{ marginLeft: '1rem' }}>加载中...</span>
+          </>
+        ) : polling ? (
+          <>
+            <span className="spinner"></span>
+            <span style={{ marginLeft: '1rem' }}>任务执行中，请稍候...</span>
+          </>
+        ) : (
+          <>
+            <span className="spinner"></span>
+            <span style={{ marginLeft: '1rem' }}>加载中...</span>
+          </>
+        )}
       </div>
     )
   }
@@ -1592,9 +1725,32 @@ function TaskDetail() {
             {/* 任务结果 */}
             {task.output && (
               <div className="info-section">
-                <h2>任务结果</h2>
+                <h2>{(() => {
+                  // 组合 output 和 metadata.structuredOutput 用于获取标题
+                  const resultData = task.output;
+                  if (typeof resultData === 'string' && task.metadata?.structuredOutput) {
+                    const combinedResult = {
+                      output: resultData,
+                      metadata: task.metadata
+                    };
+                    return getResultTypeLabel(combinedResult);
+                  }
+                  return getResultTypeLabel(resultData);
+                })()}</h2>
                 <div className="task-result">
-                  {renderResult(task.output)}
+                  {(() => {
+                    // 组合 output 和 metadata.structuredOutput
+                    const resultData = task.output;
+                    if (typeof resultData === 'string' && task.metadata?.structuredOutput) {
+                      // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
+                      const combinedResult = {
+                        output: resultData,
+                        metadata: task.metadata
+                      };
+                      return renderResult(combinedResult);
+                    }
+                    return renderResult(resultData);
+                  })()}
                 </div>
               </div>
             )}
