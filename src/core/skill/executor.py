@@ -118,17 +118,43 @@ class SkillExecutor:
         # Get artifact_type from skill
         artifact_type = self._get_skill_artifact_type(skill)
 
-        # Define the skill execution function
+        # Define the skill execution function（简化后的逻辑）
         async def _skill_func(enhanced_input: Dict[str, Any]) -> Any:
-            """Internal skill execution function"""
-            if skill.type == SkillType.PURE_PROMPT:
-                return await self._execute_prompt_skill(skill, enhanced_input)
-            elif skill.type == SkillType.PURE_SCRIPT:
-                return await self._execute_script_skill(skill, enhanced_input)
-            elif skill.type == SkillType.HYBRID:
-                return await self._execute_hybrid_skill(skill, enhanced_input)
+            """
+            Internal skill execution function
+
+            简化的判断逻辑（不再依赖 skill.type）：
+            1. 没有 execution → Native Pure-Prompt Skills
+            2. 有 execution 且 handler == 'claude_skill_handler' → Claude Code Skills
+            3. 有 execution 且 handler != 'claude_skill_handler' → Native Skills
+            """
+            # ============ 判断：是否有 execution 配置 ============
+            if not skill.execution:
+                # ⭐ Native Pure-Prompt Skills
+                # 没有 execution，但有 prompt_template
+                return await self._execute_native_prompt_skill(
+                    skill,
+                    enhanced_input
+                )
+
+            # 有 execution 配置
+            # 判断 handler 类型
+            handler_path = skill.execution.handler
+
+            if 'claude_skill_handler' in handler_path:
+                # ⭐ Claude Code Skills
+                # handler 指向 claude_skill_handler.py
+                return await self._execute_claude_skill(
+                    skill,
+                    enhanced_input
+                )
             else:
-                raise ValueError(f"Unknown skill type: {skill.type}")
+                # ⭐ Native Skills (handler.py)
+                # 传统的 Python handler
+                return await self._execute_native_skill(
+                    skill,
+                    enhanced_input
+                )
 
         # Execute with hooks if there are any hooks configured
         from config.hooks import HOOK_CONFIG
@@ -228,41 +254,33 @@ class SkillExecutor:
                     metadata={'artifact_type': artifact_type}
                 )
 
-    async def _execute_prompt_skill(
+    async def _execute_native_prompt_skill(
         self,
         skill,
         input_data: Dict[str, Any]
-    ) -> Any:
+    ) -> Dict[str, Any]:
         """
-        Execute pure-prompt skill.
+        Native Pure-Prompt Skills 执行
 
-        Pure prompt skills don't execute code, they return a formatted
-        prompt template for the LLM to process.
+        使用 ClaudeSkillHandler（template 模式）
 
         Args:
             skill: Skill definition
             input_data: Input parameters
 
         Returns:
-            Formatted prompt string
+            OutputBuilder 格式的输出
         """
-        if not skill.prompt_template:
-            raise ValueError(
-                f"Pure prompt skill '{skill.name}' missing prompt_template"
-            )
+        from .handlers.claude_skill_handler import ClaudeSkillHandler
 
-        # Render template with input data
-        template = skill.prompt_template
-        for key, value in input_data.items():
-            # Support both {{key}} and {key} syntax
-            template = template.replace(f"{{{{{key}}}}}", str(value))
-            template = template.replace(f"{{{key}}}", str(value))
+        # 创建 handler（template 模式）
+        handler = ClaudeSkillHandler(
+            skill_name=skill.name,
+            prompt_template=skill.prompt_template,  # ← 从字段读取
+            mode=ClaudeSkillHandler.MODE_TEMPLATE  # ← template 模式
+        )
 
-        return {
-            "type": "prompt",
-            "content": template,
-            "skill_name": skill.name
-        }
+        return handler.execute(input_data)
 
     async def _execute_script_skill(
         self,
@@ -387,27 +405,51 @@ class SkillExecutor:
         # This is important for hook processing
         return result
 
-    async def _execute_hybrid_skill(
+    async def _execute_native_skill(
         self,
         skill,
         input_data: Dict[str, Any]
     ) -> Any:
         """
-        Execute hybrid skill.
+        Native Skills 执行（传统 handler.py）
 
-        Hybrid skills combine script execution with prompt templates.
-        The script can use the prompt template internally for LLM calls.
+        动态导入并执行 handler.py
 
         Args:
             skill: Skill definition
             input_data: Input parameters
 
         Returns:
-            Result from handler function
+            Handler 函数的返回值
         """
-        # For hybrid skills, execute the script part
-        # The script can access skill.prompt_template for LLM calls
-        return await self._execute_script_skill(skill, input_data)
+        if not skill.execution:
+            raise ValueError(f"Skill '{skill.name}' missing execution config")
+
+        # 构建模块路径
+        handler = skill.execution.handler
+        if handler.endswith('.py'):
+            handler = handler[:-3]
+
+        # 动态导入
+        module_path = f"skills.{skill.name}.{handler.replace('/', '.')}"
+        skill_module = importlib.import_module(module_path)
+
+        # 获取函数
+        function_name = skill.execution.function or "execute"
+        if not hasattr(skill_module, function_name):
+            raise AttributeError(
+                f"Function '{function_name}' not found in '{module_path}'"
+            )
+
+        handler_func = getattr(skill_module, function_name)
+
+        # 执行
+        if asyncio.iscoroutinefunction(handler_func):
+            result = await handler_func(input_data)
+        else:
+            result = handler_func(input_data)
+
+        return result
 
     async def execute_batch(
         self,

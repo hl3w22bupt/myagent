@@ -1,8 +1,17 @@
 .code-player-container {
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   background-color: #1e1e1e;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 内部的 pre 元素处理滚动 */
+.code-player-container pre {
+  overflow: auto !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: 80vh;
+  white-space: pre !important;
 }
 
 .code-player-filename {
@@ -32,8 +41,8 @@
 
 /* 代码高亮滚动条样式 */
 .code-player-container ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 .code-player-container ::-webkit-scrollbar-track {
@@ -42,9 +51,20 @@
 
 .code-player-container ::-webkit-scrollbar-thumb {
   background: #4a4a4a;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 .code-player-container ::-webkit-scrollbar-thumb:hover {
   background: #5a5a5a;
+}
+
+/* 确保代码区域不会溢出 */
+.code-player-container pre {
+  overflow-x: auto !important;
+  white-space: pre !important;
+}
+
+.code-player-container code {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
 }

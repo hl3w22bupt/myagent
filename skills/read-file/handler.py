@@ -100,10 +100,8 @@ def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder() \
-                .set_text(
-                    text=content,
-                    title=f"📄 {filepath}"
-                ) \
+                .set_text(content) \
+                .set_title(f"📄 {filepath}") \
                 .add_standard_metadata("filepath", filepath) \
                 .add_standard_metadata("size_bytes", file_size) \
                 .add_standard_metadata("truncated", truncated) \

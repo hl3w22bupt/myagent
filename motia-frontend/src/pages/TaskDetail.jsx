@@ -858,8 +858,15 @@ function TaskDetail() {
 
       // 新格式：structured.content 包含 {code, language, filename}
       if (structured.content?.code) {
+        // 调试：检查代码格式
+        console.log('[CodePlayer Debug] structured.content:', structured.content)
+        console.log('[CodePlayer Debug] code type:', typeof structured.content.code)
+        console.log('[CodePlayer Debug] code length:', structured.content.code.length)
+        console.log('[CodePlayer Debug] first 200 chars:', structured.content.code.substring(0, 200))
+        console.log('[CodePlayer Debug] has newlines:', structured.content.code.includes('\n'))
+
         return (
-          <div className="result-visual">
+          <div className="result-visual result-visual-code">
             <CodePlayer
               code={structured.content.code}
               language={structured.content.language || 'text'}

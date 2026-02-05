@@ -67,7 +67,7 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
         language={detectedLanguage}
         style={vscDarkPlus}
         showLineNumbers={true}
-        wrapLines={true}
+        wrapLines={false}
         lineProps={(lineNumber) => ({
           style: { display: 'block', cursor: 'pointer' },
           onClick: () => {
@@ -79,8 +79,13 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
           margin: 0,
           borderRadius: '8px',
           fontSize: '14px',
-          maxHeight: '600px',
-          overflow: 'auto'
+          maxHeight: '80vh',
+          overflow: 'auto',
+          overflowX: 'auto',
+          overflowY: 'auto',
+          whiteSpace: 'pre',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#4a4a4a #1e1e1e'
         }}
       >
         {codeContent}
