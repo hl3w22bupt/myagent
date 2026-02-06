@@ -15,6 +15,7 @@ import tempfile
 import shutil
 import time
 import math
+import platform
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -1603,41 +1604,78 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         except Exception as e:
             raise Exception(f"Video rendering failed: {str(e)}")
 
-    def _check_chrome_installation(self) -> None:
+    def _check_chrome_installation(self) -> str:
         """
         Check if Chrome headless shell is properly installed.
+
+        Returns:
+            str: Path to the Chrome binary
 
         Raises:
             Exception: If Chrome is not installed or not accessible
         """
-        chrome_wrapper = self.template_dir / ".cache" / "remotion" / "chrome" / "chrome-headless-shell" / "chrome-headless-shell"
-        chrome_launcher = self.template_dir / "chrome-launcher.sh"
+        # Detect platform and architecture
+        system = platform.system().lower()  # 'darwin' or 'linux'
+        machine = platform.machine().lower()  # 'x86_64', 'arm64', etc.
 
-        # Check Chrome wrapper
-        if not chrome_wrapper.exists():
+        # Map to Chrome platform naming (matches directory name from zip)
+        if system == "darwin":
+            if machine == "arm64":
+                chrome_subdir = "chrome-headless-shell-mac-arm64"
+            else:  # x86_64
+                chrome_subdir = "chrome-headless-shell-mac-x64"
+        else:  # linux
+            if machine == "aarch64":
+                chrome_subdir = "chrome-headless-shell-linux-arm64"
+            else:  # x86_64
+                chrome_subdir = "chrome-headless-shell-linux64"
+
+        # Chrome is extracted directly to: node_modules/.remotion/chrome-headless-shell/
+        chrome_binary = (
+            self.template_dir / "node_modules" / ".remotion" / "chrome-headless-shell" /
+            chrome_subdir / "chrome-headless-shell"
+        )
+
+        # Check if Chrome binary exists
+        if not chrome_binary.exists():
+            # Build platform description for error message
+            platform_desc = f"{system} ({machine})"
             raise Exception(
-                f"Chrome headless shell not found at: {chrome_wrapper}\n"
-                f"Please ensure Chrome is properly installed in the template directory.\n"
-                f"You may need to run: cd {self.template_dir} && npx @remotion/cli install"
+                f"Chrome Headless Shell not found at: {chrome_binary}\n\n"
+                f"Detected platform: {platform_desc}\n"
+                f"Expected directory: {chrome_subdir}\n\n"
+                f"Please install Chrome Headless Shell by running:\n"
+                f"  bash {self.template_dir.parent / 'scripts' / 'install-chrome.sh'}\n\n"
+                f"Or manually download from:\n"
+                f"  https://googlechromelabs.github.io/chrome-for-testing/\n"
             )
 
-        # Check if wrapper is executable
-        if not os.access(chrome_wrapper, os.X_OK):
-            logging.warning(f"Chrome wrapper is not executable: {chrome_wrapper}")
+        # Check if binary is executable
+        if not os.access(chrome_binary, os.X_OK):
+            logging.warning(f"Chrome binary is not executable: {chrome_binary}")
             try:
-                os.chmod(chrome_wrapper, 0o755)
-                logging.info(f"Made Chrome wrapper executable: {chrome_wrapper}")
+                os.chmod(chrome_binary, 0o755)
+                logging.info(f"Made Chrome binary executable: {chrome_binary}")
             except Exception as e:
-                raise Exception(f"Failed to make Chrome wrapper executable: {e}")
+                raise Exception(f"Failed to make Chrome binary executable: {e}")
 
-        # Check Chrome launcher
-        if not chrome_launcher.exists():
-            raise Exception(
-                f"Chrome launcher script not found: {chrome_launcher}\n"
-                f"Please ensure chrome-launcher.sh exists in the template directory."
+        # Verify Chrome can run
+        try:
+            result = subprocess.run(
+                [str(chrome_binary), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
             )
+            if result.returncode == 0:
+                logging.info(f"✓ Chrome validated: {result.stdout.strip()}")
+            else:
+                logging.warning(f"Chrome --version check failed: {result.stderr}")
+        except Exception as e:
+            logging.warning(f"Could not verify Chrome version: {e}")
 
-        logging.info(f"✓ Chrome installation validated: {chrome_wrapper}")
+        logging.info(f"✓ Chrome installation validated: {chrome_binary}")
+        return str(chrome_binary)
 
     async def _create_remotion_project(self, code: str):
         """Create Remotion project by copying pre-installed template."""
@@ -1648,7 +1686,7 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
 
         # NEW: Check Chrome installation before rendering
         logging.info("Checking Chrome installation...")
-        self._check_chrome_installation()
+        self._chrome_binary = self._check_chrome_installation()
 
         # Copy template to project directory
         if self.project_dir.exists():
@@ -1737,15 +1775,15 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         env = os.environ.copy()
         env['NODE_PATH'] = str(self.template_dir / "node_modules")
 
-        # Set Chrome browser cache path to use our chrome-headless-shell wrapper
-        chrome_wrapper = self.template_dir / ".cache" / "remotion" / "chrome" / "chrome-headless-shell" / "chrome-headless-shell"
+        # Use the Chrome binary path from _check_chrome_installation()
+        chrome_binary = Path(self._chrome_binary)
 
-        # Point Remotion to our wrapper script
-        env['CHROME_EXECUTABLE_PATH'] = str(chrome_wrapper)
-        env['BROWSER_EXECUTABLE_PATH'] = str(chrome_wrapper)
-        env['REMONITION_BROWSER_PATH'] = str(chrome_wrapper)
+        # Point Remotion to Chrome Headless Shell
+        env['CHROME_EXECUTABLE_PATH'] = str(chrome_binary)
+        env['BROWSER_EXECUTABLE_PATH'] = str(chrome_binary)
+        env['PUPPETEER_EXECUTABLE_PATH'] = str(chrome_binary)
 
-        # Skip Chrome download - ENHANCED: Add more variables to prevent any Chrome download attempts
+        # Skip Chrome download - prevent any Chrome download attempts
         env['PUPPETEER_SKIP_CHROMIUM_DOWNLOAD'] = 'true'
         env['PUPPETEER_SKIP_DOWNLOAD'] = 'true'
         env['REMONITION_SKIP_BROWSER_DOWNLOAD'] = 'true'
@@ -1753,17 +1791,8 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
         env['NODE_ENV'] = 'production'  # Avoid dev mode auto-downloads
         env['REMONITION_SKIP_BUNDLE_DOWNLOAD'] = 'true'  # Skip bundle downloads
 
-        # Use Chrome launcher script that adds --headless=new
-        chrome_launcher = self.template_dir / "chrome-launcher.sh"
-
-        if not chrome_launcher.exists():
-            raise Exception(f"Chrome launcher not found: {chrome_launcher}")
-
-        # Make launcher executable
-        os.chmod(chrome_launcher, 0o755)
-        os.chmod(chrome_wrapper, 0o755)
-
-        env['PUPPETEER_EXECUTABLE_PATH'] = str(chrome_launcher)
+        # Make Chrome executable (just in case)
+        os.chmod(chrome_binary, 0o755)
 
         # Render video using template's remotion CLI
         # Format: remotion render <entry-point.ts> <comp-id> <output-file.mp4>
@@ -1777,9 +1806,7 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
             "--fps", str(fps),
             f"--frames=0-{duration * fps - 1}",  # Use frame range instead of duration
             "--jpeg-quality", quality_preset,
-            "--concurrency=1",  # Use concurrency=1 to avoid bundler issues on macOS
-            "--browser=executable",  # Use executable browser mode
-            "--chromium-mode=chrome-for-testing"  # Use chrome-for-testing mode for --headless=new
+            "--concurrency=1"  # Use concurrency=1 to avoid bundler issues
         ]
 
         # DEBUG: Log the render command
