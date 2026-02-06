@@ -212,6 +212,7 @@ export class PostgresDataStore implements Database {
           path TEXT NOT NULL,
           description TEXT,
           commit_hash TEXT,
+          metadata JSONB,
           timestamp BIGINT NOT NULL
         )
       `);
@@ -245,6 +246,19 @@ export class PostgresDataStore implements Database {
       `);
 
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
+
+      // 自动迁移：为 artifacts 表添加 metadata 列（如果不存在）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'artifacts' AND column_name = 'metadata'
+          ) THEN
+            ALTER TABLE artifacts ADD COLUMN metadata JSONB;
+          END IF;
+        END $$;
+      `);
 
       await client.query('COMMIT');
       console.log('[PostgresDataStore] Schema initialized');
@@ -582,6 +596,7 @@ export class PostgresDataStore implements Database {
         path: row.path,
         description: row.description,
         commitHash: row.commit_hash,
+        metadata: row.metadata,
         // PostgreSQL returns bigint as string, need to convert to number then Date
         timestamp: new Date(parseInt(row.timestamp)),
       }));
@@ -694,16 +709,17 @@ export class PostgresDataStore implements Database {
     try {
       const id = `artifact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       await client.query(
-        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, metadata, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           id,
           artifact.taskId,
           artifact.artifactType,
           artifact.action,
           artifact.path,
-          artifact.description,
-          artifact.commitHash,
+          artifact.description || null,
+          artifact.commitHash || null,
+          artifact.metadata || null,
           artifact.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
         ]
       );
@@ -721,16 +737,17 @@ export class PostgresDataStore implements Database {
     try {
       const id = artifact.id || `artifact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       await client.query(
-        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, metadata, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           id,
-          artifact.taskId,
+          artifact.taskId || '',
           artifact.artifactType,
           artifact.action,
           artifact.path,
-          artifact.description,
-          artifact.commitHash,
+          artifact.description || null,
+          artifact.commitHash || null,
+          artifact.metadata || null,
           artifact.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
         ]
       );

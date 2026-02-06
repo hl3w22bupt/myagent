@@ -27,9 +27,9 @@ describe('SkillDiscovery', () => {
       // Check for expected skills
       const skillNames = skills.map((s) => s.name);
       expect(skillNames).toContain('web-search');
-      expect(skillNames).toContain('summarize');
       expect(skillNames).toContain('code-analysis');
       expect(skillNames).toContain('remotion-generator');
+      expect(skillNames).toContain('text-analyzer');
     });
 
     it('should parse skill metadata correctly', async () => {
@@ -65,7 +65,7 @@ describe('SkillDiscovery', () => {
 
       // Native skills (from /skills directory)
       expect(skillNames).toContain('web-search');
-      expect(skillNames).toContain('summarize');
+      expect(skillNames).toContain('code-analysis');
 
       // Claude Skills (from /claude_skills directory) - these should also be loaded
       const claudeSkills = skills.filter((s) => s.tags.includes('claude-skill'));
@@ -120,7 +120,7 @@ describe('SkillDiscovery', () => {
     it('should return true for existing skills', async () => {
       await discovery.discover();
       expect(discovery.hasSkill('web-search')).toBe(true);
-      expect(discovery.hasSkill('summarize')).toBe(true);
+      expect(discovery.hasSkill('code-analysis')).toBe(true);
     });
 
     it('should return false for non-existent skills', async () => {

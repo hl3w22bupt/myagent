@@ -225,6 +225,7 @@ export const handler = async (request: any, { logger }: any) => {
             action: artifact.action,
             path: artifact.path,
             description: artifact.description,
+            metadata: artifact.metadata,
             timestamp: artifact.timestamp instanceof Date
               ? artifact.timestamp.toISOString()
               : new Date(artifact.timestamp).toISOString(),

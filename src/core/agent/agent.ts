@@ -226,7 +226,8 @@ export class Agent {
     await Agent.initializeSkillsRegistry();
 
     // Filter skills based on config.availableSkills
-    const filteredSkills = this.config.availableSkills
+    // Note: Empty array means no filtering (use all skills)
+    const filteredSkills = (this.config.availableSkills && this.config.availableSkills.length > 0)
       ? Agent.skillsRegistry.filter(s => this.config.availableSkills!.includes(s.name))
       : Agent.skillsRegistry;
 

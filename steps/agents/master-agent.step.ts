@@ -475,10 +475,16 @@ export const handler = async (
     // Get Agent or MasterAgent from Manager
     // each session has independent Agent/MasterAgent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
-    const agent = await agentManager.acquire(sessionId, {
+    // Note: Only pass availableSkills if it's a non-empty array
+    // Empty array means "use all skills" (not "restrict to no skills")
+    const acquireOptions: any = {
       agentType,
-      availableSkills: input.availableSkills,
-    });
+    };
+    if (input.availableSkills && input.availableSkills.length > 0) {
+      acquireOptions.availableSkills = input.availableSkills;
+    }
+
+    const agent = await agentManager.acquire(sessionId, acquireOptions);
 
     // Verify agent type
     const agentTypeName = agent.constructor.name;

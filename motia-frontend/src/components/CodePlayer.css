@@ -2,7 +2,122 @@
   border-radius: 8px;
   overflow: visible;
   background-color: #1e1e1e;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Header Bar */
+.code-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #2d2d2d;
+  border-bottom: 1px solid #3e3e3e;
+  border-radius: 8px 8px 0 0;
+  gap: 8px;
+}
+
+.code-player-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.code-player-filename {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filename-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.code-player-language {
+  flex-shrink: 0;
+}
+
+.language-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.code-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.view-mode-toggle {
+  display: flex;
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 2px;
+  border: 1px solid #3e3e3e;
+}
+
+.toggle-button {
+  padding: 4px 8px;
+  background: transparent;
+  color: #888;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggle-button:hover {
+  color: #ffffff;
+  background: #2d2d2d;
+}
+
+.toggle-button.active {
+  color: #ffffff;
+  background: #553c9a;
+}
+
+.copy-button {
+  padding: 4px 8px;
+  background: #1e1e1e;
+  color: #888;
+  border: 1px solid #3e3e3e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copy-button:hover {
+  color: #ffffff;
+  background: #2d2d2d;
+  border-color: #667eea;
+}
+
+.copy-button.copied {
+  color: #4ade80;
+  background: #1e1e1e;
+  border-color: #4ade80;
 }
 
 /* 内部的 pre 元素处理滚动 */
@@ -14,29 +129,27 @@
   white-space: pre !important;
 }
 
-.code-player-filename {
-  padding: 12px 16px;
-  background-color: #2d2d2d;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 500;
-  border-bottom: 1px solid #3e3e3e;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.code-player-filename::before {
-  content: '📄';
-  font-size: 16px;
-}
-
 .code-player-empty {
   padding: 32px;
   text-align: center;
   color: #888;
   background-color: #1e1e1e;
   border-radius: 8px;
+}
+
+/* Preview Mode */
+.code-player-preview {
+  width: 100%;
+  height: 80vh;
+  background: #ffffff;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 /* 代码高亮滚动条样式 */
@@ -67,4 +180,27 @@
 .code-player-container code {
   white-space: pre !important;
   overflow-wrap: normal !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .code-player-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .code-player-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .code-player-actions {
+    justify-content: flex-end;
+  }
+
+  .code-player-filename {
+    font-size: 12px;
+  }
 }

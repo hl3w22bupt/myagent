@@ -7,8 +7,6 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { spawn } from 'child_process';
-import { join } from 'path';
 
 /**
  * Task counter for generating unique task IDs.
@@ -36,6 +34,7 @@ export const bodySchema = z.object({
 
   /**
    * Optional: Available skills.
+   * If not provided, PTCGenerator will automatically select appropriate skills.
    */
   availableSkills: z.array(z.string()).optional().describe('List of available skills'),
 
@@ -84,63 +83,13 @@ export const config: ApiRouteConfig = {
 };
 
 /**
- * Execute Python script for skill selection.
- */
-async function autoSelectSkill(task: string, logger: any): Promise<string[]> {
-  return new Promise((resolve, _reject) => {
-    const scriptPath = join(process.cwd(), 'scripts', 'select_skill.py');
-    const python = spawn('python3', [scriptPath, task], {
-      cwd: process.cwd(),
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    python.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    python.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    python.on('close', (code) => {
-      if (code !== 0) {
-        // Skill selection failed, return empty array (no skills)
-        logger?.warn('Skill selection failed, continuing without skills', {
-          error: stderr,
-        });
-        resolve([]);
-        return;
-      }
-
-      try {
-        const result = JSON.parse(stdout);
-        if (result.selected && result.skill_name) {
-          resolve([result.skill_name]);
-        } else {
-          resolve([]);
-        }
-      } catch (error) {
-        logger?.warn('Failed to parse skill selection result', {
-          error: error instanceof Error ? error.message : String(error),
-          stdout,
-        });
-        resolve([]);
-      }
-    });
-
-    python.on('error', (error) => {
-      logger?.warn('Skill selection process error', { error });
-      resolve([]);
-    });
-  });
-}
-
-/**
  * Agent API handler.
  *
  * Receives HTTP requests and emits agent task events.
+ *
+ * Note: Skill selection is now handled by PTCGenerator inside the Agent execution flow.
+ * If availableSkills is not provided, PTCGenerator will automatically select appropriate skills
+ * based on the task description and available skill registry.
  */
 export const handler = async (request: any, { emit, logger }: any) => {
   // Validate request body
@@ -164,24 +113,9 @@ export const handler = async (request: any, { emit, logger }: any) => {
     subagents,
   });
 
-  // === Auto-select skills if not provided ===
-  let finalSkills = availableSkills;
-  if (!finalSkills || finalSkills.length === 0) {
-    logger.info('No skills provided, auto-selecting...', { taskId });
-    try {
-      finalSkills = await autoSelectSkill(task, logger);
-      if (finalSkills.length > 0) {
-        logger.info('Auto-selected skills', { taskId, skills: finalSkills });
-      } else {
-        logger.info('No matching skills found', { taskId });
-      }
-    } catch (error: any) {
-      logger.warn('Skill selection failed, continuing without skills', {
-        taskId,
-        error: error.message,
-      });
-      finalSkills = [];
-    }
+  // Log if no skills provided - PTCGenerator will handle selection
+  if (!availableSkills || availableSkills.length === 0) {
+    logger.info('No skills provided - PTCGenerator will auto-select skills', { taskId });
   }
 
   // Emit agent task execution event
@@ -193,14 +127,13 @@ export const handler = async (request: any, { emit, logger }: any) => {
       task,
       sessionId,
       systemPrompt,
-      availableSkills: finalSkills, // Use auto-selected skills
-      useDelegation, // Pass delegation flag
-      subagents, // Pass subagents list
+      availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
+      useDelegation,
+      subagents,
     },
   });
 
   // Return immediate response
-  // In a real system, you might want to use SSE or webhooks for async results
   return {
     status: 200, // OK
     body: {
@@ -212,6 +145,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       task,
       sessionId,
       useDelegation,
+      availableSkills,
     },
   };
 };

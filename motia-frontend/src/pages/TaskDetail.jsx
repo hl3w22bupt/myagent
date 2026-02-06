@@ -424,6 +424,7 @@ function TaskDetail() {
   useEffect(() => {
     if (task?.artifacts) {
       const videoCount = task.artifacts.filter(a => a.type === 'video').length
+      const codeCount = task.artifacts.filter(a => a.type === 'code').length
       if (videoCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedVideoIndex(null)
@@ -783,6 +784,39 @@ function TaskDetail() {
               size={currentVideoMetadata.size}
               getBlobUrl={getMediaBlobUrl}
             />
+          </div>
+        </div>
+      )
+    }
+
+    // 显示 code artifacts
+    const codeArtifacts = task?.artifacts
+      ? task.artifacts.filter(artifact => artifact.type === 'code')
+      : [];
+
+    if (codeArtifacts.length > 0) {
+      return (
+        <div className="result-visual">
+          <div className="artifact-section">
+            <h4>生成的代码</h4>
+            {codeArtifacts.map((artifact, index) => (
+              <div key={artifact.id} className="artifact-item">
+                <span className="artifact-language-badge">
+                  {artifact.metadata?.language || 'code'}
+                </span>
+                {artifact.metadata?.codeLength && (
+                  <span className="artifact-lines">
+                    {artifact.metadata.codeLength} chars
+                  </span>
+                )}
+                <span className="artifact-timestamp">
+                  {new Date(artifact.timestamp).toLocaleString('zh-CN')}
+                </span>
+                {artifact.description && (
+                  <p className="artifact-description">{artifact.description}</p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )

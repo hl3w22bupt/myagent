@@ -215,6 +215,20 @@ ${task}
 
 ${skillRequirement}
 
+CRITICAL - SKILL NAME VALIDATION:
+1. You MUST ONLY use skill names from the EXACT list above
+2. DO NOT create, invent, or combine skill names
+3. DO NOT make assumptions about skill names - use them EXACTLY as shown
+4. For example:
+   - ✅ CORRECT: Use "simple-code-generator" (exact match)
+   - ❌ WRONG: Do NOT use "code_generator", "code-gen", "generator", etc.
+   - ✅ CORRECT: Use "frontend-design" (exact match)
+   - ❌ WRONG: Do NOT use "web-design", "ui-design", etc.
+5. If a task mentions "code" or "generator", use "simple-code-generator"
+6. If a task mentions "web" or "frontend", use "frontend-design"
+7. The skill list above is the ONLY source of truth for valid skill names
+8. NEVER try to guess or infer a skill name - always use exact match from the list
+
 IMPORTANT GUIDELINES:
 1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
 2. PRIORITIZE using available skills over direct computation or common knowledge
@@ -235,8 +249,8 @@ IMPORTANT GUIDELINES:
    - Include all desired features in the description rather than trying to modify existing code
 
 8. CODE GENERATION TASKS:
-   - When user asks to "generate code", "create a function", or similar with simple-code-generator skill mentioned:
-     * You MUST use simple-code-generator skill
+   - When user asks to "generate code", "create a function", "write code":
+     * Use "simple-code-generator" skill (NOT "code_generator")
      * DO NOT write code directly in the PTC code
      * Let the skill handle the code generation
 
@@ -324,6 +338,44 @@ Output format (JSON):
       console.error('[PTC Generator] Missing or invalid selected_skills field:', plan);
       throw new Error(`Plan missing valid 'selected_skills' or 'selected' array`);
     }
+
+    // ✅ 新增：验证技能名称
+    const availableSkillNames = new Set(this.skills.keys());
+    const invalidSkills = skillsArray.filter(
+      (skill: string) => !availableSkillNames.has(skill)
+    );
+
+    if (invalidSkills.length > 0) {
+      const suggestions = invalidSkills.map((skill: string) => {
+        // 查找相似的技能名称
+        const similar = this.findSimilarSkillName(skill);
+        return {
+          invalid: skill,
+          suggestion: similar || null
+        };
+      });
+
+      console.error('[PTC Generator] LLM returned invalid skill names', {
+        invalidSkills,
+        suggestions,
+        availableSkills: Array.from(availableSkillNames)
+      });
+
+      const suggestionMessages = suggestions
+        .filter(s => s.suggestion)
+        .map(s => `Did you mean "${s.suggestion}" instead of "${s.invalid}"?`)
+        .join(' ');
+
+      throw new Error(
+        `Invalid skill names selected: ${invalidSkills.join(', ')}. ` +
+        `Available skills: ${Array.from(availableSkillNames).join(', ')}. ` +
+        suggestionMessages
+      );
+    }
+
+    console.info('[PTC Generator] Skills validated successfully', {
+      selectedSkills: skillsArray
+    });
 
     return {
       code: '', // Will be generated in step 2
@@ -473,7 +525,7 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 #       execute_func=executor.execute,
 #       skill_name='skill-name',
 #       input_data={
-#           'description': 'detailed task description',
+#           'task': 'THE ACTUAL TASK FROM <task> SECTION ABOVE',  # CRITICAL: Use real task!
 #           'param2': 'value2'
 #       },
 #       max_attempts=3  # Max 3 retry attempts
@@ -488,12 +540,22 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 #       'attempts': int  # Number of attempts made
 #   }
 
-# IMPORTANT: Always check result['success'] and extract result['content']:
+# CRITICAL - HOW TO PASS USER TASK TO SKILLS:
+# You MUST use the 'task' field to pass the actual user request
+# Copy the COMPLETE task description from the <task> section above
+# DO NOT use placeholders like 'task description' or 'detailed task'
+#
+# Example (WRONG - uses placeholder):
+#   input_data={'description': 'task description'}  # ❌ This will fail!
+#
+# Example (CORRECT - uses actual task):
+#   input_data={'task': '设计一个iphone17产品的前端介绍页面'}  # ✅ Copy from <task> section!
+
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='skill-name',
     input_data={
-        'description': 'detailed task description',
+        'task': 'COPY THE ACTUAL TASK FROM <task> SECTION',  # CRITICAL: Use real task content!
         'param2': 'value2'
     }
 )
@@ -509,7 +571,9 @@ else:
 result1 = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='first-skill',
-    input_data={'param': 'value'}
+    input_data={
+        'task': 'COPY ACTUAL TASK FROM <task> SECTION'
+    }
 )
 
 if result1['success']:
@@ -517,7 +581,7 @@ if result1['success']:
         execute_func=executor.execute,
         skill_name='second-skill',
         input_data={
-            'description': 'process the result',
+            'task': 'process result from first skill',
             'input_data': result1['content']  # Pass ['content'], not result1
         }
     )`
@@ -525,6 +589,16 @@ if result1['success']:
 }
 
 Code requirements:
+
+CRITICAL - USER TASK MUST BE PASSED CORRECTLY:
+- When calling skills, you MUST pass the ACTUAL task from the <task> section
+- Use 'task' field (not 'description') for the main user request
+- DO NOT use placeholders like 'task description', 'detailed task', etc.
+- Copy the COMPLETE task text from <task> section to the skill input
+- Example: If <task> says "设计一个iphone17产品的前端介绍页面"
+           Then use: input_data={'task': '设计一个iphone17产品的前端介绍页面'}
+
+General requirements:
 - Use 'await' for any async operations (like skill execution)
 - Print the final result
 - DO NOT use try/except blocks (they are added automatically)
@@ -537,11 +611,12 @@ Code requirements:
 
 CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 \`\`\`python
+# EXAMPLE: Execute frontend-design skill with user's actual task
 result = await execute_with_retry(
     execute_func=executor.execute,
-    skill_name='skill-name',
+    skill_name='frontend-design',
     input_data={
-        'description': 'task description'
+        'task': '设计一个iphone17产品的前端介绍页面'  # Use EXACT task from <task> section!
     }
 )
 
@@ -551,6 +626,10 @@ else:
     error = result['content'].get('message', 'Unknown error')
     print(f"Error: {error}")
 \`\`\`
+
+REMINDER: ALWAYS copy the ACTUAL task text from the <task> section above into the 'task' field!
+DO NOT use placeholder text like 'task description' or 'detailed task'.
+The skill needs the REAL user request to generate correct output.
 
 IMPORTANT REMINDERS:
 - ALWAYS use execute_with_retry() for skill execution (NEVER call executor.execute directly)
@@ -651,5 +730,33 @@ Generate the code now:`;
    */
   addSkill(skill: SkillMetadata): void {
     this.skills.set(skill.name, skill);
+  }
+
+  /**
+   * Find similar skill name for typos or variations.
+   */
+  private findSimilarSkillName(invalidName: string): string | null {
+    const availableNames = Array.from(this.skills.keys());
+    const invalidLower = invalidName.toLowerCase().replace(/[_\s]/g, '-');
+
+    // Direct substring match
+    for (const available of availableNames) {
+      const availableLower = available.toLowerCase();
+      if (availableLower.includes(invalidLower) || invalidLower.includes(availableLower)) {
+        return available;
+      }
+    }
+
+    // Word-based matching (e.g., "code_generator" → "simple-code-generator")
+    const invalidWords = invalidLower.split('-');
+    for (const available of availableNames) {
+      const availableWords = available.toLowerCase().split('-');
+      const commonWords = invalidWords.filter(w => availableWords.includes(w));
+      if (commonWords.length >= 2) {
+        return available;
+      }
+    }
+
+    return null;
   }
 }

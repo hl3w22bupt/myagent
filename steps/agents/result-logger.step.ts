@@ -481,6 +481,51 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         });
       }
 
+      // 检查是否是 code output 并保存到 artifacts
+      if (structuredResult?.result_type === 'code' && structuredResult.content) {
+        const content = structuredResult.content as any;
+        const code = content.code;
+        const language = content.language || 'text';
+
+        logger.info('[🔍 DIAGNOSIS] ✅ Found code output', {
+          taskId,
+          language,
+          codeLength: code?.length || 0,
+        });
+
+        if (code) {
+          // 生成唯一标识符作为 path
+          const artifactPath = `code_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${language}`;
+
+          await store.addArtifact({
+            taskId,
+            artifactType: 'code',
+            action: 'generated',
+            path: artifactPath,
+            description: content.description || `Generated ${language} code`,
+            metadata: {
+              // 使用 metadata 存储扩展属性
+              language: language,
+              codeLength: code.length,
+              ...(content.highlight && { highlight: content.highlight }),
+            },
+            timestamp: new Date(),
+          });
+
+          logger.info('[🔍 DIAGNOSIS] ✅ Code artifact saved', {
+            taskId,
+            artifactPath,
+            language,
+            metadata: { language, codeLength: code.length },
+          });
+        }
+      } else {
+        logger.info('[🔍 DIAGNOSIS] No code output found', {
+          taskId,
+          resultType: structuredResult?.result_type,
+        });
+      }
+
       // Check if this is a multi-turn continuation (task already completed)
       const currentTask = await store.getTask(taskId);
 
@@ -524,6 +569,13 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           metadata: {
             ...(currentTask.metadata || {}),
             ...normalizedResult.metadata,
+            // CRITICAL: Always preserve structuredOutput if it exists
+            ...(currentTask?.metadata?.structuredOutput && {
+              structuredOutput: currentTask.metadata.structuredOutput
+            }),
+            ...((normalizedResult.metadata as any)?.structuredOutput && {
+              structuredOutput: (normalizedResult.metadata as any).structuredOutput
+            }),
           },
           completedAt: new Date(),
         });
@@ -564,6 +616,13 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           metadata: {
             ...(latestTask?.metadata || {}),
             ...normalizedResult.metadata,
+            // CRITICAL: Always preserve structuredOutput if it exists
+            ...(latestTask?.metadata?.structuredOutput && {
+              structuredOutput: latestTask.metadata.structuredOutput
+            }),
+            ...((normalizedResult.metadata as any)?.structuredOutput && {
+              structuredOutput: (normalizedResult.metadata as any).structuredOutput
+            }),
           },
           completedAt: new Date(),
         });

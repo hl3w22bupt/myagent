@@ -112,6 +112,34 @@ class SkillExecutor:
         """
         await self.ensure_loaded()
 
+        # ✅ 新增：验证技能名称存在
+        available_skills = self.registry.get_skill_names()
+
+        if skill_name not in available_skills:
+            # 尝试找到相似的技能名称
+            similar_skill = self._find_similar_skill(skill_name, available_skills)
+
+            error_msg = (
+                f"Skill '{skill_name}' not found in registry. "
+                f"Available skills: {available_skills}"
+            )
+
+            if similar_skill:
+                error_msg += f". Did you mean '{similar_skill}'?"
+
+            print(f"[ERROR] SkillExecutor: Invalid skill name")
+            print(f"  Requested: {skill_name}")
+            print(f"  Similar: {similar_skill}")
+            print(f"  Available: {available_skills}")
+
+            return SkillResult(
+                success=False,
+                output=None,
+                error=error_msg,
+                execution_time=0,
+                metadata={'skill_not_found': True, 'suggested_skill': similar_skill}
+            )
+
         skill = await self.registry.load_full(skill_name)
         start_time = time.time()
 
@@ -123,11 +151,20 @@ class SkillExecutor:
             """
             Internal skill execution function
 
-            简化的判断逻辑（不再依赖 skill.type）：
-            1. 没有 execution → Native Pure-Prompt Skills
-            2. 有 execution 且 handler == 'claude_skill_handler' → Claude Code Skills
-            3. 有 execution 且 handler != 'claude_skill_handler' → Native Skills
+            判断逻辑：
+            1. Claude Skills（在 virtual_registry 中）→ _execute_claude_skill
+            2. 有 execution 且 handler == 'claude_skill_handler' → Claude Code Skills（旧路径）
+            3. 没有 execution → Native Pure-Prompt Skills
+            4. 有 execution 且 handler != 'claude_skill_handler' → Native Skills
             """
+            # ============ 优先判断：是否是 Claude Skill ============
+            if self._virtual_registry and skill_name in self._virtual_registry._virtual_skills:
+                # ⭐ Claude Skills, 统一使用 _execute_claude_skill 处理
+                return await self._execute_claude_skill(
+                    skill,
+                    enhanced_input
+                )
+
             # ============ 判断：是否有 execution 配置 ============
             if not skill.execution:
                 # ⭐ Native Pure-Prompt Skills
@@ -142,7 +179,7 @@ class SkillExecutor:
             handler_path = skill.execution.handler
 
             if 'claude_skill_handler' in handler_path:
-                # ⭐ Claude Code Skills
+                # ⭐ Claude Code Skills（旧路径，使用 skill.yaml）
                 # handler 指向 claude_skill_handler.py
                 return await self._execute_claude_skill(
                     skill,
@@ -160,11 +197,11 @@ class SkillExecutor:
         from config.hooks import HOOK_CONFIG
         has_hooks_configured = len(self.hook_executor.hook_manager.hooks) > 0
 
-        print(f"[DEBUG] SkillExecutor.execute: skill_name={skill_name}")
-        print(f"[DEBUG]   has_hooks_configured={has_hooks_configured}")
-        print(f"[DEBUG]   hook_manager.hooks count={len(self.hook_executor.hook_manager.hooks)}")
-        for i, hook in enumerate(self.hook_executor.hook_manager.hooks):
-            print(f"[DEBUG]     hook[{i}]: {type(hook).__name__}")
+        # print(f"[DEBUG] SkillExecutor.execute: skill_name={skill_name}")
+        # print(f"[DEBUG]   has_hooks_configured={has_hooks_configured}")
+        # print(f"[DEBUG]   hook_manager.hooks count={len(self.hook_executor.hook_manager.hooks)}")
+        # for i, hook in enumerate(self.hook_executor.hook_manager.hooks):
+        #     print(f"[DEBUG]     hook[{i}]: {type(hook).__name__}")
 
         if has_hooks_configured:
             try:
@@ -263,6 +300,9 @@ class SkillExecutor:
         Native Pure-Prompt Skills 执行
 
         使用 ClaudeSkillHandler（template 模式）
+
+        注意：Claude Skills不会走这个方法，
+        它们会通过 virtual_registry 判断，走 _execute_claude_skill 路径。
 
         Args:
             skill: Skill definition
@@ -369,32 +409,51 @@ class SkillExecutor:
             Result from Claude Skill handler (full dict with success, output, error)
         """
         from .handlers.claude_skill_handler import ClaudeSkillHandler
+        from .adapters.claude_skill_scanner import ClaudeSkillScanner
 
-        # Get script path from execution config
-        script_path = skill.execution.script_path
+        # Determine skill_root and timeout
+        timeout = 30000  # Default timeout
+        skill_root = None
 
-        # Create handler - pass the script path directly if available
-        if script_path:
-            # Extract the directory containing the script
-            script_path_obj = Path(script_path)
-            skill_root = script_path_obj.parent
+        if skill.execution:
+            timeout = skill.execution.timeout or timeout
+            if skill.execution.script_path:
+                script_path_obj = Path(skill.execution.script_path)
+                skill_root = script_path_obj.parent
         else:
-            skill_root = None
+            # No execution config - this is a pure Claude Skill (from claude_skills/ directory)
+            # Find the SKILL.md file
+            scanner = ClaudeSkillScanner()
+            skill_files = scanner.scan()
+            for skill_file in skill_files:
+                if skill_file.skill_name == skill.name:
+                    # skill_file.root_dir 指向 claude_skills/
+                    # SKILL.md 在 claude_skills/{skill_name}/SKILL.md
+                    skill_root = skill_file.root_dir / skill.name
+                    # print(f"[DEBUG] Auto-detected skill_root for {skill.name}: {skill_root}")
+                    break
+
+        # print(f"[DEBUG] Creating ClaudeSkillHandler for {skill.name}:")
+        # print(f"[DEBUG]   skill_root: {skill_root}")
+        # print(f"[DEBUG]   timeout: {timeout}")
+        # print(f"[DEBUG]   Will use mode: {'file' if skill_root else 'template'}")
 
         handler = ClaudeSkillHandler(
             skill_name=skill.name,
             skill_root=skill_root,
-            timeout=skill.execution.timeout
+            timeout=timeout,
+            mode='file' if skill_root else 'template'  # Explicitly set mode based on skill_root
         )
 
         # Execute skill
+        # Pass the complete input_data to handler (not just extracted fields)
+        # This ensures all fields from PTC code are available to the skill
         handler_input = {
             'skill_name': skill.name,
-            'task': input_data.get('task', {}),
-            'context': input_data.get('context', {})
+            **input_data  # Include all fields from input_data
         }
 
-        print(f"[DEBUG] _execute_claude_skill calling handler with: {handler_input}")
+        print(f"[DEBUG] _execute_claude_skill calling handler with:")
         result = handler.execute(handler_input)
         # 移除 result 的打印输出，避免干扰 [STRUCTURED_OUTPUT] 标记
 
@@ -538,3 +597,37 @@ class SkillExecutor:
         if hasattr(skill, 'get_artifact_type'):
             return skill.get_artifact_type()
         return 'text'
+
+    def _find_similar_skill(self, invalid_name: str, available_skills: list[str]) -> str | None:
+        """
+        Find similar skill name for typos or variations.
+
+        Args:
+            invalid_name: The invalid skill name provided
+            available_skills: List of available skill names
+
+        Returns:
+            The most similar skill name, or None if no close match found
+        """
+        if not available_skills:
+            return None
+
+        invalid_normalized = invalid_name.lower().replace('_', '-')
+
+        # Direct substring match
+        for skill in available_skills:
+            skill_normalized = skill.lower()
+            if (invalid_normalized in skill_normalized or
+                skill_normalized in invalid_normalized):
+                return skill
+
+        # Word-based matching
+        invalid_words = set(invalid_normalized.split('-'))
+        for skill in available_skills:
+            skill_words = set(skill.lower().split('-'))
+            common_words = invalid_words & skill_words
+            if len(common_words) >= 2:
+                return skill
+
+        return None
+

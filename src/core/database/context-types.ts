@@ -109,6 +109,7 @@ export interface ArtifactIndex {
   path: string;
   description?: string;
   commitHash?: string;
+  metadata?: Record<string, any>;  // 扩展属性字段（与其他表保持一致）
   timestamp: Date;
 }
 

@@ -101,7 +101,7 @@ withApiServer('Agent API Integration Tests', () => {
           },
           body: JSON.stringify({
             task: 'Search and summarize AI news',
-            availableSkills: ['web-search', 'summarize'],
+            availableSkills: ['web-search', 'code-analysis'],
           }),
         });
 
@@ -296,7 +296,7 @@ withApiKey('Agent Direct Execution Tests', () => {
     agent = new Agent(
       {
         systemPrompt: 'You are a helpful assistant.',
-        availableSkills: ['summarize'],
+        availableSkills: ['code-analysis', 'text-analyzer'],
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',

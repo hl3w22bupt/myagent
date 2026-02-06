@@ -67,7 +67,7 @@ describe('Agent + Skill Standalone Integration', () => {
     agent = new Agent(
       {
         systemPrompt: 'You are a helpful assistant with access to various skills.',
-        availableSkills: ['summarize', 'code-analysis', 'web-search'],
+        availableSkills: ['code-analysis', 'web-search', 'text-analyzer'],
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
@@ -116,7 +116,7 @@ describe('Agent + Skill Standalone Integration', () => {
       expect(agent).toBeDefined();
       const info = agent.getInfo();
       expect(info.type).toBe('Agent');
-      expect(info.availableSkills).toContain('summarize');
+      expect(info.availableSkills).toContain('code-analysis');
     });
   });
 
@@ -227,57 +227,12 @@ for name, meta in skills.items():
 
       expect(result.success).toBe(true);
       expect(result.output).toContain('SUCCESS');
-      expect(result.output).toContain('summarize');
       expect(result.output).toContain('code-analysis');
+      expect(result.output).toContain('web-search');
     });
   });
 
   describe('Skill Execution Tests', () => {
-    it('should execute summarize skill (pure-prompt)', async () => {
-      const testCode = `
-import sys
-import os
-
-skill_path = os.getenv('MOTIA_SKILL_PATH', os.getcwd())
-if skill_path not in sys.path:
-    sys.path.insert(0, skill_path)
-
-src_path = os.path.join(skill_path, 'src')
-if os.path.exists(src_path) and src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
-from core.skill.executor import SkillExecutor
-
-executor = SkillExecutor(notify_hook_api_url=None, hooks=[])
-result = await executor.execute('summarize', {
-    'content': 'This is a long text that needs to be summarized.',
-    'max_length': 50
-})
-
-# result.output is a dict with 'content' key
-summary_content = result.output.get('content', str(result.output))
-print(f"SUCCESS: Summary: {str(summary_content)[:50]}")
-`;
-
-      const result = await sandbox.execute(testCode, {
-        skills: [
-          {
-            name: 'summarize',
-            version: '1.0.0',
-            type: 'pure-prompt',
-            inputSchema: { type: 'object' },
-            outputSchema: { type: 'object' },
-          },
-        ],
-        skillImplPath: process.cwd(),
-        sessionId: `test-summarize-skill-${Date.now()}`,  // Unique sessionId
-        timeout: 15000,
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.output).toContain('SUCCESS');
-    });
-
     it('should execute code-analysis skill (pure-script)', async () => {
       const testCode = `
 import sys
@@ -399,11 +354,11 @@ if os.path.exists(src_path) and src_path not in sys.path:
 from core.skill.executor import SkillExecutor
 
 executor = SkillExecutor()
-try:
-    result = await executor.execute('non-existent-skill', {})
-    print(f"ERROR: {result.error}")
-except Exception as e:
-    print(f"EXPECTED_ERROR: {str(e)[:50]}")
+result = await executor.execute('non-existent-skill', {})
+if result.error:
+    print(f"EXPECTED_ERROR: {result.error[:100]}")
+else:
+    print(f"ERROR: {result.output}")
 `;
 
       const result = await sandbox.execute(testCode, {
@@ -433,7 +388,7 @@ if os.path.exists(src_path) and src_path not in sys.path:
 from core.skill.executor import SkillExecutor
 
 executor = SkillExecutor()
-result = await executor.execute('summarize', {})  # Missing 'text' field
+result = await executor.execute('code-analysis', {})  # Missing 'code' field
 
 if result.error:
     print(f"EXPECTED_ERROR: Missing required field")
@@ -444,9 +399,9 @@ else:
       const result = await sandbox.execute(testCode, {
         skills: [
           {
-            name: 'summarize',
+            name: 'code-analysis',
             version: '1.0.0',
-            type: 'pure-prompt',
+            type: 'pure-script',
             inputSchema: { type: 'object' },
             outputSchema: { type: 'object' },
           },

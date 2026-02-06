@@ -251,6 +251,7 @@ export class DataStore {
         path TEXT NOT NULL,
         description TEXT,
         commit_hash TEXT,
+        metadata TEXT,
         timestamp INTEGER NOT NULL,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
       )
@@ -279,6 +280,16 @@ export class DataStore {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)`);
+
+    // 自动迁移：为 artifacts 表添加 metadata 列（如果不存在）
+    try {
+      this.db.run(`ALTER TABLE artifacts ADD COLUMN metadata TEXT`);
+    } catch (err: any) {
+      // SQLite 会报错如果列已存在，忽略这个错误
+      if (!err.message.includes('duplicate column name')) {
+        console.error('[DataStore] Migration failed:', err);
+      }
+    }
 
     console.log('[DataStore] Schema initialized successfully');
   }
@@ -690,8 +701,8 @@ export class DataStore {
     const artifactId = artifact.id || `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     this.db.run(
-      `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         artifactId,
         artifact.taskId!,
@@ -700,6 +711,7 @@ export class DataStore {
         artifact.path,
         artifact.description || null,
         artifact.commitHash || null,
+        artifact.metadata ? JSON.stringify(artifact.metadata) : null,
         artifact.timestamp instanceof Date ? artifact.timestamp.getTime() : Date.now(),
       ]
     );
@@ -725,6 +737,7 @@ export class DataStore {
         path: row.path,
         description: row.description,
         commitHash: row.commit_hash,
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
         timestamp: row.timestamp,
       });
     }
