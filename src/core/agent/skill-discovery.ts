@@ -1,16 +1,16 @@
 /**
  * Skill Discovery and Auto-Loading Module.
  *
- * Automatically discovers skills from the /skills directory by:
- * 1. Scanning for skill.yaml files in subdirectories
- * 2. Parsing YAML metadata (name, description, tags)
- * 3. Building a dynamic skills registry
+ * Automatically discovers skills from multiple sources:
+ * 1. Motia native skills (/skills directory with skill.yaml)
+ * 2. Claude Skills (/claude_skills directory with SKILL.md)
  *
- * This eliminates the need for hardcoded skillsRegistry.
+ * Uses unified skill-loader for consistent discovery across API and Agent layers.
  */
 
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
+import { loadAllSkills } from '../skill/skill-loader';
 
 /**
  * Skill metadata extracted from skill.yaml
@@ -205,37 +205,47 @@ export class SkillDiscovery {
   }
 
   /**
-   * Discover all skills from the skills directory.
+   * Discover all skills from all sources.
    *
-   * Scans for subdirectories containing skill.yaml files
-   * and parses their metadata.
+   * Uses unified skill-loader to load both:
+   * - Motia native skills (/skills directory with skill.yaml)
+   * - Claude Skills (/claude_skills directory with SKILL.md)
    */
   async discover(): Promise<SkillMetadata[]> {
     this.skills.clear();
 
     try {
-      // Check if skills directory exists
-      const stats = statSync(this.skillsDir);
-      if (!stats.isDirectory()) {
-        throw new Error(`Skills directory is not a directory: ${this.skillsDir}`);
+      // Use unified skill-loader to discover all skills
+      const unifiedSkills = loadAllSkills();
+
+      // Convert UnifiedSkillMetadata to SkillMetadata
+      for (const unified of unifiedSkills) {
+        const skillMetadata: SkillMetadata = {
+          name: unified.name,
+          description: unified.description,
+          tags: unified.tags,
+          version: unified.version,
+          type: unified.type,
+          path: unified.path || '',
+          metadata: unified.metadata,
+        };
+
+        this.skills.set(unified.name, skillMetadata);
       }
-    } catch {
-      console.warn(`[SkillDiscovery] Skills directory not found or not accessible: ${this.skillsDir}`);
-      console.warn('[SkillDiscovery] No skills will be available');
+
+      console.log(`[SkillDiscovery] Discovered ${this.skills.size} skills from all sources`);
+
+      // Log breakdown by source
+      const nativeCount = unifiedSkills.filter(s => s.source === 'native').length;
+      const claudeCount = unifiedSkills.filter(s => s.source === 'claude').length;
+      console.log(`[SkillDiscovery]   - ${nativeCount} native skills`);
+      console.log(`[SkillDiscovery]   - ${claudeCount} Claude Skills`);
+
+      return Array.from(this.skills.values());
+    } catch (error) {
+      console.error('[SkillDiscovery] Failed to discover skills:', error);
       return [];
     }
-
-    // Scan for subdirectories
-    const entries = readdirSync(this.skillsDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        await this.loadSkill(entry.name);
-      }
-    }
-
-    console.log(`[SkillDiscovery] Discovered ${this.skills.size} skills`);
-    return Array.from(this.skills.values());
   }
 
   /**

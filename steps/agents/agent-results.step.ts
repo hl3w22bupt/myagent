@@ -10,7 +10,25 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import { getGlobalPostgresStore } from '../../src/core/database/global-store';
 import type { Task } from '../../src/core/database/data-store';
+
+// Cache database instance for performance
+let cachedStore: any = null;
+
+async function getOptimizedStore() {
+  if (!cachedStore) {
+    // Use global singleton for PostgreSQL
+    const backend = process.env.DATABASE_BACKEND || 'sqlite';
+    if (backend === 'postgres') {
+      cachedStore = await getGlobalPostgresStore();
+      console.log('[AgentResultsAPI] Using global PostgreSQL singleton');
+    } else {
+      cachedStore = getDataStore();
+    }
+  }
+  return cachedStore;
+}
 
 /**
  * Query parameters schema for results API.
@@ -101,8 +119,8 @@ export const handler = async (request: any, { logger }: any) => {
   });
 
   try {
-    // Query from database
-    const unifiedStore = getDataStore();
+    // Query from database using optimized (cached) store
+    const unifiedStore = await getOptimizedStore();
 
     // Map status filter to TaskStatus
     const taskStatus = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : undefined;

@@ -83,6 +83,47 @@ export class PTCGenerator {
   }
 
   /**
+   * Extract user-specified skills from the task description.
+   * Detects patterns like "use X skill", "with Y skill", "using Z skill"
+   */
+  private extractUserSpecifiedSkills(task: string): string[] {
+    const specifiedSkills: string[] = [];
+
+    // Common patterns for skill specification
+    const patterns = [
+      /use\s+(?:the\s+)?(\w+(?:\s+skill))?/gi,
+      /with\s+(?:the\s+)?(\w+(?:\s+skill))?/gi,
+      /using\s+(?:the\s+)?(\w+(?:\s+skill))?/gi,
+      /apply\s+(?:the\s+)?(\w+(?:\s+skill))?/gi,
+      /call\s+(?:the\s+)?(\w+(?:\s+skill))?/gi,
+      /(?:execute|run|invoke)\s+(?:the\s+)?(\w+(?:\s+skill))?/gi
+    ];
+
+    // Get all available skill names
+    const availableSkillNames = Array.from(this.skills.keys());
+
+    for (const pattern of patterns) {
+      const matches = task.matchAll(pattern);
+      for (const match of matches) {
+        const skillName = match[1]?.toLowerCase().trim();
+        if (!skillName) continue;
+
+        // Find matching skill (case-insensitive)
+        const matchedSkill = availableSkillNames.find(
+          name => name.toLowerCase().includes(skillName) || skillName.includes(name.toLowerCase())
+        );
+
+        if (matchedSkill && !specifiedSkills.includes(matchedSkill)) {
+          specifiedSkills.push(matchedSkill);
+        }
+      }
+    }
+
+    // Remove duplicates while preserving order
+    return [...new Set(specifiedSkills)];
+  }
+
+  /**
    * Step 1: Planning phase - Select appropriate skills.
    */
   private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
@@ -90,6 +131,9 @@ export class PTCGenerator {
     const skillsList = Array.from(this.skills.values())
       .map((s) => `- ${s.name}: ${s.description}`)
       .join('\n');
+
+    // Note: If skills are filtered, the available list is already reduced
+    // The constraint is implicit - only filtered skills are shown in the list
 
     // Build context section
     let contextSection = '';
@@ -119,6 +163,45 @@ export class PTCGenerator {
       contextSection += '</available_variables>\n\n';
     }
 
+    // 检测用户明确要求的技能
+    const explicitlyRequestedSkills: string[] = [];
+    const skillNames = Array.from(this.skills.keys());
+
+    for (const skillName of skillNames) {
+      // 匹配多种表达方式：
+      // - "use X skill"
+      // - "using X"
+      // - "with X skill"
+      // - "X skill to"
+      const patterns = [
+        new RegExp(`use\\s+${skillName}\\s+skill`, 'i'),
+        new RegExp(`using\\s+${skillName}`, 'i'),
+        new RegExp(`with\\s+${skillName}\\s+skill`, 'i'),
+        new RegExp(`${skillName}\\s+skill\\s+to`, 'i'),
+        new RegExp(`use\\s+the\\s+${skillName}`, 'i'),
+        new RegExp(`${skillName}\\s+must`, 'i'),
+      ];
+
+      if (patterns.some(pattern => pattern.test(task))) {
+        explicitlyRequestedSkills.push(skillName);
+      }
+    }
+
+    // 构建技能要求指令
+    let skillRequirement = '';
+    if (explicitlyRequestedSkills.length > 0) {
+      skillRequirement = `
+CRITICAL - USER EXPLICITLY REQUESTED SKILLS:
+The user has explicitly requested the following skills:
+${explicitlyRequestedSkills.map(s => `- ${s}`).join('\n')}
+
+YOU MUST USE THESE SKILLS in your selected_skills array.
+DO NOT ignore user's explicit skill requests.
+DO NOT attempt to solve the task without using these skills.
+These skills take priority over all other considerations.
+`;
+    }
+
     const prompt = `You are an agent that plans task execution by selecting skills.
 
 ${contextSection}
@@ -130,13 +213,19 @@ ${skillsList}
 ${task}
 </task>
 
-IMPORTANT GUIDELINES:
-1. PRIORITIZE using available skills over direct computation or common knowledge
-2. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
-3. For calculations, you can compute directly, but if uncertain, use appropriate skills
-4. NEVER return an empty selected_skills array - at least use web-search for factual queries
+${skillRequirement}
 
-5. VIDEO GENERATION AND MODIFICATION:
+IMPORTANT GUIDELINES:
+1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
+2. PRIORITIZE using available skills over direct computation or common knowledge
+3. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
+4. For calculations, you can compute directly, but if uncertain, use appropriate skills
+5. NEVER return an empty selected_skills array - at least use web-search for factual queries
+6. ${explicitlyRequestedSkills.length > 0 ?
+   'CRITICAL: User explicitly requested skills - YOU MUST include them in selected_skills' :
+   'If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills'}
+
+7. VIDEO GENERATION AND MODIFICATION:
    - ALL video creation, enhancement, or modification tasks MUST use remotion-generator skill
    - When user asks to "add to video", "enhance video", "modify animation", or similar:
      * Use remotion-generator to regenerate the ENTIRE video with new features
@@ -144,6 +233,12 @@ IMPORTANT GUIDELINES:
      * DO NOT use read-file, code-analysis, or other file manipulation skills for video tasks
    - remotion-generator can handle the complete video generation process from description
    - Include all desired features in the description rather than trying to modify existing code
+
+8. CODE GENERATION TASKS:
+   - When user asks to "generate code", "create a function", or similar with simple-code-generator skill mentioned:
+     * You MUST use simple-code-generator skill
+     * DO NOT write code directly in the PTC code
+     * Let the skill handle the code generation
 
 Please output:
 1. Which skills to use (in order)

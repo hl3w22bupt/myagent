@@ -3,14 +3,14 @@ Skill Hook System
 
 Provides hook-based execution model for Skills.
 """
-from core.skill.hooks.base import (
+from .base import (
     BaseHook,
     NoOpHook,
     HookResult,
     HookResultAction,
     SkillContext
 )
-from core.skill.hooks.executor import SkillHookExecutor
+from .executor import SkillHookExecutor
 
 __all__ = [
     'BaseHook',

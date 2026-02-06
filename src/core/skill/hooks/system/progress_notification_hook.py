@@ -94,6 +94,8 @@ class ProgressNotificationHook(BaseHook):
         result: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Notify execution completion"""
+        print(f"[DEBUG] ProgressNotificationHook.post_exec received result: {result}")
+
         # Handle case where result might be None
         if result is None:
             result = {}
@@ -116,15 +118,32 @@ class ProgressNotificationHook(BaseHook):
 
         message = f"{context.skill_name} {'succeeded' if success else 'failed'}"
 
+        # Prepare notification data with complete result
+        notification_data = {
+            "message": message,
+            "success": success
+        }
+
+        # Include result_type and content if available
+        if "result_type" in result:
+            notification_data["result_type"] = result["result_type"]
+        if "content" in result:
+            notification_data["content"] = result["content"]
+        if "title" in result:
+            notification_data["title"] = result["title"]
+        if "metadata" in result:
+            notification_data["metadata"] = result["metadata"]
+
         await self._send_notification(
             context,
             "status",
-            {"message": message, "success": success},
+            notification_data,
             stage="post"
         )
 
         # Add notification metadata to result
         result.setdefault("metadata", {})["progress_notified"] = True
+        print(f"[DEBUG] ProgressNotificationHook.post_exec returning result: {result}")
         return result
 
     async def on_progressing_notify(

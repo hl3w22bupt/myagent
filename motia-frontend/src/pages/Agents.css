@@ -1,170 +1,487 @@
-.agents {
+/* ==============================
+   Agents Page - Modern Design System
+   Style: Consistent with Skills page
+   Colors: Status-based theming
+   ============================== */
+
+/* ==============================
+   Page Layout
+   ============================== */
+.agents-page {
+  min-height: 100vh;
+  background: linear-gradient(to bottom, #F8FAFC 0%, #FFFFFF 100%);
   padding: 2rem;
 }
 
-.agents-header {
-  margin-bottom: 2rem;
+/* ==============================
+   Header Section
+   ============================== */
+.agents-page-header {
+  max-width: 1400px;
+  margin: 0 auto 3rem;
 }
 
-.agents-header h1 {
-  font-size: 2rem;
+.header-content {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.page-title {
+  font-size: 2.5rem;
   font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 0.5rem;
+  color: #1E293B;
+  margin: 0 0 0.75rem 0;
+  letter-spacing: -0.025em;
 }
 
-.agents-header p {
+.page-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: #64748B;
+  margin: 0;
+  font-weight: 400;
 }
 
-.loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  font-size: 1.125rem;
-  color: #64748b;
-}
-
-.agents-content {
-  min-height: 400px;
-}
-
-.agents-grid {
+/* ==============================
+   Stats Grid
+   ============================== */
+.stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.agent-card {
-  background-color: #ffffff;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  transition: all 0.2s ease;
+.stat-card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 1rem;
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.agent-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+.stat-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
-.agent-header {
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-total .stat-icon {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.stat-active .stat-icon {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.stat-busy .stat-icon {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+.stat-offline .stat-icon {
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #64748B;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1E293B;
+  line-height: 1;
+}
+
+/* ==============================
+   Filter Section
+   ============================== */
+.filter-section {
+  max-width: 1400px;
+  margin: 0 auto 2rem;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.75rem;
+  padding: 0.375rem;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.filter-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+  background: #F8FAFC;
+  color: #475569;
+}
+
+.filter-tab.active {
+  background: #EFF6FF;
+  color: #2563EB;
+  font-weight: 600;
+}
+
+.filter-count {
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563EB;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ==============================
+   Agents Grid
+   ============================== */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ==============================
+   Agent Card
+   ============================== */
+.agent-card {
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 8px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Status-based card styling */
+.agent-card-active {
+  border-top: 3px solid #16A34A;
+}
+
+.agent-card-busy {
+  border-top: 3px solid #F59E0B;
+}
+
+.agent-card-inactive {
+  border-top: 3px solid #94A3B8;
+}
+
+/* ==============================
+   Card Header
+   ============================== */
+.agent-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.25rem 0.875rem;
+  gap: 0.75rem;
 }
 
 .agent-info {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
   flex: 1;
   min-width: 0;
 }
 
-.agent-name {
-  font-size: 1.125rem;
+.agent-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  color: #2563EB;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #1e293b;
-  margin: 0 0 0.25rem 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
 }
 
-.agent-type {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #64748b;
-  background-color: #f1f5f9;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.25rem;
-  white-space: nowrap;
+.agent-card-active .agent-avatar {
+  background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+  color: #16A34A;
 }
 
-.status {
+.agent-card-busy .agent-avatar {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #D97706;
+}
+
+.agent-card-inactive .agent-avatar {
+  background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%);
+  color: #64748B;
+}
+
+.agent-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #1E293B;
+  margin: 0 0 0.125rem 0;
+  line-height: 1.3;
+}
+
+.agent-type-badge {
   display: inline-block;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  color: #64748B;
+  background: #F8FAFC;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 4px;
   font-weight: 500;
+}
+
+.agent-status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px;
   font-size: 0.75rem;
+  font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .status-active {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-.status-inactive {
-  background-color: #fee2e2;
-  color: #991b1b;
+  background: #F0FDF4;
+  color: #16A34A;
 }
 
 .status-busy {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background: #FEF3C7;
+  color: #D97706;
 }
 
-.status-unknown {
-  background-color: #f3f4f6;
-  color: #6b7280;
+.status-inactive {
+  background: #F1F5F9;
+  color: #64748B;
 }
 
-.agent-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+/* ==============================
+   Card Content
+   ============================== */
+.agent-card-content {
+  padding: 0 1.25rem 0.875rem;
   flex: 1;
 }
 
 .agent-description {
-  font-size: 0.875rem;
-  color: #64748b;
+  font-size: 0.8125rem;
+  color: #64748B;
   line-height: 1.5;
+  margin: 0 0 0.75rem 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.agent-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.meta-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.875rem;
-}
-
-.meta-label {
-  color: #64748b;
-  font-weight: 500;
-}
-
-.meta-value {
-  color: #1e293b;
-  font-weight: 600;
-}
-
-.no-agents {
-  text-align: center;
-  padding: 4rem 2rem;
-  color: #64748b;
+.agent-description-empty {
+  color: #94A3B8;
   font-style: italic;
 }
 
-@media (max-width: 768px) {
-  .agents {
+.agent-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.metric-label {
+  font-size: 0.6875rem;
+  color: #94A3B8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  font-size: 0.8125rem;
+  color: #1E293B;
+  font-weight: 600;
+}
+
+/* ==============================
+   Card Footer
+   ============================== */
+.agent-card-footer {
+  padding: 0.75rem 1.25rem;
+  background: #F8FAFC;
+  border-top: 1px solid #F1F5F9;
+}
+
+.last-seen {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #94A3B8;
+}
+
+.last-seen svg {
+  flex-shrink: 0;
+  color: #CBD5E1;
+}
+
+/* ==============================
+   Loading State
+   ============================== */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  gap: 1rem;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #E2E8F0;
+  border-top-color: #2563EB;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-state p {
+  color: #64748B;
+  font-size: 0.875rem;
+}
+
+/* ==============================
+   Empty State
+   ============================== */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #94A3B8;
+}
+
+.empty-state h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #64748B;
+  margin: 0 0 0.5rem 0;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+  color: #94A3B8;
+  margin: 0;
+}
+
+/* ==============================
+   Responsive Design
+   ============================== */
+@media (max-width: 1024px) {
+  .agents-page {
+    padding: 1.5rem;
+  }
+
+  .page-title {
+    font-size: 2rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 600px;
+  }
+
+  .agents-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .agents-page {
     padding: 1rem;
   }
 
-  .agents-header h1 {
-    font-size: 1.5rem;
+  .agents-page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+  }
+
+  .page-subtitle {
+    font-size: 1rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    max-width: 320px;
+  }
+
+  .stat-card {
+    padding: 1rem;
   }
 
   .agents-grid {
@@ -172,14 +489,57 @@
     gap: 1rem;
   }
 
-  .agent-header {
+  .agent-card-header {
     flex-direction: column;
-    align-items: flex-start;
+    gap: 0.75rem;
   }
 
-  .meta-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
+  .agent-status {
+    align-self: flex-start;
   }
+
+  .agent-metrics {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+/* ==============================
+   Accessibility
+   ============================== */
+@media (prefers-reduced-motion: reduce) {
+  .agent-card,
+  .stat-card {
+    transition: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+}
+
+.agent-card:focus-within {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* ==============================
+   Error State
+   ============================== */
+.error-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.error-state h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #DC2626;
+  margin: 0 0 0.5rem 0;
+}
+
+.error-state p {
+  font-size: 0.875rem;
+  color: #991B1B;
+  margin: 0;
 }

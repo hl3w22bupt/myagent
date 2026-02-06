@@ -5,8 +5,8 @@ Configuration file for Skill hook system.
 Defines available hooks and their settings.
 """
 from typing import List, Optional
-from core.skill.hooks.base import BaseHook
-from core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
+from src.core.skill.hooks.base import BaseHook
+from src.core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
 
 
 # Hook configuration options

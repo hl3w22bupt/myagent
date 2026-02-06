@@ -15,8 +15,8 @@ export interface AgentConfig {
   /** System prompt for the Agent */
   systemPrompt: string;
 
-  /** List of skills this Agent can use */
-  availableSkills: string[];
+  /** List of skills this Agent can use (optional = all available skills) */
+  availableSkills?: string[];
 
   /** LLM configuration */
   llm?: {
@@ -123,6 +123,10 @@ export interface AgentResult {
     skillNames?: string[];
     /** Subagents that were delegated to (for MasterAgent) */
     delegates?: string[];
+    /** Artifact type from skill output (e.g., 'video', 'image', 'code') */
+    artifactType?: string;
+    /** Structured output from skill execution */
+    structuredOutput?: any;
     /** Sandbox execution retry information */
     retries?: {
       /** Number of retry attempts */

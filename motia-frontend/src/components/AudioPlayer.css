@@ -1,0 +1,134 @@
+.audio-player-container {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.audio-player-filename {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-player-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.audio-player-play-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background-color: #4a9eff;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.audio-player-play-btn:hover:not(:disabled) {
+  background-color: #3a8eef;
+}
+
+.audio-player-play-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.audio-player-progress-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.audio-player-time {
+  color: #888;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.audio-player-progress-bar {
+  flex: 1;
+  height: 6px;
+  background-color: #3e3e3e;
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.audio-player-progress-fill {
+  height: 100%;
+  background-color: #4a9eff;
+  transition: width 0.1s linear;
+}
+
+.audio-player-progress-bar:hover .audio-player-progress-fill {
+  background-color: #3a8eef;
+}
+
+.audio-player-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-player-volume-slider {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: #3e3e3e;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.audio-player-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #4a9eff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.audio-player-volume-slider::-webkit-slider-thumb:hover {
+  background-color: #3a8eef;
+}
+
+.audio-player-volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #4a9eff;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.2s;
+}
+
+.audio-player-volume-slider::-moz-range-thumb:hover {
+  background-color: #3a8eef;
+}
+
+.audio-player-error {
+  padding: 32px;
+  text-align: center;
+  color: #ff6b6b;
+  background-color: #1e1e1e;
+  border-radius: 8px;
+}

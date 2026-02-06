@@ -100,10 +100,13 @@ function Home() {
                   value={taskContent}
                   onChange={(e) => setTaskContent(e.target.value)}
                   onKeyDown={(e) => {
+                    // Cmd+Enter 或 Ctrl+Enter 快捷键提交
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault()
+                      e.preventDefault() // 阻止默认行为
+                      e.stopPropagation() // 阻止事件冒泡到表单
+                      // 直接触发表单提交，而不是调用 handleSubmit
                       if (taskContent.trim() && !submitting) {
-                        handleSubmit(e)
+                        e.target.form?.requestSubmit()
                       }
                     }
                   }}

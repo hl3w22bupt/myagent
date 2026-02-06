@@ -676,6 +676,19 @@
   overflow: hidden;
 }
 
+/* 代码区域特殊处理：允许横向滚动 */
+.result-visual-code {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  align-items: flex-start !important;
+}
+
+.result-visual-code .code-player-container {
+  width: 100%;
+  max-width: none;
+  min-width: 100%;
+}
+
 .video-player {
   max-width: 100%;
   max-height: 600px;

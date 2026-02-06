@@ -42,6 +42,9 @@ export interface AgentManagerConfig {
 export interface AcquireOptions {
   /** Agent type to create */
   agentType?: 'agent' | 'master';
+
+  /** Optional: Available skills to filter (whitelist) */
+  availableSkills?: string[];
 }
 
 /**
@@ -135,10 +138,35 @@ export class AgentManager {
       this.config.defaultAgentType ||
       'agent';
 
-    // Determine config to use
-    const config = agentType === 'master'
-      ? this.config.masterAgentConfig!
-      : this.config.agentConfig;
+    // Determine config to use and merge availableSkills if provided
+    let config: AgentConfig | MasterAgentConfig;
+    if (agentType === 'master') {
+      const baseConfig = this.config.masterAgentConfig!;
+      config = options?.availableSkills
+        ? { ...baseConfig, availableSkills: options.availableSkills }
+        : baseConfig;
+    } else {
+      const baseConfig = this.config.agentConfig;
+      config = options?.availableSkills
+        ? { ...baseConfig, availableSkills: options.availableSkills }
+        : baseConfig;
+    }
+
+    // Debug logging
+    if (options?.availableSkills) {
+      console.log('[AgentManager] Merging availableSkills into config:', {
+        sessionId,
+        agentType,
+        before: (agentType === 'master' ? this.config.masterAgentConfig! : this.config.agentConfig).availableSkills,
+        after: options.availableSkills
+      });
+    } else {
+      console.log('[AgentManager] No availableSkills in options, using default:', {
+        sessionId,
+        agentType,
+        default: config.availableSkills
+      });
+    }
 
     // Execute onAgentCreate hook
     const createResult = await this.hookManager.executeHook<
@@ -166,10 +194,11 @@ export class AgentManager {
           'Cannot create MasterAgent: masterAgentConfig not provided in AgentManagerConfig'
         );
       }
-      agent = new MasterAgent(this.config.masterAgentConfig, sessionId);
+      // Type assertion is safe here because we checked agentType === 'master'
+      agent = new MasterAgent(config as MasterAgentConfig, sessionId);  // Use merged config
     } else {
       // Create regular Agent
-      agent = new Agent(this.config.agentConfig, sessionId);
+      agent = new Agent(config as AgentConfig, sessionId);  // Use merged config
     }
 
     // Store session and type

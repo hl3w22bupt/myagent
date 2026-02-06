@@ -13,7 +13,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent / "generators"))
 # Add parent lib for OutputBuilder (absolute path to skills/lib)
-lib_dir = Path(__file__).parent.parent.parent / "lib"
+lib_dir = Path(__file__).parent.parent / "lib"
 if lib_dir.exists():
     sys.path.insert(0, str(lib_dir))
 
@@ -286,11 +286,12 @@ class InfographicGenerator:
             if export_success and actual_export_path:
                 # If the actual path is PNG, use that; otherwise use SVG path
                 if actual_export_path.endswith('.png'):
-                    png_path = actual_export_path
+                    png_path = Path(actual_export_path)  # Convert to Path object
                     svg_path = None
                     export_url = f"/outputs/infographics/{png_filename}"
                 else:
                     png_path = None
+                    # svg_path is already a Path object from line 273
                     export_url = f"/outputs/infographics/{png_filename}"  # SVG also uses same name
             else:
                 png_path = None
@@ -298,66 +299,45 @@ class InfographicGenerator:
                 export_url = None
 
             # Build standardized output using OutputBuilder
-            if OUTPUT_BUILDER_AVAILABLE:
-                # Determine actual output file (prefer PNG)
-                actual_output_path = None
-                actual_mime_type = None
+            # Determine actual output file (prefer PNG)
+            actual_output_path = None
+            actual_mime_type = None
 
-                if png_path and png_path.exists():
-                    actual_output_path = png_path
-                    actual_mime_type = "image/png"
-                elif svg_path and svg_path.exists():
-                    actual_output_path = svg_path
-                    actual_mime_type = "image/svg+xml"
-                else:
-                    actual_output_path = html_path
-                    actual_mime_type = "text/html"
-
-                # Get file information
-                relative_path = get_relative_path(actual_output_path)
-                file_size = get_file_size(actual_output_path)
-
-                # Use OutputBuilder to build standardized output
-                result = OutputBuilder() \
-                    .set_infographic(
-                        path=relative_path,
-                        mime_type=actual_mime_type,
-                        size=file_size,
-                        width=width,
-                        height=height,
-                        template=template,
-                        chart_type=content_type,
-                        theme=theme_input if theme_input != "auto" else None,
-                        style=style
-                    ) \
-                    .set_title(title) \
-                    .add_skill("infographic-generator") \
-                    .add_standard_metadata("template", template) \
-                    .add_standard_metadata("content_type", content_type) \
-                    .add_standard_metadata("theme", palette) \
-                    .add_standard_metadata("style", style) \
-                    .add_standard_metadata("dimensions", {"width": width, "height": height}) \
-                    .build()
+            if png_path and png_path.exists():
+                actual_output_path = png_path
+                actual_mime_type = "image/png"
+            elif svg_path and svg_path.exists():
+                actual_output_path = svg_path
+                actual_mime_type = "image/svg+xml"
             else:
-                # Fallback to old format if OutputBuilder not available
-                result = {
-                    "success": True,
-                    "html_path": str(html_path),
-                    "svg_path": svg_path,
-                    "png_path": png_path,
-                    "html_url": f"/outputs/infographics/{html_filename}",
-                    "svg_url": export_url if svg_path else None,
-                    "png_url": export_url if png_path else None,
-                    "metadata": {
-                        "title": title,
-                        "template": template,
-                        "content_type": content_type,
-                        "theme": palette,
-                        "style": style,
-                        "dimensions": {"width": width, "height": height},
-                        "generated_at": format_timestamp(),
-                    },
-                }
+                actual_output_path = html_path
+                actual_mime_type = "text/html"
+
+            # Get file information
+            relative_path = get_relative_path(actual_output_path)
+            file_size = get_file_size(actual_output_path)
+
+            # Use OutputBuilder to build standardized output
+            result = OutputBuilder() \
+                .set_infographic(
+                    path=relative_path,
+                    mime_type=actual_mime_type,
+                    size=file_size,
+                    width=width,
+                    height=height,
+                    template=template,
+                    chart_type=content_type,
+                    theme=theme_input if theme_input != "auto" else None,
+                    style=style
+                ) \
+                .set_title(title) \
+                .add_skill("infographic-generator") \
+                .add_standard_metadata("template", template) \
+                .add_standard_metadata("content_type", content_type) \
+                .add_standard_metadata("theme", palette) \
+                .add_standard_metadata("style", style) \
+                .add_standard_metadata("dimensions", {"width": width, "height": height}) \
+                .build()
 
             return result
 

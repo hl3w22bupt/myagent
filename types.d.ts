@@ -12,6 +12,7 @@ declare module 'motia' {
   }
 
   interface Handlers {
+    'skill-selector-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'media-serve-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'output-history-tracker': EventHandler<never, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

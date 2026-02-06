@@ -79,12 +79,31 @@ export class Agent {
       variables: new Map(),
     };
 
+    // Debug: Log config.availableSkills
+    console.log(`[Agent ${sessionId}] Constructor config.availableSkills:`, config.availableSkills);
+
+    // Wait for skills registry to be initialized
+    // This ensures we can filter skills synchronously in constructor
+    Agent.initializeSkillsRegistry().then(() => {
+      // Filter skills based on config.availableSkills
+      const filteredSkills = config.availableSkills
+        ? Agent.skillsRegistry.filter(s => config.availableSkills!.includes(s.name))
+        : Agent.skillsRegistry;
+
+      console.log(`[Agent ${sessionId}] Filtered to ${filteredSkills.length}/${Agent.skillsRegistry.length} skills:`,
+        config.availableSkills || ['all']);
+
+      // Initialize PTC Generator with filtered skills
+      this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills);
+    }).catch((error) => {
+      console.error('[Agent] Skills initialization failed:', error);
+      // Fallback: use empty skills registry
+      this.ptcGenerator = new PTCGenerator(this.llm, []);
+    });
+
     // Initialize PTC Generator with empty registry initially
     // Will be updated when skills are loaded
     this.ptcGenerator = new PTCGenerator(this.llm, []);
-
-    // Initialize skills registry asynchronously (non-blocking)
-    this.initializeSkillsRegistryAsync();
   }
 
   /**
@@ -93,8 +112,15 @@ export class Agent {
    */
   private initializeSkillsRegistryAsync(): void {
     Agent.initializeSkillsRegistry().then(() => {
-      // Update PTCGenerator with the loaded skills
-      this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
+      // Filter skills based on config.availableSkills
+      const filteredSkills = this.config.availableSkills
+        ? Agent.skillsRegistry.filter(s => this.config.availableSkills!.includes(s.name))
+        : Agent.skillsRegistry;
+
+      console.log(`[Agent ${this.sessionId}] Async skills loaded: ${filteredSkills.length} filtered from ${Agent.skillsRegistry.length} total`);
+
+      // Update PTCGenerator with the filtered skills
+      this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills);
     }).catch((error) => {
       console.error('[Agent] Async skills initialization failed:', error);
     });
@@ -199,10 +225,16 @@ export class Agent {
     // This prevents "Skill not found" errors due to race conditions
     await Agent.initializeSkillsRegistry();
 
-    // Update PTCGenerator with latest skills registry
-    // This ensures the PTCGenerator has access to all discovered skills
-    this.ptcGenerator = new PTCGenerator(this.llm, Agent.skillsRegistry);
-    console.log('[Agent] PTCGenerator ready with', Agent.skillsRegistry.length, 'skills');
+    // Filter skills based on config.availableSkills
+    const filteredSkills = this.config.availableSkills
+      ? Agent.skillsRegistry.filter(s => this.config.availableSkills!.includes(s.name))
+      : Agent.skillsRegistry;
+
+    // Update PTCGenerator with filtered skills
+    // This ensures the PTCGenerator only sees the allowed skills
+    this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills);
+    console.log(`[Agent ${this.sessionId}] PTCGenerator ready with ${filteredSkills.length}/${Agent.skillsRegistry.length} skills`,
+      this.config.availableSkills || ['all']);
 
     // Update activity time
     this.state.lastActivityAt = Date.now();
@@ -524,6 +556,10 @@ export class Agent {
       // Count skill calls from PTC code
       const skillCalls = this.countSkillCalls(ptcResult.code);
 
+      // Extract artifact_type from skill output
+      // Skills may return Python dict with 'metadata': {'artifact_type': 'video'}
+      const artifactType = this.extractArtifactType(sandboxResult);
+
       return {
         success: true,
         output: sandboxResult.output,
@@ -540,6 +576,8 @@ export class Agent {
           skillCalls,
           totalTokens: 0,
           skillNames: ptcResult.selectedSkills,
+          artifactType: artifactType, // Add artifact_type to metadata
+          structuredOutput: sandboxResult.structuredOutput, // Add structured output
           retries: retryInfo.attempts > 1 ? retryInfo : undefined,
           ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
         },
@@ -587,6 +625,38 @@ export class Agent {
   private countSkillCalls(code: string): number {
     const matches = code.match(/executor\.execute/g);
     return matches ? matches.length : 0;
+  }
+
+  /**
+   * Extract artifact_type from structured output
+   * 优先级：structuredOutput.result_type（唯一来源）
+   */
+  private extractArtifactType(sandboxResult: any): string | undefined {
+    // 调试：输出完整的 sandboxResult.structuredOutput
+    console.log('[Agent] extractArtifactType called, sandboxResult.structuredOutput:',
+      JSON.stringify(sandboxResult.structuredOutput, null, 2));
+
+    // 直接从 structuredOutput 获取
+    if (sandboxResult.structuredOutput?.result_type) {
+      const resultType = sandboxResult.structuredOutput.result_type;
+      console.log(`[Agent] Found artifact_type from structuredOutput: ${resultType}`);
+
+      // 映射 result_type 到 artifact_type（如果需要）
+      const typeMapping: Record<string, string> = {
+        'infographic': 'image',
+        'video': 'video',
+        'image': 'image',
+        'audio': 'audio',
+        'table': 'table',
+        'code': 'code',
+      };
+
+      return typeMapping[resultType] || resultType;
+    }
+
+    // 如果没有 structuredOutput，返回 undefined
+    console.warn('[Agent] No structuredOutput found');
+    return undefined;
   }
 
   /**

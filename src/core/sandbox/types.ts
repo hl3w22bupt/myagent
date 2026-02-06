@@ -44,6 +44,34 @@ export interface SkillManifest {
 }
 
 /**
+ * Structured output from skill execution.
+ * This is the new unified format for all skill outputs.
+ */
+export interface StructuredOutput {
+  /** Result type from skill execution */
+  result_type: 'video' | 'image' | 'code' | 'text' | 'markdown' | 'json' | 'table' | 'error' | 'infographic' | 'audio' | 'gif' | 'report' | 'mixed';
+
+  /** Whether execution succeeded */
+  success: boolean;
+
+  /** Content data (structure depends on result_type) */
+  content: any;
+
+  /** Optional metadata */
+  metadata?: {
+    execution_time: number;
+    skills_used?: string[];
+    [key: string]: any;
+  };
+
+  /** Optional title */
+  title?: string;
+
+  /** Optional description */
+  description?: string;
+}
+
+/**
  * Result from executing code in a Sandbox.
  */
 export interface SandboxResult {
@@ -67,6 +95,9 @@ export interface SandboxResult {
 
   /** Standard error from the process */
   stderr?: string;
+
+  /** Structured output from skill execution (new unified format) */
+  structuredOutput?: StructuredOutput;
 }
 
 /**

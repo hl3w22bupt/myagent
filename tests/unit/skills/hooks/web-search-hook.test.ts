@@ -3,7 +3,7 @@
  */
 
 // Mock hook implementation for testing
-class WebSearchHook {
+class MockWebSearchHook {
   MIN_QUERY_LENGTH = 3;
 
   async preExec(context: any): Promise<any> {
@@ -34,10 +34,10 @@ class WebSearchHook {
 }
 
 describe('WebSearchHook', () => {
-  let hook: WebSearchHook;
+  let hook: MockWebSearchHook;
 
   beforeEach(() => {
-    hook = new WebSearchHook();
+    hook = new MockWebSearchHook();
   });
 
   describe('preExec', () => {

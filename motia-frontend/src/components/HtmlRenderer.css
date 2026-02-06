@@ -1,0 +1,216 @@
+.html-renderer-container {
+  background-color: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.html-renderer-filename {
+  padding: 12px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.html-renderer-content {
+  padding: 24px;
+  max-height: 600px;
+  overflow: auto;
+}
+
+/* Markdown 样式 */
+.html-renderer-markdown {
+  color: #333;
+  line-height: 1.6;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+.html-renderer-markdown h1,
+.html-renderer-markdown h2,
+.html-renderer-markdown h3,
+.html-renderer-markdown h4,
+.html-renderer-markdown h5,
+.html-renderer-markdown h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.html-renderer-markdown h1 {
+  font-size: 2em;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 8px;
+}
+
+.html-renderer-markdown h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 8px;
+}
+
+.html-renderer-markdown h3 {
+  font-size: 1.25em;
+}
+
+.html-renderer-markdown p {
+  margin-bottom: 16px;
+}
+
+.html-renderer-markdown a {
+  color: #4a9eff;
+  text-decoration: none;
+}
+
+.html-renderer-markdown a:hover {
+  text-decoration: underline;
+}
+
+.html-renderer-markdown ul,
+.html-renderer-markdown ol {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+
+.html-renderer-markdown li {
+  margin-bottom: 8px;
+}
+
+.html-renderer-markdown code {
+  background-color: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.html-renderer-markdown pre {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.html-renderer-markdown pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.html-renderer-markdown blockquote {
+  border-left: 4px solid #4a9eff;
+  padding-left: 16px;
+  color: #666;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+.html-renderer-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.html-renderer-markdown table th,
+.html-renderer-markdown table td {
+  border: 1px solid #e0e0e0;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.html-renderer-markdown table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+.html-renderer-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+/* HTML 样式 */
+.html-renderer-html {
+  color: #333;
+}
+
+.html-renderer-html h1,
+.html-renderer-html h2,
+.html-renderer-html h3,
+.html-renderer-html h4,
+.html-renderer-html h5,
+.html-renderer-html h6 {
+  margin-top: 16px;
+  margin-bottom: 12px;
+}
+
+.html-renderer-html p {
+  margin-bottom: 12px;
+}
+
+.html-renderer-html a {
+  color: #4a9eff;
+  text-decoration: none;
+}
+
+.html-renderer-html a:hover {
+  text-decoration: underline;
+}
+
+.html-renderer-html ul,
+.html-renderer-html ol {
+  padding-left: 24px;
+  margin-bottom: 12px;
+}
+
+/* 纯文本样式 */
+.html-renderer-text {
+  background-color: #f5f5f5;
+  padding: 16px;
+  border-radius: 4px;
+}
+
+.html-renderer-text pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* 空内容样式 */
+.html-renderer-empty {
+  padding: 32px;
+  text-align: center;
+  color: #888;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+/* 滚动条样式 */
+.html-renderer-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.html-renderer-content::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+.html-renderer-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 5px;
+}
+
+.html-renderer-content::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}

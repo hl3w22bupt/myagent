@@ -79,7 +79,9 @@ export function getAgentManager(): AgentManager {
       model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
       apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
     },
-    availableSkills: ['web-search', 'summarize', 'code-analysis'],
+    // Don't restrict availableSkills - let all discovered skills be available
+    // This allows users to explicitly request skills via task instructions
+    // (undefined = all skills available)
     sandbox: {
       type: 'local',
       local: {
@@ -103,7 +105,7 @@ export function getAgentManager(): AgentManager {
         model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
         apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
       },
-      availableSkills: ['web-search', 'summarize', 'code-analysis'],
+      // availableSkills: undefined, // Allow dynamic configuration via availableSkills parameter (undefined = all skills)
       sandbox: {
         type: 'local',
         local: {
