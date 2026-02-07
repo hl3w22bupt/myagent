@@ -66,14 +66,19 @@ export class PTCGenerator {
    *
    * @param task - User task description
    * @param options - Generation options (including context)
+   * @param previousError - Optional: previous error message from retry attempt
    * @returns Generated PTC result with code, selected skills, and reasoning
    */
-  async generateWithResult(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
+  async generateWithResult(
+    task: string,
+    options?: PTCGenerationOptions,
+    previousError?: string
+  ): Promise<PTCResult> {
     // Step 1: Plan - Select skills (with context)
     const plan = await this.planSkills(task, options);
 
-    // Step 2: Implement - Generate Python code (with context)
-    const code = await this.generateCode(task, plan.selectedSkills, options);
+    // Step 2: Implement - Generate Python code (with context and previous error)
+    const code = await this.generateCode(task, plan.selectedSkills, options, previousError);
 
     return {
       code,
@@ -386,11 +391,17 @@ Output format (JSON):
 
   /**
    * Step 2: Implementation phase - Generate Python code.
+   *
+   * @param task - User task description
+   * @param selectedSkills - Skills to use in the code
+   * @param options - Generation options (including context)
+   * @param previousError - Optional: previous error message from retry attempt
    */
   private async generateCode(
     task: string,
     selectedSkills: string[],
-    options?: PTCGenerationOptions
+    options?: PTCGenerationOptions,
+    previousError?: string
   ): Promise<string> {
     // Get skill details
     const skillsDetails = selectedSkills.map((skillName) => {
@@ -471,11 +482,34 @@ Output format (JSON):
       contextSection += '</available_variables>\n\n';
     }
 
+    // IMPORTANT: Add previous error if this is a retry attempt
+    let errorSection = '';
+    if (previousError) {
+      errorSection = `<previous_error>
+⚠️  THE PREVIOUS ATTEMPT FAILED WITH THE FOLLOWING ERROR:
+
+${previousError}
+
+CRITICAL - YOU MUST FIX THIS ERROR:
+1. Analyze the error above to understand what went wrong
+2. Generate DIFFERENT code that avoids the same mistake
+3. Common fixes:
+   - Check if you used the correct parameter name for the skill
+   - Verify you passed the actual task content (not placeholders)
+   - Ensure proper async/await usage
+   - Check skill parameter names match the schema exactly
+4. DO NOT repeat the same code that caused this error
+</previous_error>
+
+`;
+      console.log('[PTC Generator] Including previous error in prompt:', previousError.substring(0, 100));
+    }
+
     const prompt = `<context>
 ${contextSection}
 </context>
 
-<task>
+${errorSection}<task>
 ${task}
 </task>
 

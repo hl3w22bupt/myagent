@@ -14,46 +14,214 @@ import './TaskDetail.css'
 
 /**
  * 格式化 Agent Hook 事件为人类可读的消息
+ * 根据后端发送的结构化数据生成用户友好的消息
  */
 const formatAgentHookMessage = (event) => {
-  const { type, agentType, data, taskId } = event
-  // metadata 实际上在 data 字段中
-  const metadata = data?.metadata || data || {}
+  const { type, stage, data, taskId } = event
 
   console.log('[formatAgentHookMessage] 收到事件:', {
     type,
-    agentType,
-    taskId,
+    stage,
     data,
-    metadata,
+    taskId,
     fullEvent: event
   })
 
   switch (type) {
-    case 'agent_acquired':
-      return `🤖 系统: ${agentType || 'Agent'} 已分配`
+    case 'agent':
+      if (stage === 'pre') {
+        // Agent pre hook - 直接显示任务内容（作为用户消息）
+        const taskContent = data?.task || ''
+        return `[🤖 agent启动]：${taskContent}`
+      } else if (stage === 'post') {
+        // Agent post hook - 任务完成
+        const success = data?.success ? '✅ 成功' : '❌ 失败'
+        return `[🤖 agent完成]：${success}`
+      }
+      break
 
-    case 'agent_created':
-      const skills = metadata?.skillsCount || 0
-      return `✨ 系统: ${agentType || 'Agent'} 已创建 (技能: ${skills})`
+    case 'intent_analysis':
+      const intent = data?.intent || 'general'
+      const intentNames = {
+        'video_generation': '视频生成',
+        'code_generation': '代码生成',
+        'review': '代码审查',
+        'design': '设计',
+        'frontend_design': '前端设计',
+        'text_generation': '文本生成',
+        'general': '通用任务'
+      }
+      const intentName = intentNames[intent] || intent
+      return `[🧠 意图识别]：${intentName} - ${data?.reasoning || ''}`
 
-    case 'task_start':
-      return `🚀 系统: 开始执行任务 ${taskId || ''}`
-
-    case 'task_complete':
-      const success = data?.success ? '成功' : '失败'
-      const time = metadata?.executionTime || data?.executionTime ? ` (${metadata?.executionTime || data?.executionTime}ms)` : ''
-      const tokens = metadata?.totalTokens || data?.totalTokens ? `, ${metadata?.totalTokens || data?.totalTokens} tokens` : ''
-      return data?.success !== false ? `✅ 系统: 任务成功${time}${tokens}` : `❌ 系统: 任务失败`
-
-    case 'agent_released':
-      const taskCount = metadata?.taskCount || 0
-      return `🔚 系统: ${agentType || 'Agent'} 已释放 (处理了 ${taskCount} 个任务)`
+    case 'ptc_planning':
+      const skills = data?.selectedSkills || []
+      if (skills.length === 0) {
+        return '[📋 执行计划]：直接执行任务'
+      } else if (skills.length === 1) {
+        return `[📋 执行计划]：使用 ${skills[0]} skill`
+      } else {
+        const skillsList = skills.join('、')
+        return `[📋 执行计划]：依次使用 ${skillsList} skills`
+      }
 
     default:
       console.warn('[formatAgentHookMessage] 未知事件类型:', type)
-      return `ℹ️ 系统: ${type || '未知事件'}`
+      return `[ℹ️ 系统]: ${type || '未知事件'}`
   }
+}
+
+/**
+ * 获取状态配置（通用函数，用于 MessageBubble 和 StreamEntries）
+ * 返回状态的标签、颜色、背景色和图标
+ */
+const getStatusConfig = (status) => {
+  const statusLower = status?.toLowerCase() || 'pending'
+  switch (statusLower) {
+    case 'pending':
+      return {
+        label: '等待中',
+        color: '#F59E0B',
+        bgColor: '#FEF3C7',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      }
+    case 'started':
+      return {
+        label: '已启动',
+        color: '#64748B',
+        bgColor: '#F1F5F9',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      }
+    case 'analyzing':
+      return {
+        label: '分析中',
+        color: '#8B5CF6',
+        bgColor: '#EDE9FE',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      }
+    case 'analyzed':
+      return {
+        label: '已分析',
+        color: '#A78BFA',
+        bgColor: '#DDD6FE',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
+          </svg>
+        )
+      }
+    case 'planning':
+      return {
+        label: '规划中',
+        color: '#EC4899',
+        bgColor: '#FCE7F3',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      }
+    case 'planned':
+      return {
+        label: '已规划',
+        color: '#F472B6',
+        bgColor: '#FBCFE8',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
+          </svg>
+        )
+      }
+    case 'running':
+      return {
+        label: '执行中',
+        color: '#3B82F6',
+        bgColor: '#DBEAFE',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
+            <path d="M12 2v4m0 4v4m0 4h4m-4 0h4"/>
+          </svg>
+        )
+      }
+    case 'completed':
+      return {
+        label: '已完成',
+        color: '#22C55E',
+        bgColor: '#D1FAE5',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
+          </svg>
+        )
+      }
+    case 'failed':
+      return {
+        label: '失败',
+        color: '#DC2626',
+        bgColor: '#FEE2E2',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 8v4m0 4h.01"/>
+          </svg>
+        )
+      }
+    default:
+      return null
+  }
+}
+
+/**
+ * 格式化 Skill Hook 事件为人类可读的消息
+ */
+const formatSkillMessage = (message) => {
+  const { type, stage, skill, data, metadata, task: messageTask, message: messageMessage } = message
+
+  // 如果是 skill 的 post_exec 事件（stage === 'post'）
+  if (type === 'skill' && stage === 'post') {
+    const skillName = data?.skill_name || skill || 'skill'
+    const success = data?.success !== false // 默认成功
+
+    if (success) {
+      return `[🔬 skill执行完成]: ${skillName}`
+    } else {
+      const errorMsg = data?.error || ''
+      return errorMsg ? `❌ ${skillName} skill 执行失败：${errorMsg}` : `❌ ${skillName} skill 执行失败`
+    }
+  }
+
+  // 如果是 skill 的 pre_exec 事件（stage === 'pre'）
+  if (type === 'skill' && stage === 'pre') {
+    const skillName = skill || 'skill'
+    return `[🔬 skill开始执行]: ${skillName}`
+  }
+
+  // 默认返回简化的消息，过滤掉完整输出
+  // 如果 message 或 task 字段包含大量内容（如对话历史），只显示简短描述
+  const fallbackMessage = messageMessage || messageTask || ''
+
+  if (fallbackMessage.length > 200) {
+    // 消息太长，可能是完整输出，只显示简短描述
+    return `[🔬 skill 执行中]: ${skill || 'skill'}`
+  }
+
+  return fallbackMessage || message.message || message.task || ''
 }
 
 function TaskDetail() {
@@ -140,12 +308,21 @@ function TaskDetail() {
         const processedEntries = historyEntries.map(entry => {
           // 如果是 agent hook 事件（通过 category 字段标识）
           if (entry.category === 'agent_hook' || entry.id?.startsWith('agent-')) {
+            const isAgentPre = entry.type === 'agent' && entry.stage === 'pre'
+
             return {
               id: entry.id,
               type: 'agent_hook',
+              status: entry.status,  // 保留状态字段
               message: formatAgentHookMessage(entry),
               timestamp: entry.timestamp,
               originalEvent: entry,
+              // agent pre hook 事件显示为用户消息（右边）
+              metadata: isAgentPre ? {
+                data: {
+                  sender: 'user'  // 标记为用户消息
+                }
+              } : undefined
             }
           }
           // 其他类型的事件保持原样
@@ -244,12 +421,21 @@ function TaskDetail() {
       const processedEntries = entries.map(entry => {
         // 如果是 agent hook 事件（通过 category 字段标识）
         if (entry.category === 'agent_hook' || entry.id?.startsWith('agent-')) {
+          const isAgentPre = entry.type === 'agent' && entry.stage === 'pre'
+
           return {
             id: entry.id,
             type: 'agent_hook',
+            status: entry.status,  // 保留状态字段
             message: formatAgentHookMessage(entry),
             timestamp: entry.timestamp,
             originalEvent: entry,
+            // agent pre hook 事件显示为用户消息（右边）
+            metadata: isAgentPre ? {
+              data: {
+                sender: 'user'  // 标记为用户消息
+              }
+            } : undefined
           }
         }
         // 其他类型的事件保持原样
@@ -656,12 +842,27 @@ function TaskDetail() {
         <div className="stream-entries">
           {entries.map((entry) => {
             // entry 是对象，包含 id, type, status, message, timestamp 等字段
+            const statusConfig = getStatusConfig(entry.status)
+            const statusLabel = statusConfig?.label || entry.status || '等待中'
+            const statusColor = statusConfig?.color || '#64748B'
+            const statusBgColor = statusConfig?.bgColor || '#F1F5F9'
+
             return (
               <div key={entry.id} className={`stream-entry stream-entry-${entry.status || 'info'}`}>
                 <div className="entry-header">
                   <span className="entry-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                  <span className={`entry-status status-${entry.status || 'info'}`}>
-                    {entry.status || 'pending'}
+                  <span
+                    className="entry-status"
+                    style={{
+                      color: statusColor,
+                      backgroundColor: statusBgColor,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {statusLabel}
                   </span>
                   {entry.type && <span className="entry-type">{entry.type === 'task' ? '任务' : '技能'}</span>}
                   {entry.skill && <span className="entry-skill">{entry.skill}</span>}
@@ -1244,6 +1445,27 @@ function TaskDetail() {
   const MessageBubble = ({ message }) => {
     // 获取类型图标
     const getTypeIcon = () => {
+      // 特殊类型：intent_analysis 和 ptc_planning
+      if (message.type === 'intent_analysis') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
+            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+          </svg>
+        )
+      }
+
+      if (message.type === 'ptc_planning') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            <path d="M9 14h6M9 10h6M9 18h6"/>
+          </svg>
+        )
+      }
+
+      // 标准类型：task, agent, skill
       if (message.type === 'task') {
         return (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
@@ -1251,6 +1473,7 @@ function TaskDetail() {
           </svg>
         )
       }
+
       if (message.type === 'skill') {
         return (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
@@ -1259,88 +1482,27 @@ function TaskDetail() {
           </svg>
         )
       }
+
       if (message.type === 'agent_hook') {
+        // Agent pre 和 post 使用机器人图标（绿色）
         return (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
-            <path d="M12 22v-6M12 12v-2"/>
+            <rect x="3" y="11" width="18" height="10" rx="2"/>
+            <circle cx="12" cy="5" r="2"/>
+            <path d="M12 7v4"/>
+            <line x1="8" y1="16" x2="8" y2="16"/>
+            <line x1="16" y1="16" x2="16" y2="16"/>
           </svg>
         )
       }
+
+      // 默认图标
       return (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 16v-4M12 8h.01"/>
         </svg>
       )
-    }
-
-    // 获取状态配置
-    const getStatusConfig = () => {
-      const status = message.status?.toLowerCase() || 'pending'
-      switch (status) {
-        case 'pending':
-          return {
-            label: '等待中',
-            color: '#F59E0B',
-            bgColor: '#FEF3C7',
-            icon: (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
-              </svg>
-            )
-          }
-        case 'started':
-          return {
-            label: '已开始',
-            color: '#64748B',
-            bgColor: '#F1F5F9',
-            icon: (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
-              </svg>
-            )
-          }
-        case 'running':
-          return {
-            label: '执行中',
-            color: '#3B82F6',
-            bgColor: '#DBEAFE',
-            icon: (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
-                <path d="M12 2v4m0 4v4m0 4h4m-4 0h4"/>
-              </svg>
-            )
-          }
-        case 'completed':
-          return {
-            label: '已完成',
-            color: '#22C55E',
-            bgColor: '#D1FAE5',
-            icon: (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
-              </svg>
-            )
-          }
-        case 'failed':
-          return {
-            label: '失败',
-            color: '#DC2626',
-            bgColor: '#FEE2E2',
-            icon: (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 8v4m0 4h.01"/>
-              </svg>
-            )
-          }
-        default:
-          return null
-      }
     }
 
     // 获取阶段图标（小）
@@ -1371,12 +1533,20 @@ function TaskDetail() {
 
     const typeIcon = getTypeIcon()
     const stageIcon = getStageIcon()
-    const statusConfig = getStatusConfig()
-    // 对于 agent_hook 类型的消息，优先显示 message.message（格式化后的消息）
-    // 对于其他类型的消息，显示 task 或 message
-    const content = message.type === 'agent_hook'
-      ? (message.message || '')
-      : (message.task || message.message || '')
+    const statusConfig = getStatusConfig(message.status)
+
+    // 根据消息类型格式化内容
+    let content
+    if (message.type === 'agent_hook') {
+      // agent_hook 类型的消息已经通过 formatAgentHookMessage 格式化
+      content = message.message || ''
+    } else if (message.type === 'skill') {
+      // skill 类型的消息需要特殊处理
+      content = formatSkillMessage(message)
+    } else {
+      // 其他类型的消息显示 task 或 message
+      content = message.task || message.message || ''
+    }
 
     return (
       <div className="chat-bubble assistant">

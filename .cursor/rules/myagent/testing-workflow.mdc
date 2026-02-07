@@ -1,0 +1,848 @@
+---
+description: MyAgent 测试工作流 - 自动化验证、服务管理、端口控制
+---
+
+# MyAgent 测试工作流规约
+
+## 核心原则
+
+**❌ 禁止行为**：
+- ❌ 不得要求用户手动测试
+- ❌ 不得让用户在浏览器中验证
+- ❌ 不得跳过自动化验证步骤
+- ❌ 不得说"部署后请测试"
+
+**✅ 必须行为**：
+- ✅ 所有验证必须由 Claude 自动完成
+- ✅ 自动重启服务并验证启动状态
+- ✅ 自动构建真实 HTTP 请求进行测试
+- ✅ 自动检查日志输出和响应结果
+- ✅ 验证失败时自动调试并修复
+
+## 1. 端口管理规约
+
+### 1.1 固定端口配置
+
+```typescript
+// 后端服务端口
+const BACKEND_PORT = 3000;
+
+// 前端服务端口
+const FRONTEND_PORT = 5173;
+```
+
+### 1.2 进程终止策略
+
+**根据端口号查找并终止进程**：
+
+```bash
+# 查找占用端口的进程 PID
+lsof -ti :3000    # 后端
+lsof -ti :5173    # 前端
+
+# 终止进程
+kill -9 $(lsof -ti :3000)    # 强制终止后端
+kill -9 $(lsof -ti :5173)    # 强制终止前端
+
+# 或者使用更安全的方式
+kill $(lsof -ti :3000)       # 优雅终止后端
+kill $(lsof -ti :5173)       # 优雅终止前端
+```
+
+**完整脚本**：
+```bash
+# 终止后端进程
+if lsof -ti :3000 > /dev/null 2>&1; then
+  echo "Terminating backend process on port 3000..."
+  kill -9 $(lsof -ti :3000)
+  sleep 2
+  echo "Backend process terminated"
+fi
+
+# 终止前端进程
+if lsof -ti :5173 > /dev/null 2>&1; then
+  echo "Terminating frontend process on port 5173..."
+  kill -9 $(lsof -ti :5173)
+  sleep 2
+  echo "Frontend process terminated"
+fi
+```
+
+## 2. 服务启动流程
+
+### 2.1 后端服务启动
+
+**步骤**：
+1. 检查并终止旧进程（端口 3000）
+2. 启动后端服务
+3. 验证启动状态
+4. 检查日志输出
+
+**实现**：
+```bash
+# 1. 终止旧进程
+echo "Step 1: Cleaning up old backend process..."
+if lsof -ti :3000 > /dev/null 2>&1; then
+  kill -9 $(lsof -ti :3000) 2>/dev/null
+  sleep 2
+fi
+
+# 2. 启动后端服务（后台运行）
+echo "Step 2: Starting backend service..."
+npm run dev > /tmp/myagent-backend.log 2>&1 &
+BACKEND_PID=$!
+
+# 3. 等待服务启动
+echo "Step 3: Waiting for backend to start..."
+sleep 10  # 给服务足够的启动时间
+
+# 4. 验证服务状态
+echo "Step 4: Verifying backend status..."
+if lsof -ti :3000 > /dev/null 2>&1; then
+  echo "✅ Backend started successfully on port 3000"
+  echo "Backend PID: $(lsof -ti :3000)"
+else
+  echo "❌ Backend failed to start"
+  echo "Backend logs:"
+  tail -50 /tmp/myagent-backend.log
+  exit 1
+fi
+
+# 5. 检查健康端点
+echo "Step 5: Checking health endpoint..."
+sleep 3
+if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+  echo "✅ Backend health check passed"
+else
+  echo "⚠️  Backend is running but health check failed (might be normal if no /health endpoint)"
+fi
+```
+
+### 2.2 前端服务启动
+
+**步骤**：
+1. 检查并终止旧进程（端口 5173）
+2. 启动前端服务
+3. 验证启动状态
+4. 检查日志输出
+
+**实现**：
+```bash
+# 1. 终止旧进程
+echo "Step 1: Cleaning up old frontend process..."
+if lsof -ti :5173 > /dev/null 2>&1; then
+  kill -9 $(lsof -ti :5173) 2>/dev/null
+  sleep 2
+fi
+
+# 2. 启动前端服务（后台运行）
+echo "Step 2: Starting frontend service..."
+cd client && npm run dev > /tmp/myagent-frontend.log 2>&1 &
+FRONTEND_PID=$!
+
+# 3. 等待服务启动
+echo "Step 3: Waiting for frontend to start..."
+sleep 10
+
+# 4. 验证服务状态
+echo "Step 4: Verifying frontend status..."
+if lsof -ti :5173 > /dev/null 2>&1; then
+  echo "✅ Frontend started successfully on port 5173"
+  echo "Frontend PID: $(lsof -ti :5173)"
+else
+  echo "❌ Frontend failed to start"
+  echo "Frontend logs:"
+  tail -50 /tmp/myagent-frontend.log
+  exit 1
+fi
+
+# 5. 检查首页
+echo "Step 5: Checking frontend homepage..."
+sleep 2
+if curl -s http://localhost:5173 > /dev/null 2>&1; then
+  echo "✅ Frontend is accessible"
+else
+  echo "⚠️  Frontend is running but not accessible yet"
+fi
+```
+
+### 2.3 完整服务重启流程
+
+```bash
+#!/bin/bash
+# restart-all-services.sh
+
+echo "========================================="
+echo "MyAgent Service Restart Script"
+echo "========================================="
+
+# ===== 1. 清理旧进程 =====
+echo ""
+echo "[1/6] Cleaning up old processes..."
+
+# 终止后端
+if lsof -ti :3000 > /dev/null 2>&1; then
+  echo "  Terminating backend (port 3000)..."
+  kill -9 $(lsof -ti :3000) 2>/dev/null
+fi
+
+# 终止前端
+if lsof -ti :5173 > /dev/null 2>&1; then
+  echo "  Terminating frontend (port 5173)..."
+  kill -9 $(lsof -ti :5173) 2>/dev/null
+fi
+
+sleep 3
+echo "  ✅ Cleanup complete"
+
+# ===== 2. 启动后端 =====
+echo ""
+echo "[2/6] Starting backend service..."
+npm run dev > /tmp/myagent-backend.log 2>&1 &
+BACKEND_PID=$!
+echo "  Backend PID: $BACKEND_PID"
+
+# ===== 3. 等待后端启动 =====
+echo ""
+echo "[3/6] Waiting for backend to be ready..."
+for i in {1..30}; do
+  if curl -s http://localhost:3000 > /dev/null 2>&1; then
+    echo "  ✅ Backend is ready after ${i}s"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo "  ❌ Backend failed to start within 30s"
+    echo "  Backend logs:"
+    tail -50 /tmp/myagent-backend.log
+    exit 1
+  fi
+  sleep 1
+  echo "  Waiting... ($i/30)"
+done
+
+# ===== 4. 启动前端（可选）=====
+echo ""
+echo "[4/6] Starting frontend service..."
+if [ -d "client" ]; then
+  cd client && npm run dev > /tmp/myagent-frontend.log 2>&1 &
+  FRONTEND_PID=$!
+  cd ..
+  echo "  Frontend PID: $FRONTEND_PID"
+else
+  echo "  ⚠️  No frontend directory found, skipping frontend"
+fi
+
+# ===== 5. 验证服务状态 =====
+echo ""
+echo "[5/6] Verifying services..."
+
+# 验证后端
+if lsof -ti :3000 > /dev/null 2>&1; then
+  echo "  ✅ Backend running on port 3000 (PID: $(lsof -ti :3000))"
+else
+  echo "  ❌ Backend not running"
+  exit 1
+fi
+
+# 验证前端
+if lsof -ti :5173 > /dev/null 2>&1; then
+  echo "  ✅ Frontend running on port 5173 (PID: $(lsof -ti :5173))"
+else
+  echo "  ⚠️  Frontend not running (optional)"
+fi
+
+# ===== 6. 显示服务信息 =====
+echo ""
+echo "[6/6] Service Information"
+echo "========================================="
+echo "Backend URL:  http://localhost:3000"
+echo "Frontend URL: http://localhost:5173"
+echo ""
+echo "Backend Logs:  /tmp/myagent-backend.log"
+echo "Frontend Logs: /tmp/myagent-frontend.log"
+echo ""
+echo "To view logs:"
+echo "  tail -f /tmp/myagent-backend.log"
+echo "  tail -f /tmp/myagent-frontend.log"
+echo "========================================="
+```
+
+## 3. 自动化测试流程
+
+### 3.1 测试前准备
+
+**每次测试前必须执行**：
+1. 保存当前代码更改
+2. 重新编译 TypeScript（如果需要）
+3. 重启相关服务
+4. 等待服务完全启动
+5. 验证服务健康状态
+
+**实现**：
+```bash
+#!/bin/bash
+# prepare-and-test.sh
+
+echo "Preparing for automated testing..."
+
+# 1. 编译 TypeScript
+echo "[1/4] Compiling TypeScript..."
+npm run build:ts
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript compilation failed"
+  exit 1
+fi
+echo "✅ TypeScript compiled successfully"
+
+# 2. 重启服务
+echo "[2/4] Restarting services..."
+bash restart-all-services.sh
+if [ $? -ne 0 ]; then
+  echo "❌ Service restart failed"
+  exit 1
+fi
+echo "✅ Services restarted successfully"
+
+# 3. 等待服务稳定
+echo "[3/4] Waiting for services to stabilize..."
+sleep 5
+echo "✅ Services are stable"
+
+# 4. 运行测试
+echo "[4/4] Running automated tests..."
+# 测试逻辑在下面
+```
+
+### 3.2 真实 HTTP 请求测试
+
+**使用 curl 进行真实 API 调用**：
+
+```bash
+#!/bin/bash
+# test-api-endpoint.sh
+
+API_URL="http://localhost:3000"
+
+echo "Testing API endpoint: $API_URL"
+
+# 测试 1: 健康检查
+echo ""
+echo "Test 1: Health Check"
+response=$(curl -s -w "\n%{http_code}" "$API_URL/health")
+http_code=$(echo "$response" | tail -n1)
+body=$(echo "$response" | sed '$d')
+
+if [ "$http_code" -eq 200 ]; then
+  echo "✅ Health check passed"
+  echo "Response: $body"
+else
+  echo "❌ Health check failed (HTTP $http_code)"
+  echo "Response: $body"
+  exit 1
+fi
+
+# 测试 2: 提交任务
+echo ""
+echo "Test 2: Submit Task"
+task_response=$(curl -s -w "\n%{http_code}" -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"task": "test task", "sessionId": "test-session"}' \
+  "$API_URL/agent/execute")
+
+task_http_code=$(echo "$task_response" | tail -n1)
+task_body=$(echo "$task_response" | sed '$d')
+
+if [ "$task_http_code" -eq 200 ]; then
+  echo "✅ Task submitted successfully"
+  echo "Response: $task_body"
+else
+  echo "❌ Task submission failed (HTTP $task_http_code)"
+  echo "Response: $task_body"
+  exit 1
+fi
+
+# 提取 taskId
+task_id=$(echo "$task_body" | jq -r '.taskId // .id // empty')
+
+if [ -z "$task_id" ]; then
+  echo "⚠️  Could not extract taskId from response"
+else
+  echo "Task ID: $task_id"
+
+  # 测试 3: 查询任务状态
+  echo ""
+  echo "Test 3: Get Task Status"
+  status_response=$(curl -s -w "\n%{http_code}" "$API_URL/agent/tasks/$task_id")
+  status_http_code=$(echo "$status_response" | tail -n1)
+  status_body=$(echo "$status_response" | sed '$d')
+
+  if [ "$status_http_code" -eq 200 ]; then
+    echo "✅ Task status retrieved"
+    echo "Response: $status_body"
+  else
+    echo "❌ Failed to get task status (HTTP $status_http_code)"
+    echo "Response: $status_body"
+  fi
+fi
+
+echo ""
+echo "========================================="
+echo "All API tests passed! ✅"
+echo "========================================="
+```
+
+### 3.3 使用 Node.js 进行复杂测试
+
+**对于复杂场景，使用 Node.js 脚本**：
+
+```javascript
+// test-api-complex.js
+import http from 'http';
+
+const API_URL = 'http://localhost:3000';
+
+function request(method, path, data = null) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, API_URL);
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    };
+
+    const req = http.request(url, options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          body: body ? JSON.parse(body) : null,
+        });
+      });
+    });
+
+    req.on('error', reject);
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+
+    req.end();
+  });
+}
+
+async function runTests() {
+  console.log('Running complex API tests...\n');
+
+  try {
+    // Test 1: Create session
+    console.log('Test 1: Create session');
+    const sessionResult = await request('POST', '/api/sessions', {
+      userId: 'test-user',
+    });
+    console.log(`Status: ${sessionResult.statusCode}`);
+    console.log(`Response:`, sessionResult.body);
+    console.log('✅ Session created\n');
+
+    const sessionId = sessionResult.body.sessionId;
+
+    // Test 2: Execute task
+    console.log('Test 2: Execute task');
+    const taskResult = await request('POST', '/agent/execute', {
+      task: 'Analyze this code',
+      sessionId,
+      availableSkills: ['code-analysis'],
+    });
+    console.log(`Status: ${taskResult.statusCode}`);
+    console.log(`Response:`, taskResult.body);
+    console.log('✅ Task submitted\n');
+
+    const taskId = taskResult.body.taskId;
+
+    // Test 3: Poll for result
+    console.log('Test 3: Poll for task completion');
+    let completed = false;
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    while (!completed && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const statusResult = await request('GET', `/agent/tasks/${taskId}`);
+      console.log(`Attempt ${attempts + 1}: ${statusResult.body.status}`);
+
+      if (statusResult.body.status === 'completed' || statusResult.body.status === 'failed') {
+        completed = true;
+        console.log(`Final status: ${statusResult.body.status}`);
+        console.log(`Result:`, statusResult.body.output || statusResult.body.error);
+        console.log('✅ Task completed\n');
+      }
+
+      attempts++;
+    }
+
+    if (!completed) {
+      throw new Error('Task did not complete within timeout');
+    }
+
+    console.log('=========================================');
+    console.log('All tests passed! ✅');
+    console.log('=========================================');
+
+  } catch (error) {
+    console.error('❌ Test failed:', error.message);
+    console.error('Stack:', error.stack);
+    process.exit(1);
+  }
+}
+
+runTests();
+```
+
+### 3.4 完整测试工作流
+
+```bash
+#!/bin/bash
+# complete-test-workflow.sh
+
+set -e  # 任何步骤失败则退出
+
+echo "========================================="
+echo "MyAgent Complete Test Workflow"
+echo "========================================="
+
+# ===== 阶段 1: 准备 =====
+echo ""
+echo "[Phase 1: Preparation]"
+
+# 1.1 保存更改
+echo "Checking for uncommitted changes..."
+if [ -n "$(git status --porcelain)" ]; then
+  echo "⚠️  You have uncommitted changes"
+  echo "Consider committing them before testing"
+fi
+
+# 1.2 编译
+echo "Compiling TypeScript..."
+npm run build:ts > /tmp/build.log 2>&1
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed"
+  cat /tmp/build.log
+  exit 1
+fi
+echo "✅ Build successful"
+
+# ===== 阶段 2: 服务重启 =====
+echo ""
+echo "[Phase 2: Service Restart]"
+
+bash restart-all-services.sh
+if [ $? -ne 0 ]; then
+  echo "❌ Service restart failed"
+  exit 1
+fi
+
+# ===== 阶段 3: 功能测试 =====
+echo ""
+echo "[Phase 3: Functional Testing]"
+
+# 3.1 API 测试
+echo "Running API tests..."
+bash test-api-endpoint.sh
+if [ $? -ne 0 ]; then
+  echo "❌ API tests failed"
+  exit 1
+fi
+
+# 3.2 复杂场景测试
+echo "Running complex scenario tests..."
+node test-api-complex.js
+if [ $? -ne 0 ]; then
+  echo "❌ Complex tests failed"
+  exit 1
+fi
+
+# ===== 阶段 4: 验证结果 =====
+echo ""
+echo "[Phase 4: Result Validation]"
+
+echo "Checking service logs..."
+echo "=== Backend Logs (last 20 lines) ==="
+tail -20 /tmp/myagent-backend.log
+
+echo ""
+echo "=== Frontend Logs (last 20 lines) ==="
+tail -20 /tmp/myagent-frontend.log
+
+# ===== 完成 =====
+echo ""
+echo "========================================="
+echo "✅ All tests passed successfully!"
+echo "========================================="
+echo ""
+echo "Services are running:"
+echo "  Backend:  http://localhost:3000"
+echo "  Frontend: http://localhost:5173"
+echo ""
+echo "You can now test manually in browser if needed"
+```
+
+## 4. 调试和故障排查
+
+### 4.1 日志查看
+
+**实时查看日志**：
+```bash
+# 后端日志
+tail -f /tmp/myagent-backend.log
+
+# 前端日志
+tail -f /tmp/myagent-frontend.log
+
+# 同时查看两个日志
+tail -f /tmp/myagent-backend.log /tmp/myagent-frontend.log
+```
+
+**查找错误**：
+```bash
+# 查找错误日志
+grep -i "error" /tmp/myagent-backend.log
+grep -i "exception" /tmp/myagent-backend.log
+grep -i "failed" /tmp/myagent-backend.log
+```
+
+### 4.2 端口冲突排查
+
+**检查端口占用**：
+```bash
+# 查看端口占用详情
+lsof -i :3000
+lsof -i :5173
+
+# 查看所有监听端口
+netstat -an | grep LISTEN
+```
+
+**强制清理端口**：
+```bash
+# 终止所有 Node 进程（危险！）
+pkill -9 node
+
+# 更安全的方式：只终止特定端口
+kill -9 $(lsof -ti :3000) 2>/dev/null
+kill -9 $(lsof -ti :5173) 2>/dev/null
+```
+
+### 4.3 常见问题解决
+
+**问题 1：端口被占用**
+```bash
+# 检查哪个进程占用端口
+lsof -i :3000
+
+# 终止该进程
+kill -9 $(lsof -ti :3000)
+
+# 重新启动服务
+npm run dev
+```
+
+**问题 2：服务启动失败**
+```bash
+# 查看启动日志
+cat /tmp/myagent-backend.log
+
+# 检查编译错误
+npm run build:ts
+
+# 清理并重新安装依赖
+rm -rf node_modules .motia
+npm install
+npm run postinstall
+```
+
+**问题 3：测试失败**
+```bash
+# 检查服务是否运行
+curl http://localhost:3000/health
+
+# 查看详细错误日志
+tail -100 /tmp/myagent-backend.log | grep -A 10 -B 10 "error"
+
+# 重启服务
+bash restart-all-services.sh
+```
+
+## 5. Claude AI 工作流程
+
+### 5.1 任务执行流程
+
+**当用户要求实现功能时**：
+
+```
+1. 理解需求
+   ↓
+2. 编写代码
+   ↓
+3. 运行 prepare-and-test.sh
+   ↓
+4. 如果测试失败
+   ├→ 查看日志
+   ├→ 修复问题
+   └→ 重新测试
+   ↓
+5. 测试通过
+   ↓
+6. 向用户报告结果
+   ├→ 展示测试输出
+   ├→ 说明修改内容
+   └→ 提供访问 URL
+```
+
+### 5.2 测试检查清单
+
+**每次代码修改后必须执行**：
+
+- [ ] 保存代码文件
+- [ ] 编译 TypeScript（`npm run build:ts`）
+- [ ] 终止旧进程（端口 3000, 5173）
+- [ ] 启动新服务
+- [ ] 验证服务启动成功
+- [ ] 构建真实 HTTP 请求
+- [ ] 发送请求并获取响应
+- [ ] 验证响应结果正确
+- [ ] 检查日志无错误
+- [ ] 向用户报告测试结果
+
+### 5.3 测试报告模板
+
+**测试通过时**：
+```
+✅ 功能已实现并测试通过
+
+修改内容：
+- 修改了文件：src/example/file.ts
+- 变更说明：添加了 XXX 功能
+
+测试结果：
+- API 端点：POST /agent/execute
+- 请求数据：{"task": "test"}
+- 响应状态：200 OK
+- 响应数据：{"taskId": "xxx", "status": "pending"}
+
+服务状态：
+- 后端：http://localhost:3000 ✅
+- 前端：http://localhost:5173 ✅
+
+可以访问以下地址验证：
+- API 文档：http://localhost:3000/docs
+- 前端界面：http://localhost:5173
+```
+
+**测试失败时**：
+```
+❌ 测试失败，正在修复...
+
+问题描述：
+- 测试用例：XXX
+- 预期结果：YYY
+- 实际结果：ZZZ
+- 错误信息：[error message]
+
+调试过程：
+- 查看日志：[log excerpt]
+- 发现问题：[root cause]
+- 修复方案：[fix description]
+
+重新测试中...
+[重新执行测试]
+
+✅ 问题已修复
+- 测试结果：[new test output]
+- 验证通过：[confirmation]
+```
+
+## 6. 工具脚本
+
+### 6.1 必备脚本列表
+
+创建以下脚本在项目根目录：
+
+```bash
+scripts/
+├── restart-all-services.sh      # 重启所有服务
+├── restart-backend.sh            # 只重启后端
+├── restart-frontend.sh           # 只重启前端
+├── test-api-endpoint.sh          # API 端点测试
+├── test-api-complex.js           # 复杂场景测试
+├── prepare-and-test.sh           # 准备并测试
+├── complete-test-workflow.sh     # 完整测试流程
+└── check-services.sh             # 检查服务状态
+```
+
+### 6.2 快捷命令
+
+**在 package.json 中添加**：
+```json
+{
+  "scripts": {
+    "test:api": "bash scripts/test-api-endpoint.sh",
+    "test:complex": "node scripts/test-api-complex.js",
+    "test:full": "bash scripts/complete-test-workflow.sh",
+    "restart:all": "bash scripts/restart-all-services.sh",
+    "restart:backend": "bash scripts/restart-backend.sh",
+    "restart:frontend": "bash scripts/restart-frontend.sh",
+    "check": "bash scripts/check-services.sh"
+  }
+}
+```
+
+## 7. 最佳实践
+
+### 7.1 测试原则
+
+1. **自动化优先**：所有测试必须可自动化执行
+2. **真实环境**：使用真实的 HTTP 请求，不是 mock
+3. **完整覆盖**：覆盖成功和失败场景
+4. **独立可重复**：测试不依赖执行顺序，可重复运行
+5. **快速反馈**：测试应该快速完成（< 30秒）
+
+### 7.2 服务管理原则
+
+1. **端口固定**：开发阶段使用固定端口（3000, 5173）
+2. **清理彻底**：启动前必须终止旧进程
+3. **等待就绪**：启动后等待服务完全就绪再测试
+4. **日志记录**：所有输出重定向到日志文件
+5. **状态验证**：启动后必须验证服务健康状态
+
+### 7.3 错误处理原则
+
+1. **快速失败**：测试失败立即停止并报告
+2. **详细日志**：记录足够的信息用于调试
+3. **友好提示**：提供清晰的错误信息和解决建议
+4. **自动重试**：对于暂时性错误，自动重试（最多 3 次）
+5. **状态回滚**：测试失败后自动清理和回滚
+
+## 总结
+
+**核心要求**：
+1. ✅ **完全自动化**：不要求用户手动测试
+2. ✅ **真实验证**：使用真实 HTTP 请求测试
+3. ✅ **服务管理**：基于端口号自动重启服务
+4. ✅ **失败处理**：测试失败时自动调试并修复
+5. ✅ **结果报告**：向用户提供详细的测试报告
+
+**禁止行为**：
+- ❌ "请手动测试"
+- ❌ "请在浏览器中验证"
+- ❌ "部署后请检查"
+- ❌ 跳过自动化验证步骤
+
+**工作流程**：
+```
+编写代码 → 编译 → 重启服务 → 等待就绪 → 真实请求测试 → 验证结果 → 报告
+```
+
+**记住**：Claude AI 应该能够完全自主地完成整个测试流程，不需要用户干预！

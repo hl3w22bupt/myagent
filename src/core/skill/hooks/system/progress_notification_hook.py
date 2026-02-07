@@ -60,7 +60,8 @@ class ProgressNotificationHook(BaseHook):
                 "timestamp": time.time(),  # Unix timestamp in seconds
                 "stage": stage,
                 "skill": context.skill_name,
-                "message": data.get("message", f"{context.skill_name}: {notification_type}"),
+                # ⚠️ 不从 data 中获取 message，避免发送完整输出
+                # 前端会根据 skill_name 和 stage 生成消息
                 "data": data
             }
 
@@ -93,7 +94,11 @@ class ProgressNotificationHook(BaseHook):
         context: SkillContext,
         result: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Notify execution completion"""
+        """
+        Notify execution completion.
+
+        简化版：只发送必要的信息，避免大量数据传输
+        """
         print(f"[DEBUG] ProgressNotificationHook.post_exec received result: {result}")
 
         # Handle case where result might be None
@@ -116,24 +121,22 @@ class ProgressNotificationHook(BaseHook):
             # 兜底逻辑：默认为失败
             success = False
 
-        message = f"{context.skill_name} {'succeeded' if success else 'failed'}"
-
-        # Prepare notification data with complete result
+        # Prepare simplified notification data (只发送核心信息)
         notification_data = {
-            "message": message,
-            "success": success
+            "success": success,
+            "skill_name": context.skill_name,
+            "result_type": result_type,
         }
 
-        # Include result_type and content if available
-        if "result_type" in result:
-            notification_data["result_type"] = result["result_type"]
-        if "content" in result:
-            notification_data["content"] = result["content"]
-        if "title" in result:
-            notification_data["title"] = result["title"]
-        if "metadata" in result:
-            notification_data["metadata"] = result["metadata"]
+        # 只在有错误时发送错误信息
+        if not success and result.get("content"):
+            content = result["content"]
+            if isinstance(content, dict) and "message" in content:
+                notification_data["error"] = content["message"]
+            elif isinstance(content, str):
+                notification_data["error"] = content[:200]  # 限制长度
 
+        # ⚠️ 不传递 message 参数，避免发送完整输出
         await self._send_notification(
             context,
             "status",

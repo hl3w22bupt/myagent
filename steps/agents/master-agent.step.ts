@@ -174,9 +174,11 @@ export const handler = async (
         : message;
 
       // 触发Agent Hook: onTaskStart
+      // ⚠️ 传递 message（用户消息）而不是 chatPrompt（完整上下文）
+      // 避免在通知中包含完整的对话历史
       await hookManager.executeHook(
         'onTaskStart',
-        chatPrompt,
+        message,
         taskId,
         context
       );
@@ -364,6 +366,7 @@ export const handler = async (
     taskId,
     sessionId,
     task: input.task,
+    originalTask: input.task,  // 保存原始任务（不含对话历史）
     status: 'pending',
     context: null,
     metadata: {
@@ -378,7 +381,7 @@ export const handler = async (
       logger,
       emit,
     },
-  };
+  } as any; // 使用 any 因为我们要添加额外的 agentType 字段
 
   // Initialize data store and create task record
   const store = getDataStore();
@@ -494,6 +497,9 @@ export const handler = async (
       isMasterAgent: agentTypeName === 'MasterAgent',
     });
 
+    // 设置 taskContext 的 agentType，供 hook 使用
+    (taskContext as any).agentType = agentTypeName;
+
     await updateStream('running', {
       currentStep: `${agentTypeName} acquired, starting execution`,
     });
@@ -543,7 +549,9 @@ export const handler = async (
     taskContext.task = taskWithContext; // 更新任务描述
 
     // === Agent Hook: onTaskStart ===
-    await hookManager.executeHook('onTaskStart', taskContext.task, taskId, taskContext.context);
+    // ⚠️ 传递原始任务（input.task）而不是 taskWithContext（包含对话历史）
+    // 避免在通知中包含完整的对话历史
+    await hookManager.executeHook('onTaskStart', input.task, taskId, taskContext.context);
     logger.info('Agent onTaskStart hook executed', { taskId });
 
     // === Start progressing hooks ===

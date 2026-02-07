@@ -6,6 +6,7 @@ export interface TaskContext {
   taskId: string;
   sessionId: string;
   task: string;
+  originalTask?: string;  // 原始用户任务（不含对话历史等上下文）
 
   // Execution state
   status: 'pending' | 'running' | 'completed' | 'failed';

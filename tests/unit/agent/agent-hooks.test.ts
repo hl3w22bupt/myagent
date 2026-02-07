@@ -207,7 +207,7 @@ describe('AgentProgressNotifyHook', () => {
   let mockStreams: any;
 
   beforeEach(() => {
-    hook = new AgentProgressNotifyHook();
+    hook = new AgentProgressNotifyHook({ notifyOnAcquire: true });
     mockAgent = new MockAgent('test-session');
 
     // Mock streams
@@ -244,7 +244,10 @@ describe('AgentProgressNotifyHook', () => {
       'task-1', // groupId (taskId takes precedence)
       expect.any(String), // entryId (dynamic timestamp)
       expect.objectContaining({
-        type: 'task_start',
+        type: 'agent',
+        stage: 'pre',
+        progressType: 'user-request',
+        status: 'started',
         sessionId: 'session-1',
         taskId: 'task-1',
         category: 'agent_hook',
@@ -274,7 +277,10 @@ describe('AgentProgressNotifyHook', () => {
       'task-1', // groupId (taskId takes precedence)
       expect.any(String), // entryId (dynamic timestamp)
       expect.objectContaining({
-        type: 'task_complete',
+        type: 'agent',
+        stage: 'post',
+        progressType: 'task-result',
+        status: 'completed',
         sessionId: 'session-1',
         taskId: 'task-1',
         category: 'agent_hook',

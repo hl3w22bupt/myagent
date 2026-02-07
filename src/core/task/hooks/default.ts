@@ -28,6 +28,7 @@ export class DefaultTaskHook extends BaseTaskHook {
         skillCalls: context.metadata.skillCalls,
         totalTokens: context.metadata.totalTokens,
       },
+      category: 'task_hook',
     });
 
     // 2. Log task start
@@ -36,28 +37,55 @@ export class DefaultTaskHook extends BaseTaskHook {
     return undefined;
   }
 
+  /**
+   * Task post-execution hook.
+   * 简化版：只发送最有价值的信息，避免对话历史等冗余数据
+   *
+   * 统一数据结构：
+   * - type: 'task'
+   * - stage: 'post'
+   * - category: 'task_hook'
+   */
   async postExec(context: TaskContext, result: any): Promise<void> {
-    const { taskId, services } = context;
+    const { taskId, task, services } = context;
     const entryId = `${taskId}-default-post`;
 
     // 1. Determine final status
     const status = result.success ? 'completed' : 'failed';
 
-    // 2. Send completion status to Stream
+    // 2. Get artifact count (from context.context.artifactIndex)
+    const artifactCount = context.context?.artifactIndex?.length || 0;
+
+    // 3. Get skill count
+    const skillCount = context.metadata.skillCalls || 0;
+
+    // 4. Get original task (without conversation history)
+    // If originalTask is available, use it; otherwise fallback to context.task
+    const taskToDisplay = (context as any).originalTask || context.task;
+
+    // 5. Send simplified completion status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
-      type: 'task',
+      type: 'task',  // 统一为 'task'
+      stage: 'post',  // 统一使用 stage 字段
+      progressType: 'task-result',
       status,
-      task: context.task,
+      taskId,
+      task: taskToDisplay,  // 使用原始任务，不包含对话历史
       timestamp: new Date().toISOString(),
       metadata: {
         llmCalls: context.metadata.llmCalls,
         skillCalls: context.metadata.skillCalls,
         totalTokens: context.metadata.totalTokens,
-        data: result,
+        data: {
+          success: result.success,
+          executionTime: result.executionTime,
+          error: result.error,
+        },
       },
+      category: 'task_hook',
     });
 
-    // 3. Log task completion
+    // 6. Log task completion (detailed info for internal use)
     services.logger.info('Task completed', {
       taskId,
       status,

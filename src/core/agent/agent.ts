@@ -13,6 +13,7 @@ import { PTCGenerator } from './ptc-generator';
 import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
 import { SkillDiscovery, getSkillDiscovery } from './skill-discovery';
 import { retryOperation, isDefaultRetryableError } from './retry';
+import { getAgentStreams } from './hooks/progress-notify';
 
 /**
  * Base Agent class with core Agent capabilities.
@@ -274,6 +275,9 @@ export class Agent {
     console.log('[Agent] About to generate PTC code');
 
     try {
+      // ⭐ Step 0: Analyze intent and send notification
+      await this.notifyIntentAnalysis(task, context?.taskId);
+
       // Step 1: Generate PTC code with retry logic
       steps.push({
         type: 'planning',
@@ -296,10 +300,13 @@ export class Agent {
         const maxPtcRetries = 3; // Hardcoded to 3 attempts for PTC generation
 
         let lastError: Error | null = null;
+        let lastErrorMessage: string | null = null; // 保存错误消息用于重试
 
         for (let attempt = 1; attempt <= maxPtcRetries; attempt++) {
           try {
-            console.log(`[Agent] PTC generation attempt ${attempt}/${maxPtcRetries}`);
+            console.log(`[Agent] PTC generation attempt ${attempt}/${maxPtcRetries}`, {
+              hasPreviousError: !!lastErrorMessage
+            });
 
             // Build options for PTC generator
             const ptcOptions: any = {
@@ -313,13 +320,21 @@ export class Agent {
               ptcOptions.originalTask = context.originalTask;
             }
 
-            const result = await this.ptcGenerator.generateWithResult(task, ptcOptions);
+            // Pass previous error if this is a retry attempt
+            const result = await this.ptcGenerator.generateWithResult(
+              task,
+              ptcOptions,
+              lastErrorMessage || undefined // 传递上一次的错误信息
+            );
 
             console.log('[Agent] PTC code generated', {
               codeLength: result.code.length,
               selectedSkills: result.selectedSkills,
               attempt
             });
+
+            // ⭐ Send PTC planning notification
+            await this.notifyPTCPlanning(task, result, context?.taskId);
 
             // Success
             if (attempt > 1) {
@@ -336,7 +351,9 @@ export class Agent {
 
           } catch (error: any) {
             lastError = error;
-            console.error(`[Agent] PTC generation failed on attempt ${attempt}:`, error.message);
+            // 保存错误消息，用于下一次重试
+            lastErrorMessage = error.message || String(error);
+            console.error(`[Agent] PTC generation failed on attempt ${attempt}:`, lastErrorMessage);
 
             // Check if should retry
             const isRetryable = isDefaultRetryableError(error);
@@ -735,5 +752,230 @@ export class Agent {
   } {
     const discovery = getSkillDiscovery();
     return discovery.getStats();
+  }
+
+  /**
+   * Analyze task intent and send notification.
+   */
+  private async notifyIntentAnalysis(task: string, taskId?: string): Promise<{
+    intent: string;
+    reasoning: string;
+    category: string;
+  }> {
+    const streams = getAgentStreams();
+
+    if (!streams?.taskExecution) {
+      console.warn('[Agent] No taskExecution stream available, skipping intent notification');
+      return this.fallbackIntentDetection(task);
+    }
+
+    try {
+      const analysisResult = await this.analyzeIntentWithLLM(task);
+
+      const event = {
+        type: 'intent_analysis',
+        progressType: 'reasoning',
+        status: 'analyzing',  // 进行中状态
+        taskId: taskId || `task-${Date.now()}`,
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          originalTask: task,
+          intent: analysisResult.intent,
+          reasoning: analysisResult.reasoning,
+          category: analysisResult.category,
+          agentType: this.constructor.name
+        }
+      };
+
+      const groupId = event.taskId;
+      const timestamp = Date.now();
+      const entryId = `agent-${event.type}-${groupId}-${timestamp}`;
+
+      await streams.taskExecution.set(groupId, entryId, {
+        ...event,
+        category: 'agent_hook',
+      });
+
+      console.log('[Agent] ✅ Intent analysis notification sent');
+      return analysisResult;
+    } catch (error) {
+      console.error('[Agent] Failed to send intent analysis notification:', error);
+      return this.fallbackIntentDetection(task);
+    }
+  }
+
+  /**
+   * Send PTC planning event notification.
+   */
+  private async notifyPTCPlanning(task: string, ptcResult: any, taskId?: string): Promise<void> {
+    const streams = getAgentStreams();
+
+    if (!streams?.taskExecution) {
+      console.warn('[Agent] No taskExecution stream available, skipping PTC planning notification');
+      return;
+    }
+
+    try {
+      const skills = ptcResult.selectedSkills || [];
+
+      const event = {
+        type: 'ptc_planning',
+        progressType: 'skill-selection',
+        status: 'planning',  // 进行中状态
+        taskId: taskId || `task-${Date.now()}`,
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          userTask: task,
+          selectedSkills: skills,
+          reasoning: ptcResult.reasoning,
+          executionPlan: this.formatExecutionPlan(skills)
+        }
+      };
+
+      const groupId = event.taskId;
+      const timestamp = Date.now();
+      const entryId = `agent-${event.type}-${groupId}-${timestamp}`;
+
+      await streams.taskExecution.set(groupId, entryId, {
+        ...event,
+        category: 'agent_hook',
+      });
+
+      console.log('[Agent] ✅ PTC planning notification sent');
+    } catch (error) {
+      console.error('[Agent] Failed to send PTC planning notification:', error);
+    }
+  }
+
+  /**
+   * Analyze task intent using LLM.
+   */
+  private async analyzeIntentWithLLM(task: string): Promise<{
+    intent: string;
+    reasoning: string;
+    category: string;
+  }> {
+    try {
+      const prompt = `Analyze the following task and identify the user's intent:
+
+Task: "${task}"
+
+Please respond in the following JSON format:
+{
+  "intent": "video_generation|code_generation|review|design|frontend_design|text_generation|general",
+  "category": "creative|analytical|technical",
+  "reasoning": "Brief explanation of why this intent was chosen"
+}
+
+Intent types:
+- video_generation: Creating videos, animations, visual content
+- code_generation: Writing code, programming, software development
+- review: Reviewing code, analyzing content, quality assessment
+- design: Creating designs, visual content, layouts
+- frontend_design: Web development, UI/UX, frontend code
+- text_generation: Writing documentation, content creation
+- general: General tasks that don't fit other categories
+
+Categories:
+- creative: Creating new content (video, design, code)
+- analytical: Analyzing existing content (review, audit)
+- technical: Technical implementation (code, infrastructure)
+
+Respond ONLY with valid JSON, no other text.`;
+
+      const response = await this.llm.messagesCreate(
+        [{ role: 'user', content: prompt }],
+        { max_tokens: 500, temperature: 0.3 }
+      );
+
+      const content = response.content.trim();
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        console.log('[Agent] Intent analysis completed:', result);
+        return {
+          intent: result.intent || 'general',
+          reasoning: result.reasoning || 'General task',
+          category: result.category || 'general'
+        };
+      } else {
+        throw new Error('Invalid JSON response from LLM');
+      }
+    } catch (error) {
+      console.error('[Agent] LLM intent analysis failed, falling back to simple detection:', error);
+      return this.fallbackIntentDetection(task);
+    }
+  }
+
+  /**
+   * Fallback intent detection using simple keyword matching.
+   */
+  private fallbackIntentDetection(task: string): {
+    intent: string;
+    reasoning: string;
+    category: string;
+  } {
+    const lowerTask = task.toLowerCase();
+
+    if (lowerTask.includes('视频') || lowerTask.includes('动画') || lowerTask.includes('remotion')) {
+      return {
+        intent: 'video_generation',
+        reasoning: '视频生成任务，需要使用 remotion-generator skill 创建动画效果',
+        category: 'creative'
+      };
+    }
+    if (lowerTask.includes('代码') || (lowerTask.includes('生成') && lowerTask.includes('码'))) {
+      return {
+        intent: 'code_generation',
+        reasoning: '代码生成任务，需要生成相应的代码实现',
+        category: 'technical'
+      };
+    }
+    if (lowerTask.includes('审查') || lowerTask.includes('分析') || lowerTask.includes('review')) {
+      return {
+        intent: 'review',
+        reasoning: '审查分析任务，需要对代码或内容进行评估',
+        category: 'analytical'
+      };
+    }
+    if (lowerTask.includes('图片') || lowerTask.includes('设计') || lowerTask.includes('infographic')) {
+      return {
+        intent: 'design',
+        reasoning: '设计任务，需要创建视觉内容或界面',
+        category: 'creative'
+      };
+    }
+    if (lowerTask.includes('前端') || lowerTask.includes('ui') || lowerTask.includes('界面')) {
+      return {
+        intent: 'frontend_design',
+        reasoning: '前端设计任务，需要生成前端代码和界面',
+        category: 'technical'
+      };
+    }
+    if (lowerTask.includes('文本') || lowerTask.includes('文档')) {
+      return {
+        intent: 'text_generation',
+        reasoning: '文本生成任务，需要创建文档或内容',
+        category: 'creative'
+      };
+    }
+
+    return {
+      intent: 'general',
+      reasoning: '通用任务，将根据具体需求选择合适的处理方式',
+      category: 'general'
+    };
+  }
+
+  /**
+   * Format execution plan for display.
+   */
+  private formatExecutionPlan(skills: string[]): string {
+    if (skills.length === 0) return '直接执行';
+    if (skills.length === 1) return `使用 ${skills[0]} skill`;
+    return `使用 ${skills.join(' + ')} skills`;
   }
 }

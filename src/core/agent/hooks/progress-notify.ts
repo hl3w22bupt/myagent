@@ -89,7 +89,7 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
   constructor(config: AgentProgressNotifyConfig = {}) {
     super();
     this.config = {
-      notifyOnAcquire: config.notifyOnAcquire ?? true,
+      notifyOnAcquire: config.notifyOnAcquire ?? false, // ⚠️ 禁用，避免重复通知
       notifyOnTaskStart: config.notifyOnTaskStart ?? true,
       notifyOnTaskComplete: config.notifyOnTaskComplete ?? true,
       notifyOnStatusCheck: config.notifyOnStatusCheck ?? false,
@@ -188,8 +188,10 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
    * Called before task execution.
    * Sends notification with task details.
    *
-   * 同时发送 Agent 生命周期事件和任务开始事件，统一使用 taskId 作为 groupId
-   * 这样前端只需订阅 taskId 就能接收到所有事件。
+   * 统一数据结构：
+   * - type: 'agent'
+   * - stage: 'pre'
+   * - category: 'agent_hook'
    */
   async onTaskStart(
     task: string,
@@ -202,38 +204,29 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
 
     try {
       const sessionId = context.sessionId;
+      const agentType = context.agentType || 'Agent';
 
-      // 发送三个事件：agent_created、agent_acquired、task_start
-      // 这样可以确保前端通过 taskId 订阅接收到完整的 Agent 生命周期事件
-      const events = [
-        {
-          type: 'agent_created',
-          data: { agentType: 'Agent', skillsCount: 0, hasSystemPrompt: false },
-        },
-        {
-          type: 'agent_acquired',
-          data: { conversationLength: 0, executionCount: 0, variablesCount: 0 },
-        },
-        {
-          type: 'task_start',
-          data: { task: task.substring(0, 200), taskLength: task.length },
-        },
-      ];
-
-      for (const eventDef of events) {
-        const event = {
-          type: eventDef.type,
-          sessionId,
-          taskId,
-          timestamp: new Date().toISOString(),
-          data: eventDef.data,
-        };
-        await this.sendNotification(sessionId, event);
-      }
-
-      console.log('[AgentProgressNotifyHook] Agent lifecycle and task start notifications sent', {
+      const event = {
+        type: 'agent',  // 统一为 'agent'
+        stage: 'pre',   // 统一使用 stage 字段
+        progressType: 'user-request',
+        status: 'started',
         sessionId,
         taskId,
+        timestamp: new Date().toISOString(),
+        data: {
+          task: task.substring(0, 200),
+          taskLength: task.length,
+          agentType,
+        }
+      };
+
+      await this.sendNotification(sessionId, event);
+
+      console.log('[AgentProgressNotifyHook] Task start notification sent', {
+        sessionId,
+        taskId,
+        agentType,
       });
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send task start notification', {
@@ -248,6 +241,11 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
   /**
    * Called after task execution completes.
    * Sends notification with result details.
+   *
+   * 统一数据结构：
+   * - type: 'agent'
+   * - stage: 'post'
+   * - category: 'agent_hook'
    */
   async onTaskComplete(
     result: AgentResult,
@@ -261,21 +259,27 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       const sessionId = context.sessionId;
       const taskId = context.taskId;
 
+      // 获取 artifact 数量（支持多种 context 结构）
+      const artifactCount = context.artifactIndex?.length ||
+                            context.context?.artifactIndex?.length ||
+                            0;
+
+      // 获取使用的 skill 数量
+      const skillCount = result.metadata.skillCalls;
+
       const event = {
-        type: 'task_complete',
+        type: 'agent',  // 统一为 'agent'
+        stage: 'post',  // 统一使用 stage 字段
+        progressType: 'task-result',
+        status: result.success ? 'completed' : 'failed',
         sessionId,
         taskId,
         timestamp: new Date().toISOString(),
         data: {
           success: result.success,
-          executionTime: result.executionTime,
-          stepsCount: result.steps.length,
-          llmCalls: result.metadata.llmCalls,
-          skillCalls: result.metadata.skillCalls,
-          totalTokens: result.metadata.totalTokens,
-          hasOutput: result.output !== undefined,
-          hasError: result.error !== undefined,
-        },
+          artifactCount,
+          skillCount,
+        }
       };
 
       await this.sendNotification(sessionId, event);
@@ -284,6 +288,8 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         sessionId,
         taskId,
         success: result.success,
+        artifactCount,
+        skillCount,
       });
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send task complete notification', {

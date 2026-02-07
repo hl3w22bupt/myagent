@@ -1,0 +1,629 @@
+---
+description: MyAgent 设计规约 - Agent、Skill、Hook 核心设计原则与编码约定
+---
+
+# MyAgent 设计规约
+
+## 概述
+
+本文档总结了 MyAgent 项目的核心设计原则和编码约定，确保所有代码遵循统一的架构模式。
+
+**核心设计理念**：
+- **框架无关性**：核心 Agent 层（`src/core/agent/`）不依赖 Motia，可在任何框架中使用
+- **会话隔离**：每个 Session 拥有独立的 Agent 实例和状态，互不干扰
+- **类型安全**：全面使用 TypeScript 类型定义，确保编译时类型检查
+- **分层架构**：清晰的职责划分，高层模块依赖抽象而非具体实现
+- **多语言协作**：TypeScript（协调层）+ Python（技能执行层）
+
+## 1. Agent 系统
+
+### 1.1 AgentManager - 会话管理
+
+**职责**：
+- 管理 Session → Agent 映射
+- 提供会话隔离和并发安全
+- 自动清理过期会话
+- 集成 Agent Hook 系统
+
+**关键设计**：
+```typescript
+// 会话获取/创建
+async acquire(sessionId: string, options?: AcquireOptions): Promise<Agent | MasterAgent>
+
+// 会话释放和资源清理
+async release(sessionId: string): Promise<void>
+
+// LRU 淘汰策略（达到 maxSessions 时）
+private async evictOldestSession(): Promise<void>
+
+// 定期清理过期会话（每分钟）
+private async cleanupExpiredSessions(): Promise<void>
+```
+
+**使用约定**：
+1. **优先使用 AgentManager**：不要直接 `new Agent()`，始终通过 `AgentManager.acquire()` 获取
+2. **及时释放会话**：使用完毕后调用 `release()`，避免内存泄漏
+3. **会话超时配置**：合理设置 `sessionTimeout`（建议 30-60 分钟）
+4. **限制并发会话数**：根据资源设置 `maxSessions`（建议 10-100）
+
+### 1.2 Agent - 任务执行引擎
+
+**职责**：
+- 执行用户任务
+- 调用 LLM 处理任务
+- 调用可用技能
+- 记录执行步骤和结果
+
+**核心方法**：
+```typescript
+async execute(task: string, options?: ExecuteOptions): Promise<AgentResult>
+```
+
+**Session 状态管理**：
+```typescript
+interface SessionState {
+  sessionId: string;
+  createdAt: number;
+  lastActivityAt: number;
+  conversationHistory: Array<{role, content, timestamp}>;
+  executionHistory: Array<{task, result, timestamp, executionTime}>;
+  variables: Map<string, any>;
+}
+```
+
+**使用约定**：
+1. **不要直接实例化**：使用 `AgentManager.acquire()` 获取 Agent 实例
+2. **维护会话状态**：Agent 自动维护 `conversationHistory` 和 `variables`
+3. **记录执行步骤**：每个步骤都应记录到 `AgentResult.steps` 中
+4. **返回结构化结果**：始终返回标准的 `AgentResult` 类型
+
+### 1.3 MasterAgent - 委派协调器
+
+**职责**：
+- 分析任务类型
+- 决定是否委派给子代理
+- 生成委派计划（PTC）
+- 协调子代理执行
+
+**委派流程**：
+```
+接收任务 → 分析任务 → 决定策略 → [直接执行 | 委派子代理]
+```
+
+**使用约定**：
+1. **明确的委派规则**：子代理配置中应定义清晰的 `triggers` 和 `patterns`
+2. **合理的置信度阈值**：设置 `minConfidence`（建议 0.6-0.8），避免误委派
+3. **可追溯的委派决策**：在 `AgentResult.metadata.delegates` 中记录委派的子代理
+
+### 1.4 AgentConfig - 配置约定
+
+**必需字段**：
+```typescript
+{
+  systemPrompt: string;        // 系统提示词（必需）
+  availableSkills?: string[];  // 可用技能列表（可选，空=全部技能）
+}
+```
+
+**可选配置**：
+```typescript
+{
+  llm?: {
+    provider: string;          // 'anthropic' | 'openai-compatible'
+    model: string;             // 模型名称
+    apiKey?: string;           // API 密钥
+    baseURL?: string;          // 自定义 API 端点
+  };
+  sandbox?: {
+    type: string;              // 'local' | 'daytona' | 'e2b' | 'modal'
+    config?: any;              // 沙箱特定配置
+  };
+  constraints?: {
+    maxIterations?: number;    // 最大迭代次数（建议 10-50）
+    timeout?: number;          // 超时时间（毫秒，建议 60000）
+    retry?: {
+      maxRetries?: number;     // 最大重试次数（建议 3）
+      baseDelay?: number;      // 基础延迟（毫秒，建议 1000）
+      exponentialBackoff?: boolean; // 指数退避（建议 true）
+    };
+  };
+}
+```
+
+## 2. Skill 系统
+
+### 2.1 Skill 目录结构
+
+**标准结构**：
+```
+skills/
+├── skill-name/
+│   ├── skill.yaml          # 技能配置（必需）
+│   ├── handler.py          # 技能实现（必需）
+│   ├── requirements.txt    # Python 依赖（可选）
+│   └── README.md           # 技能文档（推荐）
+```
+
+**skill.yaml 必需字段**：
+```yaml
+id: skill-name               # 技能唯一 ID（必需）
+name: Skill Name             # 技能显示名称（必需）
+version: 1.0.0              # 语义化版本（必需）
+description: 技能描述       # 技能描述（必需）
+type: python                # 技能类型（必需）
+tags:                        # 标签（必需，用于搜索）
+  - tag1
+  - tag2
+```
+
+### 2.2 Skill 实现约定
+
+**handler.py 标准结构**：
+```python
+import json
+from typing import Dict, Any
+
+def execute(context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    技能执行函数
+
+    Args:
+        context: 包含以下键：
+            - 'inputs': 用户提供的输入参数
+            - 'config': 技能配置（来自 skill.yaml）
+            - 'metadata': 执行元数据
+
+    Returns:
+        {
+            'success': bool,        # 是否成功
+            'output': any,          # 执行结果（成功时）
+            'error': str            # 错误信息（失败时）
+        }
+    """
+    inputs = context.get('inputs', {})
+    config = context.get('config', {})
+
+    try:
+        # 执行技能逻辑
+        result = perform_skill(inputs, config)
+
+        return {
+            'success': True,
+            'output': result
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }
+```
+
+**编码约定**：
+1. **输入验证**：始终验证 `inputs` 中的必需参数
+2. **错误处理**：捕获所有异常并返回友好的错误信息
+3. **幂等性**：技能应该是幂等的，多次执行产生相同结果
+4. **超时控制**：在 skill.yaml 中配置合理的 `timeout`
+5. **依赖声明**：在 `requirements.txt` 中声明所有 Python 依赖
+
+### 2.3 Skill 输入输出约定
+
+**输入参数定义**（skill.yaml）：
+```yaml
+inputs:
+  paramName:
+    type: string              # 参数类型
+    description: 参数描述     # 参数说明
+    required: true            # 是否必需
+    default: defaultValue     # 默认值（可选）
+    validation:               # 验证规则（可选）
+      minLength: 1
+      maxLength: 1000
+```
+
+**输出定义**（skill.yaml）：
+```yaml
+outputs:
+  resultName:
+    type: object             # 输出类型
+    description: 输出描述    # 输出说明
+```
+
+### 2.4 Skill 双重来源系统
+
+**Motia Native Skills**（`/skills/`）：
+- 标准 skill.yaml 配置
+- Python handler.py 实现
+- 直接通过沙箱执行
+
+**Claude Skills**（`/claude_skills/`）：
+- SKILL.md 文件（YAML frontmatter + Markdown）
+- 可能包含 Python 脚本（可选）
+- 通过适配器层加载
+
+**统一加载**：
+```typescript
+import { loadAllSkills } from '@/core/skill/skill-loader';
+
+const skills = loadAllSkills(); // 返回 UnifiedSkillMetadata[]
+```
+
+## 3. Hook 系统
+
+### 3.1 Agent Hooks（Agent 生命周期钩子）
+
+**Hook 类型**：
+```typescript
+interface AgentHook {
+  onAgentCreate?(config: AgentConfig, sessionId: string): Promise<{abort?: boolean; reason?: string}>;
+  onAgentAcquire?(agent: Agent, sessionId: string): Promise<void>;
+  onAgentDestroy?(sessionId: string): Promise<void>;
+}
+```
+
+**使用场景**：
+- `onAgentCreate`：Agent 创建前的拦截检查（如权限验证）
+- `onAgentAcquire`：Agent 获取时的初始化（如恢复会话状态）
+- `onAgentDestroy`：Agent 销毁时的资源清理
+
+**注册方式**：
+```typescript
+agentManager.getHookManager().register(myHook);
+```
+
+### 3.2 Task Hooks（任务生命周期钩子）
+
+**Hook 类型**：
+```typescript
+abstract class BaseTaskHook {
+  abstract preExec(context: TaskContext): Promise<void | PreExecResult>;
+  abstract postExec(context: TaskContext, result: any): Promise<void>;
+  async onProgressingNotify(context: TaskContext): Promise<void>;
+}
+```
+
+**PreExec 返回值**：
+```typescript
+type PreExecResult = void | {
+  stop?: boolean;          // 停止任务执行
+  reason?: string;         // 停止原因
+  modifiedTask?: string;   // 修改后的任务
+};
+```
+
+**TaskContext 结构**：
+```typescript
+interface TaskContext {
+  taskId: string;
+  sessionId: string;
+  task: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  context: any;                       // 自定义上下文数据
+  metadata: {
+    createdAt: Date;
+    updatedAt: Date;
+    llmCalls: number;
+    skillCalls: number;
+    totalTokens: number;
+    userId?: string;
+  };
+  services: {
+    streams: any;    // Motia Stream 服务
+    logger: any;     // Motia Logger 服务
+    emit: any;       // Motia Event 发射器
+  };
+}
+```
+
+**内置 Hooks**：
+- `UserAllowHook`：用户权限检查
+- `DefaultTaskHook`：默认任务处理逻辑
+- `MetricsHook`：指标收集
+- `ContextManagerHook`：上下文生命周期管理
+
+### 3.3 Hook 实现约定
+
+**编码约定**：
+1. **快速失败**：在 `preExec` 中尽早验证，避免不必要的执行
+2. **幂等性**：Hook 应该是幂等的，多次调用产生相同效果
+3. **异步处理**：所有 Hook 方法都是异步的，使用 `async/await`
+4. **错误处理**：不要抛出异常，通过返回值指示错误状态
+5. **轻量级**：Hook 逻辑应该简洁快速，避免阻塞主流程
+
+**Hook 注册顺序**：
+```typescript
+// 按优先级注册（重要 Hook 先注册）
+registry.register(new UserAllowHook());      // 1. 权限检查（最高优先级）
+registry.register(new TaskValidationHook()); // 2. 任务验证
+registry.register(new RateLimitHook());      // 3. 速率限制
+registry.register(new DefaultTaskHook());    // 4. 默认处理
+registry.register(new MetricsHook());       // 5. 指标收集
+```
+
+## 4. PTC（Python Task Code）系统
+
+### 4.1 PTC 生成
+
+**职责**：
+- 根据任务生成 Python 执行代码
+- 选择合适的技能
+- 构建执行计划
+
+**PTC 模板**：
+```python
+import json
+from typing import Dict, Any
+
+def execute(context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    PTC 主执行函数
+
+    Args:
+        context: {
+            'task': str,
+            'available_skills': List[str],
+            'variables': Dict[str, Any],
+            'conversation_history': List[Dict]
+        }
+
+    Returns:
+        {
+            'success': bool,
+            'output': any,
+            'metadata': {...}
+        }
+    """
+    # 1. 分析任务
+    task_analysis = analyze_task(context['task'])
+
+    # 2. 选择技能
+    selected_skills = select_skills(task_analysis, context['available_skills'])
+
+    # 3. 执行技能
+    results = []
+    for skill in selected_skills:
+        result = call_skill(skill, prepare_inputs(skill, context))
+        results.append(result)
+
+    # 4. 综合结果
+    final_output = synthesize_results(results)
+
+    return {
+        'success': True,
+        'output': final_output,
+        'metadata': {
+            'steps': ['analysis', 'skill_calls', 'synthesis'],
+            'skills_used': selected_skills
+        }
+    }
+```
+
+### 4.2 PTC 执行
+
+**执行流程**：
+1. 生成 PTC 代码
+2. 在沙箱中执行
+3. 捕获执行结果
+4. 解析输出
+
+**重试机制**：
+```typescript
+{
+  maxRetries: 3,              // 最大重试次数
+  baseDelay: 1000,            // 基础延迟（毫秒）
+  exponentialBackoff: true,   // 指数退避
+  maxDelay: 30000,            // 最大延迟（毫秒）
+}
+```
+
+## 5. 沙箱系统
+
+### 5.1 沙箱适配器
+
+**支持类型**：
+- `local`：本地 Python 环境（开发/测试）
+- `daytona`：Daytona 沙箱
+- `e2b`：E2B 沙箱
+- `modal`：Modal 沙箱
+
+**接口定义**：
+```typescript
+interface SandboxAdapter {
+  execute(code: string, timeout: number): Promise<SandboxResult>;
+}
+
+interface SandboxResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  executionTime: number;
+}
+```
+
+### 5.2 沙箱配置
+
+**本地沙箱**：
+```typescript
+{
+  type: 'local',
+  local: {
+    pythonPath: './python_modules/bin/python3'
+  }
+}
+```
+
+**Daytona 沙箱**：
+```typescript
+{
+  type: 'daytona',
+  daytona: {
+    projectId: string
+  }
+}
+```
+
+## 6. 错误处理
+
+### 6.1 错误类型
+
+```typescript
+enum ErrorType {
+  VALIDATION = 'validation',       // 输入验证失败
+  PERMISSION = 'permission',       // 权限不足
+  NOT_FOUND = 'not_found',        // 资源不存在
+  TIMEOUT = 'timeout',            // 超时
+  RATE_LIMIT = 'rate_limit',      // 频率限制
+  INTERNAL = 'internal',          // 内部错误
+  EXTERNAL = 'external',          // 外部服务错误
+}
+```
+
+### 6.2 错误处理约定
+
+1. **分层处理**：API 层捕获并格式化，应用层业务逻辑处理，领域层规则验证
+2. **重试策略**：对于可重试错误（如网络超时），使用指数退避重试
+3. **错误日志**：记录详细错误信息（stack trace、context、metadata）
+4. **用户友好**：返回清晰的错误消息，避免暴露内部实现细节
+
+## 7. 并发安全
+
+### 7.1 会话级隔离
+
+- 每个 Session 独立的 Agent 实例
+- 不同 Session 之间完全隔离
+- 同一 Session 内的请求串行处理
+
+### 7.2 状态锁机制
+
+```typescript
+// 细粒度锁：每个 (groupId, key) 对应独立锁
+await stateLockManager.atomicUpdate(
+  state,
+  groupId,
+  key,
+  (current) => updatedValue
+);
+```
+
+### 7.3 并发约定
+
+1. **避免共享状态**：不同 Session 不共享状态
+2. **使用原子操作**：对于共享资源，使用 `atomicUpdate`
+3. **避免死锁**：锁的获取顺序应该一致
+4. **超时控制**：所有阻塞操作都应有超时
+
+## 8. 类型定义
+
+### 8.1 核心类型位置
+
+```
+src/core/agent/types.ts           # Agent 相关类型
+src/core/task/hooks/types.ts      # Task Hook 类型
+src/core/sandbox/types.ts         # Sandbox 类型
+src/core/database/*.ts            # 数据库类型
+```
+
+### 8.2 类型约定
+
+1. **导出所有公共类型**：在 `types.ts` 中导出所有公共接口
+2. **使用严格类型**：避免 `any`，使用具体的类型定义
+3. **可选字段标记**：使用 `?` 明确标记可选字段
+4. **只读字段**：使用 `readonly` 标记只读字段
+
+## 9. 测试约定
+
+### 9.1 测试目录结构
+
+```
+tests/
+├── unit/              # 单元测试
+├── integration/       # 集成测试
+├── e2e/              # 端到端测试
+└── manual/           # 手动测试脚本
+```
+
+### 9.2 测试约定
+
+1. **单元测试**：覆盖核心逻辑（Agent、Skill、Hook）
+2. **集成测试**：测试模块间交互
+3. **E2E 测试**：测试完整工作流
+4. **Mock 外部依赖**：使用 mock 隔离外部服务（LLM、沙箱）
+
+## 10. 代码风格
+
+### 10.1 TypeScript 约定
+
+1. **使用 ES Modules**：`import`/`export`
+2. **异步代码**：使用 `async/await`，避免回调地狱
+3. **错误处理**：使用 `try/catch`，不要吞掉异常
+4. **命名约定**：
+   - 类名：PascalCase（`AgentManager`）
+   - 函数/方法：camelCase（`acquireAgent`）
+   - 常量：UPPER_SNAKE_CASE（`MAX_SESSIONS`）
+   - 接口：PascalCase，无 `I` 前缀（`AgentConfig`）
+
+### 10.2 Python 约定
+
+1. **遵循 PEP 8**：Python 代码风格指南
+2. **类型注解**：使用类型提示（`typing` 模块）
+3. **文档字符串**：使用 Google 或 NumPy 风格的 docstring
+4. **命名约定**：
+   - 函数/变量：snake_case（`execute_task`）
+   - 类名：PascalCase（`SkillExecutor`）
+   - 常量：UPPER_SNAKE_CASE（`MAX_RETRIES`）
+
+## 11. 文档约定
+
+### 11.1 代码文档
+
+1. **文件头注释**：每个文件顶部添加描述性注释
+2. **函数文档**：公共函数必须有 JSDoc/Docstring
+3. **类型文档**：复杂类型添加注释说明用途
+4. **示例代码**：提供使用示例
+
+### 11.2 规约文档
+
+1. **架构文档**：`.cursor/rules/myagent/architecture.mdc`
+2. **系统文档**：agent-system.mdc、skill-system.mdc、task-hooks.mdc
+3. **API 文档**：api-design.mdc
+4. **更新及时**：代码变更时同步更新文档
+
+## 12. 依赖管理
+
+### 12.1 TypeScript 依赖
+
+```json
+{
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@motiadev/core": "0.17.11-beta.193",
+    "motia": "0.17.11-beta.193",
+    "zod": "^4.1.12"
+  }
+}
+```
+
+### 12.2 Python 依赖
+
+- 在 `requirements.txt` 中声明所有依赖
+- 使用 `uv` 管理 Python 环境
+- 固定版本号以确保可重现构建
+
+## 总结
+
+**核心原则**：
+1. **框架无关**：核心 Agent 层独立于 Motia
+2. **会话隔离**：每个 Session 独立运行
+3. **类型安全**：全面使用 TypeScript 类型
+4. **分层架构**：清晰的职责划分
+5. **多语言协作**：TS（协调）+ Python（执行）
+
+**编码规范**：
+1. **优先使用管理器**：通过 AgentManager 获取 Agent
+2. **标准 Skill 结构**：遵循 skill.yaml + handler.py 模式
+3. **Hook 轻量级**：快速失败、幂等、异步
+4. **错误友好**：清晰的错误消息和详细日志
+5. **并发安全**：会话隔离、细粒度锁、超时控制
+
+**遵循这些规约，确保代码质量和系统稳定性。**
