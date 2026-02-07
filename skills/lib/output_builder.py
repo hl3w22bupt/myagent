@@ -320,7 +320,8 @@ class OutputBuilder:
         self._result_type = "table"
 
         self._content = {
-            "headers": headers,
+            "columns": headers,  # 前端期望 columns 字段
+            "headers": headers,  # 保留 headers 以向后兼容
             "rows": rows
         }
 

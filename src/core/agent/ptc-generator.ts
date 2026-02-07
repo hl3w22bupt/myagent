@@ -401,12 +401,26 @@ Output format (JSON):
       return skill;
     });
 
+    // Build parameter mapping for debugging
+    const paramMapping: Record<string, string> = {};
+    for (const skill of skillsDetails) {
+      const taskParam = this.findTaskParameter(skill.name);
+      paramMapping[skill.name] = taskParam;
+    }
+
+    console.info('[PTC Generator] Parameter mapping:', {
+      mapping: paramMapping
+    });
+
     // Build skills block for prompt
     const skillsBlock = skillsDetails
       .map((skill) => {
+        const taskParam = this.findTaskParameter(skill.name);
+
         let skillInfo = `${skill.name}:
   Description: ${skill.description}
-  Tags: ${skill.tags.join(', ')}`;
+  Tags: ${skill.tags.join(', ')}
+  Task Parameter: ${taskParam}`;
 
         // Add input schema if available
         if (skill.metadata && skill.metadata.input_schema) {
@@ -419,7 +433,8 @@ Output format (JSON):
               const paramType = info.type || 'any';
               const paramDesc = info.description || '';
               const defaultValue = info.default !== undefined ? ` (default: ${info.default})` : '';
-              skillInfo += `\n    - ${paramName} (${paramType})${required ? ' [REQUIRED]' : ''}${defaultValue}: ${paramDesc}`;
+              const marker = paramName === taskParam ? ' ← MAIN TASK PARAMETER' : '';
+              skillInfo += `\n    - ${paramName}${marker} (${paramType})${required ? ' [REQUIRED]' : ''}${defaultValue}: ${paramDesc}`;
             }
           }
         }
@@ -506,7 +521,62 @@ IMPORTANT - Code structure requirements:
 
 ${
   selectedSkills.length > 0
-    ? `Available skills to use:
+    ? (() => {
+        // Build parameter mapping instructions for each selected skill
+        const skillParamInstructions = skillsDetails.map((skill, index) => {
+          const taskParam = this.findTaskParameter(skill.name);
+          return `# Skill ${index + 1}: ${skill.name}
+# - Use '${taskParam}' parameter for the main task
+# - Check the skill's parameter schema above for other required/optional parameters`;
+        }).join('\n\n');
+
+        const firstSkillParam = this.findTaskParameter(selectedSkills[0]);
+
+        // Build skill-specific content preparation instructions
+        let skillContentPrep = '';
+        if (selectedSkills.includes('infographic-generator')) {
+          skillContentPrep = `
+# CRITICAL - INFOGRAPHIC CONTENT PREPARATION:
+# infographic-generator needs DETAILED, STRUCTURED content - NOT just a brief task!
+#
+# When user gives a short instruction like "生成软件生命周期图", you MUST:
+# 1. INTELLIGENTLY EXPAND the content based on the topic
+# 2. Generate a DETAILED, STRUCTURED description with all stages/steps
+# 3. Use proper format: numbered list, bullet points, or clear stages
+#
+# Example (WRONG - too brief):
+#   content='生成一个软件生命周期图'  # ❌ This will produce poor results!
+#
+# Example (CORRECT - detailed and structured):
+#   content='''
+#   软件生命周期包括以下阶段：
+#   1. 需求分析：明确用户需求和系统目标
+#   2. 系统设计：架构设计、技术选型
+#   3. 编码实现：开发功能模块
+#   4. 测试验证：单元测试、集成测试
+#   5. 部署上线：发布到生产环境
+#   6. 运维监控：系统维护和性能监控
+#   7. 退役更新：版本迭代或系统下线
+#   '''  # ✅ Detailed, structured content!
+#
+# Common patterns you should expand:
+# - "软件生命周期" → List all stages (需求→设计→开发→测试→部署→维护)
+# - "产品开发流程" → List complete process steps
+# - "技术栈对比" → Create detailed comparison items
+# - "系统架构" → List all components and layers
+# - "数据流程" → Show data flow through stages
+#
+# REMEMBER: The infographic-generator needs RICH, DETAILED content to create good visuals!
+`;
+        }
+
+        return `CRITICAL - SKILL EXECUTION IS MANDATORY:
+You have selected skills: ${selectedSkills.join(', ')}
+You MUST use these skills - DO NOT write native Python code!
+
+${skillParamInstructions}
+
+Available skills:
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
 import os
@@ -525,7 +595,7 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 #       execute_func=executor.execute,
 #       skill_name='skill-name',
 #       input_data={
-#           'task': 'THE ACTUAL TASK FROM <task> SECTION ABOVE',  # CRITICAL: Use real task!
+#           '${firstSkillParam}': 'THE ACTUAL TASK FROM <task> SECTION ABOVE',  # CRITICAL: Use the mapped parameter name!
 #           'param2': 'value2'
 #       },
 #       max_attempts=3  # Max 3 retry attempts
@@ -539,24 +609,28 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 #       'metadata': dict,
 #       'attempts': int  # Number of attempts made
 #   }
-
+${skillContentPrep}
 # CRITICAL - HOW TO PASS USER TASK TO SKILLS:
-# You MUST use the 'task' field to pass the actual user request
+# You MUST use the '${firstSkillParam}' field to pass the actual user request
 # Copy the COMPLETE task description from the <task> section above
+# For infographic-generator: EXPAND brief instructions into DETAILED structured content!
 # DO NOT use placeholders like 'task description' or 'detailed task'
 #
 # Example (WRONG - uses placeholder):
 #   input_data={'description': 'task description'}  # ❌ This will fail!
 #
 # Example (CORRECT - uses actual task):
-#   input_data={'task': '设计一个iphone17产品的前端介绍页面'}  # ✅ Copy from <task> section!
+#   input_data={'${firstSkillParam}': '设计一个iphone17产品的前端介绍页面'}  # ✅ Copy from <task> section!
+
+# MANDATORY: You must call execute_with_retry with the selected skill
+# DO NOT write any Python code directly - ONLY call skills!
 
 result = await execute_with_retry(
     execute_func=executor.execute,
-    skill_name='skill-name',
+    skill_name='${selectedSkills[0]}',  # MANDATORY: Use the selected skill
     input_data={
-        'task': 'COPY THE ACTUAL TASK FROM <task> SECTION',  # CRITICAL: Use real task content!
-        'param2': 'value2'
+        '${firstSkillParam}': 'COPY THE ACTUAL TASK FROM <task> SECTION',  # CRITICAL: Use mapped parameter name!
+        # Add other required parameters based on skill schema
     }
 )
 
@@ -568,11 +642,12 @@ else:
     print(f"Failed after {result['attempts']} attempts: {error_message}")
 
 # When chaining skills, pass result['content'] (NOT result) to the next skill:
+# IMPORTANT: Check the Task Parameter for each skill in the SKILL PARAMETER MAPPING above
 result1 = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='first-skill',
     input_data={
-        'task': 'COPY ACTUAL TASK FROM <task> SECTION'
+        'TASK_PARAM_FOR_FIRST_SKILL': 'COPY ACTUAL TASK FROM <task> SECTION'
     }
 )
 
@@ -581,18 +656,28 @@ if result1['success']:
         execute_func=executor.execute,
         skill_name='second-skill',
         input_data={
-            'task': 'process result from first skill',
+            'TASK_PARAM_FOR_SECOND_SKILL': 'process result from first skill',
             'input_data': result1['content']  # Pass ['content'], not result1
         }
-    )`
-    : `No skills needed - solve the task directly with Python code.`
+    )`;
+      })()
+    : `CRITICAL - NO SKILLS SELECTED:
+This is a FALLBACK path - you should only be here if NO skills matched the task.
+
+You MUST solve the task directly with native Python code.
+DO NOT try to call executor.execute() - no skills are available.
+
+Write pure Python code to solve the task.
+Use standard libraries and any available imports.
+Print or return the result directly.`
 }
 
 Code requirements:
 
 CRITICAL - USER TASK MUST BE PASSED CORRECTLY:
 - When calling skills, you MUST pass the ACTUAL task from the <task> section
-- Use 'task' field (not 'description') for the main user request
+- Use the CORRECT parameter name for each skill (check "Task Parameter" above)
+- Different skills use different parameter names (e.g., 'content', 'query', 'description')
 - DO NOT use placeholders like 'task description', 'detailed task', etc.
 - Copy the COMPLETE task text from <task> section to the skill input
 - Example: If <task> says "设计一个iphone17产品的前端介绍页面"
@@ -611,7 +696,8 @@ General requirements:
 
 CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 \`\`\`python
-# EXAMPLE: Execute frontend-design skill with user's actual task
+# EXAMPLE: Execute a skill with user's actual task
+# IMPORTANT: Replace 'frontend-design' and 'task' with the actual skill and parameter name from the mapping above
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='frontend-design',
@@ -627,7 +713,7 @@ else:
     print(f"Error: {error}")
 \`\`\`
 
-REMINDER: ALWAYS copy the ACTUAL task text from the <task> section above into the 'task' field!
+REMINDER: ALWAYS copy the ACTUAL task text from the <task> section above into the correct parameter field!
 DO NOT use placeholder text like 'task description' or 'detailed task'.
 The skill needs the REAL user request to generate correct output.
 
@@ -637,6 +723,7 @@ IMPORTANT REMINDERS:
 - Extract actual output from result['content'] (NOT result['output'])
 - When passing results to another skill, pass result['content'] (NOT result)
 - Check the skill's input schema to understand expected parameter types
+- ALWAYS use the correct parameter name for each skill (see "Task Parameter" in skill details above)
 - The retry logic will automatically handle transient failures (timeout, network errors)
 - Non-retryable errors (validation, permission, not found) will fail immediately
 
@@ -716,6 +803,66 @@ Generate the code now:`;
     }
 
     return code;
+  }
+
+  /**
+   * Find the correct task parameter name for a skill.
+   *
+   * Priority strategy:
+   * 1. Check required list first - use the first standard parameter (task/description/content/query)
+   * 2. If no standard params in required, check all properties with priority
+   * 3. Fallback to first required parameter or 'task'
+   *
+   * Standard parameter priority: task > description > content > query
+   *
+   * @param skillName - Name of the skill
+   * @returns The correct parameter name to use for the main task
+   */
+  private findTaskParameter(skillName: string): string {
+    const skill = this.skills.get(skillName);
+    if (!skill || !skill.metadata?.input_schema) {
+      return 'task'; // Fallback: use 'task'
+    }
+
+    const schema = skill.metadata.input_schema;
+    const standardParams = ['task', 'description', 'content', 'query'];
+
+    // Priority 1: Check required list for standard parameters
+    if (schema.required && schema.required.length > 0) {
+      for (const param of standardParams) {
+        if (schema.required.includes(param)) {
+          return param;
+        }
+      }
+    }
+
+    // Priority 2: Explicit 'task' parameter (even if not required)
+    if (schema.properties?.task) {
+      return 'task';
+    }
+
+    // Priority 3: 'description' parameter
+    if (schema.properties?.description) {
+      return 'description';
+    }
+
+    // Priority 4: 'content' parameter
+    if (schema.properties?.content) {
+      return 'content';
+    }
+
+    // Priority 5: 'query' parameter
+    if (schema.properties?.query) {
+      return 'query';
+    }
+
+    // Priority 6: First required parameter (any name)
+    if (schema.required && schema.required.length > 0) {
+      return schema.required[0];
+    }
+
+    // Fallback: use 'task'
+    return 'task';
   }
 
   /**

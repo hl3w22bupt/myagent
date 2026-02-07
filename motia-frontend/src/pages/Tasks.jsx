@@ -16,6 +16,9 @@ function Tasks() {
   const [availableSkills, setAvailableSkills] = useState([])
   const [skillsMap, setSkillsMap] = useState({})
   const [retryingTasks, setRetryingTasks] = useState({})
+  const [selectedTasks, setSelectedTasks] = useState(new Set())
+  const [isSelectMode, setIsSelectMode] = useState(false)
+  const [deletingTasks, setDeletingTasks] = useState(new Set())
   const pageSize = 12
 
   // 加载可用技能列表
@@ -162,6 +165,108 @@ function Tasks() {
     }
   }
 
+  // 处理任务选择
+  const handleSelectTask = (taskId, event) => {
+    event.stopPropagation()
+    const newSelected = new Set(selectedTasks)
+    if (newSelected.has(taskId)) {
+      newSelected.delete(taskId)
+    } else {
+      newSelected.add(taskId)
+    }
+    setSelectedTasks(newSelected)
+  }
+
+  // 处理全选/取消全选
+  const handleSelectAll = () => {
+    if (selectedTasks.size === tasks.length && tasks.length > 0) {
+      // 如果已全选，则取消全选
+      setSelectedTasks(new Set())
+    } else {
+      // 全选当前页的所有任务
+      setSelectedTasks(new Set(tasks.map(task => task.taskId)))
+    }
+  }
+
+  // 批量删除任务
+  const handleBatchDelete = async () => {
+    if (selectedTasks.size === 0) {
+      alert('请先选择要删除的任务')
+      return
+    }
+
+    const count = selectedTasks.size
+    if (!window.confirm(`确定要删除选中的 ${count} 个任务吗?此操作不可恢复。`)) {
+      return
+    }
+
+    try {
+      // 标记删除中状态
+      setDeletingTasks(new Set(selectedTasks))
+
+      // 使用批量删除API（一次请求删除所有任务）
+      const response = await tasksAPI.deleteTasks(Array.from(selectedTasks))
+
+      // 处理响应
+      const { summary, results } = response.data
+
+      if (summary.successfulCount > 0) {
+        // 至少有一些任务删除成功
+        let message = `成功删除 ${summary.successfulCount} 个任务`
+
+        if (summary.failedCount > 0) {
+          message += `，失败 ${summary.failedCount} 个`
+
+          // 显示失败的详情
+          console.error('部分任务删除失败:', results.failed)
+
+          // 可选：显示更详细的错误信息
+          if (results.failed && results.failed.length > 0) {
+            const failedList = results.failed.map(f => `- ${f.taskId}: ${f.error}`).join('\n')
+            console.error('失败任务列表:\n' + failedList)
+          }
+        }
+
+        // 删除成功后清空选择并刷新列表
+        setSelectedTasks(new Set())
+        setIsSelectMode(false)
+        fetchTasks()
+
+        alert(message)
+      } else {
+        // 所有任务都删除失败
+        throw new Error('批量删除失败')
+      }
+    } catch (error) {
+      console.error('批量删除任务失败:', error)
+      const errorMessage = error.response?.data?.message || error.message || '批量删除任务失败，请稍后重试'
+      alert(errorMessage)
+    } finally {
+      setDeletingTasks(new Set())
+    }
+  }
+
+  // 切换选择模式
+  const toggleSelectMode = () => {
+    setIsSelectMode(!isSelectMode)
+    setSelectedTasks(new Set())
+  }
+
+  // 判断任务是否被选中
+  const isTaskSelected = (taskId) => {
+    return selectedTasks.has(taskId)
+  }
+
+  // 判断是否全选
+  const isAllSelected = () => {
+    return tasks.length > 0 && selectedTasks.size === tasks.length
+  }
+
+  // 判断是否部分选中
+  const isSomeSelected = () => {
+    return selectedTasks.size > 0 && selectedTasks.size < tasks.length
+  }
+
   const handleRetryTask = async (taskId, event) => {
     // 阻止事件冒泡,防止触发链接跳转
     event.preventDefault()
@@ -291,6 +396,81 @@ function Tasks() {
             ))}
           </select>
         </div>
+
+        {/* 选择模式和批量删除按钮 */}
+        <div className="filter-group filter-actions">
+          <button
+            className={`select-mode-button ${isSelectMode ? 'active' : ''}`}
+            onClick={toggleSelectMode}
+            title={isSelectMode ? '退出选择模式' : '进入选择模式'}
+          >
+            {isSelectMode ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                退出选择
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 11 12 14 22 4"></polyline>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                多选
+              </>
+            )}
+          </button>
+
+          {isSelectMode && (
+            <>
+              <button
+                className="select-all-button"
+                onClick={handleSelectAll}
+                title={isAllSelected() ? '取消全选' : '全选'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {isAllSelected() ? (
+                    <>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="9" y1="9" x2="15" y2="15"></line>
+                      <line x1="15" y1="9" x2="9" y2="15"></line>
+                    </>
+                  ) : isSomeSelected() ? (
+                    <>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <polyline points="9 11 12 14 22 4"></polyline>
+                    </>
+                  ) : (
+                    <>
+                      <polyline points="9 11 12 14 22 4"></polyline>
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </>
+                  )}
+                </svg>
+                {isAllSelected() ? '取消全选' : '全选'}
+              </button>
+
+              {selectedTasks.size > 0 && (
+                <button
+                  className="batch-delete-button"
+                  onClick={handleBatchDelete}
+                  disabled={deletingTasks.size > 0}
+                  title={`删除选中的 ${selectedTasks.size} 个任务`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                  删除 ({selectedTasks.size})
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* 任务列表 */}
@@ -301,7 +481,21 @@ function Tasks() {
           <>
             <div className="tasks-list">
               {tasks.map(task => (
-                <div key={task.taskId} className="task-card">
+                <div
+                  key={task.taskId}
+                  className={`task-card ${isTaskSelected(task.taskId) ? 'selected' : ''} ${isSelectMode ? 'select-mode' : ''}`}
+                >
+                  {isSelectMode && (
+                    <div className="task-checkbox" onClick={(e) => handleSelectTask(task.taskId, e)}>
+                      <div className={`checkbox ${isTaskSelected(task.taskId) ? 'checked' : ''}`}>
+                        {isTaskSelected(task.taskId) && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="task-header">
                     <Link to={`/tasks/${task.taskId}`} className="task-title">
                       {task.task}

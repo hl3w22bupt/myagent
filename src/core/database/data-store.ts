@@ -54,6 +54,8 @@ export interface Task {
       executionTime?: number;
     }>;
   };
+  /** Structured output from skill execution (at root level, not in metadata) */
+  structuredOutput?: any;
   retryCount: number;
   isRetry: boolean;
 }

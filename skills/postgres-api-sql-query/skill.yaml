@@ -1,0 +1,121 @@
+name: postgres-api-sql-query
+version: 1.0.0
+description: "Execute SQL queries on a PostgreSQL database and return results as a table"
+tags: [postgres, database, sql, query]
+type: pure-script
+
+input_schema:
+  type: object
+  required:
+    - query
+  properties:
+    query:
+      type: string
+      description: "SQL query to execute (SELECT statements recommended)"
+    connection_string:
+      type: string
+      description: "PostgreSQL connection string (e.g., postgresql://user:password@localhost:5432/database)"
+    host:
+      type: string
+      description: "Database host (default: localhost)"
+    port:
+      type: integer
+      description: "Database port (default: 5432)"
+    database:
+      type: string
+      description: "Database name"
+    user:
+      type: string
+      description: "Database user"
+    password:
+      type: string
+      description: "Database password"
+    max_rows:
+      type: integer
+      description: "Maximum number of rows to return (default: 1000, use -1 for unlimited)"
+      default: 1000
+    timeout:
+      type: integer
+      description: "Query timeout in seconds (default: 30)"
+      default: 30
+  description: |
+    Execute SQL query on PostgreSQL database. By default, limits results to 1000 rows
+    to prevent large result sets. Set max_rows to -1 for unlimited results.
+
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
+  properties:
+    result_type:
+      type: string
+      enum: [table, error]
+      description: "Type of result"
+    success:
+      type: boolean
+      description: "Whether the query succeeded"
+    content:
+      oneOf:
+        - type: object
+          required: [headers, rows]
+          properties:
+            headers:
+              type: array
+              items:
+                type: string
+              description: "Column names"
+            rows:
+              type: array
+              items:
+                type: array
+              description: "Row values (can be of any type)"
+            title:
+              type: string
+              description: "Table title"
+            sortable:
+              type: boolean
+              description: "Whether the table is sortable"
+        - type: object
+          required: [error_code, message]
+          properties:
+            error_code:
+              type: string
+              enum: [validation_error, connection_error, execution_error, timeout_error, permission_error, syntax_error, unknown_error]
+            message:
+              type: string
+            details:
+              type: string
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
+      type: object
+      required: [row_count, column_count, execution_time, query_preview]
+      properties:
+        row_count:
+          type: integer
+          description: "Number of rows returned"
+        column_count:
+          type: integer
+          description: "Number of columns"
+        execution_time:
+          type: number
+          description: "Execution time in milliseconds"
+        query_preview:
+          type: string
+          description: "First 100 characters of the query"
+        rows_truncated:
+          type: boolean
+          description: "Whether results were truncated due to max_rows limit"
+        database:
+          type: string
+          description: "Database name"
+
+execution:
+  handler: handler.py
+  function: execute_query
+  timeout: 60000

@@ -1,0 +1,142 @@
+name: shell-executor
+version: 1.0.0
+description: "Execute shell commands safely with intelligent output parsing"
+tags: [shell, command, cli, executor, utility]
+type: pure-script
+
+input_schema:
+  type: object
+  required:
+    - command
+  properties:
+    command:
+      type: string
+      description: "Command to execute (must be in whitelist)"
+    args:
+      type: array
+      items:
+        type: string
+      description: "Command arguments"
+    env:
+      type: object
+      description: "Environment variables for the command"
+    working_dir:
+      type: string
+      description: "Working directory for command execution"
+    timeout:
+      type: integer
+      description: "Command timeout in seconds (default: 30)"
+      default: 30
+    output_format:
+      type: string
+      enum: [raw, json, table, kv, csv, auto]
+      description: "Output parsing format (default: auto)"
+      default: auto
+    parse_options:
+      type: object
+      properties:
+        delimiter:
+          type: string
+          description: "Delimiter for table/kv/csv parsing (default: auto-detect)"
+        skip_rows:
+          type: integer
+          description: "Number of rows to skip (default: 0)"
+        skip_empty:
+          type: boolean
+          description: "Skip empty rows (default: true)"
+          default: true
+        trim:
+          type: boolean
+          description: "Trim whitespace from values (default: true)"
+          default: true
+  description: |
+    Execute shell commands safely with a whitelist mechanism. Supports intelligent
+    output parsing for various formats including tables (psql, ls -l), JSON, CSV,
+    and key-value pairs. Default output_format='auto' will attempt to detect format.
+
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
+  properties:
+    result_type:
+      type: string
+      enum: [table, text, json, error]
+      description: "Type of result"
+    success:
+      type: boolean
+      description: "Whether the command succeeded"
+    content:
+      oneOf:
+        - type: object
+          required: [headers, rows]
+          properties:
+            headers:
+              type: array
+              items:
+                type: string
+              description: "Column names"
+            rows:
+              type: array
+              items:
+                type: array
+              description: "Row values"
+            title:
+              type: string
+              description: "Table title"
+            sortable:
+              type: boolean
+              description: "Whether the table is sortable"
+        - type: string
+          description: "Raw text output"
+        - type: object
+          description: "Parsed JSON output"
+        - type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+              enum: [validation, execution, timeout, network, resource, permission, dependency, unknown]
+            message:
+              type: string
+            details:
+              type: string
+            retryable:
+              type: boolean
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
+      type: object
+      required: [execution_time, command]
+      properties:
+        execution_time:
+          type: number
+          description: "Execution time in milliseconds"
+        command:
+          type: string
+          description: "Full command that was executed"
+        exit_code:
+          type: integer
+          description: "Command exit code"
+        stdout_lines:
+          type: integer
+          description: "Number of lines in stdout"
+        stderr_lines:
+          type: integer
+          description: "Number of lines in stderr"
+        output_size:
+          type: integer
+          description: "Output size in bytes"
+        truncated:
+          type: boolean
+          description: "Whether output was truncated"
+
+execution:
+  handler: handler.py
+  function: execute_shell_command
+  timeout: 60000

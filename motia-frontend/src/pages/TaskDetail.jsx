@@ -558,20 +558,8 @@ function TaskDetail() {
 
   // 获取结果类型的显示标题
   const getResultTypeLabel = (result) => {
-    const resultType = getResultType(result)
-
-    const typeLabels = {
-      'video': '📹 视频结果',
-      'image': '🖼️ 图片结果',
-      'code': '💻 代码结果',
-      'table': '📊 表格结果',
-      'audio': '🎵 音频结果',
-      'markdown': '📝 Markdown 结果',
-      'html': '🌐 HTML 结果',
-      'json': '📋 JSON 结果',
-    }
-
-    return typeLabels[resultType] || '📄 任务结果'
+    // 统一使用"展示区"作为标题
+    return '展示区'
   }
 
   // 检测结果类型
@@ -580,11 +568,30 @@ function TaskDetail() {
       return 'text'
     }
 
-    // 优先：从 metadata.structuredOutput 获取（唯一来源）
+    // 优先：从顶层 structuredOutput 获取（新格式）
+    if (typeof result === 'object' && result.structuredOutput?.result_type) {
+      const resultType = result.structuredOutput.result_type
+
+      // 映射 result_type 到显示类型
+      const typeMapping = {
+        'infographic': 'image',
+        'video': 'video',
+        'image': 'image',
+        'audio': 'audio',
+        'table': 'table',
+        'code': 'code',
+        'markdown': 'markdown',
+        'html': 'html',
+        'json': 'json',
+      }
+
+      return typeMapping[resultType] || resultType
+    }
+
+    // 兼容旧格式：从 metadata.structuredOutput 获取
     if (typeof result === 'object' && result.metadata?.structuredOutput?.result_type) {
       const resultType = result.metadata.structuredOutput.result_type
 
-      // 映射 result_type 到显示类型
       const typeMapping = {
         'infographic': 'image',
         'video': 'video',
@@ -606,7 +613,12 @@ function TaskDetail() {
 
   // 从output字符串中提取URL和统一结果
   const extractParsedResult = (result) => {
-    // 直接使用 structuredOutput
+    // 优先：从顶层 structuredOutput 获取（新格式）
+    if (typeof result === 'object' && result.structuredOutput) {
+      return result.structuredOutput
+    }
+
+    // 兼容旧格式：从 metadata.structuredOutput 获取
     if (typeof result === 'object' && result.metadata?.structuredOutput) {
       return result.metadata.structuredOutput
     }
@@ -768,9 +780,26 @@ function TaskDetail() {
                 </svg>
               </div>
               {/* 版本描述 - 内联显示 */}
-              <span className="version-description-inline">
-                {videoArtifacts[selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1]?.description}
-              </span>
+              {(() => {
+                const currentIndex = selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1;
+                const artifact = videoArtifacts[currentIndex];
+                const fullDescription = artifact?.description || '';
+
+                // 调试：打印完整描述
+                console.log('[Version Description] 完整描述:', {
+                  index: currentIndex,
+                  fullDescription,
+                  length: fullDescription.length
+                });
+
+                return (
+                  <Tooltip content={fullDescription}>
+                    <span className="version-description-inline">
+                      {fullDescription}
+                    </span>
+                  </Tooltip>
+                );
+              })()}
             </div>
           )}
 
@@ -838,9 +867,10 @@ function TaskDetail() {
       )
     }
 
-    if (resultType === 'table' && typeof result === 'object') {
+    if (resultType === 'table') {
       // 处理表格
-      const { content } = result
+      const structured = extractParsedResult(result)
+      const { content } = structured
       if (!content || !content.columns || !content.rows) {
         return <div className="no-result">无效的表格数据</div>
       }
@@ -848,19 +878,36 @@ function TaskDetail() {
       return (
         <div className="result-table">
           <div className="table-controls">
-            <input
-              type="text"
-              placeholder="搜索表格..."
-              className="table-search"
-              onChange={(e) => {
-                const query = e.target.value.toLowerCase()
-                const rows = document.querySelectorAll('.data-table tbody tr')
-                rows.forEach(row => {
-                  const text = row.textContent.toLowerCase()
-                  row.style.display = text.includes(query) ? '' : 'none'
-                })
-              }}
-            />
+            <div className="table-search-wrapper">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="table-search-icon"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="搜索..."
+                className="table-search"
+                onChange={(e) => {
+                  const query = e.target.value.toLowerCase()
+                  const rows = document.querySelectorAll('.data-table tbody tr')
+                  rows.forEach(row => {
+                    const text = row.textContent.toLowerCase()
+                    row.style.display = text.includes(query) ? '' : 'none'
+                  })
+                }}
+              />
+            </div>
+            <span className="table-row-count">
+              {content.rows.length} 行
+            </span>
           </div>
           <div className="table-wrapper">
             <table className="data-table">
@@ -1049,8 +1096,8 @@ function TaskDetail() {
         image: {
           icon: (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-              <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
-              <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 4.002 3a2 2 0 0 1 2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14.002 4l-.008 9a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1z"/>
+              <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+              <path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z"/>
             </svg>
           ),
           label: '图片'
@@ -1066,8 +1113,12 @@ function TaskDetail() {
         },
         table: {
           icon: (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-              <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm15-2h-3v3h3V0zm0 4h-3v3h3V4zm0 4h-3v3h3V8zM1 1h10v3H1V1zm0 4h10v3H1V5zm0 4h10v3H1V9zm11-3h3V5h-3v1zm0 4h3V9h-3v1zm0 4h3v-3h-3v1zM1 13h10v3H1v-3z"/>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="tab-icon">
+              <rect x="1" y="2" width="14" height="12" rx="1.5" />
+              <line x1="1" y1="6" x2="15" y2="6" />
+              <line x1="1" y1="10" x2="15" y2="10" />
+              <line x1="5" y1="2" x2="5" y2="14" />
+              <line x1="10" y1="2" x2="10" y2="14" />
             </svg>
           ),
           label: '表格'
@@ -1356,6 +1407,90 @@ function TaskDetail() {
           {message.error && <div className="message-error">{message.error}</div>}
         </div>
       </div>
+    )
+  }
+
+  // 自定义 Tooltip 组件 - 现代化设计
+  const Tooltip = ({ children, content }) => {
+    const [isVisible, setIsVisible] = useState(false)
+    const [position, setPosition] = useState({ top: 0, left: 0 })
+    const targetRef = useRef(null)
+
+    const handleMouseEnter = (e) => {
+      if (!content) return
+
+      const rect = e.target.getBoundingClientRect()
+      // 确保tooltip不会超出屏幕
+      const tooltipMaxWidth = Math.min(500, window.innerWidth - rect.left - 20)
+
+      setPosition({
+        top: rect.bottom + 10,
+        left: rect.left,
+        maxWidth: tooltipMaxWidth
+      })
+      setIsVisible(true)
+    }
+
+    const handleMouseLeave = () => {
+      setIsVisible(false)
+    }
+
+    return (
+      <span
+        ref={targetRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{ position: 'relative', display: 'inline-block' }}
+      >
+        {children}
+        {isVisible && content && (
+          <div
+            style={{
+              position: 'fixed',
+              top: `${position.top}px`,
+              left: `${position.left}px`,
+              backgroundColor: 'rgba(15, 23, 42, 0.98)',
+              color: '#f8fafc',
+              padding: '0.75rem 1rem',
+              borderRadius: '0.75rem',
+              fontSize: '0.8125rem',
+              lineHeight: '1.6',
+              fontWeight: '400',
+              maxWidth: `${position.maxWidth}px`,
+              whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word',
+              zIndex: 10000,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)',
+              pointerEvents: 'none',
+              animation: 'tooltipFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              maxHeight: '400px',
+              overflowY: 'auto',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              // 自定义滚动条样式
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(148, 163, 184, 0.5) transparent'
+            }}
+          >
+            {/* 添加一个小箭头指示器 */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-6px',
+                left: '12px',
+                width: '0',
+                height: '0',
+                borderLeft: '6px solid transparent',
+                borderRight: '6px solid transparent',
+                borderBottom: '6px solid rgba(15, 23, 42, 0.98)',
+                filter: 'drop-shadow(0 -2px 2px rgba(0, 0, 0, 0.1))'
+              }}
+            />
+            {content}
+          </div>
+        )}
+      </span>
     )
   }
 
@@ -1767,11 +1902,14 @@ function TaskDetail() {
             {task.output && (
               <div className="info-section">
                 <h2>{(() => {
-                  // 组合 output 和 metadata.structuredOutput 用于获取标题
+                  // 组合 output 和 structuredOutput 用于获取标题
                   const resultData = task.output;
-                  if (typeof resultData === 'string' && task.metadata?.structuredOutput) {
+                  // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
+                  const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
+                  if (typeof resultData === 'string' && hasStructuredOutput) {
                     const combinedResult = {
                       output: resultData,
+                      structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
                       metadata: task.metadata
                     };
                     return getResultTypeLabel(combinedResult);
@@ -1780,12 +1918,15 @@ function TaskDetail() {
                 })()}</h2>
                 <div className="task-result">
                   {(() => {
-                    // 组合 output 和 metadata.structuredOutput
+                    // 组合 output 和 structuredOutput
                     const resultData = task.output;
-                    if (typeof resultData === 'string' && task.metadata?.structuredOutput) {
+                    // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
+                    const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
+                    if (typeof resultData === 'string' && hasStructuredOutput) {
                       // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
                       const combinedResult = {
                         output: resultData,
+                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
                         metadata: task.metadata
                       };
                       return renderResult(combinedResult);

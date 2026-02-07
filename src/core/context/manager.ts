@@ -135,14 +135,18 @@ export class ContextManager {
     const updatedContext = await this.store.addMessage(taskId, message);
 
     // 3. 提取并保存Artifacts
-    const artifacts = this.artifactExtractor.extractFromMessage({
-      ...message,
-      taskId,
-    });
-
-    for (const artifact of artifacts) {
-      await this.store.addArtifact({ ...artifact, taskId });
-    }
+    // DISABLED: ArtifactExtractor 从消息中提取文件路径和函数调用，产生大量垃圾数据
+    // 前端只使用 video 和 code 类型的 artifacts，不使用 file 和 function 类型
+    // 真正的 artifacts 由 result-logger.step.ts 从 skill 的统一格式返回值中提取
+    //
+    // const artifacts = this.artifactExtractor.extractFromMessage({
+    //   ...message,
+    //   taskId,
+    // });
+    //
+    // for (const artifact of artifacts) {
+    //   await this.store.addArtifact({ ...artifact, taskId });
+    // }
 
     // 4. 检查是否需要压缩
     if (this.compressor.shouldCompress(updatedContext)) {

@@ -37,7 +37,8 @@
     "py:lint": "uv run pylint **/*.py",
     "py:format": "uv run black .",
     "py:typecheck": "uv run mypy .",
-    "pytest": "uvx pytest"
+    "pytest": "uvx pytest",
+    "cleanup:task": "ts-node scripts/cleanup-old-tasks.ts"
   },
   "keywords": [
     "motia",

@@ -578,10 +578,10 @@ export class Agent {
           totalTokens: 0,
           skillNames: ptcResult.selectedSkills,
           artifactType: artifactType, // Add artifact_type to metadata
-          structuredOutput: sandboxResult.structuredOutput, // Add structured output
           retries: retryInfo.attempts > 1 ? retryInfo : undefined,
           ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
         },
+        structuredOutput: sandboxResult.structuredOutput, // Structured output at root level
       };
     } catch (error: any) {
       // Record error in conversation history

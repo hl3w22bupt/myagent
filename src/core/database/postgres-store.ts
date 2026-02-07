@@ -152,6 +152,7 @@ export class PostgresDataStore implements Database {
           error TEXT,
           execution_time INTEGER,
           metadata JSONB,
+          structured_output JSONB,
           retry_count INTEGER DEFAULT 0,
           is_retry BOOLEAN DEFAULT FALSE
         )
@@ -280,8 +281,8 @@ export class PostgresDataStore implements Database {
     try {
       const now = Date.now();
       const result = await client.query(
-        `INSERT INTO tasks (id, task, session_id, status, created_at, updated_at, completed_at, output, error, execution_time, metadata, retry_count, is_retry)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO tasks (id, task, session_id, status, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
         [
           data.id,
@@ -295,6 +296,7 @@ export class PostgresDataStore implements Database {
           data.error,
           data.executionTime,
           data.metadata || null,  // 直接传入对象，node-postgres 自动处理为 JSONB
+          data.structuredOutput || null,  // 直接传入对象，node-postgres 自动处理为 JSONB
           data.retryCount || 0,
           // Convert boolean to integer for PostgreSQL
           data.isRetry ? 1 : 0,
@@ -360,7 +362,14 @@ export class PostgresDataStore implements Database {
       }
       if (updates.metadata !== undefined) {
         fields.push(`metadata = $${paramIndex++}`);
-        values.push(updates.metadata);  // 直接传入对象，自动处理为 JSONB
+        // 🔧 FIX: 显式序列化为 JSON 字符串，确保正确存储为 JSONB
+        // PostgreSQL 会自动将 JSON 字符串解析为 JSONB 类型
+        values.push(JSON.stringify(updates.metadata));
+      }
+      if (updates.structuredOutput !== undefined) {
+        fields.push(`structured_output = $${paramIndex++}`);
+        // 显式序列化为 JSON 字符串，确保正确存储为 JSONB
+        values.push(JSON.stringify(updates.structuredOutput));
       }
       if (updates.completedAt !== undefined) {
         fields.push(`completed_at = $${paramIndex++}`);
@@ -638,7 +647,9 @@ export class PostgresDataStore implements Database {
       }
       if (updates.metadata !== undefined) {
         fields.push(`metadata = $${paramIndex++}`);
-        values.push(updates.metadata);  // 直接传入对象，自动处理为 JSONB
+        // 🔧 FIX: 显式序列化为 JSON 字符串，确保正确存储为 JSONB
+        // PostgreSQL 会自动将 JSON 字符串解析为 JSONB 类型
+        values.push(JSON.stringify(updates.metadata));
       }
 
       fields.push(`updated_at = $${paramIndex++}`);
@@ -966,6 +977,7 @@ export class PostgresDataStore implements Database {
       error: row.error,
       executionTime: row.execution_time,
       metadata: row.metadata,
+      structuredOutput: row.structured_output,
       retryCount: row.retry_count,
       // Convert integer to boolean (PostgreSQL stores as INTEGER)
       isRetry: row.is_retry === 1,

@@ -34,6 +34,12 @@
   align-items: center;
 }
 
+.filter-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
 .filter-group {
   display: flex;
   align-items: center;
@@ -105,6 +111,58 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+/* 多选按钮样式 */
+.select-mode-button,
+.select-all-button,
+.batch-delete-button {
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.select-mode-button:hover,
+.select-all-button:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-hover);
+}
+
+.select-mode-button.active {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.select-mode-button.active:hover {
+  background-color: #2563eb;
+}
+
+.batch-delete-button {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.batch-delete-button:hover:not(:disabled) {
+  background-color: #fecaca;
+  border-color: #fca5a5;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.batch-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* 任务列表 */
 .tasks-content {
   min-height: 400px;
@@ -136,6 +194,37 @@
   }
 }
 
+/* 任务复选框 */
+.task-checkbox {
+  position: absolute;
+  left: 1rem;
+  top: 1.5rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--border-color);
+  border-radius: 0.375rem;
+  background-color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  color: white;
+}
+
+.checkbox:hover {
+  border-color: var(--primary);
+}
+
+.checkbox.checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
 .tasks-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -165,6 +254,27 @@
   cursor: pointer;
   text-decoration: none;
   color: inherit;
+  position: relative;
+}
+
+.task-card.select-mode {
+  padding-left: 3.5rem;
+}
+
+.task-card.selected {
+  border-color: var(--primary);
+  background-color: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+}
+
+.task-card.select-mode:hover {
+  transform: none;
 }
 
 .detail-item {

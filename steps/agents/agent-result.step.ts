@@ -216,6 +216,7 @@ export const handler = async (request: any, { logger }: any) => {
           error: task.error,
           executionTime: task.executionTime,
           metadata: parsedMetadata,  // Use parsed metadata
+          structuredOutput: task.structuredOutput,  // Structured output at root level
           sessionId: task.sessionId,
           timestamp: safeToISOString(task.createdAt) || new Date().toISOString(),
           // Include artifacts array

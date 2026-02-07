@@ -33,7 +33,24 @@ def truncate_text(text: str, max_length: int) -> str:
 
 def extract_title(content: str, max_length: int = 20) -> str:
     """Extract meaningful title from content."""
-    lines = content.split("\n")
+    # 移除常见任务前缀
+    prefixes = [
+        "生成一个", "创建一个", "设计一个", "制作一个", "画一个",
+        "生成", "创建", "设计", "制作", "画",
+        "用图表展示", "展示", "绘制",
+        "请生成", "请创建", "请设计", "请制作",
+    ]
+
+    content_cleaned = content.strip()
+    for prefix in prefixes:
+        if content_cleaned.startswith(prefix):
+            content_cleaned = content_cleaned[len(prefix):].strip()
+            break
+
+    # 移除结尾的标点
+    content_cleaned = content_cleaned.rstrip('。.!！')
+
+    lines = content_cleaned.split("\n")
     first_line = lines[0].strip()
 
     if len(first_line) <= max_length:

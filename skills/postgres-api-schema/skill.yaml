@@ -1,0 +1,145 @@
+name: postgres-api-schema
+version: 1.0.0
+description: "Fetch all tables and their schemas from a PostgreSQL database"
+tags: [postgres, database, schema, sql]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    connection_string:
+      type: string
+      description: "PostgreSQL connection string (e.g., postgresql://user:password@localhost:5432/database)"
+    host:
+      type: string
+      description: "Database host (default: localhost)"
+    port:
+      type: integer
+      description: "Database port (default: 5432)"
+    database:
+      type: string
+      description: "Database name"
+    user:
+      type: string
+      description: "Database user"
+    password:
+      type: string
+      description: "Database password"
+    schema_name:
+      type: string
+      description: "Schema name to fetch (default: public)"
+    include_system_tables:
+      type: boolean
+      description: "Include system tables (default: false)"
+      default: false
+  description: |
+    Database connection configuration. You can either provide a connection_string
+    or individual parameters (host, port, database, user, password).
+    If not provided, will use environment variables (PG_CONNECTION_STRING, PG_HOST, etc.)
+
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
+  properties:
+    result_type:
+      type: string
+      enum: [json, error]
+      description: "Type of result"
+    success:
+      type: boolean
+      description: "Whether the operation succeeded"
+    content:
+      oneOf:
+        - type: object
+          required: [database, schema, tables]
+          properties:
+            database:
+              type: string
+              description: "Database name"
+            schema:
+              type: string
+              description: "Schema name"
+            tables:
+              type: array
+              items:
+                type: object
+                required: [table_name, columns]
+                properties:
+                  table_name:
+                    type: string
+                  table_type:
+                    type: string
+                    enum: [BASE TABLE, VIEW, FOREIGN TABLE, LOCAL TEMPORARY]
+                  columns:
+                    type: array
+                    items:
+                      type: object
+                      required: [column_name, data_type, is_nullable]
+                      properties:
+                        column_name:
+                          type: string
+                        ordinal_position:
+                          type: integer
+                        data_type:
+                          type: string
+                        character_maximum_length:
+                          type: integer
+                          nullable: true
+                        numeric_precision:
+                          type: integer
+                          nullable: true
+                        numeric_scale:
+                          type: integer
+                          nullable: true
+                        is_nullable:
+                          type: string
+                          enum: [YES, NO]
+                        column_default:
+                          type: string
+                          nullable: true
+                        is_primary_key:
+                          type: boolean
+                        is_foreign_key:
+                          type: boolean
+                          nullable: true
+                          description: "null means not checked"
+                  row_count:
+                    type: integer
+                    nullable: true
+                    description: "Estimated row count (null if not available)"
+        - type: object
+          required: [error_code, message]
+          properties:
+            error_code:
+              type: string
+              enum: [validation_error, connection_error, execution_error, timeout_error, permission_error, unknown_error]
+            message:
+              type: string
+            details:
+              type: string
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
+      type: object
+      required: [table_count, execution_time]
+      properties:
+        table_count:
+          type: integer
+          description: "Number of tables found"
+        column_count:
+          type: integer
+          description: "Total number of columns across all tables"
+        execution_time:
+          type: number
+          description: "Execution time in milliseconds"
+
+execution:
+  handler: handler.py
+  function: get_schema
+  timeout: 30000

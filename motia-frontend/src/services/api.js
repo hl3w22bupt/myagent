@@ -134,11 +134,44 @@ export const tasksAPI = {
   deleteTask: (id) => {
     console.log('=== deleteTask 被调用 ===')
     console.log('删除任务 ID:', id)
-    return apiClient.delete('/agent/result', {
+    // 使用统一的删除API，通过id参数删除单个任务
+    return apiClient.delete('/agent/results', {
       params: { id },
-      timeout: 30000 // 增加到 30 秒
-    }).catch(error => {
+      timeout: 30000
+    }).then(response => response.data)
+      .catch(error => {
       console.error('=== deleteTask API 错误 ===')
+      console.error('错误对象:', error)
+      console.error('错误 code:', error.code)
+      console.error('是否超时:', error.code === 'ECONNABORTED')
+      throw error
+    })
+  },
+  deleteTasks: (ids) => {
+    console.log('=== deleteTasks 被调用（批量删除）===')
+    console.log('删除任务 IDs:', ids)
+    // 使用统一的删除API，通过ids参数删除多个任务
+    return apiClient.delete('/agent/results', {
+      params: { ids: Array.isArray(ids) ? ids.join(',') : ids },
+      timeout: 60000 // 批量操作增加到 60 秒
+    }).then(response => ({
+      ...response,
+      data: {
+        success: response.data.success,
+        message: response.data.message,
+        type: response.data.type,
+        summary: response.data.summary || {
+          totalRequested: Array.isArray(ids) ? ids.length : 1,
+          successfulCount: response.data.results?.successful?.length || 0,
+          failedCount: response.data.results?.failed?.length || 0
+        },
+        results: response.data.results || {
+          successful: [],
+          failed: []
+        }
+      }
+    })).catch(error => {
+      console.error('=== deleteTasks API 错误 ===')
       console.error('错误对象:', error)
       console.error('错误 code:', error.code)
       console.error('是否超时:', error.code === 'ECONNABORTED')

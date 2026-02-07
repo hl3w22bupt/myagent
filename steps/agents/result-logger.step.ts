@@ -272,6 +272,24 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const task = input.task || 'Unknown task';
   const sessionId = input.sessionId;
 
+  // 🔍 DIAGNOSIS: 检查接收到的 metadata 格式
+  const receivedMetadataKeys = Object.keys(normalizedResult.metadata || {});
+  const isReceivedMetadataCharIndexed = receivedMetadataKeys.length > 10 &&
+    receivedMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
+
+  logger.info('[🔍 DIAGNOSIS] Received metadata format', {
+    taskId,
+    metadataKeysCount: receivedMetadataKeys.length,
+    isCharIndexed: isReceivedMetadataCharIndexed,
+    firstKeys: receivedMetadataKeys.slice(0, 20),
+    metadataPreview: normalizedResult.metadata ?
+      JSON.stringify(normalizedResult.metadata).substring(0, 200) : 'undefined',
+  });
+
+  // NOTE: structuredOutput is now at root level (Agent.run() returns it there)
+  // No need to move it from root to metadata anymore
+  // For backward compatibility, we still support reading from metadata if needed
+
   // Parse unified format result from output FIRST (before database update)
   logger.info('Parsing unified format result from task output', {
     taskId,
@@ -362,7 +380,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             artifactType: 'video',
             action: 'generated',
             path: videoUrl,
-            description: content.description || `Video generated: ${task.substring(0, 50)}...`,
+            // 优先使用 content.description，否则使用完整的 task（不截断）
+            description: content.description || `Video generated: ${task}`,
             timestamp: new Date(),
           });
 
@@ -442,8 +461,9 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 videoNumber,
               });
 
-              // 只在任务描述超过50个字符时才添加省略号
-              const taskDesc = task.length > 50 ? `${task.substring(0, 50)}...` : task;
+              // 保留完整的任务描述，不截断
+              // taskDesc 保持完整，前端 CSS 会处理显示时的截断
+              const taskDesc = task;
 
               await store.addArtifact({
                 taskId,
@@ -536,6 +556,21 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         currentOutputLength: currentTask?.output?.length || 0,
       });
 
+      // 🔍 DIAGNOSIS: 检查 currentTask.metadata 的格式
+      const currentMetadataKeys = Object.keys(currentTask?.metadata || {});
+      const isCurrentMetadataCharIndexed = currentMetadataKeys.length > 10 &&
+        currentMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
+
+      logger.info('[🔍 DIAGNOSIS] Current task metadata format', {
+        taskId,
+        hasMetadata: !!currentTask?.metadata,
+        metadataKeysCount: currentMetadataKeys.length,
+        isCharIndexed: isCurrentMetadataCharIndexed,
+        firstKeys: currentMetadataKeys.slice(0, 20),
+        metadataPreview: currentTask?.metadata ?
+          JSON.stringify(currentTask.metadata).substring(0, 200) : 'undefined',
+      });
+
       const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;
 
       logger.info('[🔍 DIAGNOSIS] Multi-turn check', {
@@ -569,15 +604,30 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           metadata: {
             ...(currentTask.metadata || {}),
             ...normalizedResult.metadata,
-            // CRITICAL: Always preserve structuredOutput if it exists
-            ...(currentTask?.metadata?.structuredOutput && {
-              structuredOutput: currentTask.metadata.structuredOutput
-            }),
-            ...((normalizedResult.metadata as any)?.structuredOutput && {
-              structuredOutput: (normalizedResult.metadata as any).structuredOutput
-            }),
           },
+          // Store structuredOutput at root level (not in metadata)
+          // For backward compatibility, also check old location in metadata
+          structuredOutput: (normalizedResult as any).structuredOutput ||
+                           (normalizedResult.metadata as any)?.structuredOutput ||
+                           currentTask.structuredOutput,
           completedAt: new Date(),
+        });
+
+        // 🔍 DIAGNOSIS: 检查合并后的 metadata 格式
+        const mergedMetadata = {
+          ...(currentTask.metadata || {}),
+          ...normalizedResult.metadata,
+        };
+        const mergedMetadataKeys = Object.keys(mergedMetadata);
+        const isMergedMetadataCharIndexed = mergedMetadataKeys.length > 10 &&
+          mergedMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
+
+        logger.info('[🔍 DIAGNOSIS] Merged metadata format (multi-turn)', {
+          taskId,
+          metadataKeysCount: mergedMetadataKeys.length,
+          isCharIndexed: isMergedMetadataCharIndexed,
+          firstKeys: mergedMetadataKeys.slice(0, 20),
+          metadataPreview: JSON.stringify(mergedMetadata).substring(0, 200),
         });
 
         logger.info('[🔍 DIAGNOSIS] ✅ Multi-turn update completed', {
@@ -606,6 +656,21 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           retryCount++;
         }
 
+        // 🔍 DIAGNOSIS: 检查 latestTask.metadata 的格式
+        const latestMetadataKeys = Object.keys(latestTask?.metadata || {});
+        const isLatestMetadataCharIndexed = latestMetadataKeys.length > 10 &&
+          latestMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
+
+        logger.info('[🔍 DIAGNOSIS] Latest task metadata format (first round)', {
+          taskId,
+          hasMetadata: !!latestTask?.metadata,
+          metadataKeysCount: latestMetadataKeys.length,
+          isCharIndexed: isLatestMetadataCharIndexed,
+          firstKeys: latestMetadataKeys.slice(0, 20),
+          metadataPreview: latestTask?.metadata ?
+            JSON.stringify(latestTask.metadata).substring(0, 200) : 'undefined',
+        });
+
         await store.updateTask(taskId, {
           status: finalStatus,
           output: normalizedResult.output,
@@ -616,15 +681,30 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           metadata: {
             ...(latestTask?.metadata || {}),
             ...normalizedResult.metadata,
-            // CRITICAL: Always preserve structuredOutput if it exists
-            ...(latestTask?.metadata?.structuredOutput && {
-              structuredOutput: latestTask.metadata.structuredOutput
-            }),
-            ...((normalizedResult.metadata as any)?.structuredOutput && {
-              structuredOutput: (normalizedResult.metadata as any).structuredOutput
-            }),
           },
+          // Store structuredOutput at root level (not in metadata)
+          // For backward compatibility, also check old location in metadata
+          structuredOutput: (normalizedResult as any).structuredOutput ||
+                           (normalizedResult.metadata as any)?.structuredOutput ||
+                           latestTask?.structuredOutput,
           completedAt: new Date(),
+        });
+
+        // 🔍 DIAGNOSIS: 检查合并后的 metadata 格式
+        const mergedMetadataFirstRound = {
+          ...(latestTask?.metadata || {}),
+          ...normalizedResult.metadata,
+        };
+        const mergedMetadataFirstRoundKeys = Object.keys(mergedMetadataFirstRound);
+        const isMergedMetadataFirstRoundCharIndexed = mergedMetadataFirstRoundKeys.length > 10 &&
+          mergedMetadataFirstRoundKeys.slice(0, 10).every((k, i) => k === String(i));
+
+        logger.info('[🔍 DIAGNOSIS] Merged metadata format (first round)', {
+          taskId,
+          metadataKeysCount: mergedMetadataFirstRoundKeys.length,
+          isCharIndexed: isMergedMetadataFirstRoundCharIndexed,
+          firstKeys: mergedMetadataFirstRoundKeys.slice(0, 20),
+          metadataPreview: JSON.stringify(mergedMetadataFirstRound).substring(0, 200),
         });
 
         logger.info('Task record updated in database', {

@@ -181,8 +181,8 @@ class InfographicGenerator:
     async def generate_infographic(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate infographic from input data."""
         try:
-            # Support both 'content' and 'description' as parameter names
-            content = input_data.get("content") or input_data.get("description", "")
+            # Support 'content', 'description', and 'task' as parameter names
+            content = input_data.get("content") or input_data.get("description") or input_data.get("task", "")
             if not content:
                 if OUTPUT_BUILDER_AVAILABLE:
                     error_output = OutputBuilder() \

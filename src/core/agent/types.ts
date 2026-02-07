@@ -125,8 +125,6 @@ export interface AgentResult {
     delegates?: string[];
     /** Artifact type from skill output (e.g., 'video', 'image', 'code') */
     artifactType?: string;
-    /** Structured output from skill execution */
-    structuredOutput?: any;
     /** Sandbox execution retry information */
     retries?: {
       /** Number of retry attempts */
@@ -146,6 +144,9 @@ export interface AgentResult {
       recovered: boolean;
     };
   };
+
+  /** Structured output from skill execution (at root level, not in metadata) */
+  structuredOutput?: any;
 
   /** Session ID (optional for backward compatibility) */
   sessionId?: string;
