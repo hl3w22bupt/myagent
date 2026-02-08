@@ -140,48 +140,52 @@ export const handler = async (request: any, { logger }: any) => {
     // Get database store
     const unifiedStore = getDataStore();
 
-    // Delete tasks (concurrent for better performance)
-    const deletePromises = ids.map(async (taskId) => {
-      try {
-        // Query task from database first
+    // Step 1: Query all tasks to get details before deletion
+    const tasksToDelete = await Promise.all(
+      ids.map(async (taskId) => {
         const task = await unifiedStore.getTask(taskId);
+        return { taskId, task };
+      })
+    );
 
-        if (!task) {
-          results.failed.push({
-            taskId,
-            error: 'Task not found',
+    // Separate found and not-found tasks
+    const foundTasks = tasksToDelete.filter(({ task }) => task !== null);
+    const notFoundIds = tasksToDelete.filter(({ task }) => task === null).map(({ taskId }) => taskId);
+
+    // Add not-found tasks to failed results
+    for (const taskId of notFoundIds) {
+      results.failed.push({
+        taskId,
+        error: 'Task not found',
+      });
+    }
+
+    // Step 2: Batch delete all found tasks using single SQL DELETE statement
+    // This is atomic and avoids PostgreSQL deadlock
+    if (foundTasks.length > 0) {
+      const foundTaskIds = foundTasks.map(({ task }) => task!.id);
+      const deletedCount = await unifiedStore.deleteTasks(foundTaskIds);
+
+      logger.info('Agent Tasks Delete API: Batch delete completed', {
+        requested: foundTaskIds.length,
+        deleted: deletedCount,
+      });
+
+      // All found tasks should be deleted successfully
+      for (const { task } of foundTasks) {
+        if (task) {
+          results.successful.push({
+            taskId: task.id,
+            task: task.task,
+            timestamp: task.createdAt.toISOString(),
           });
-          return;
+
+          logger.info('Agent Tasks Delete API: Task deleted successfully', {
+            taskId: task.id,
+          });
         }
-
-        // Delete from database
-        await unifiedStore.deleteTask(taskId);
-
-        results.successful.push({
-          taskId: task.id,
-          task: task.task,
-          timestamp: task.createdAt.toISOString(),
-        });
-
-        logger.info('Agent Tasks Delete API: Task deleted successfully', {
-          taskId,
-        });
-      } catch (error: any) {
-        logger.error('Agent Tasks Delete API: Error deleting task', {
-          taskId,
-          error: error.message,
-          stack: error.stack,
-        });
-
-        results.failed.push({
-          taskId,
-          error: error.message || 'Unknown error',
-        });
       }
-    });
-
-    // Wait for all deletions to complete
-    await Promise.all(deletePromises);
+    }
 
     // Determine overall success
     const hasSuccess = results.successful.length > 0;

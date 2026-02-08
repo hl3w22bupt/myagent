@@ -7,15 +7,10 @@
  * - Updates task status and metadata
  * - Logs execution results for audit trail
  * - Maintains execution history in state
- *
- * FIX: Added circular reference detection and history size limits
- * to prevent Motia wrapObject infinite recursion bug.
- * See: https://github.com/motiadev/motia/issues/xxx
  */
 
 import { z } from 'zod';
 import { EventConfig } from 'motia';
-import { hasCircularReference } from '../../src/utils/state-safety';
 import { stateLockManager } from '../../src/utils/state-lock';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 import { writeFile, mkdir } from 'fs/promises';
@@ -24,7 +19,6 @@ import { existsSync } from 'fs';
 
 /**
  * Configuration for execution history limits.
- * Reduced from 100 to 20 to prevent wrapObject stack overflow.
  */
 const MAX_HISTORY_SIZE = 20;
 
@@ -357,7 +351,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
       // Also check if output contains video paths (for skills that don't use unified format)
       // This handles cases where the skill returns plain text with embedded video paths
-      if (normalizedResult.output && typeof normalizedResult.output === 'string') {
+      // Skip this if we already processed the video from structured result (to avoid duplicates)
+      const hasStructuredVideo = finalStructuredResult?.result_type === 'video' && finalStructuredResult.content;
+
+      if (!hasStructuredVideo && normalizedResult.output && typeof normalizedResult.output === 'string') {
         // Find all unique video paths using regex
         const videoPattern = /videos\/[\w-]+_video_(\d+)\.mp4/g;
         let match;
@@ -667,15 +664,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       key,
       (history: any) => {
         // 在锁内执行，不会有竞态条件
-        let current = history || [];
-
-        // Check for circular references in existing history
-        if (hasCircularReference(current)) {
-          logger.warn('[result-logger] Circular reference detected in existing history, resetting', {
-            historyLength: current.length
-          });
-          current = [];
-        }
+        const current = history || [];
 
         // Remove any existing entry with the same taskId to prevent duplicates
         const duplicateIndex = current.findIndex((entry: any) => entry.taskId === taskId);
@@ -703,12 +692,6 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         // Keep only last MAX_HISTORY_SIZE entries
         if (newHistory.length > MAX_HISTORY_SIZE) {
           newHistory.splice(MAX_HISTORY_SIZE);
-        }
-
-        // Final circular reference check before returning
-        if (hasCircularReference(newHistory)) {
-          logger.error('[result-logger] Circular reference detected after modification, throwing error');
-          throw new Error('Circular reference in history data');
         }
 
         return newHistory;

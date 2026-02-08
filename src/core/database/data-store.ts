@@ -524,6 +524,26 @@ export class DataStore {
     return changes > 0;
   }
 
+  async deleteTasks(taskIds: string[]): Promise<number> {
+    if (taskIds.length === 0) {
+      return 0;
+    }
+
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // SQLite doesn't support array parameters, so we build a dynamic IN clause
+    const placeholders = taskIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`);
+    stmt.bind(taskIds);
+    stmt.step();
+    const changes = this.db.getRowsModified();
+    stmt.free();
+
+    await this.save();
+    return changes;
+  }
+
   // ============================================================================
   // 上下文管理 (原 ContextStore 功能)
   // ============================================================================

@@ -558,6 +558,15 @@ function Tasks() {
                         <span className="detail-value">{task.skill}</span>
                       </div>
                     )}
+                    {/* 显示产物数 */}
+                    {task.artifacts && task.artifacts.length > 0 && (
+                      <div className="detail-item">
+                        <span className="detail-label">产物:</span>
+                        <span className="detail-value">
+                          {task.artifacts.length} {task.artifacts.length === 1 ? '个' : '个'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

@@ -2,13 +2,10 @@
  * Health Check API Step.
  *
  * Provides system health status and metrics.
- *
- * Uses safe state operations to prevent wrapObject stack overflow.
  */
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { safeStateGet } from '../../src/utils/state-safety';
 
 /**
  * Response schema for health check.
@@ -86,8 +83,8 @@ export const handler = async (request: any, { logger, state }: any) => {
     // Get metrics from state if available
     let metrics;
     try {
-      // Use Motia state API with safety checks
-      const history = await safeStateGet(state, 'agent:execution', 'history', []);
+      // Use Motia state API directly
+      const history = await state.get('agent:execution', 'history') || [];
 
       const successfulTasks = history.filter((entry: any) => entry.success).length;
       const failedTasks = history.filter((entry: any) => !entry.success).length;

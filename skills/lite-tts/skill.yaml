@@ -1,0 +1,122 @@
+name: lite-tts
+version: 1.0.0
+description: "轻量级文本转语音（Text-to-Speech）技能，使用系统 TTS 引擎将文本转换为音频文件"
+tags: [tts, audio, speech, synthesis, voice, lite]
+
+type: pure-script
+
+input_schema:
+  type: object
+  required:
+    - text
+  properties:
+    text:
+      type: string
+      description: "要转换的文本内容"
+    voice:
+      type: string
+      description: "声音名称或ID（可选，默认使用系统默认声音）"
+    lang:
+      type: string
+      enum: [en, zh, es, fr, de, ja, ko]
+      description: "语言代码（可选，用于筛选声音）"
+    output_file:
+      type: string
+      description: "输出文件路径（可选，默认保存到 outputs/audio/ 目录）"
+    speed:
+      type: number
+      minimum: 0.5
+      maximum: 2.0
+      default: 1.0
+      description: "语速倍率（1.0 = 正常速度）"
+    volume:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      default: 1.0
+      description: "音量（0.0 = 静音，1.0 = 最大音量）"
+  description: |
+    将文本转换为语音音频文件。使用系统内置的 TTS 引擎（pyttsx3），
+    支持 177 种系统声音（macOS），包括中文、英文等多种语言。
+
+    示例:
+    - 基础使用: {"text": "Hello, world!"}
+    - 指定语言: {"text": "你好", "lang": "zh"}
+    - 调整语速: {"text": "Fast speech", "speed": 1.5}
+    - 保存文件: {"text": "Test", "output_file": "custom/path/test.wav"}
+
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+    - metadata
+  properties:
+    result_type:
+      type: string
+      enum: [audio, error]
+      description: "结果类型"
+    success:
+      type: boolean
+      description: "是否成功"
+    content:
+      oneOf:
+        - type: object
+          required: [path, mime_type]
+          properties:
+            path:
+              type: string
+              description: "音频文件相对路径（相对于 outputs/）"
+            mime_type:
+              type: string
+              enum: [audio/wav, audio/mpeg]
+              description: "音频 MIME 类型"
+            size:
+              type: integer
+              description: "文件大小（字节）"
+            duration:
+              type: number
+              description: "音频时长（秒）"
+            sample_rate:
+              type: integer
+              description: "采样率（Hz）"
+        - type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+              enum: [validation, execution, timeout, resource, permission, dependency, unknown]
+            message:
+              type: string
+            details:
+              type: string
+            retryable:
+              type: boolean
+            suggestions:
+              type: array
+              items:
+                type: string
+    metadata:
+      type: object
+      properties:
+        execution_time:
+          type: integer
+          description: "执行时间（毫秒）"
+        voice:
+          type: string
+          description: "使用的声音名称"
+        lang:
+          type: string
+          description: "语言代码"
+        text_length:
+          type: integer
+          description: "文本长度（字符数）"
+        engine:
+          type: string
+          description: "TTS 引擎类型"
+
+execution:
+  handler: handler.py
+  function: execute_tts
+  timeout: 60000
