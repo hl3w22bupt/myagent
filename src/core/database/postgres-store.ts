@@ -261,6 +261,26 @@ export class PostgresDataStore implements Database {
         END $$;
       `);
 
+      // 创建 favorites 表
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS favorites (
+          id TEXT PRIMARY KEY,
+          artifact_id TEXT NOT NULL,
+          task_id TEXT NOT NULL,
+          artifact_type TEXT NOT NULL,
+          path TEXT NOT NULL,
+          description TEXT,
+          metadata JSONB,
+          created_at BIGINT NOT NULL,
+          CONSTRAINT fk_favorites_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_favorites_artifact FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+        )
+      `);
+
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_created_at ON favorites(created_at DESC)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_type ON favorites(artifact_type)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_task_id ON favorites(task_id)');
+
       await client.query('COMMIT');
       console.log('[PostgresDataStore] Schema initialized');
     } catch (error) {
@@ -954,6 +974,171 @@ export class PostgresDataStore implements Database {
       );
 
       return result.rowCount || 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Favorites Operations
+  // ============================================================================
+
+  async addFavorite(favorite: {
+    artifactId: string;
+    taskId: string;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      // 获取 artifact 信息
+      const artifactResult = await client.query(
+        'SELECT * FROM artifacts WHERE id = $1',
+        [favorite.artifactId]
+      );
+
+      if (artifactResult.rows.length === 0) {
+        throw new Error('Artifact not found');
+      }
+
+      const artifact = artifactResult.rows[0];
+
+      // 检查是否已收藏
+      const existingResult = await client.query(
+        'SELECT id FROM favorites WHERE artifact_id = $1',
+        [favorite.artifactId]
+      );
+
+      if (existingResult.rows.length > 0) {
+        // 已收藏，直接返回
+        return;
+      }
+
+      // 添加到精选
+      const id = `favorite-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await client.query(
+        `INSERT INTO favorites (id, artifact_id, task_id, artifact_type, path, description, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          favorite.artifactId,
+          favorite.taskId,
+          artifact.artifact_type,
+          artifact.path,
+          artifact.description,
+          artifact.metadata,
+          Date.now(),
+        ]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async removeFavorite(favoriteId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('DELETE FROM favorites WHERE id = $1', [favoriteId]);
+      return (result.rowCount || 0) > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFavorite(favoriteId: string): Promise<any | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('SELECT * FROM favorites WHERE id = $1', [favoriteId]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        artifactId: row.artifact_id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        path: row.path,
+        description: row.description,
+        metadata: row.metadata,
+        createdAt: new Date(parseInt(row.created_at)),
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async isFavorite(artifactId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query('SELECT 1 FROM favorites WHERE artifact_id = $1', [artifactId]);
+      return (result.rows.length > 0);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFavorites(options: {
+    page: number;
+    limit: number;
+    type?: string;
+  }): Promise<{
+    favorites: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const client = await this.pool.connect();
+
+    try {
+      const { page, limit, type } = options;
+      const offset = (page - 1) * limit;
+
+      // 构建 WHERE 条件
+      let whereClause = '';
+      const params: any[] = [];
+
+      if (type) {
+        whereClause = 'WHERE artifact_type = $1';
+        params.push(type);
+      }
+
+      // 获取总数
+      const countResult = await client.query(
+        `SELECT COUNT(*) as total FROM favorites ${whereClause}`,
+        params
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      // 获取分页数据
+      const dataResult = await client.query(
+        `SELECT * FROM favorites ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      );
+
+      const favorites = dataResult.rows.map(row => ({
+        id: row.id,
+        artifactId: row.artifact_id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        path: row.path,
+        description: row.description,
+        metadata: row.metadata,
+        createdAt: new Date(parseInt(row.created_at)),
+      }));
+
+      return {
+        favorites,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     } finally {
       client.release();
     }

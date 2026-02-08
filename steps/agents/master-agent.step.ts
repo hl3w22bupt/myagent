@@ -560,6 +560,28 @@ export const handler = async (
 
     const result = await agent.run(taskContext.task, taskId, taskContext.context);
 
+    // Fallback: Read structuredOutput from file if Agent didn't return it
+    if (!result.structuredOutput || Object.keys(result.structuredOutput).length === 0) {
+      const fs = await import('fs');
+      const structuredOutputPath = `/tmp/motia-sandbox/structured_outputs/output_${sessionId}.json`;
+
+      if (fs.existsSync(structuredOutputPath)) {
+        try {
+          const fileContent = await fs.promises.readFile(structuredOutputPath, 'utf-8');
+          result.structuredOutput = JSON.parse(fileContent);
+          logger.info('[master-agent] Loaded structuredOutput from file', {
+            taskId,
+            resultType: result.structuredOutput?.result_type,
+          });
+        } catch (error: any) {
+          logger.warn('[master-agent] Failed to read structuredOutput from file', {
+            taskId,
+            error: error.message,
+          });
+        }
+      }
+    }
+
     logger.info('Task execution completed', {
       sessionId,
       success: result.success,
@@ -600,19 +622,6 @@ export const handler = async (
     });
 
     // Emit completion event
-    // 🔍 DIAGNOSIS: 检查 emit 前的 metadata 格式
-    const metadataKeys = Object.keys(result.metadata || {});
-    const isCharIndexedBeforeEmit = metadataKeys.length > 10 &&
-      metadataKeys.slice(0, 10).every((k, i) => k === String(i));
-
-    logger.info('[🔍 DIAGNOSIS] Before emit - metadata format', {
-      taskId,
-      metadataKeysCount: metadataKeys.length,
-      isCharIndexed: isCharIndexedBeforeEmit,
-      firstKeys: metadataKeys.slice(0, 20),
-      metadataPreview: JSON.stringify(result.metadata).substring(0, 200),
-    });
-
     await emit({
       topic: 'agent.task.completed',
       data: {

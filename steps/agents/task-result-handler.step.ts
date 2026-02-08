@@ -1,8 +1,12 @@
 /**
- * Agent Result Logger Step.
+ * Task Result Handler Step.
  *
- * Listens to agent task completion events and logs results.
- * Provides audit trail and execution history.
+ * Listens to agent task completion/failure events and handles results:
+ * - Parses unified format results from skills
+ * - Saves artifacts (videos, code, infographics, tables) to database
+ * - Updates task status and metadata
+ * - Logs execution results for audit trail
+ * - Maintains execution history in state
  *
  * FIX: Added circular reference detection and history size limits
  * to prevent Motia wrapObject infinite recursion bug.
@@ -14,6 +18,9 @@ import { EventConfig } from 'motia';
 import { hasCircularReference } from '../../src/utils/state-safety';
 import { stateLockManager } from '../../src/utils/state-lock';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 /**
  * Configuration for execution history limits.
@@ -124,12 +131,12 @@ export const inputSchema = z
   .passthrough();
 
 /**
- * Result Logger Step configuration.
+ * Task Result Handler Step configuration.
  */
 export const config: EventConfig = {
   type: 'event',
-  name: 'result-logger',
-  description: 'Logs agent task execution results for audit trail',
+  name: 'task-result-handler',
+  description: 'Handles agent task results: parses output, saves artifacts, updates task status',
 
   /**
    * Subscribe to both successful and failed agent task events.
@@ -259,32 +266,15 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         executionTime: undefined,
         metadata: undefined,
       }
-    : (input.result || {
-        // Fallback for completed event without result
-        success: true,
-        output: undefined,
-        error: undefined,
-        executionTime: undefined,
-        metadata: undefined,
-      }); // Completed event: use nested result
+    : {
+        // Completed event: use nested result
+        ...input.result,
+        structuredOutput: (input.result as any)?.structuredOutput, // Extract structuredOutput
+      };
 
   const taskId = input.taskId;
   const task = input.task || 'Unknown task';
   const sessionId = input.sessionId;
-
-  // 🔍 DIAGNOSIS: 检查接收到的 metadata 格式
-  const receivedMetadataKeys = Object.keys(normalizedResult.metadata || {});
-  const isReceivedMetadataCharIndexed = receivedMetadataKeys.length > 10 &&
-    receivedMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
-
-  logger.info('[🔍 DIAGNOSIS] Received metadata format', {
-    taskId,
-    metadataKeysCount: receivedMetadataKeys.length,
-    isCharIndexed: isReceivedMetadataCharIndexed,
-    firstKeys: receivedMetadataKeys.slice(0, 20),
-    metadataPreview: normalizedResult.metadata ?
-      JSON.stringify(normalizedResult.metadata).substring(0, 200) : 'undefined',
-  });
 
   // NOTE: structuredOutput is now at root level (Agent.run() returns it there)
   // No need to move it from root to metadata anymore
@@ -295,30 +285,27 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     taskId,
     hasOutput: !!normalizedResult.output,
     outputLength: normalizedResult.output?.length || 0,
-    outputPreview: normalizedResult.output?.substring(0, 150) || 'no output',
   });
 
+  // Check structuredOutput first
+  const structuredOutput = (normalizedResult as any).structuredOutput;
   const structuredResult = parseUnifiedResult(normalizedResult.output);
 
-  logger.info('[🔍 DIAGNOSIS] Unified format result parsed', {
-    taskId,
-    hasStructuredResult: !!structuredResult,
-    resultType: structuredResult?.result_type,
-    hasContent: !!structuredResult?.content,
-    success: structuredResult?.success,
-    contentKeys: structuredResult?.content ? Object.keys(structuredResult.content) : [],
-  });
+  // IMPORTANT: Also check structuredOutput field (from file)
+  // For skills like infographic-generator that write structured output to file
+  // Use structuredOutput if structuredResult is not available
+  const finalStructuredResult = structuredResult || structuredOutput;
 
   // Override success status if unified format result has a success field
   // This is important for skills like remotion-generator that return error results
   // but still exit cleanly (exitCode=0)
-  if (structuredResult && typeof structuredResult.success === 'boolean') {
+  if (finalStructuredResult && typeof finalStructuredResult.success === 'boolean') {
     const originalSuccess = normalizedResult.success;
-    normalizedResult.success = structuredResult.success as boolean;
+    normalizedResult.success = finalStructuredResult.success as boolean;
 
     // Update error message if available
-    if (!normalizedResult.success && structuredResult.content) {
-      const content = structuredResult.content as any;
+    if (!normalizedResult.success && finalStructuredResult.content) {
+      const content = finalStructuredResult.content as any;
       if (content.message) {
         normalizedResult.error = content.message;
       }
@@ -330,7 +317,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         taskId,
         originalSuccess,
         overriddenSuccess: normalizedResult.success,
-        resultType: structuredResult.result_type,
+        resultType: finalStructuredResult.result_type,
       });
     }
   }
@@ -342,38 +329,19 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
 
       // Check if this is a video output and save to artifacts
-      logger.info('[🔍 DIAGNOSIS] Checking for unified format video', {
-        taskId,
-        resultType: structuredResult?.result_type,
-        hasContent: !!structuredResult?.content,
-      });
-
-      if (structuredResult?.result_type === 'video' && structuredResult.content) {
-        const content = structuredResult.content as any;
+      if (finalStructuredResult?.result_type === 'video' && finalStructuredResult.content) {
+        const content = finalStructuredResult.content as any;
         let videoUrl = content.videoUrl || content.url || content.path;
-
-        logger.info('[🔍 DIAGNOSIS] ✅ Found unified format video', {
-          taskId,
-          videoUrl,
-          contentFields: Object.keys(content),
-        });
 
         if (videoUrl) {
           // Normalize the path: ensure it's a relative path without leading slash
           // and includes videos/ prefix if it's a local file
-          const originalVideoUrl = videoUrl;
           if (videoUrl.startsWith('/')) {
             videoUrl = videoUrl.substring(1); // Remove leading slash
           }
           if (!videoUrl.startsWith('videos/') && !videoUrl.startsWith('outputs/')) {
             videoUrl = 'videos/' + videoUrl; // Add videos/ prefix
           }
-
-          logger.info('[🔍 DIAGNOSIS] Saving video artifact from unified format', {
-            taskId,
-            originalUrl: originalVideoUrl,
-            normalizedUrl: videoUrl,
-          });
 
           await store.addArtifact({
             taskId,
@@ -384,83 +352,27 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             description: content.description || `Video generated: ${task}`,
             timestamp: new Date(),
           });
-
-          logger.info('[🔍 DIAGNOSIS] ✅ Video artifact saved (unified format)', {
-            taskId,
-            videoUrl,
-          });
-        } else {
-          logger.warn('[🔍 DIAGNOSIS] ⚠️ Video result has no URL', {
-            taskId,
-            content: JSON.stringify(content).substring(0, 200),
-          });
         }
-      } else {
-        logger.info('[🔍 DIAGNOSIS] No unified format video found', {
-          taskId,
-          resultType: structuredResult?.result_type,
-        });
       }
 
       // Also check if output contains video paths (for skills that don't use unified format)
       // This handles cases where the skill returns plain text with embedded video paths
-      logger.info('[🔍 DIAGNOSIS] Checking output string for video paths', {
-        taskId,
-        hasOutput: !!normalizedResult.output,
-        outputType: typeof normalizedResult.output,
-        outputLength: normalizedResult.output?.length || 0,
-      });
-
       if (normalizedResult.output && typeof normalizedResult.output === 'string') {
         // Find all unique video paths using regex
         const videoPattern = /videos\/[\w-]+_video_(\d+)\.mp4/g;
         let match;
         const uniquePaths = new Map<string, number>(); // path -> number
-        let matchCount = 0;
-
-        logger.info('[🔍 DIAGNOSIS] Executing regex to find video paths', {
-          taskId,
-          pattern: videoPattern.source,
-          outputLength: normalizedResult.output.length,
-        });
 
         while ((match = videoPattern.exec(normalizedResult.output)) !== null) {
-          matchCount++;
           const path = match[0];
           const number = parseInt(match[1], 10); // match[1] 是第一个捕获组
           // 使用 Map 自动去重，保留唯一的路径
           uniquePaths.set(path, number);
-
-          logger.info('[🔍 DIAGNOSIS] ✅ Found video path', {
-            taskId,
-            matchNumber: matchCount,
-            videoPath: path,
-            videoNumber: number,
-            matchIndex: match.index,
-          });
         }
 
-        logger.info('[🔍 DIAGNOSIS] Regex matching completed', {
-          taskId,
-          totalMatches: matchCount,
-          uniquePaths: uniquePaths.size,
-          paths: Array.from(uniquePaths.entries()),
-        });
-
         if (uniquePaths.size > 0) {
-          logger.info(`[🔍 DIAGNOSIS] Found ${uniquePaths.size} video paths, saving artifacts`, {
-            taskId,
-            paths: Array.from(uniquePaths.keys()),
-          });
-
           for (const [videoPath, videoNumber] of uniquePaths.entries()) {
             try {
-              logger.info('[🔍 DIAGNOSIS] Saving video artifact', {
-                taskId,
-                videoPath,
-                videoNumber,
-              });
-
               // 保留完整的任务描述，不截断
               // taskDesc 保持完整，前端 CSS 会处理显示时的截断
               const taskDesc = task;
@@ -473,56 +385,53 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 description: `Video ${videoNumber}: ${taskDesc}`,
                 timestamp: new Date(),
               });
-
-              logger.info('[🔍 DIAGNOSIS] ✅ Video artifact saved', {
-                taskId,
-                videoPath,
-                videoNumber,
-              });
             } catch (error: any) {
-              logger.error('[🔍 DIAGNOSIS] ❌ Failed to save artifact', {
+              logger.error('Failed to save video artifact', {
                 taskId,
                 videoPath,
                 error: error.message,
-                stack: error.stack,
               });
             }
           }
-        } else {
-          logger.warn('[🔍 DIAGNOSIS] ⚠️ No video paths found in output', {
-            taskId,
-            outputPreview: normalizedResult.output.substring(0, 500),
-          });
         }
-      } else {
-        logger.warn('[🔍 DIAGNOSIS] ⚠️ Output not a string', {
-          taskId,
-          outputType: typeof normalizedResult.output,
-        });
       }
 
       // 检查是否是 code output 并保存到 artifacts
-      if (structuredResult?.result_type === 'code' && structuredResult.content) {
-        const content = structuredResult.content as any;
+      if (finalStructuredResult?.result_type === 'code' && finalStructuredResult.content) {
+        const content = finalStructuredResult.content as any;
         const code = content.code;
         const language = content.language || 'text';
 
-        logger.info('[🔍 DIAGNOSIS] ✅ Found code output', {
-          taskId,
-          language,
-          codeLength: code?.length || 0,
-        });
-
         if (code) {
           // 生成唯一标识符作为 path
-          const artifactPath = `code_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${language}`;
+          const filename = `code_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${language}`;
+          const artifactPath = `codes/${filename}`;
+
+          // 确保目录存在
+          const codesDir = join(process.cwd(), 'outputs', 'codes');
+          if (!existsSync(codesDir)) {
+            await mkdir(codesDir, { recursive: true });
+          }
+
+          // 将代码内容写入文件
+          const filePath = join(codesDir, filename);
+          await writeFile(filePath, code, 'utf-8');
+
+          logger.info('Code artifact saved to file', {
+            taskId,
+            filename,
+            language,
+            codeLength: code.length,
+            filePath,
+          });
 
           await store.addArtifact({
             taskId,
             artifactType: 'code',
             action: 'generated',
             path: artifactPath,
-            description: content.description || `Generated ${language} code`,
+            // 使用当前轮次的用户输入作为描述，而不是 skill 返回的 description
+            description: task || content.description || `Generated ${language} code`,
             metadata: {
               // 使用 metadata 存储扩展属性
               language: language,
@@ -531,68 +440,88 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             },
             timestamp: new Date(),
           });
+        }
+      }
 
-          logger.info('[🔍 DIAGNOSIS] ✅ Code artifact saved', {
+      // Check if this is an infographic output and save to artifacts
+      if (finalStructuredResult?.result_type === 'infographic' && finalStructuredResult.content) {
+        const content = finalStructuredResult.content as any;
+        const infographicPath = content.path;
+        const title = content.title || finalStructuredResult.title;
+        const template = content.template;
+        const chartType = content.chart_type;
+
+        if (infographicPath) {
+          // Normalize the path: ensure it's a relative path with outputs/ prefix
+          let normalizedPath = infographicPath;
+          if (normalizedPath.startsWith('/')) {
+            normalizedPath = normalizedPath.substring(1); // Remove leading slash
+          }
+          if (!normalizedPath.startsWith('outputs/')) {
+            normalizedPath = 'outputs/' + normalizedPath; // Add outputs/ prefix
+          }
+
+          await store.addArtifact({
             taskId,
-            artifactPath,
-            language,
-            metadata: { language, codeLength: code.length },
+            artifactType: 'image',
+            action: 'generated',
+            path: normalizedPath,
+            // 使用当前轮次的用户输入作为描述，而不是 skill 返回的 title
+            // 这样在多轮对话时，description 会准确反映用户的实际请求
+            description: task || title || `Infographic: ${template} (${chartType})`,
+            metadata: {
+              template: template,
+              chartType: chartType,
+              style: content.style,
+              dimensions: content.dimensions ? `${content.dimensions.width}x${content.dimensions.height}` : undefined,
+              size: content.size,
+              mimeType: content.mime_type,
+            },
+            timestamp: new Date(),
           });
         }
-      } else {
-        logger.info('[🔍 DIAGNOSIS] No code output found', {
+      }
+
+      // Check if this is a table output and save to artifacts
+      if (finalStructuredResult?.result_type === 'table' && finalStructuredResult.content) {
+        const content = finalStructuredResult.content as any;
+        const title = content.title || finalStructuredResult.title;
+        const columns = content.columns || content.headers || [];
+        const rows = content.rows || [];
+        const rowCount = rows.length;
+
+        // Generate a unique artifact ID for the table
+        const artifactPath = `table_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.json`;
+
+        await store.addArtifact({
           taskId,
-          resultType: structuredResult?.result_type,
+          artifactType: 'table',
+          action: 'generated',
+          path: artifactPath,
+          description: task || title || `Table with ${rowCount} rows`,
+          metadata: {
+            columnCount: columns.length,
+            rowCount,
+            columns: columns,
+            title: title,
+            // Store table data inline in metadata for easy access
+            tableData: {
+              columns,
+              rows,
+              title,
+            },
+          },
+          timestamp: new Date(),
         });
       }
 
       // Check if this is a multi-turn continuation (task already completed)
       const currentTask = await store.getTask(taskId);
-
-      logger.info('[🔍 DIAGNOSIS] Current task from database', {
-        taskId,
-        hasCurrentTask: !!currentTask,
-        currentStatus: currentTask?.status,
-        currentOutputLength: currentTask?.output?.length || 0,
-      });
-
-      // 🔍 DIAGNOSIS: 检查 currentTask.metadata 的格式
-      const currentMetadataKeys = Object.keys(currentTask?.metadata || {});
-      const isCurrentMetadataCharIndexed = currentMetadataKeys.length > 10 &&
-        currentMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
-
-      logger.info('[🔍 DIAGNOSIS] Current task metadata format', {
-        taskId,
-        hasMetadata: !!currentTask?.metadata,
-        metadataKeysCount: currentMetadataKeys.length,
-        isCharIndexed: isCurrentMetadataCharIndexed,
-        firstKeys: currentMetadataKeys.slice(0, 20),
-        metadataPreview: currentTask?.metadata ?
-          JSON.stringify(currentTask.metadata).substring(0, 200) : 'undefined',
-      });
-
       const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;
-
-      logger.info('[🔍 DIAGNOSIS] Multi-turn check', {
-        taskId,
-        isMultiTurnContinuation,
-        currentStatus: currentTask?.status,
-        finalStatus,
-        willUpdateOutput: !isMultiTurnContinuation,
-        explanation: isMultiTurnContinuation
-          ? 'Multi-turn: NOT updating output (preserving first round)'
-          : 'First round: updating all fields including output',
-      });
 
       if (isMultiTurnContinuation) {
         // Multi-turn continuation: don't overwrite output field
         // This preserves the first round's text output while adding video artifacts
-        logger.info('[🔍 DIAGNOSIS] Multi-turn: updating (preserving output)', {
-          taskId,
-          updatingFields: ['status', 'executionTime', 'metadata', 'completedAt'],
-          preservingFields: ['output'],
-        });
-
         await store.updateTask(taskId, {
           // CRITICAL: Always set status to completed after successful execution
           // This ensures the task status is correct even in multi-turn conversations
@@ -612,38 +541,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                            currentTask.structuredOutput,
           completedAt: new Date(),
         });
-
-        // 🔍 DIAGNOSIS: 检查合并后的 metadata 格式
-        const mergedMetadata = {
-          ...(currentTask.metadata || {}),
-          ...normalizedResult.metadata,
-        };
-        const mergedMetadataKeys = Object.keys(mergedMetadata);
-        const isMergedMetadataCharIndexed = mergedMetadataKeys.length > 10 &&
-          mergedMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
-
-        logger.info('[🔍 DIAGNOSIS] Merged metadata format (multi-turn)', {
-          taskId,
-          metadataKeysCount: mergedMetadataKeys.length,
-          isCharIndexed: isMergedMetadataCharIndexed,
-          firstKeys: mergedMetadataKeys.slice(0, 20),
-          metadataPreview: JSON.stringify(mergedMetadata).substring(0, 200),
-        });
-
-        logger.info('[🔍 DIAGNOSIS] ✅ Multi-turn update completed', {
-          taskId,
-          finalStatus,
-          preservedOutputPreview: currentTask.output?.substring(0, 50),
-        });
       } else {
         // First round or new task: update normally
-        logger.info('[🔍 DIAGNOSIS] First round: updating all fields', {
-          taskId,
-          finalStatus,
-          outputLength: normalizedResult.output?.length || 0,
-          outputPreview: normalizedResult.output?.substring(0, 100),
-        });
-
         // RELOAD task to get latest metadata (may have been updated by output-history-tracker)
         // Retry up to 3 times with short delay to handle concurrent updates
         let latestTask = await store.getTask(taskId);
@@ -655,21 +554,6 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           latestTask = await store.getTask(taskId);
           retryCount++;
         }
-
-        // 🔍 DIAGNOSIS: 检查 latestTask.metadata 的格式
-        const latestMetadataKeys = Object.keys(latestTask?.metadata || {});
-        const isLatestMetadataCharIndexed = latestMetadataKeys.length > 10 &&
-          latestMetadataKeys.slice(0, 10).every((k, i) => k === String(i));
-
-        logger.info('[🔍 DIAGNOSIS] Latest task metadata format (first round)', {
-          taskId,
-          hasMetadata: !!latestTask?.metadata,
-          metadataKeysCount: latestMetadataKeys.length,
-          isCharIndexed: isLatestMetadataCharIndexed,
-          firstKeys: latestMetadataKeys.slice(0, 20),
-          metadataPreview: latestTask?.metadata ?
-            JSON.stringify(latestTask.metadata).substring(0, 200) : 'undefined',
-        });
 
         await store.updateTask(taskId, {
           status: finalStatus,
@@ -688,23 +572,6 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                            (normalizedResult.metadata as any)?.structuredOutput ||
                            latestTask?.structuredOutput,
           completedAt: new Date(),
-        });
-
-        // 🔍 DIAGNOSIS: 检查合并后的 metadata 格式
-        const mergedMetadataFirstRound = {
-          ...(latestTask?.metadata || {}),
-          ...normalizedResult.metadata,
-        };
-        const mergedMetadataFirstRoundKeys = Object.keys(mergedMetadataFirstRound);
-        const isMergedMetadataFirstRoundCharIndexed = mergedMetadataFirstRoundKeys.length > 10 &&
-          mergedMetadataFirstRoundKeys.slice(0, 10).every((k, i) => k === String(i));
-
-        logger.info('[🔍 DIAGNOSIS] Merged metadata format (first round)', {
-          taskId,
-          metadataKeysCount: mergedMetadataFirstRoundKeys.length,
-          isCharIndexed: isMergedMetadataFirstRoundCharIndexed,
-          firstKeys: mergedMetadataFirstRoundKeys.slice(0, 20),
-          metadataPreview: JSON.stringify(mergedMetadataFirstRound).substring(0, 200),
         });
 
         logger.info('Task record updated in database', {

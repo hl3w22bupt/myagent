@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
-import { tasksAPI, agentsAPI } from '../services/api'
+import { tasksAPI, agentsAPI, favoritesAPI } from '../services/api'
 import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
 import CodePlayer from '../components/CodePlayer'
 import AudioPlayer from '../components/AudioPlayer'
@@ -241,7 +241,17 @@ function TaskDetail() {
   const [errors, setErrors] = useState([]) // 错误消息列表
   const [isSending, setIsSending] = useState(false) // 发送状态
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(null) // 当前选择的视频轮次
+  const [selectedImageIndex, setSelectedImageIndex] = useState(null) // 当前选择的图片轮次
+  const [selectedCodeIndex, setSelectedCodeIndex] = useState(null) // 当前选择的代码轮次
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
+  const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Set()) // 已收藏的 artifacts
+  const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
+
+  // 表格状态管理
+  const [tableSearchQuery, setTableSearchQuery] = useState('')
+  const [tableSortColumn, setTableSortColumn] = useState(null)
+  const [tableSortDirection, setTableSortDirection] = useState('asc')
+  const [tableCurrentPage, setTableCurrentPage] = useState(1)
 
   // 获取 stream 实例
   const { stream } = useMotiaStream()
@@ -308,8 +318,6 @@ function TaskDetail() {
         const processedEntries = historyEntries.map(entry => {
           // 如果是 agent hook 事件（通过 category 字段标识）
           if (entry.category === 'agent_hook' || entry.id?.startsWith('agent-')) {
-            const isAgentPre = entry.type === 'agent' && entry.stage === 'pre'
-
             return {
               id: entry.id,
               type: 'agent_hook',
@@ -317,12 +325,6 @@ function TaskDetail() {
               message: formatAgentHookMessage(entry),
               timestamp: entry.timestamp,
               originalEvent: entry,
-              // agent pre hook 事件显示为用户消息（右边）
-              metadata: isAgentPre ? {
-                data: {
-                  sender: 'user'  // 标记为用户消息
-                }
-              } : undefined
             }
           }
           // 其他类型的事件保持原样
@@ -338,6 +340,42 @@ function TaskDetail() {
             seenIds.add(entryId)
             uniqueEntries.push(entry)
           }
+        }
+
+        // 始终在最前面添加 task.task 作为初始用户消息（作为任务的起点）
+        if (task && task.task) {
+          const initialUserMessage = {
+            id: `initial-task-${taskId}`,
+            type: 'chat',
+            progressType: 'chat',
+            role: 'user',
+            content: task.task,
+            timestamp: task.timestamp || new Date().toISOString(),
+            metadata: {
+              data: {
+                sender: 'user',
+                message: task.task
+              }
+            }
+          }
+
+          // 检查是否已经存在相同的初始任务消息
+          const hasInitialTask = uniqueEntries.some(
+            entry => entry.id === `initial-task-${taskId}`
+          )
+
+          // 始终将初始任务消息放在最前面（覆盖之前的）
+          if (hasInitialTask) {
+            // 移除旧的初始任务消息
+            const index = uniqueEntries.findIndex(entry => entry.id === `initial-task-${taskId}`)
+            if (index !== -1) {
+              uniqueEntries.splice(index, 1)
+            }
+          }
+
+          // 插入到开头
+          uniqueEntries.unshift(initialUserMessage)
+          console.log('[Stream History] 添加/更新初始任务作为第一条消息:', task.task)
         }
 
         console.log('[Stream History] 去重后历史数据数量:', uniqueEntries.length)
@@ -456,6 +494,42 @@ function TaskDetail() {
       }
       console.log('[Stream] 去重后entries数量:', uniqueEntries.length)
       messagesRef.current = uniqueEntries
+
+      // 始终在最前面添加初始任务消息（确保不会被 stream 覆盖）
+      if (task && task.task) {
+        const initialUserMessage = {
+          id: `initial-task-${id}`,
+          type: 'chat',
+          progressType: 'chat',
+          role: 'user',
+          content: task.task,
+          timestamp: task.timestamp || new Date().toISOString(),
+          metadata: {
+            data: {
+              sender: 'user',
+              message: task.task
+            }
+          }
+        }
+
+        // 检查是否已经存在
+        const hasInitialTask = uniqueEntries.some(
+          entry => entry.id === `initial-task-${id}`
+        )
+
+        if (hasInitialTask) {
+          // 移除旧的
+          const index = uniqueEntries.findIndex(entry => entry.id === `initial-task-${id}`)
+          if (index !== -1) {
+            uniqueEntries.splice(index, 1)
+          }
+        }
+
+        // 插入到开头
+        uniqueEntries.unshift(initialUserMessage)
+        console.log('[Stream] 确保初始任务消息在第一位:', task.task)
+      }
+
       setMessages(prev => [...uniqueEntries]) // 浅拷贝确保组件更新
     })
 
@@ -532,6 +606,11 @@ function TaskDetail() {
         setTask(task)
         setError('')
         setLoading(false)
+
+        // 检查 artifacts 的收藏状态
+        if (task.artifacts && task.artifacts.length > 0) {
+          checkFavoritesStatus(task.artifacts)
+        }
         // 只有在首次成功获取数据时才结束 initialLoading
         if (!hasInitialData.current) {
           hasInitialData.current = true
@@ -606,17 +685,58 @@ function TaskDetail() {
     }
   }, [id])
 
-  // 重置视频版本选择当任务更新时
+  // 重置版本选择当任务更新时
   useEffect(() => {
     if (task?.artifacts) {
       const videoCount = task.artifacts.filter(a => a.type === 'video').length
+      const imageCount = task.artifacts.filter(a => a.type === 'image').length
       const codeCount = task.artifacts.filter(a => a.type === 'code').length
       if (videoCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedVideoIndex(null)
       }
+      if (imageCount > 0) {
+        // 重置为null，这样会自动选择最新的轮次
+        setSelectedImageIndex(null)
+      }
+      if (codeCount > 0) {
+        // 重置为null，这样会自动选择最新的轮次
+        setSelectedCodeIndex(null)
+      }
     }
   }, [task?.artifacts])
+
+  // 确保 task 加载后初始任务消息被添加
+  useEffect(() => {
+    if (task && task.task && messagesRef.current.length > 0) {
+      const initialUserMessage = {
+        id: `initial-task-${id}`,
+        type: 'chat',
+        progressType: 'chat',
+        role: 'user',
+        content: task.task,
+        timestamp: task.timestamp || new Date().toISOString(),
+        metadata: {
+          data: {
+            sender: 'user',
+            message: task.task
+          }
+        }
+      }
+
+      // 检查是否已经存在
+      const hasInitialTask = messagesRef.current.some(
+        msg => msg.id === `initial-task-${id}`
+      )
+
+      if (!hasInitialTask) {
+        // 添加到开头
+        messagesRef.current.unshift(initialUserMessage)
+        setMessages(prev => [...messagesRef.current])
+        console.log('[Task Loaded] 添加初始任务消息:', task.task)
+      }
+    }
+  }, [task?.task, id])
 
   // 获取或生成sessionId
   useEffect(() => {
@@ -948,61 +1068,85 @@ function TaskDetail() {
       // 移除前导的/outputs/如果存在
       videoPath = videoPath.replace(/^\/?outputs\//, '')
 
+      const currentIndex = selectedVideoIndex !== null
+        ? selectedVideoIndex
+        : videoArtifacts.length - 1;
+      const selectedArtifact = videoArtifacts[currentIndex];
+
       return (
         <div className="result-visual">
-          {/* 版本选择器 */}
-          {videoArtifacts.length > 1 && (
-            <div className="video-version-selector">
-              <span className="version-label">轮次</span>
-              <div className="version-dropdown-wrapper">
-                <select
-                  value={selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1}
-                  onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
-                  className="version-dropdown"
-                >
-                  {videoArtifacts.map((artifact, index) => {
-                    const isLatest = index === videoArtifacts.length - 1;
-                    const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false
-                    });
+          {/* 版本选择器 - 始终显示，统一体验 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1}
+                onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {videoArtifacts.map((artifact, index) => {
+                  const isLatest = index === videoArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
 
-                    return (
-                      <option key={artifact.id} value={index}>
-                        第 {index + 1} 轮 · {time}
-                        {isLatest ? ' · 最新' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-                <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
-                  <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              {/* 版本描述 - 内联显示 */}
-              {(() => {
-                const currentIndex = selectedVideoIndex !== null ? selectedVideoIndex : videoArtifacts.length - 1;
-                const artifact = videoArtifacts[currentIndex];
-                const fullDescription = artifact?.description || '';
-
-                // 调试：打印完整描述
-                console.log('[Version Description] 完整描述:', {
-                  index: currentIndex,
-                  fullDescription,
-                  length: fullDescription.length
-                });
-
-                return (
-                  <Tooltip content={fullDescription}>
-                    <span className="version-description-inline">
-                      {fullDescription}
-                    </span>
-                  </Tooltip>
-                );
-              })()}
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </div>
-          )}
+            {/* 版本描述 - 内联显示 */}
+            {(() => {
+              const artifact = videoArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
+                  </span>
+                </Tooltip>
+              );
+            })()}
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => {
+                    const favoriteId = `favorite-${selectedArtifact.id}`
+                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
+                  }}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* 视频播放器 */}
           <div className="video-player-wrapper">
@@ -1021,33 +1165,207 @@ function TaskDetail() {
 
     // 显示 code artifacts
     const codeArtifacts = task?.artifacts
-      ? task.artifacts.filter(artifact => artifact.type === 'code')
+      ? task.artifacts
+        .filter(artifact => artifact.type === 'code')
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
     if (codeArtifacts.length > 0) {
+      const currentIndex = selectedCodeIndex !== null
+        ? selectedCodeIndex
+        : codeArtifacts.length - 1; // 默认最后一轮
+
+      const selectedArtifact = codeArtifacts[currentIndex];
+      let codePath = selectedArtifact.path;
+      // 移除前导的/outputs/如果存在
+      codePath = codePath.replace(/^\/?outputs\//, '');
+
+      return (
+        <div className="result-visual result-visual-with-code">
+          {/* 版本选择器 - 始终显示，统一体验 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedCodeIndex !== null ? selectedCodeIndex : codeArtifacts.length - 1}
+                onChange={(e) => setSelectedCodeIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {codeArtifacts.map((artifact, index) => {
+                  const isLatest = index === codeArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
+
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            {/* 版本描述 */}
+            {(() => {
+              const currentIndex = selectedCodeIndex !== null ? selectedCodeIndex : codeArtifacts.length - 1;
+              const artifact = codeArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
+                  </span>
+                </Tooltip>
+              );
+            })()}
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => {
+                    const favoriteId = `favorite-${selectedArtifact.id}`
+                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
+                  }}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 代码查看器 */}
+          <CodeViewer
+            codePath={codePath}
+            getBlobUrl={getMediaBlobUrl}
+            language={selectedArtifact.metadata?.language}
+          />
+        </div>
+      )
+    }
+
+    // 检查是否有多个图片版本（从 artifacts）
+    const imageArtifacts = task?.artifacts
+      ? task.artifacts
+          .filter(artifact => artifact.type === 'image')
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+
+    // 处理多轮图片（优先从 artifacts）
+    if (imageArtifacts.length > 0) {
+      const currentIndex = selectedImageIndex !== null
+        ? selectedImageIndex
+        : imageArtifacts.length - 1; // 默认最后一轮
+
+      const selectedArtifact = imageArtifacts[currentIndex];
+      let imagePath = selectedArtifact.path;
+      // 移除前导的/outputs/如果存在
+      imagePath = imagePath.replace(/^\/?outputs\//, '');
+
       return (
         <div className="result-visual">
-          <div className="artifact-section">
-            <h4>生成的代码</h4>
-            {codeArtifacts.map((artifact, index) => (
-              <div key={artifact.id} className="artifact-item">
-                <span className="artifact-language-badge">
-                  {artifact.metadata?.language || 'code'}
-                </span>
-                {artifact.metadata?.codeLength && (
-                  <span className="artifact-lines">
-                    {artifact.metadata.codeLength} chars
+          {/* 版本选择器 - 始终显示，统一体验 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedImageIndex !== null ? selectedImageIndex : imageArtifacts.length - 1}
+                onChange={(e) => setSelectedImageIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {imageArtifacts.map((artifact, index) => {
+                  const isLatest = index === imageArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
+
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            {/* 版本描述 */}
+            {(() => {
+              const currentIndex = selectedImageIndex !== null ? selectedImageIndex : imageArtifacts.length - 1;
+              const artifact = imageArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
                   </span>
-                )}
-                <span className="artifact-timestamp">
-                  {new Date(artifact.timestamp).toLocaleString('zh-CN')}
-                </span>
-                {artifact.description && (
-                  <p className="artifact-description">{artifact.description}</p>
-                )}
-              </div>
-            ))}
+                </Tooltip>
+              );
+            })()}
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => {
+                    const favoriteId = `favorite-${selectedArtifact.id}`
+                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
+                  }}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* 图片播放器 */}
+          <ImagePlayer
+            key={imagePath}
+            imagePath={imagePath}
+            getBlobUrl={getMediaBlobUrl}
+          />
         </div>
       )
     }
@@ -1073,7 +1391,55 @@ function TaskDetail() {
       const structured = extractParsedResult(result)
       const { content } = structured
       if (!content || !content.columns || !content.rows) {
-        return <div className="no-result">无效的表格数据</div>
+        return (
+          <div className="no-result">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M3 3h18v18H3z" />
+              <path d="M3 9h18" />
+              <path d="M9 3v18" />
+            </svg>
+            <p>无效的表格数据</p>
+            <span className="hint">请检查数据格式是否包含 columns 和 rows</span>
+          </div>
+        )
+      }
+
+      // 使用组件顶层的表格状态
+      const rowsPerPage = 25
+
+      // 过滤和排序数据
+      const filteredAndSortedRows = content.rows.filter(row => {
+        if (!tableSearchQuery) return true
+        return row.some(cell =>
+          String(cell).toLowerCase().includes(tableSearchQuery.toLowerCase())
+        )
+      }).sort((a, b) => {
+        if (!tableSortColumn) return 0
+        const aVal = a[tableSortColumn]
+        const bVal = b[tableSortColumn]
+        const compare = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+        return tableSortDirection === 'asc' ? compare : -compare
+      })
+
+      // 分页
+      const totalPages = Math.ceil(filteredAndSortedRows.length / rowsPerPage)
+      const paginatedRows = filteredAndSortedRows.slice(
+        (tableCurrentPage - 1) * rowsPerPage,
+        tableCurrentPage * rowsPerPage
+      )
+
+      const handleSort = (colIndex) => {
+        if (tableSortColumn === colIndex) {
+          setTableSortDirection(tableSortDirection === 'asc' ? 'desc' : 'asc')
+        } else {
+          setTableSortColumn(colIndex)
+          setTableSortDirection('asc')
+        }
+      }
+
+      const handleSearchChange = (e) => {
+        setTableSearchQuery(e.target.value)
+        setTableCurrentPage(1) // 重置到第一页
       }
 
       return (
@@ -1094,42 +1460,145 @@ function TaskDetail() {
               </svg>
               <input
                 type="text"
-                placeholder="搜索..."
+                placeholder="搜索表格内容..."
                 className="table-search"
-                onChange={(e) => {
-                  const query = e.target.value.toLowerCase()
-                  const rows = document.querySelectorAll('.data-table tbody tr')
-                  rows.forEach(row => {
-                    const text = row.textContent.toLowerCase()
-                    row.style.display = text.includes(query) ? '' : 'none'
-                  })
-                }}
+                value={tableSearchQuery}
+                onChange={handleSearchChange}
               />
+              {tableSearchQuery && (
+                <button
+                  className="table-search-clear"
+                  onClick={() => {
+                    setTableSearchQuery('')
+                    setTableCurrentPage(1)
+                  }}
+                  aria-label="清除搜索"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
-            <span className="table-row-count">
-              {content.rows.length} 行
-            </span>
+            <div className="table-stats">
+              <span className="table-row-count">
+                {filteredAndSortedRows.length} 行
+              </span>
+              {tableSearchQuery && (
+                <span className="table-filter-indicator">
+                  已过滤
+                </span>
+              )}
+            </div>
           </div>
+
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
                 <tr>
                   {content.columns.map((col, i) => (
-                    <th key={i}>{col}</th>
+                    <th
+                      key={i}
+                      onClick={() => handleSort(i)}
+                      className={tableSortColumn === i ? `sorted-${tableSortDirection}` : ''}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="th-content">
+                        <span>{col}</span>
+                        {tableSortColumn === i && (
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="sort-icon"
+                          >
+                            {tableSortDirection === 'asc' ? (
+                              <path d="M12 19V5M5 12l7-7 7 7" />
+                            ) : (
+                              <path d="M12 5v14M5 12l7 7 7-7" />
+                            )}
+                          </svg>
+                        )}
+                      </div>
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {content.rows.map((row, i) => (
-                  <tr key={i}>
-                    {row.map((cell, j) => (
-                      <td key={j}>{String(cell)}</td>
-                    ))}
+                {paginatedRows.length > 0 ? (
+                  paginatedRows.map((row, i) => (
+                    <tr key={(tableCurrentPage - 1) * rowsPerPage + i}>
+                      {row.map((cell, j) => (
+                        <td key={j} title={String(cell)}>
+                          {String(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={content.columns.length} className="table-no-results">
+                      <div className="table-empty-state">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                        </svg>
+                        <p>未找到匹配结果</p>
+                        <span className="hint">尝试调整搜索关键词</span>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* 分页控件 */}
+          {totalPages > 1 && (
+            <div className="table-pagination">
+              <button
+                className="pagination-button"
+                onClick={() => setTableCurrentPage(p => Math.max(1, p - 1))}
+                disabled={tableCurrentPage === 1}
+                aria-label="上一页"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+
+              <div className="pagination-info">
+                <span className="pagination-current">{tableCurrentPage}</span>
+                <span className="pagination-separator">/</span>
+                <span className="pagination-total">{totalPages}</span>
+              </div>
+
+              <button
+                className="pagination-button"
+                onClick={() => setTableCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={tableCurrentPage === totalPages}
+                aria-label="下一页"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+
+              <select
+                className="pagination-rows-per-page"
+                value={rowsPerPage}
+                disabled // 暂时禁用，因为 rowsPerPage 是常量
+                aria-label="每页显示行数"
+              >
+                <option value="25">25 行/页</option>
+                <option value="50">50 行/页</option>
+                <option value="100">100 行/页</option>
+              </select>
+            </div>
+          )}
         </div>
       )
     }
@@ -1846,6 +2315,73 @@ function TaskDetail() {
     }
   }
 
+  // 添加到精选
+  const handleAddToFavorites = async (artifactId) => {
+    if (loadingFavorites) return
+
+    setLoadingFavorites(true)
+    try {
+      await favoritesAPI.addFavorite(artifactId, task.taskId)
+
+      // 更新收藏状态
+      setFavoriteArtifacts(prev => new Set([...prev, artifactId]))
+    } catch (error) {
+      console.error('添加到精选失败:', error)
+      const errorMessage = error.response?.data?.message || error.message || '添加失败'
+      console.error(`添加失败: ${errorMessage}`)
+    } finally {
+      setLoadingFavorites(false)
+    }
+  }
+
+  // 从精选移除
+  const handleRemoveFromFavorites = async (favoriteId, artifactId) => {
+    if (loadingFavorites) return
+
+    setLoadingFavorites(true)
+    try {
+      await favoritesAPI.removeFavorite(favoriteId)
+
+      // 更新收藏状态
+      setFavoriteArtifacts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(artifactId)
+        return newSet
+      })
+    } catch (error) {
+      console.error('从精选移除失败:', error)
+      const errorMessage = error.response?.data?.message || error.message || '移除失败'
+      console.error(`移除失败: ${errorMessage}`)
+    } finally {
+      setLoadingFavorites(false)
+    }
+  }
+
+  // 检查 artifacts 是否已被收藏
+  const checkFavoritesStatus = async (artifacts) => {
+    if (!artifacts || artifacts.length === 0) return
+
+    try {
+      // 批量检查收藏状态
+      const checkPromises = artifacts.map(artifact =>
+        favoritesAPI.isFavorite(artifact.id).catch(() => false)
+      )
+
+      const results = await Promise.all(checkPromises)
+      const favoriteIds = new Set()
+
+      results.forEach((isFavorite, index) => {
+        if (isFavorite) {
+          favoriteIds.add(artifacts[index].id)
+        }
+      })
+
+      setFavoriteArtifacts(favoriteIds)
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+    }
+  }
+
   if (loading || polling || initialLoading) {
     return (
       <div className="task-detail">
@@ -1948,6 +2484,10 @@ function TaskDetail() {
             <div className="info-item">
               <span className="info-label">执行时间:</span>
               <span className="info-value">{formatDuration(task.executionTime)}</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">产物数:</span>
+              <span className="info-value">{task.artifacts?.length || 0} 个</span>
             </div>
             {task.metadata?.skillNames && task.metadata.skillNames.length > 0 && (
               <div className="info-item">
@@ -2245,6 +2785,50 @@ function ImagePlayer({ imagePath, getBlobUrl }) {
       onClick={() => window.open(imageUrl, '_blank')}
     />
   )
+}
+
+// Code Viewer Component
+function CodeViewer({ codePath, getBlobUrl, language }) {
+  const [code, setCode] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const loadCode = async () => {
+      setLoading(true)
+      setError(false)
+      try {
+        const url = await getBlobUrl(codePath)
+        if (url) {
+          const response = await fetch(url)
+          if (response.ok) {
+            const codeContent = await response.text()
+            setCode(codeContent)
+          } else {
+            setError(true)
+          }
+        } else {
+          setError(true)
+        }
+      } catch (err) {
+        console.error('Failed to load code:', err)
+        setError(true)
+      }
+      setLoading(false)
+    }
+
+    loadCode()
+  }, [codePath, getBlobUrl])
+
+  if (loading) {
+    return <div className="media-loading">加载代码...</div>
+  }
+
+  if (error || !code) {
+    return <div className="media-error">代码加载失败</div>
+  }
+
+  return <CodePlayer code={code} language={language || 'text'} filename={codePath.split('/').pop()} />
 }
 
 export default TaskDetail

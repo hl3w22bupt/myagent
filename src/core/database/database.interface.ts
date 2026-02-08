@@ -48,6 +48,28 @@ export interface Database {
   getArtifacts(taskId: string): Promise<ArtifactIndex[]>;
 
   /**
+   * Favorite operations
+   */
+  addFavorite(favorite: {
+    artifactId: string;
+    taskId: string;
+  }): Promise<void>;
+  removeFavorite(favoriteId: string): Promise<boolean>;
+  getFavorite(favoriteId: string): Promise<any | null>;
+  isFavorite(artifactId: string): Promise<boolean>;
+  getFavorites(options: {
+    page: number;
+    limit: number;
+    type?: string;
+  }): Promise<{
+    favorites: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
+
+  /**
    * Compression history operations
    */
   saveCompressionHistory(history: CompressionHistory): Promise<void>;

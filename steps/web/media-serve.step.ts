@@ -1,8 +1,14 @@
 /**
  * Media File Serve API
  *
- * Serves media files (videos, images) from the outputs/ and videos/ directories.
- * Provides static file access for generated content.
+ * Serves media files from multiple directories:
+ * - videos/ (legacy video files)
+ * - outputs/ (general output files)
+ * - outputs/videos/ (video artifacts)
+ * - outputs/codes/ (code artifacts - HTML, CSS, JS, etc.)
+ * - outputs/infographics/ (infographic artifacts)
+ *
+ * Provides static file access for generated content with proper MIME types.
  */
 
 import { z } from 'zod';
@@ -41,14 +47,44 @@ export const config: ApiRouteConfig = {
 function getMimeType(filePath: string): string {
   const ext = filePath.toLowerCase().split('.').pop();
   const mimeTypes: Record<string, string> = {
+    // Video types
     mp4: 'video/mp4',
     webm: 'video/webm',
     mov: 'video/quicktime',
+    // Image types
     png: 'image/png',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     gif: 'image/gif',
     svg: 'image/svg+xml',
+    // Code/Text types - for code artifacts
+    html: 'text/html',
+    htm: 'text/html',
+    css: 'text/css',
+    js: 'text/javascript',
+    mjs: 'text/javascript',
+    ts: 'text/typescript',
+    tsx: 'text/typescript',
+    jsx: 'text/javascript',
+    json: 'application/json',
+    xml: 'application/xml',
+    txt: 'text/plain',
+    md: 'text/markdown',
+    py: 'text/x-python',
+    rb: 'text/x-ruby',
+    php: 'text/x-php',
+    java: 'text/x-java-source',
+    c: 'text/x-c',
+    cpp: 'text/x-c++',
+    h: 'text/x-c',
+    hpp: 'text/x-c++',
+    cs: 'text/x-csharp',
+    go: 'text/x-go',
+    rs: 'text/x-rust',
+    sql: 'text/x-sql',
+    sh: 'text/x-shellscript',
+    yaml: 'text/x-yaml',
+    yml: 'text/x-yaml',
   };
   return mimeTypes[ext || ''] || 'application/octet-stream';
 }
@@ -73,11 +109,18 @@ export const handler = async (request: any, { logger }: any) => {
 
   logger.info('Media file requested', { path });
 
-  // Try videos/ directory first, then outputs/
+  // Try multiple directories in order:
+  // 1. videos/ (legacy)
+  // 2. outputs/ (general)
+  // 3. outputs/videos/ (videos)
+  // 4. outputs/codes/ (code artifacts)
+  // 5. outputs/infographics/ (infographics)
   const possiblePaths = [
     join(process.cwd(), 'videos', path),
     join(process.cwd(), 'outputs', path),
     join(process.cwd(), 'outputs', 'videos', path),
+    join(process.cwd(), 'outputs', 'codes', path),
+    join(process.cwd(), 'outputs', 'infographics', path),
   ];
 
   let filePathFound = '';

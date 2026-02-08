@@ -97,7 +97,7 @@ The project uses an event-driven architecture where multiple steps may try to up
 │  Task Completed     │
 └──────────┬──────────┘
            │
-           ├─→ result-logger → update status to "completed"
+           ├─→ task-result-handler → update status to "completed"
            │
            └─→ output-history-tracker → update metadata
 ```

@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 
 /**
  * Query parameters schema for retry API.
@@ -108,6 +108,10 @@ export const handler = async (request: any, { logger, emit }: any) => {
       sessionId: foundTask.sessionId,
       status: foundTask.status,
     });
+
+    // 更新任务状态为 running（在重新执行之前）
+    await unifiedStore.updateTask(id, { status: TaskStatus.RUNNING });
+    logger.info('[Agent Retry] Task status updated to RUNNING', { taskId: id });
 
     // 重新执行任务（使用相同的 taskId）
     await emit({

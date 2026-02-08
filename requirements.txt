@@ -13,6 +13,9 @@ anthropic==0.40.0
 httpx==0.25.2
 aiohttp==3.9.1
 
+# Web search
+ddgs>=9.0.0
+
 # Code execution
 executing==2.0.1
 

@@ -89,6 +89,9 @@ export class DefaultTaskHook extends BaseTaskHook {
     services.logger.info('Task completed', {
       taskId,
       status,
+      task,
+      artifactCount,
+      skillCount,
       executionTime: result.executionTime,
     });
   }

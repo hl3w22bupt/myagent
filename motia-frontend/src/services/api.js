@@ -182,4 +182,37 @@ export const tasksAPI = {
     apiClient.post('/agent/result/retry', {}, { params: { id } })
 }
 
+// 精选相关 API
+export const favoritesAPI = {
+  // 添加到精选
+  addFavorite: (artifactId, taskId) =>
+    apiClient.post('/api/favorites/add', {
+      artifactId,
+      taskId
+    }).then(response => response.data),
+
+  // 从精选移除
+  removeFavorite: (favoriteId) =>
+    apiClient.post('/api/favorites/remove', {
+      favoriteId
+    }).then(response => response.data),
+
+  // 获取精选列表
+  getFavorites: (params = {}) =>
+    apiClient.get('/api/favorites', { params }).then(response => response.data),
+
+  // 检查是否已收藏
+  isFavorite: async (artifactId) => {
+    try {
+      const response = await apiClient.get('/api/favorites', {
+        params: { artifactId }
+      })
+      return response.data.isFavorite || false
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+      return false
+    }
+  }
+}
+
 export default apiClient

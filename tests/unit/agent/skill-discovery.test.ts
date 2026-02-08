@@ -38,7 +38,9 @@ describe('SkillDiscovery', () => {
       // Find web-search skill
       const webSearch = skills.find((s) => s.name === 'web-search');
       expect(webSearch).toBeDefined();
-      expect(webSearch?.description).toBe('Search the web for information and return results');
+      // The description is now a detailed multi-line description from skill.yaml
+      expect(webSearch?.description).toContain('INTERNET/WEB searches');
+      expect(webSearch?.description).toContain('DuckDuckGo');
       expect(webSearch?.tags).toContain('web');
       expect(webSearch?.tags).toContain('research');
       expect(webSearch?.tags).toContain('search');

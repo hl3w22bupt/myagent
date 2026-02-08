@@ -274,6 +274,21 @@ export class DataStore {
       )
     `);
 
+    // 7. 精选表 (依赖于 artifacts)
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS favorites (
+        id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        artifact_type TEXT NOT NULL,
+        path TEXT NOT NULL,
+        description TEXT,
+        metadata TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+      )
+    `);
+
     // 索引
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
@@ -282,6 +297,8 @@ export class DataStore {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_favorites_artifact_id ON favorites(artifact_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_favorites_created_at ON favorites(created_at DESC)`);
 
     // 自动迁移：为 artifacts 表添加 metadata 列（如果不存在）
     try {
@@ -873,6 +890,174 @@ export class DataStore {
     stmt.free();
 
     return sessions;
+  }
+
+  // ============================================================================
+  // 精选管理 (新增功能)
+  // ============================================================================
+
+  async addFavorite(favorite: {
+    artifactId: string;
+    taskId: string;
+  }): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 获取 artifact 信息
+    const artifacts = await this.getArtifacts(favorite.taskId);
+    const artifact = artifacts.find((a: ArtifactIndex) => a.id === favorite.artifactId);
+
+    if (!artifact) {
+      throw new Error('Artifact not found');
+    }
+
+    // 检查是否已收藏
+    const checkStmt = this.db.prepare('SELECT id FROM favorites WHERE artifact_id = ?');
+    checkStmt.bind([favorite.artifactId]);
+    const exists = checkStmt.step();
+    checkStmt.free();
+
+    if (exists) {
+      // 已收藏，直接返回
+      return;
+    }
+
+    // 添加到精选
+    const id = `favorite-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    this.db.run(
+      `INSERT INTO favorites (id, artifact_id, task_id, artifact_type, path, description, metadata, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        favorite.artifactId,
+        favorite.taskId,
+        artifact.artifactType,
+        artifact.path,
+        artifact.description || null,
+        artifact.metadata ? JSON.stringify(artifact.metadata) : null,
+        Date.now(),
+      ]
+    );
+
+    await this.save();
+  }
+
+  async removeFavorite(favoriteId: string): Promise<boolean> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM favorites WHERE id = ?');
+    stmt.bind([favoriteId]);
+    stmt.step();
+    const changes = this.db.getRowsModified();
+    stmt.free();
+
+    await this.save();
+    return changes > 0;
+  }
+
+  async getFavorite(favoriteId: string): Promise<any | null> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM favorites WHERE id = ?');
+    stmt.bind([favoriteId]);
+
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+
+    const row = stmt.getAsObject() as any;
+    stmt.free();
+
+    return {
+      id: row.id,
+      artifactId: row.artifact_id,
+      taskId: row.task_id,
+      artifactType: row.artifact_type,
+      path: row.path,
+      description: row.description,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      createdAt: new Date(row.created_at),
+    };
+  }
+
+  async isFavorite(artifactId: string): Promise<boolean> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT 1 FROM favorites WHERE artifact_id = ?');
+    stmt.bind([artifactId]);
+    const exists = stmt.step();
+    stmt.free();
+
+    return exists;
+  }
+
+  async getFavorites(options: {
+    page: number;
+    limit: number;
+    type?: string;
+  }): Promise<{
+    favorites: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const { page, limit, type } = options;
+    const offset = (page - 1) * limit;
+
+    // 构建 WHERE 条件
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (type) {
+      whereClause = 'WHERE artifact_type = ?';
+      params.push(type);
+    }
+
+    // 获取总数
+    const countQuery = `SELECT COUNT(*) as total FROM favorites ${whereClause}`;
+    const countStmt = this.db.prepare(countQuery);
+    countStmt.bind(params);
+    countStmt.step();
+    const countRow = countStmt.getAsObject() as { total: number };
+    const total = countRow.total;
+    countStmt.free();
+
+    // 获取分页数据
+    const dataQuery = `SELECT * FROM favorites ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const dataStmt = this.db.prepare(dataQuery);
+    dataStmt.bind([...params, limit, offset]);
+
+    const favorites: any[] = [];
+    while (dataStmt.step()) {
+      const row = dataStmt.getAsObject() as any;
+      favorites.push({
+        id: row.id,
+        artifactId: row.artifact_id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        path: row.path,
+        description: row.description,
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        createdAt: new Date(row.created_at),
+      });
+    }
+    dataStmt.free();
+
+    return {
+      favorites,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ============================================================================

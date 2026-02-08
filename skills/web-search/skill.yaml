@@ -1,7 +1,24 @@
 name: web-search
 version: 1.0.0
-description: Search the web for information and return results
-tags: [web, research, search]
+description: |
+  This skill performs INTERNET/WEB searches using DuckDuckGo search engine to find information online.
+
+  Use web-search when user asks to:
+  - Search the internet/web for information
+  - Find tutorials, guides, or documentation online
+  - Look up facts, definitions, or current information
+  - Search for resources on specific topics
+  - Find examples or references online
+
+
+  No API key required - uses free DuckDuckGo search API.
+
+  Features:
+  - Free web search (no API key needed)
+  - Configurable result limits
+  - Progress reporting
+  - Returns results as table with title, URL, snippet, and source
+tags: [web, research, search, internet, online]
 type: hybrid
 
 input_schema:

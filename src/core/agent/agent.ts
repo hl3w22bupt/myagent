@@ -600,6 +600,7 @@ export class Agent {
         },
         structuredOutput: sandboxResult.structuredOutput, // Structured output at root level
       };
+
     } catch (error: any) {
       // Record error in conversation history
       this.state.conversationHistory.push({

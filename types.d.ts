@@ -22,11 +22,14 @@ declare module 'motia' {
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'favorites-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'favorites-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'favorites-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-compression-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'subagents-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'result-logger': EventHandler<never, never>
+    'task-result-handler': EventHandler<never, never>
     'master-agent': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
     'failure-handler': EventHandler<never, never>
     'agent-tasks-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

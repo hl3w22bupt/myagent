@@ -34,6 +34,7 @@ from utils import (
     extract_description,
     parse_list_items,
 )
+from aspect_ratio import recommend_dimensions, get_dimension_variants
 
 
 class InfographicRenderer:
@@ -204,11 +205,37 @@ class InfographicGenerator:
             preferred_template = input_data.get("preferred_template")
             theme_input = input_data.get("theme", "auto")
             style = input_data.get("style", "auto")
-            width = input_data.get("width", 1920)
-            height = input_data.get("height", 1080)
             export_format = input_data.get("export_format", "both")
 
             content_type = identify_content_type(content)
+
+            # Parse items first to get meaningful title and count
+            items = parse_list_items(content)
+            item_count = len(items)
+
+            # Smart dimension recommendation
+            user_width = input_data.get("width")
+            user_height = input_data.get("height")
+            platform = input_data.get("platform", "default")
+
+            # Only use smart recommendation if user didn't specify both dimensions
+            if user_width is None or user_height is None:
+                width, height, dimension_desc = recommend_dimensions(
+                    content_type=content_type,
+                    item_count=item_count,
+                    text_length=len(content),
+                    platform=platform,
+                    custom_width=user_width,
+                    custom_height=user_height
+                )
+
+                # Log the recommendation for debugging
+                import sys
+                print(f"[Infographic] 使用推荐尺寸: {width}x{height} ({dimension_desc})", file=sys.stderr)
+            else:
+                width = user_width if user_width else 1920
+                height = user_height if user_height else 1080
+                print(f"[Infographic] 使用用户自定义尺寸: {width}x{height}", file=sys.stderr)
 
             if preferred_template:
                 template = preferred_template
@@ -227,10 +254,8 @@ class InfographicGenerator:
             if style == "auto":
                 style = "rough"
 
-            # Parse items first to get meaningful title
-            items = parse_list_items(content)
-
             # Generate title from first item or extract from content
+            # Note: items already parsed above for dimension calculation
             if len(items) > 0 and len(items[0]) <= 30:
                 # Use first item as title if it's short enough
                 title = items[0]
@@ -246,13 +271,16 @@ class InfographicGenerator:
                 items_with_data.append(item_dict)
 
             config = self._generate_config_json(
-                template, title, desc, items_with_data, palette, style
+                template, title, desc, items_with_data, palette, style,
+                auto_scale=True  # Enable auto-scaling
             )
             html_content = self._generate_html(title, config, width, height)
 
             # Generate task ID (same logic as remotion)
+            # Priority: input_data.task_id > environment variable > sessionId > timestamp
             task_id = (
                 input_data.get('task_id') or
+                os.getenv('MOTIA_TASK_ID') or  # Read from environment variable set by sandbox
                 input_data.get('metadata', {}).get('taskId') or
                 input_data.get('sessionId') or
                 f"task_{int(time.time())}"
@@ -265,9 +293,11 @@ class InfographicGenerator:
 
             infographic_number = self.task_infographic_counts[task_id]
 
-            # File naming: {task_id}_infographic_{number}.{format}
-            html_filename = f"{task_id}_infographic_{infographic_number}.html"
-            png_filename = f"{task_id}_infographic_{infographic_number}.png"
+            # Add timestamp to ensure uniqueness in multi-turn conversations
+            # Format: {task_id}_infographic_{number}_{timestamp_ms}.{format}
+            timestamp_ms = int(time.time() * 1000)
+            html_filename = f"{task_id}_infographic_{infographic_number}_{timestamp_ms}.html"
+            png_filename = f"{task_id}_infographic_{infographic_number}_{timestamp_ms}.png"
 
             html_path = self.output_dir / html_filename
             svg_path = self.output_dir / png_filename  # PNG will be saved here as fallback
@@ -371,6 +401,7 @@ class InfographicGenerator:
         items: list,
         palette: list,
         style: str,
+        auto_scale: bool = True,
     ) -> dict:
         """Generate AntV Infographic configuration as JSON object."""
         config = {
@@ -394,10 +425,40 @@ class InfographicGenerator:
         if theme:
             config["theme"] = theme
 
+        # Add auto-scale configuration
+        if auto_scale:
+            # Calculate content metrics to determine optimal scale
+            total_items = len(items)
+            avg_text_length = sum(len(str(item.get('label', ''))) for item in items) / max(total_items, 1)
+            max_text_length = max((len(str(item.get('label', ''))) for item in items), default=0)
+
+            # Determine scale factor based on content characteristics
+            if total_items > 10:
+                scale_factor = 0.75  # Scale down for many items
+            elif total_items > 6:
+                scale_factor = 0.85
+            elif max_text_length > 30:
+                scale_factor = 0.85  # Scale down for long text
+            elif max_text_length > 20:
+                scale_factor = 0.90
+            else:
+                scale_factor = 1.0  # No scaling for normal content
+
+            config["layout"] = {
+                "autoFit": True,
+                "autoSize": True,
+            }
+
+            # Add custom scale to infographic
+            config["scale"] = scale_factor
+
+            # Log scaling decision for debugging
+            print(f"[Infographic] Auto-scale: {scale_factor:.2f}x (items={total_items}, max_text_len={max_text_length})")
+
         return config
 
     def _generate_html(self, title: str, config: dict, width: int, height: int) -> str:
-        """Generate HTML from template."""
+        """Generate HTML from template with auto-scaling support."""
         import json
 
         config_json = json.dumps(config, ensure_ascii=False, indent=2)
@@ -412,6 +473,12 @@ class InfographicGenerator:
     <title>{title}</title>
     <script src="https://unpkg.com/@antv/infographic@latest/dist/infographic.min.js"></script>
     <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
         body {{
             margin: 0;
             padding: 20px;
@@ -421,31 +488,73 @@ class InfographicGenerator:
             min-height: 100vh;
             background-color: #f0f2f5;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            box-sizing: border-box;
-            overflow: auto;
+            overflow: hidden;  /* Prevent body scroll */
         }}
+
+        #wrapper {{
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }}
+
         #container {{
             background-color: white;
             box-shadow: 0 8px 24px rgba(0,0,0,0.12);
             border-radius: 12px;
             padding: 40px 60px;
+            transform-origin: center center;
+            transition: transform 0.3s ease;
             max-width: 100%;
-            max-height: 100vh;
-            overflow: auto;
-            box-sizing: border-box;
+            max-height: 100%;
+        }}
+
+        /* Auto-scaling container */
+        #container.auto-scale {{
+            width: {width}px;
+            height: {height}px;
+        }}
+
+        /* Overflow handling for scaled content */
+        .overflow-warning {{
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff9800;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
         }}
     </style>
 </head>
 <body>
-    <div id="container"></div>
+    <div id="wrapper">
+        <div id="container" class="auto-scale"></div>
+        <div id="overflow-warning" class="overflow-warning">
+            ⚠️ 内容较长，已自动缩放以适应屏幕
+        </div>
+    </div>
     <script>
         // Using JavaScript API (not DSL)
         const config = {escaped_config};
         const {{Infographic}} = window.AntVInfographic;
 
+        const container = document.getElementById('container');
+        const wrapper = document.getElementById('wrapper');
+
         const infographic = new Infographic({{
-            container: document.getElementById('container'),
+            container: container,
             width: '{width}px',
+            height: '{height}px',
             ...config
         }});
 
@@ -455,16 +564,72 @@ class InfographicGenerator:
         // Call render() to trigger rendering
         infographic.render();
 
-        // Listen for render completion
+        // Auto-scale functionality
         infographic.on('rendered', (event) => {{
             console.log('✅ Infographic rendered successfully');
             window.renderComplete = true;
+
+            // Auto-scale to fit viewport
+            setTimeout(() => {{
+                autoScaleContent();
+            }}, 100);
         }});
 
         // Listen for errors
         infographic.on('error', (error) => {{
             console.error('❌ Infographic render error:', error);
             window.renderError = error;
+        }});
+
+        function autoScaleContent() {{
+            const wrapperWidth = wrapper.clientWidth - 40;  // 40px padding
+            const wrapperHeight = wrapper.clientHeight - 40;
+            const contentWidth = {width};
+            const contentHeight = {height};
+
+            // Calculate scale ratios
+            const widthRatio = wrapperWidth / contentWidth;
+            const heightRatio = wrapperHeight / contentHeight;
+
+            // Use the smaller ratio to ensure content fits
+            let scale = Math.min(widthRatio, heightRatio, 1.0);
+
+            // Only scale down, never scale up
+            if (scale >= 0.95) {{
+                scale = 1.0;
+            }} else if (scale < 0.5) {{
+                // Don't scale too much
+                scale = 0.5;
+            }}
+
+            // Apply scale if needed
+            if (scale < 1.0) {{
+                container.style.transform = `scale(${{scale}})`;
+
+                // Show warning if significantly scaled
+                const warning = document.getElementById('overflow-warning');
+                if (scale < 0.8) {{
+                    warning.style.display = 'block';
+                    setTimeout(() => {{
+                        warning.style.display = 'none';
+                    }}, 3000);
+                }}
+
+                console.log(`[Auto-scale] Scaled to ${{(scale * 100).toFixed(1)}}% to fit viewport`);
+            }} else {{
+                container.style.transform = 'scale(1.0)';
+            }}
+        }}
+
+        // Re-scale on window resize
+        let resizeTimeout;
+        window.addEventListener('resize', () => {{
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {{
+                if (window.renderComplete) {{
+                    autoScaleContent();
+                }}
+            }}, 250);
         }});
     </script>
 </body>

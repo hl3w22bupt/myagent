@@ -125,7 +125,14 @@ describe('DefaultTaskHook', () => {
 
       expect(mockContext.services.logger.info).toHaveBeenCalledWith(
         'Task completed',
-        { taskId: 'test-1', status: 'completed', executionTime: 5000 }
+        {
+          taskId: 'test-1',
+          status: 'completed',
+          task: 'test task',
+          artifactCount: 0,
+          skillCount: 3,
+          executionTime: 5000
+        }
       );
     });
   });

@@ -387,6 +387,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
 - Output ONLY valid JSON inside <plan> tags
 - Delegate ONLY when there's a clear, specific match
 - Omit "delegateTo" field if handling directly
+- **CRITICAL**: Use EXACTLY the subagent name from the list above (lowercase with hyphens, e.g., "code-reviewer", "security-auditor"). Do NOT transform the name format.
 - Provide specific reasoning based on descriptions and skills
 - Consider if the task has sufficient context (files, data, specifics)
 `;
