@@ -32,6 +32,7 @@ export interface Database {
     offset?: number;
   }): Promise<{ tasks: Task[]; total: number }>;
   deleteTask(taskId: string): Promise<boolean>;
+  deleteTasks(taskIds: string[]): Promise<number>;
 
   /**
    * Context operations

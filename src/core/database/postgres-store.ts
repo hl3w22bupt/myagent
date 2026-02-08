@@ -500,6 +500,25 @@ export class PostgresDataStore implements Database {
     }
   }
 
+  async deleteTasks(taskIds: string[]): Promise<number> {
+    if (taskIds.length === 0) {
+      return 0;
+    }
+
+    const client = await this.pool.connect();
+
+    try {
+      // 使用单个 DELETE 语句 + ANY 数组，避免死锁
+      const result = await client.query(
+        'DELETE FROM tasks WHERE id = ANY($1::text[])',
+        [taskIds]
+      );
+      return result.rowCount || 0;
+    } finally {
+      client.release();
+    }
+  }
+
   // ============================================================================
   // Context Operations
   // ============================================================================

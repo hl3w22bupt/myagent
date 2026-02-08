@@ -1007,23 +1007,33 @@ function TaskDetail() {
 
   const getMediaBlobUrl = async (path) => {
     if (mediaUrls[path]) {
+      console.log('[getMediaBlobUrl] Using cached URL for:', path)
       return mediaUrls[path]
     }
 
     try {
       // 使用查询参数格式：/media?path=xxx 而不是 /media/xxx
-      const response = await fetch(`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`)
+      const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`
+      console.log('[getMediaBlobUrl] Fetching:', url)
+
+      const response = await fetch(url)
+      console.log('[getMediaBlobUrl] Response status:', response.status)
+      console.log('[getMediaBlobUrl] Response headers:', Object.fromEntries(response.headers.entries()))
+
       if (!response.ok) {
-        throw new Error('Failed to fetch file')
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`)
       }
 
       const blob = await response.blob()
+      console.log('[getMediaBlobUrl] Blob size:', blob.size, 'type:', blob.type)
+
       const blobUrl = URL.createObjectURL(blob)
+      console.log('[getMediaBlobUrl] Created blob URL:', blobUrl, 'for path:', path)
 
       setMediaUrls(prev => ({ ...prev, [path]: blobUrl }))
       return blobUrl
     } catch (error) {
-      console.error('Error fetching media file:', error)
+      console.error('[getMediaBlobUrl] Error fetching media file:', error)
       return null
     }
   }
@@ -1638,9 +1648,9 @@ function TaskDetail() {
 
     // 新增：音频渲染
     if (resultType === 'audio') {
-      const audioPath = typeof result === 'object' ? (result.content?.path || result.path || result.audio_path) : null
-      const audioUrl = typeof result === 'object' ? result.url || result.audio_url : null
-      const filename = typeof result === 'object' ? result.filename || result.content?.filename : ''
+      const audioPath = typeof parsedResult === 'object' ? (parsedResult.content?.path || parsedResult.path || parsedResult.audio_path) : null
+      const audioUrl = typeof parsedResult === 'object' ? parsedResult.url || parsedResult.audio_url : null
+      const filename = typeof parsedResult === 'object' ? parsedResult.filename || parsedResult.content?.filename : ''
 
       return (
         <div className="result-visual">
@@ -1795,8 +1805,10 @@ function TaskDetail() {
         },
         audio: {
           icon: (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-              <path d="M11.536 14.01A8.473 8.473 0 0 1 8 15a8.473 8.473 0 0 1-8-8 8.473 8.473 0 0 1 .99-3.536l.705.707A7.476 7.476 0 0 0 1 7a7.476 7.476 0 0 0 7 7c1.928 0 3.694-.736 5.007-1.938l.705.707A8.473 8.473 0 0 1 8 15a8.473 8.473 0 0 1-3.536-.99l.705-.707A6.476 6.476 0 0 0 8 13a6.476 6.476 0 0 0 6-6c0-1.56-.56-3.001-1.492-4.14l.705-.707A7.476 7.476 0 0 1 15 8c0 2.086-.724 4.008-1.938 5.64l-.705-.707A6.476 6.476 0 0 0 14 8a6.476 6.476 0 0 0-6-6c-1.928 0-3.694.736-5.007 1.938l-.705-.707A8.473 8.473 0 0 1 8 1a8.473 8.473 0 0 1 8 8 8.473 8.473 0 0 1-.99 3.536l-.705-.707zM8 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="tab-icon">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
             </svg>
           ),
           label: '音频'

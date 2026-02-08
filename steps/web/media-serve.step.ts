@@ -7,6 +7,7 @@
  * - outputs/videos/ (video artifacts)
  * - outputs/codes/ (code artifacts - HTML, CSS, JS, etc.)
  * - outputs/infographics/ (infographic artifacts)
+ * - outputs/audios/ (audio artifacts)
  *
  * Provides static file access for generated content with proper MIME types.
  */
@@ -57,6 +58,16 @@ function getMimeType(filePath: string): string {
     jpeg: 'image/jpeg',
     gif: 'image/gif',
     svg: 'image/svg+xml',
+    // Audio types
+    wav: 'audio/wav',
+    wave: 'audio/wav',
+    mp3: 'audio/mpeg',
+    mpeg: 'audio/mpeg',
+    oga: 'audio/ogg',
+    ogg: 'audio/ogg',
+    aac: 'audio/aac',
+    m4a: 'audio/mp4',
+    flac: 'audio/flac',
     // Code/Text types - for code artifacts
     html: 'text/html',
     htm: 'text/html',
@@ -115,12 +126,16 @@ export const handler = async (request: any, { logger }: any) => {
   // 3. outputs/videos/ (videos)
   // 4. outputs/codes/ (code artifacts)
   // 5. outputs/infographics/ (infographics)
+  // 6. outputs/audios/ (audio artifacts, new)
+  // 7. outputs/audio/ (audio artifacts, legacy - for backward compatibility)
   const possiblePaths = [
     join(process.cwd(), 'videos', path),
     join(process.cwd(), 'outputs', path),
     join(process.cwd(), 'outputs', 'videos', path),
     join(process.cwd(), 'outputs', 'codes', path),
     join(process.cwd(), 'outputs', 'infographics', path),
+    join(process.cwd(), 'outputs', 'audios', path),
+    join(process.cwd(), 'outputs', 'audio', path),  // Legacy support
   ];
 
   let filePathFound = '';
