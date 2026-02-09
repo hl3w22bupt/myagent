@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { systemAPI, tasksAPI, skillsAPI, agentsAPI, favoritesAPI } from '../services/api'
+import AudioPlayer from '../components/AudioPlayer'
 import './Home.css'
 
 function Home() {
@@ -18,6 +19,7 @@ function Home() {
     video: 0,
     image: 0,
     code: 0,
+    audio: 0,
     total: 0
   })
   const [loading, setLoading] = useState(true)
@@ -93,11 +95,12 @@ function Home() {
         // 统计各类型数量
         if (favoritesType === '') {
           const allResult = await favoritesAPI.getFavorites({ page: 1, limit: 1000 })
-          const stats = { video: 0, image: 0, code: 0, total: 0 }
+          const stats = { video: 0, image: 0, code: 0, audio: 0, total: 0 }
           allResult.favorites.forEach(f => {
             if (f.artifactType === 'video') stats.video++
             else if (f.artifactType === 'image') stats.image++
             else if (f.artifactType === 'code') stats.code++
+            else if (f.artifactType === 'audio') stats.audio++
             stats.total++
           })
           setFavoritesStats(stats)
@@ -160,6 +163,10 @@ function Home() {
               </svg>
             </div>
           )
+        case 'audio':
+          return (
+            <FavoriteAudioPreview path={path} getMediaBlobUrl={getMediaBlobUrl} />
+          )
         default:
           return (
             <div className="favorite-preview favorite-preview-default">
@@ -182,7 +189,7 @@ function Home() {
           </p>
           <div className="favorite-card-meta">
             <span className={`favorite-card-type type-${artifactType}`}>
-              {artifactType === 'video' ? '视频' : artifactType === 'image' ? '图片' : artifactType === 'code' ? '代码' : '文件'}
+              {artifactType === 'video' ? '视频' : artifactType === 'image' ? '图片' : artifactType === 'code' ? '代码' : artifactType === 'audio' ? '音频' : '文件'}
             </span>
           </div>
         </Link>
@@ -308,6 +315,18 @@ function Home() {
     )
   }
 
+  // 音频预览组件
+  const FavoriteAudioPreview = ({ path, getMediaBlobUrl }) => {
+    return (
+      <div className="favorite-preview favorite-preview-audio">
+        <AudioPlayer
+          audioPath={path}
+          getBlobUrl={getMediaBlobUrl}
+        />
+      </div>
+    )
+  }
+
   // 模态框视频预览组件
   const ModalVideoPreview = ({ path, getMediaBlobUrl }) => {
     const [videoUrl, setVideoUrl] = useState(null)
@@ -399,6 +418,55 @@ function Home() {
         src={imageUrl}
         alt="预览图片"
         className="media-modal-image"
+      />
+    )
+  }
+
+  // 模态框音频预览组件
+  const ModalAudioPreview = ({ path, getMediaBlobUrl }) => {
+    const [audioUrl, setAudioUrl] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      const loadAudio = async () => {
+        if (!path) return
+        setLoading(true)
+        const url = await getMediaBlobUrl(path)
+        setAudioUrl(url)
+        setLoading(false)
+      }
+
+      loadAudio()
+    }, [path, getMediaBlobUrl])
+
+    useEffect(() => {
+      // 清理 blob URL 以防止内存泄漏
+      return () => {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl)
+        }
+      }
+    }, [audioUrl])
+
+    if (loading || !audioUrl) {
+      return (
+        <div className="media-modal-loading">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M9 18V5l12-2v13" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+          </svg>
+          <p>加载中...</p>
+        </div>
+      )
+    }
+
+    return (
+      <audio
+        src={audioUrl}
+        controls
+        autoPlay
+        className="media-modal-audio"
       />
     )
   }
@@ -582,6 +650,13 @@ function Home() {
                         代码
                         <span className="filter-count">{favoritesStats.code}</span>
                       </button>
+                      <button
+                        className={`filter-tab ${favoritesType === 'audio' ? 'active' : ''}`}
+                        onClick={() => handleFavoritesTypeChange('audio')}
+                      >
+                        音频
+                        <span className="filter-count">{favoritesStats.audio}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -682,6 +757,9 @@ function Home() {
               )}
               {modalMedia.artifactType === 'image' && (
                 <ModalImagePreview path={modalMedia.path} getMediaBlobUrl={getMediaBlobUrl} />
+              )}
+              {modalMedia.artifactType === 'audio' && (
+                <ModalAudioPreview path={modalMedia.path} getMediaBlobUrl={getMediaBlobUrl} />
               )}
               {modalMedia.artifactType === 'code' && (
                 <div className="media-modal-code">

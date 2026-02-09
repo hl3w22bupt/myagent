@@ -243,6 +243,7 @@ function TaskDetail() {
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(null) // 当前选择的视频轮次
   const [selectedImageIndex, setSelectedImageIndex] = useState(null) // 当前选择的图片轮次
   const [selectedCodeIndex, setSelectedCodeIndex] = useState(null) // 当前选择的代码轮次
+  const [selectedAudioIndex, setSelectedAudioIndex] = useState(null) // 当前选择的音频轮次
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
   const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Set()) // 已收藏的 artifacts
   const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
@@ -1376,6 +1377,111 @@ function TaskDetail() {
             imagePath={imagePath}
             getBlobUrl={getMediaBlobUrl}
           />
+        </div>
+      )
+    }
+
+    // 处理 audio artifacts（优先从 artifacts）
+    const audioArtifacts = task?.artifacts
+      ? task.artifacts
+          .filter(artifact => artifact.type === 'audio')
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+
+    if (audioArtifacts.length > 0) {
+      const currentIndex = selectedAudioIndex !== null
+        ? selectedAudioIndex
+        : audioArtifacts.length - 1; // 默认最后一轮
+
+      const selectedArtifact = audioArtifacts[currentIndex];
+      let audioPath = selectedArtifact.path;
+      // 移除前导的/outputs/如果存在
+      audioPath = audioPath.replace(/^\/?outputs\//, '');
+
+      return (
+        <div className="result-visual">
+          {/* 版本选择器 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedAudioIndex !== null ? selectedAudioIndex : audioArtifacts.length - 1}
+                onChange={(e) => setSelectedAudioIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {audioArtifacts.map((artifact, index) => {
+                  const isLatest = index === audioArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
+
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            {/* 版本描述 */}
+            {(() => {
+              const currentIndex = selectedAudioIndex !== null ? selectedAudioIndex : audioArtifacts.length - 1;
+              const artifact = audioArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
+                  </span>
+                </Tooltip>
+              );
+            })()}
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => {
+                    const favoriteId = `favorite-${selectedArtifact.id}`
+                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
+                  }}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 音频播放器 */}
+          <div className="audio-player-wrapper">
+            <AudioPlayer
+              key={audioPath}
+              audioPath={audioPath}
+              getBlobUrl={getMediaBlobUrl}
+            />
+          </div>
         </div>
       )
     }

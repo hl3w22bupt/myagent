@@ -234,7 +234,7 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
   }
 
   return (
-    <div className="audio-player-wrapper">
+    <div className="audio-player-wrapper" onClick={(e) => e.stopPropagation()}>
       <div className="audio-player-header">
         <div className="audio-player-info">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="audio-icon">
@@ -275,13 +275,13 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
             {isLoading ? (
               <div className="audio-spinner" />
             ) : isPlaying ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16"/>
-                <rect x="14" y="4" width="4" height="16"/>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="4" y="2" width="6" height="20"/>
+                <rect x="14" y="2" width="6" height="20"/>
               </svg>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 2v20l15-10z"/>
               </svg>
             )}
           </button>

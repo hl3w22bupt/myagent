@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { tasksAPI, skillsAPI } from '../services/api'
 import './Tasks.css'
@@ -20,6 +20,9 @@ function Tasks() {
   const [isSelectMode, setIsSelectMode] = useState(false)
   const [deletingTasks, setDeletingTasks] = useState(new Set())
   const pageSize = 12
+
+  // 使用 useRef 防止重复提交（立即生效，不受 setState 异步影响）
+  const isDeletingRef = useRef(false)
 
   // 加载可用技能列表
   useEffect(() => {
@@ -190,6 +193,12 @@ function Tasks() {
 
   // 批量删除任务
   const handleBatchDelete = async () => {
+    // 使用 useRef 防止重复提交（立即生效，不受 setState 异步影响）
+    if (isDeletingRef.current) {
+      console.warn('删除操作进行中，请勿重复点击')
+      return
+    }
+
     if (selectedTasks.size === 0) {
       alert('请先选择要删除的任务')
       return
@@ -201,7 +210,8 @@ function Tasks() {
     }
 
     try {
-      // 标记删除中状态
+      // 立即标记删除中（防止重复点击）
+      isDeletingRef.current = true
       setDeletingTasks(new Set(selectedTasks))
 
       // 使用批量删除API（一次请求删除所有任务）
@@ -242,6 +252,8 @@ function Tasks() {
       const errorMessage = error.response?.data?.message || error.message || '批量删除任务失败，请稍后重试'
       alert(errorMessage)
     } finally {
+      // 清除删除中状态
+      isDeletingRef.current = false
       setDeletingTasks(new Set())
     }
   }
@@ -456,7 +468,7 @@ function Tasks() {
                 <button
                   className="batch-delete-button"
                   onClick={handleBatchDelete}
-                  disabled={deletingTasks.size > 0}
+                  disabled={deletingTasks.size > 0 || isDeletingRef.current}
                   title={`删除选中的 ${selectedTasks.size} 个任务`}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -559,14 +571,12 @@ function Tasks() {
                       </div>
                     )}
                     {/* 显示产物数 */}
-                    {task.artifacts && task.artifacts.length > 0 && (
-                      <div className="detail-item">
-                        <span className="detail-label">产物:</span>
-                        <span className="detail-value">
-                          {task.artifacts.length} {task.artifacts.length === 1 ? '个' : '个'}
-                        </span>
-                      </div>
-                    )}
+                    <div className="detail-item">
+                      <span className="detail-label">产物:</span>
+                      <span className="detail-value">
+                        {task.artifactsCount || 0} 个
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}

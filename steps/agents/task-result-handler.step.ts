@@ -512,6 +512,42 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         });
       }
 
+      // Check if this is an audio output and save to artifacts
+      if (finalStructuredResult?.result_type === 'audio' && finalStructuredResult.content) {
+        const content = finalStructuredResult.content as any;
+        let audioPath = content.path || content.audioUrl || content.url;
+
+        if (audioPath) {
+          // Normalize the path: ensure it's a relative path without leading slash
+          if (audioPath.startsWith('/')) {
+            audioPath = audioPath.substring(1);
+          }
+          if (!audioPath.startsWith('audios/') && !audioPath.startsWith('audio/')) {
+            audioPath = `audios/${audioPath}`;
+          }
+
+          await store.addArtifact({
+            taskId,
+            artifactType: 'audio',
+            action: 'generated',
+            path: audioPath,
+            description: finalStructuredResult.title || task || `Audio generated: ${task}`,
+            metadata: {
+              mimeType: content.mime_type || content.mimeType || 'audio/wav',
+              size: content.size,
+              duration: content.duration,
+              sampleRate: content.sample_rate || content.sampleRate,
+              channels: content.channels,
+              ...(content.engine && { engine: content.engine }),
+              ...(content.voice && { voice: content.voice }),
+              ...(content.lang && { lang: content.lang }),
+              ...(content.speed && { speed: content.speed }),
+            },
+            timestamp: new Date(),
+          });
+        }
+      }
+
       // Check if this is a multi-turn continuation (task already completed)
       const currentTask = await store.getTask(taskId);
       const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;

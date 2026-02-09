@@ -505,15 +505,76 @@ export class PostgresDataStore implements Database {
       return 0;
     }
 
+    // Sort task IDs to ensure consistent delete order
+    const sortedTaskIds = [...taskIds].sort();
+
     const client = await this.pool.connect();
 
     try {
-      // 使用单个 DELETE 语句 + ANY 数组，避免死锁
+      await client.query('BEGIN');
+
+      // Delete tasks one by one in a single transaction
+      // This prevents internal deadlocks from parallel CASCADE operations
+      let deletedCount = 0;
+
+      for (const taskId of sortedTaskIds) {
+        const result = await client.query(
+          'DELETE FROM tasks WHERE id = $1',
+          [taskId]
+        );
+
+        if (result.rowCount && result.rowCount > 0) {
+          deletedCount++;
+        }
+      }
+
+      await client.query('COMMIT');
+
+      console.log(`[PostgresDataStore] deleteTasks: Successfully deleted ${deletedCount} tasks`);
+
+      return deletedCount;
+    } catch (error: any) {
+      await client.query('ROLLBACK').catch(() => {});
+
+      console.error(
+        '[PostgresDataStore] deleteTasks: Failed',
+        {
+          error: error.message,
+          code: error.code,
+          taskCount: sortedTaskIds.length
+        }
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 批量获取任务的产物数量
+   * @param taskIds 任务ID列表
+   * @returns Map<taskId, artifactCount>
+   */
+  async getArtifactCounts(taskIds: string[]): Promise<Map<string, number>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    const client = await this.pool.connect();
+
+    try {
       const result = await client.query(
-        'DELETE FROM tasks WHERE id = ANY($1::text[])',
+        `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id = ANY($1) GROUP BY task_id`,
         [taskIds]
       );
-      return result.rowCount || 0;
+
+      const counts = new Map<string, number>();
+      for (const row of result.rows) {
+        counts.set(row.task_id, parseInt(row.count, 10));
+      }
+
+      return counts;
     } finally {
       client.release();
     }

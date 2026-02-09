@@ -544,6 +544,35 @@ export class DataStore {
     return changes;
   }
 
+  /**
+   * 批量获取任务的产物数量
+   * @param taskIds 任务ID列表
+   * @returns Map<taskId, artifactCount>
+   */
+  async getArtifactCounts(taskIds: string[]): Promise<Map<string, number>> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = taskIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(
+      `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id IN (${placeholders}) GROUP BY task_id`
+    );
+    stmt.bind(taskIds);
+
+    const counts = new Map<string, number>();
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as any;
+      counts.set(row.task_id, row.count);
+    }
+    stmt.free();
+
+    return counts;
+  }
+
   // ============================================================================
   // 上下文管理 (原 ContextStore 功能)
   // ============================================================================

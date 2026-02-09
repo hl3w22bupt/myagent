@@ -132,6 +132,10 @@ export const handler = async (request: any, { logger }: any) => {
       status: taskStatus as any,
     });
 
+    // 批量获取任务的产物数量
+    const taskIds = tasks.map((task: Task) => task.id);
+    const artifactCounts = await unifiedStore.getArtifactCounts(taskIds);
+
     // Map database tasks to API response format
     // Handle potentially invalid dates
     const safeToISOString = (date: Date | undefined) => {
@@ -152,6 +156,8 @@ export const handler = async (request: any, { logger }: any) => {
       metadata: task.metadata,
       sessionId: task.sessionId,
       timestamp: safeToISOString(task.createdAt),
+      // 添加产物数量
+      artifactsCount: artifactCounts.get(task.id) || 0,
     }));
 
     return {

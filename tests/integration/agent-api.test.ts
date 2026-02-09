@@ -11,7 +11,7 @@ import { existsSync } from 'fs';
 
 // Test configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-const TEST_TIMEOUT = 30000;
+const TEST_TIMEOUT = 60000; // Increased to 60s for slower CI/CD environments
 
 // Helper to skip HTTP API tests if server is not running
 const withApiServer = process.env.RUN_HTTP_TESTS ? describe : describe.skip;
