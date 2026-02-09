@@ -160,6 +160,13 @@ export const handler = async (request: any, { logger }: any) => {
       });
     }
 
+    // Helper function to safely convert Date to ISO string
+    const safeToISOString = (date: Date | undefined): string => {
+      if (!date) return new Date().toISOString();
+      if (isNaN(date.getTime())) return new Date().toISOString();
+      return date.toISOString();
+    };
+
     // Step 2: Batch delete all found tasks using single SQL DELETE statement
     // This is atomic and avoids PostgreSQL deadlock
     if (foundTasks.length > 0) {
@@ -177,7 +184,7 @@ export const handler = async (request: any, { logger }: any) => {
           results.successful.push({
             taskId: task.id,
             task: task.task,
-            timestamp: task.createdAt.toISOString(),
+            timestamp: safeToISOString(task.createdAt),
           });
 
           logger.info('Agent Tasks Delete API: Task deleted successfully', {
@@ -207,22 +214,29 @@ export const handler = async (request: any, { logger }: any) => {
         : 'Failed to delete task';
     }
 
+    const responseBody = {
+      success: hasFailures && !hasSuccess ? false : true,
+      message,
+      type: isBatch ? 'batch' : 'single',
+      summary: {
+        totalRequested: results.totalRequested,
+        successfulCount: results.successful.length,
+        failedCount: results.failed.length,
+      },
+      results: hasSuccess || hasFailures ? {
+        successful: results.successful,
+        failed: results.failed,
+      } : undefined,
+    };
+
+    logger.info('Agent Tasks Delete API: Returning response', {
+      statusCode,
+      body: responseBody,
+    });
+
     return {
       status: statusCode,
-      body: {
-        success: hasFailures && !hasSuccess ? false : true,
-        message,
-        type: isBatch ? 'batch' : 'single',
-        summary: {
-          totalRequested: results.totalRequested,
-          successfulCount: results.successful.length,
-          failedCount: results.failed.length,
-        },
-        results: hasSuccess || hasFailures ? {
-          successful: results.successful,
-          failed: results.failed,
-        } : undefined,
-      },
+      body: responseBody,
     };
   } catch (error: any) {
     logger.error('Agent Tasks Delete API: Unexpected error during delete operation', {

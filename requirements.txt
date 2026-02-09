@@ -31,3 +31,6 @@ psycopg2-binary==2.9.9
 black==23.12.1
 pylint==3.0.3
 mypy==1.7.1
+
+# TTS
+pyttsx3==2.99

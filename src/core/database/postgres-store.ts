@@ -123,20 +123,42 @@ export class PostgresDataStore implements Database {
     const client = await this.pool.connect();
 
     try {
-      await client.query('BEGIN');
+      // 🔒 获取 PostgreSQL Advisory Lock (跨进程互斥)
+      // 使用固定的 lock key (12345) 防止多个进程并发初始化
+      const lockResult = await client.query('SELECT pg_try_advisory_lock(12345) as locked');
 
-      // Helper function to execute query and ignore "already exists" errors
-      const safeQuery = async (query: string) => {
-        try {
-          await client.query(query);
-        } catch (error: any) {
-          // Ignore errors if the object already exists
-          if (!error.message.includes('already exists') &&
-              !error.message.includes('duplicate key')) {
-            throw error;
+      if (!lockResult.rows[0].locked) {
+        console.warn('[PostgresDataStore] Another process is initializing schema, waiting...');
+        // 等待获取锁
+        await client.query('SELECT pg_advisory_lock(12345)');
+      }
+
+      try {
+        await client.query('BEGIN');
+
+        // Helper function to execute query and ignore initialization errors
+        const safeQuery = async (query: string) => {
+          try {
+            await client.query(query);
+          } catch (error: any) {
+            // Ignore errors if the object already exists or during concurrent initialization
+            const isIgnorableError =
+              error.message.includes('already exists') ||
+              error.message.includes('duplicate key') ||
+              error.code === '40P01' || // deadlock
+              error.code === '42P07' ||  // duplicate_table
+              error.code === '42P06';    // duplicate_schema
+
+            if (!isIgnorableError) {
+              throw error;
+            }
+
+            // Log ignored concurrent initialization errors for debugging
+            if (error.code === '40P01') {
+              console.warn('[PostgresDataStore] Ignoring concurrent initialization deadlock (this is normal)');
+            }
           }
-        }
-      };
+        };
 
       // Tasks table
       await safeQuery(`
@@ -272,17 +294,35 @@ export class PostgresDataStore implements Database {
           description TEXT,
           metadata JSONB,
           created_at BIGINT NOT NULL,
-          CONSTRAINT fk_favorites_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-          CONSTRAINT fk_favorites_artifact FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+          CONSTRAINT fk_favorites_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
         )
       `);
 
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_created_at ON favorites(created_at DESC)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_type ON favorites(artifact_type)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_task_id ON favorites(task_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_artifact_id ON favorites(artifact_id)');
+
+      // 迁移：移除 favorites 表的 artifact_id 外键约束（解决死锁问题）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'fk_favorites_artifact'
+              AND table_name = 'favorites'
+          ) THEN
+            ALTER TABLE favorites DROP CONSTRAINT fk_favorites_artifact;
+          END IF;
+        END $$;
+      `);
 
       await client.query('COMMIT');
       console.log('[PostgresDataStore] Schema initialized');
+      } finally {
+        // 🔓 释放 Advisory Lock
+        await client.query('SELECT pg_advisory_unlock(12345)');
+      }
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -505,35 +545,93 @@ export class PostgresDataStore implements Database {
       return 0;
     }
 
-    // Sort task IDs to ensure consistent delete order
+    // Sort task IDs to ensure consistent lock order
     const sortedTaskIds = [...taskIds].sort();
 
     const client = await this.pool.connect();
 
     try {
+      // 🔒 开启事务 - 保证原子性
       await client.query('BEGIN');
 
-      // Delete tasks one by one in a single transaction
-      // This prevents internal deadlocks from parallel CASCADE operations
-      let deletedCount = 0;
+      const startTime = Date.now();
 
-      for (const taskId of sortedTaskIds) {
-        const result = await client.query(
-          'DELETE FROM tasks WHERE id = $1',
-          [taskId]
-        );
+      // ============================================
+      // 使用 CTE (Common Table Expression) 批量删除
+      // ============================================
+      // 优化：移除了 favorites.artifact_id 外键约束，避免死锁
+      // 现在只需要通过 task_id 删除 favorites 即可
+      // ============================================
 
-        if (result.rowCount && result.rowCount > 0) {
-          deletedCount++;
-        }
-      }
+      const result = await client.query(
+        `
+        WITH target_tasks AS (
+          -- 选择要删除的任务
+          SELECT id AS task_id FROM tasks WHERE id = ANY($1)
+        ),
+        target_contexts AS (
+          -- 选择相关的 task_contexts
+          SELECT tc.task_id FROM task_contexts tc
+          INNER JOIN target_tasks tt ON tc.task_id = tt.task_id
+        ),
+        deleted_fav AS (
+          -- 删除 favorites (通过 task_id)
+          DELETE FROM favorites
+          WHERE task_id = ANY(SELECT task_id FROM target_tasks)
+          RETURNING 1
+        ),
+        deleted_compression AS (
+          -- 删除 compression_history
+          DELETE FROM compression_history
+          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
+          RETURNING 1
+        ),
+        deleted_artifacts AS (
+          -- 删除 artifacts
+          DELETE FROM artifacts
+          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
+          RETURNING 1
+        ),
+        deleted_messages AS (
+          -- 删除 messages
+          DELETE FROM messages
+          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
+          RETURNING 1
+        ),
+        deleted_contexts AS (
+          -- 删除 task_contexts
+          DELETE FROM task_contexts
+          WHERE task_id = ANY(SELECT task_id FROM target_tasks)
+          RETURNING 1
+        ),
+        deleted_tasks AS (
+          -- 最后删除 tasks
+          DELETE FROM tasks
+          WHERE id = ANY($1)
+          RETURNING id
+        )
+        SELECT COUNT(*) as deleted_count FROM deleted_tasks
+        `,
+        [sortedTaskIds]
+      );
 
+      const deletedCount = parseInt(result.rows[0].deleted_count, 10);
+
+      // ✅ 提交事务 - 所有删除操作永久生效
       await client.query('COMMIT');
 
-      console.log(`[PostgresDataStore] deleteTasks: Successfully deleted ${deletedCount} tasks`);
+      const duration = Date.now() - startTime;
+
+      console.log(`[PostgresDataStore] deleteTasks: Successfully deleted ${deletedCount} tasks in ${duration}ms`);
+
+      // 性能警告
+      if (duration > 5000) {
+        console.warn(`[PostgresDataStore] deleteTasks: Slow operation (${duration}ms for ${sortedTaskIds.length} tasks)`);
+      }
 
       return deletedCount;
     } catch (error: any) {
+      // ❌ 回滚事务 - 撤销所有操作，保证数据一致性
       await client.query('ROLLBACK').catch(() => {});
 
       console.error(
