@@ -120,23 +120,38 @@ export const handler = async (request: any, { logger }: any) => {
 
   logger.info('Media file requested', { path });
 
-  // Try multiple directories in order:
-  // 1. videos/ (legacy)
-  // 2. outputs/ (general)
-  // 3. outputs/videos/ (videos)
-  // 4. outputs/codes/ (code artifacts)
-  // 5. outputs/infographics/ (infographics)
-  // 6. outputs/audios/ (audio artifacts, new)
-  // 7. outputs/audio/ (audio artifacts, legacy - for backward compatibility)
-  const possiblePaths = [
-    join(process.cwd(), 'videos', path),
-    join(process.cwd(), 'outputs', path),
-    join(process.cwd(), 'outputs', 'videos', path),
-    join(process.cwd(), 'outputs', 'codes', path),
-    join(process.cwd(), 'outputs', 'infographics', path),
-    join(process.cwd(), 'outputs', 'audios', path),
-    join(process.cwd(), 'outputs', 'audio', path),  // Legacy support
-  ];
+  // Normalize path: remove leading slash if present
+  const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+
+  // Build possible paths to try
+  const possiblePaths: string[] = [];
+
+  // If path already starts with 'outputs/' or 'videos/', try it directly first
+  if (normalizedPath.startsWith('outputs/') || normalizedPath.startsWith('videos/')) {
+    possiblePaths.push(join(process.cwd(), normalizedPath));
+  }
+
+  // Then try subdirectories for backward compatibility
+  // Only add these if the path doesn't already contain the subdirectory
+  if (!normalizedPath.startsWith('videos/')) {
+    possiblePaths.push(join(process.cwd(), 'videos', normalizedPath));
+  }
+  if (!normalizedPath.startsWith('outputs/')) {
+    possiblePaths.push(join(process.cwd(), 'outputs', normalizedPath));
+  }
+  if (!normalizedPath.includes('outputs/videos/')) {
+    possiblePaths.push(join(process.cwd(), 'outputs', 'videos', normalizedPath));
+  }
+  if (!normalizedPath.includes('outputs/codes/')) {
+    possiblePaths.push(join(process.cwd(), 'outputs', 'codes', normalizedPath));
+  }
+  if (!normalizedPath.includes('outputs/infographics/')) {
+    possiblePaths.push(join(process.cwd(), 'outputs', 'infographics', normalizedPath));
+  }
+  if (!normalizedPath.includes('outputs/audios/') && !normalizedPath.includes('outputs/audio/')) {
+    possiblePaths.push(join(process.cwd(), 'outputs', 'audios', normalizedPath));
+    possiblePaths.push(join(process.cwd(), 'outputs', 'audio', normalizedPath));  // Legacy support
+  }
 
   let filePathFound = '';
   for (const possiblePath of possiblePaths) {

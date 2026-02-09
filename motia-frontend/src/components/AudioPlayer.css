@@ -94,51 +94,49 @@
 }
 
 .audio-play-btn {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
   border: none;
-  background: linear-gradient(135deg, #4a9eff 0%, #3a8eef 100%);
-  color: white;
+  background: transparent;
+  color: #4a9eff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+  padding: 0;
 }
 
 .audio-play-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(74, 158, 255, 0.4);
+  color: #5aaeff;
+  transform: scale(1.1);
 }
 
 .audio-play-btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.95);
 }
 
 .audio-play-btn.playing {
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
-  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
 }
 
 .audio-play-btn.playing:hover:not(:disabled) {
-  box-shadow: 0 6px 16px rgba(255, 107, 107, 0.4);
+  color: #ff7b7b;
 }
 
 .audio-play-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
 /* 加载动画 */
 .audio-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(74, 158, 255, 0.3);
+  border-top-color: #4a9eff;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -322,8 +320,8 @@
   }
 
   .audio-play-btn {
-    width: 48px;
-    height: 48px;
+    width: 28px;
+    height: 28px;
   }
 
   .audio-progress-wrapper {

@@ -279,20 +279,51 @@ function Home() {
   const FavoriteImagePreview = ({ path, getMediaBlobUrl }) => {
     const [imageUrl, setImageUrl] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(false)
 
     useEffect(() => {
       const loadImage = async () => {
-        if (!path) return
+        if (!path) {
+          console.error('[FavoriteImagePreview] No path provided')
+          setError(true)
+          setLoading(false)
+          return
+        }
+
+        console.log('[FavoriteImagePreview] Loading image:', path)
         setLoading(true)
-        const url = await getMediaBlobUrl(path)
-        setImageUrl(url)
-        setLoading(false)
+        setError(false)
+
+        try {
+          const url = await getMediaBlobUrl(path)
+          console.log('[FavoriteImagePreview] Image URL:', url)
+          if (url) {
+            setImageUrl(url)
+          } else {
+            console.error('[FavoriteImagePreview] getMediaBlobUrl returned null')
+            setError(true)
+          }
+        } catch (err) {
+          console.error('[FavoriteImagePreview] Load error:', err)
+          setError(true)
+        } finally {
+          setLoading(false)
+        }
       }
 
       loadImage()
     }, [path, getMediaBlobUrl])
 
-    if (loading || !imageUrl) {
+    if (loading) {
+      return (
+        <div className="favorite-preview favorite-preview-image">
+          <div className="media-loading">加载中...</div>
+        </div>
+      )
+    }
+
+    if (error || !imageUrl) {
+      console.error('[FavoriteImagePreview] Rendering error state, imageUrl:', imageUrl)
       return (
         <div className="favorite-preview favorite-preview-image">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -310,6 +341,13 @@ function Home() {
           src={imageUrl}
           alt="精选图片"
           className="favorite-image-preview"
+          onError={(e) => {
+            console.error('[FavoriteImagePreview] Image element error:', e.target.error)
+            setError(true)
+          }}
+          onLoad={(e) => {
+            console.log('[FavoriteImagePreview] Image loaded successfully')
+          }}
         />
       </div>
     )
@@ -378,14 +416,36 @@ function Home() {
   const ModalImagePreview = ({ path, getMediaBlobUrl }) => {
     const [imageUrl, setImageUrl] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(false)
 
     useEffect(() => {
       const loadImage = async () => {
-        if (!path) return
+        if (!path) {
+          console.error('[ModalImagePreview] No path provided')
+          setError(true)
+          setLoading(false)
+          return
+        }
+
+        console.log('[ModalImagePreview] Loading image:', path)
         setLoading(true)
-        const url = await getMediaBlobUrl(path)
-        setImageUrl(url)
-        setLoading(false)
+        setError(false)
+
+        try {
+          const url = await getMediaBlobUrl(path)
+          console.log('[ModalImagePreview] Image URL:', url)
+          if (url) {
+            setImageUrl(url)
+          } else {
+            console.error('[ModalImagePreview] getMediaBlobUrl returned null')
+            setError(true)
+          }
+        } catch (err) {
+          console.error('[ModalImagePreview] Load error:', err)
+          setError(true)
+        } finally {
+          setLoading(false)
+        }
       }
 
       loadImage()
@@ -400,7 +460,7 @@ function Home() {
       }
     }, [imageUrl])
 
-    if (loading || !imageUrl) {
+    if (loading) {
       return (
         <div className="media-modal-loading">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -413,11 +473,31 @@ function Home() {
       )
     }
 
+    if (error || !imageUrl) {
+      console.error('[ModalImagePreview] Rendering error state, imageUrl:', imageUrl)
+      return (
+        <div className="media-modal-error">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 8v4M12 16h.01" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <p>图片加载失败</p>
+        </div>
+      )
+    }
+
     return (
       <img
         src={imageUrl}
         alt="预览图片"
         className="media-modal-image"
+        onError={(e) => {
+          console.error('[ModalImagePreview] Image element error:', e.target.error)
+          setError(true)
+        }}
+        onLoad={(e) => {
+          console.log('[ModalImagePreview] Image loaded successfully, dimensions:', e.target.naturalWidth, 'x', e.target.naturalHeight)
+        }}
       />
     )
   }
