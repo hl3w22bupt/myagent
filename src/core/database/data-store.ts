@@ -22,6 +22,7 @@ export enum TaskStatus {
   RUNNING = 'running',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  AWAITING_CLARIFICATION = 'awaiting_clarification', // HITL: 等待用户澄清
 }
 
 /**
@@ -948,7 +949,7 @@ export class DataStore {
   async addFavorite(favorite: {
     artifactId: string;
     taskId: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
@@ -961,14 +962,9 @@ export class DataStore {
     }
 
     // 检查是否已收藏
-    const checkStmt = this.db.prepare('SELECT id FROM favorites WHERE artifact_id = ?');
-    checkStmt.bind([favorite.artifactId]);
-    const exists = checkStmt.step();
-    checkStmt.free();
-
-    if (exists) {
-      // 已收藏，直接返回
-      return;
+    const existing = await this.getFavoriteByArtifactId(favorite.artifactId);
+    if (existing) {
+      return existing.id;
     }
 
     // 添加到精选
@@ -989,6 +985,7 @@ export class DataStore {
     );
 
     await this.save();
+    return id;
   }
 
   async removeFavorite(favoriteId: string): Promise<boolean> {
@@ -1011,6 +1008,33 @@ export class DataStore {
 
     const stmt = this.db.prepare('SELECT * FROM favorites WHERE id = ?');
     stmt.bind([favoriteId]);
+
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+
+    const row = stmt.getAsObject() as any;
+    stmt.free();
+
+    return {
+      id: row.id,
+      artifactId: row.artifact_id,
+      taskId: row.task_id,
+      artifactType: row.artifact_type,
+      path: row.path,
+      description: row.description,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      createdAt: new Date(row.created_at),
+    };
+  }
+
+  async getFavoriteByArtifactId(artifactId: string): Promise<any | null> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM favorites WHERE artifact_id = ?');
+    stmt.bind([artifactId]);
 
     if (!stmt.step()) {
       stmt.free();

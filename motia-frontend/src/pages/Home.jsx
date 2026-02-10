@@ -156,6 +156,12 @@ function Home() {
             <FavoriteImagePreview path={path} getMediaBlobUrl={getMediaBlobUrl} />
           )
         case 'code':
+          // 如果有 renderUrl，说明是可渲染的 HTML
+          if (favorite.renderUrl) {
+            return (
+              <FavoriteHtmlPreview renderUrl={favorite.renderUrl} />
+            )
+          }
           return (
             <div className="favorite-preview favorite-preview-code">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -365,6 +371,23 @@ function Home() {
     )
   }
 
+  // HTML 预览组件 - 使用 iframe 渲染 HTML
+  const FavoriteHtmlPreview = ({ renderUrl }) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const fullUrl = `${API_BASE_URL}${renderUrl}`
+
+    return (
+      <div className="favorite-preview favorite-preview-html">
+        <iframe
+          src={fullUrl}
+          className="favorite-html-preview"
+          sandbox="allow-scripts allow-same-origin"
+          title="HTML 预览"
+        />
+      </div>
+    )
+  }
+
   // 模态框视频预览组件
   const ModalVideoPreview = ({ path, getMediaBlobUrl }) => {
     const [videoUrl, setVideoUrl] = useState(null)
@@ -547,6 +570,21 @@ function Home() {
         controls
         autoPlay
         className="media-modal-audio"
+      />
+    )
+  }
+
+  // 模态框 HTML 预览组件
+  const ModalHtmlPreview = ({ renderUrl }) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const fullUrl = `${API_BASE_URL}${renderUrl}`
+
+    return (
+      <iframe
+        src={fullUrl}
+        className="media-modal-html"
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        title="HTML 预览"
       />
     )
   }
@@ -842,12 +880,16 @@ function Home() {
                 <ModalAudioPreview path={modalMedia.path} getMediaBlobUrl={getMediaBlobUrl} />
               )}
               {modalMedia.artifactType === 'code' && (
-                <div className="media-modal-code">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M16.5 10.5l-4.72 4.72a.75.75 0 01-1.28-.53l-4.72-4.72M7.5 13.5l4.72-4.72a.75.75 0 011.28.53l4.72 4.72" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <p>代码预览功能即将上线</p>
-                </div>
+                modalMedia.renderUrl ? (
+                  <ModalHtmlPreview renderUrl={modalMedia.renderUrl} />
+                ) : (
+                  <div className="media-modal-code">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M16.5 10.5l-4.72 4.72a.75.75 0 01-1.28-.53l-4.72-4.72M7.5 13.5l4.72-4.72a.75.75 0 011.28.53l4.72 4.72" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <p>代码预览功能即将上线</p>
+                  </div>
+                )
               )}
             </div>
             <div className="media-modal-footer">

@@ -224,15 +224,8 @@ CRITICAL - SKILL NAME VALIDATION:
 1. You MUST ONLY use skill names from the EXACT list above
 2. DO NOT create, invent, or combine skill names
 3. DO NOT make assumptions about skill names - use them EXACTLY as shown
-4. For example:
-   - ✅ CORRECT: Use "simple-code-generator" (exact match)
-   - ❌ WRONG: Do NOT use "code_generator", "code-gen", "generator", etc.
-   - ✅ CORRECT: Use "frontend-design" (exact match)
-   - ❌ WRONG: Do NOT use "web-design", "ui-design", etc.
-5. If a task mentions "code" or "generator", use "simple-code-generator"
-6. If a task mentions "web" or "frontend", use "frontend-design"
-7. The skill list above is the ONLY source of truth for valid skill names
-8. NEVER try to guess or infer a skill name - always use exact match from the list
+4. The skill list above is the ONLY source of truth for valid skill names
+5. NEVER try to guess or infer a skill name - always use exact match from the list
 
 IMPORTANT GUIDELINES:
 1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
@@ -244,20 +237,11 @@ IMPORTANT GUIDELINES:
    'CRITICAL: User explicitly requested skills - YOU MUST include them in selected_skills' :
    'If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills'}
 
-7. VIDEO GENERATION AND MODIFICATION:
-   - ALL video creation, enhancement, or modification tasks MUST use remotion-generator skill
-   - When user asks to "add to video", "enhance video", "modify animation", or similar:
-     * Use remotion-generator to regenerate the ENTIRE video with new features
-     * DO NOT attempt to read or modify temporary Remotion code files (they are ephemeral)
-     * DO NOT use read-file, code-analysis, or other file manipulation skills for video tasks
-   - remotion-generator can handle the complete video generation process from description
-   - Include all desired features in the description rather than trying to modify existing code
-
-8. CODE GENERATION TASKS:
-   - When user asks to "generate code", "create a function", "write code":
-     * Use "simple-code-generator" skill (NOT "code_generator")
-     * DO NOT write code directly in the PTC code
-     * Let the skill handle the code generation
+SKILL SELECTION STRATEGY:
+- Analyze the task description and match with skill descriptions/tags
+- Prioritize skills that are specifically designed for the task type
+- If multiple skills could work, choose the most specific one
+- Review the skill's input schema to ensure it can handle the task requirements
 
 Please output:
 1. Which skills to use (in order)
@@ -561,27 +545,81 @@ ${
           const taskParam = this.findTaskParameter(skill.name);
           return `# Skill ${index + 1}: ${skill.name}
 # - Use '${taskParam}' parameter for the main task
-# - Check the skill's parameter schema above for other required/optional parameters`;
+# - Check the skill's parameter schema above for other required/optional parameters
+# - EXTRACT ALL PARAMETERS from the task description (e.g., duration, fps, resolution)`;
         }).join('\n\n');
 
         const firstSkillParam = this.findTaskParameter(selectedSkills[0]);
 
-        // Build skill-specific content preparation instructions
-        let skillContentPrep = '';
-        if (selectedSkills.includes('infographic-generator')) {
-          skillContentPrep = `
-# CRITICAL - INFOGRAPHIC CONTENT PREPARATION:
-# infographic-generator needs DETAILED, STRUCTURED content - NOT just a brief task!
+        // Build skill-specific parameter extraction instructions
+        // Generic approach: LLM extracts parameters based on schema
+        const skillsWithParams = skillsDetails.filter(skill =>
+          skill.metadata?.input_schema?.properties &&
+          Object.keys(skill.metadata.input_schema.properties).length > 1
+        );
+
+        let skillParamExtraction = '';
+        if (skillsWithParams.length > 0) {
+          skillParamExtraction = `
+# PARAMETER EXTRACTION FROM NATURAL LANGUAGE:
+# The following skills have additional parameters:
+# - [REQUIRED]: MUST extract from task, fail if missing
+# - (default: X): Optional, extract if present, otherwise use default
+# - No default, not required: Extract if present, otherwise omit
 #
-# When user gives a short instruction like "生成软件生命周期图", you MUST:
-# 1. INTELLIGENTLY EXPAND the content based on the topic
-# 2. Generate a DETAILED, STRUCTURED description with all stages/steps
-# 3. Use proper format: numbered list, bullet points, or clear stages
+${skillsWithParams.map(skill => {
+  const schema = skill.metadata!.input_schema;
+  const taskParam = this.findTaskParameter(skill.name);
+  const params = Object.entries(schema.properties)
+    .filter(([name]) => name !== taskParam)
+    .map(([name, info]: [string, any]) => {
+      const required = schema.required?.includes(name) ? ' [REQUIRED]' : '';
+      const def = info.default !== undefined ? ` (default: ${info.default})` : '';
+      return `    - ${name} (${info.type})${required}${def}: ${info.description || 'No description'}`;
+    });
+
+  return `# ${skill.name}:
+#   Main parameter: ${taskParam}
+#   Additional parameters:
+${params.join('\n')}
+#   Example: If task says "duration 15s", extract: 'duration': 15`;
+}).join('\n\n')}
+#
+# EXTRACTION STRATEGY:
+# 1. REQUIRED parameters: MUST extract from task or report error
+# 2. Optional parameters with defaults: Extract if mentioned, otherwise use default
+# 3. Optional parameters without defaults: Extract if mentioned, otherwise omit entirely
+# 4. Match values to parameter types (e.g., "15s" → duration=15, "1080p" → resolution="1920x1080")
+`;
+        }
+
+        // Build skill-specific content preparation instructions
+        // Generic approach: Based on skill tags and description
+        let skillContentPrep = '';
+        const skillsNeedingDetailedContent = skillsDetails.filter(skill =>
+          skill.tags.includes('visualization') ||
+          skill.tags.includes('infographic') ||
+          (skill.description.toLowerCase().includes('detailed content') ||
+           skill.description.toLowerCase().includes('structured'))
+        );
+
+        if (skillsNeedingDetailedContent.length > 0) {
+          skillContentPrep = `
+# CRITICAL - CONTENT PREPARATION FOR VISUALIZATION SKILLS:
+# The following skills require DETAILED, STRUCTURED content for best results:
+${skillsNeedingDetailedContent.map(skill =>
+  `# - ${skill.name}: ${skill.description}`
+).join('\n')}
+#
+# When the task provides a brief instruction, you MUST:
+# 1. INTELLIGENTLY EXPAND the content based on domain knowledge
+# 2. Generate a DETAILED, STRUCTURED description with all necessary elements
+# 3. Use proper formatting: numbered lists, bullet points, clear stages
 #
 # Example (WRONG - too brief):
-#   content='生成一个软件生命周期图'  # ❌ This will produce poor results!
+#   content='生成软件生命周期图'  # ❌ Too brief!
 #
-# Example (CORRECT - detailed and structured):
+# Example (CORRECT - expanded):
 #   content='''
 #   软件生命周期包括以下阶段：
 #   1. 需求分析：明确用户需求和系统目标
@@ -590,17 +628,7 @@ ${
 #   4. 测试验证：单元测试、集成测试
 #   5. 部署上线：发布到生产环境
 #   6. 运维监控：系统维护和性能监控
-#   7. 退役更新：版本迭代或系统下线
-#   '''  # ✅ Detailed, structured content!
-#
-# Common patterns you should expand:
-# - "软件生命周期" → List all stages (需求→设计→开发→测试→部署→维护)
-# - "产品开发流程" → List complete process steps
-# - "技术栈对比" → Create detailed comparison items
-# - "系统架构" → List all components and layers
-# - "数据流程" → Show data flow through stages
-#
-# REMEMBER: The infographic-generator needs RICH, DETAILED content to create good visuals!
+#   '''  # ✅ Detailed and structured!
 `;
         }
 
@@ -609,6 +637,13 @@ You have selected skills: ${selectedSkills.join(', ')}
 You MUST use these skills - DO NOT write native Python code!
 
 ${skillParamInstructions}
+
+CRITICAL - PARAMETER EXTRACTION REQUIREMENTS:
+For each skill, you MUST extract ALL mentioned parameters from the task:
+1. SCAN the task description for parameter values (duration, fps, resolution, etc.)
+2. EXTRACT numeric values with their units
+3. PASS as SEPARATE parameters in input_data (NOT just in the task string)
+4. Use DEFAULT values for unspecified parameters based on skill schema
 
 Available skills:
 from core.skill.executor import SkillExecutor
@@ -644,27 +679,47 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
 #       'attempts': int  # Number of attempts made
 #   }
 ${skillContentPrep}
+${skillParamExtraction}
 # CRITICAL - HOW TO PASS USER TASK TO SKILLS:
 # You MUST use the '${firstSkillParam}' field to pass the actual user request
 # Copy the COMPLETE task description from the <task> section above
-# For infographic-generator: EXPAND brief instructions into DETAILED structured content!
 # DO NOT use placeholders like 'task description' or 'detailed task'
 #
-# Example (WRONG - uses placeholder):
-#   input_data={'description': 'task description'}  # ❌ This will fail!
+# CRITICAL: EXTRACT AND PASS STRUCTURED PARAMETERS:
+# Check the skill's parameter schema above:
+# - [REQUIRED] parameters: MUST extract from task
+# - Optional with defaults: Extract if mentioned, otherwise use default
+# - Optional without defaults: Extract if mentioned, otherwise omit
 #
-# Example (CORRECT - uses actual task):
-#   input_data={'${firstSkillParam}': '设计一个iphone17产品的前端介绍页面'}  # ✅ Copy from <task> section!
-
+# Example 1 (WRONG - required parameter not extracted):
+#   input_data={'task': '创建视频，时长 15s'}  # ❌ duration not extracted!
+#
+# Example 2 (CORRECT - all parameters extracted):
+#   input_data={
+#       'task': '创建一个教学视频，时长 15s',
+#       'duration': 15,  # ✅ Extracted from "15s"
+#       'fps': 30       # ✅ Default from schema (optional, can omit if not in task)
+#   }
+#
+# Example 3 (CORRECT - optional param not mentioned, omit it):
+#   input_data={
+#       'task': '创建一个教学视频'  # No duration/fps mentioned
+#       # Only required param (task) is included
+#       # Optional params with defaults will be handled by the skill
+#   }
+#
 # MANDATORY: You must call execute_with_retry with the selected skill
 # DO NOT write any Python code directly - ONLY call skills!
 
 result = await execute_with_retry(
     execute_func=executor.execute,
-    skill_name='${selectedSkills[0]}',  # MANDATORY: Use the selected skill
+    skill_name='${selectedSkills[0]}',
     input_data={
-        '${firstSkillParam}': 'COPY THE ACTUAL TASK FROM <task> SECTION',  # CRITICAL: Use mapped parameter name!
-        # Add other required parameters based on skill schema
+        '${firstSkillParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',
+        # Add other parameters based on schema:
+        # - REQUIRED: Extract from task
+        # - Optional with defaults: Extract if mentioned, or omit (skill will use default)
+        # - Optional without defaults: Extract if mentioned, or omit
     }
 )
 
@@ -730,18 +785,40 @@ General requirements:
 
 CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 \`\`\`python
-# EXAMPLE: Execute a skill with user's actual task
-# IMPORTANT: Replace 'frontend-design' and 'task' with the actual skill and parameter name from the mapping above
+# EXAMPLE: Execute skill with extracted parameters
+# Check the skill's schema and extract parameters from the task:
+# - [REQUIRED]: Must extract from task
+# - Optional with default: Extract if mentioned, or omit (skill uses default)
+# - Optional without default: Extract if mentioned, or omit
 result = await execute_with_retry(
     execute_func=executor.execute,
-    skill_name='frontend-design',
+    skill_name='skill-name',
     input_data={
-        'task': '设计一个iphone17产品的前端介绍页面'  # Use EXACT task from <task> section!
+        'task_parameter': 'Copy actual task from <task> section',
+        # 'param1': 'value1',  # Extract if mentioned in task
+        # 'param2': 'value2'   # Or omit - skill will use default if available
     }
 )
 
 if result['success']:
-    print(result['content'])  # Print ['content'], not result
+    print(result['content'])
+else:
+    error = result['content'].get('message', 'Unknown error')
+    print(f"Error: {error}")
+\`\`\`
+
+# EXAMPLE: Execute skill with simple task (no extra parameters)
+\`\`\`python
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='skill-name',  # Use exact skill name from selection
+    input_data={
+        'task': 'Copy exact task from <task> section'  # Use EXACT task from <task> section!
+    }
+)
+
+if result['success']:
+    print(result['content'])
 else:
     error = result['content'].get('message', 'Unknown error')
     print(f"Error: {error}")

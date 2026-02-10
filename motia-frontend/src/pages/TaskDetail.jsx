@@ -65,6 +65,15 @@ const formatAgentHookMessage = (event) => {
         return `[📋 执行计划]：依次使用 ${skillsList} skills`
       }
 
+    case 'awaiting_clarification':
+      const question = data?.question || '请提供更多信息'
+      const options = data?.options || []
+      if (options.length > 0) {
+        return `[❓ 需要澄清]：${question}\n选项：${options.join('、')}`
+      } else {
+        return `[❓ 需要澄清]：${question}`
+      }
+
     default:
       console.warn('[formatAgentHookMessage] 未知事件类型:', type)
       return `[ℹ️ 系统]: ${type || '未知事件'}`
@@ -145,6 +154,19 @@ const getStatusConfig = (status) => {
         icon: (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-6-6l2-2"/>
+          </svg>
+        )
+      }
+    case 'awaiting_clarification':
+      return {
+        label: '等待澄清',
+        color: '#F59E0B',
+        bgColor: '#FEF3C7',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
         )
       }
@@ -245,7 +267,7 @@ function TaskDetail() {
   const [selectedCodeIndex, setSelectedCodeIndex] = useState(null) // 当前选择的代码轮次
   const [selectedAudioIndex, setSelectedAudioIndex] = useState(null) // 当前选择的音频轮次
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
-  const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Set()) // 已收藏的 artifacts
+  const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Map()) // artifactId -> favoriteId 映射
   const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
 
   // 表格状态管理
@@ -1133,10 +1155,7 @@ function TaskDetail() {
               {favoriteArtifacts.has(selectedArtifact.id) ? (
                 <button
                   className="favorite-btn active"
-                  onClick={() => {
-                    const favoriteId = `favorite-${selectedArtifact.id}`
-                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
-                  }}
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
                   disabled={loadingFavorites}
                   title="从精选移除"
                 >
@@ -1191,6 +1210,11 @@ function TaskDetail() {
       // 移除前导的/outputs/如果存在
       codePath = codePath.replace(/^\/?outputs\//, '');
 
+      // 优先从 artifact.metadata 读取 language，如果没有则从 task.structuredOutput 读取
+      const language = selectedArtifact.metadata?.language ||
+                      task?.structuredOutput?.content?.language ||
+                      'text';
+
       return (
         <div className="result-visual result-visual-with-code">
           {/* 版本选择器 - 始终显示，统一体验 */}
@@ -1241,10 +1265,7 @@ function TaskDetail() {
               {favoriteArtifacts.has(selectedArtifact.id) ? (
                 <button
                   className="favorite-btn active"
-                  onClick={() => {
-                    const favoriteId = `favorite-${selectedArtifact.id}`
-                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
-                  }}
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
                   disabled={loadingFavorites}
                   title="从精选移除"
                 >
@@ -1271,7 +1292,7 @@ function TaskDetail() {
           <CodeViewer
             codePath={codePath}
             getBlobUrl={getMediaBlobUrl}
-            language={selectedArtifact.metadata?.language}
+            language={language}
           />
         </div>
       )
@@ -1345,10 +1366,7 @@ function TaskDetail() {
               {favoriteArtifacts.has(selectedArtifact.id) ? (
                 <button
                   className="favorite-btn active"
-                  onClick={() => {
-                    const favoriteId = `favorite-${selectedArtifact.id}`
-                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
-                  }}
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
                   disabled={loadingFavorites}
                   title="从精选移除"
                 >
@@ -1448,10 +1466,7 @@ function TaskDetail() {
               {favoriteArtifacts.has(selectedArtifact.id) ? (
                 <button
                   className="favorite-btn active"
-                  onClick={() => {
-                    const favoriteId = `favorite-${selectedArtifact.id}`
-                    handleRemoveFromFavorites(favoriteId, selectedArtifact.id)
-                  }}
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
                   disabled={loadingFavorites}
                   title="从精选移除"
                 >
@@ -2052,6 +2067,16 @@ function TaskDetail() {
         )
       }
 
+      if (message.type === 'awaiting_clarification') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        )
+      }
+
       // 标准类型：task, agent, skill
       if (message.type === 'task') {
         return (
@@ -2439,10 +2464,12 @@ function TaskDetail() {
 
     setLoadingFavorites(true)
     try {
-      await favoritesAPI.addFavorite(artifactId, task.taskId)
+      const result = await favoritesAPI.addFavorite(artifactId, task.taskId)
 
-      // 更新收藏状态
-      setFavoriteArtifacts(prev => new Set([...prev, artifactId]))
+      // 更新收藏状态 - 保存 artifactId -> favoriteId 映射
+      if (result.favoriteId) {
+        setFavoriteArtifacts(prev => new Map([...prev, [artifactId, result.favoriteId]]))
+      }
     } catch (error) {
       console.error('添加到精选失败:', error)
       const errorMessage = error.response?.data?.message || error.message || '添加失败'
@@ -2453,8 +2480,14 @@ function TaskDetail() {
   }
 
   // 从精选移除
-  const handleRemoveFromFavorites = async (favoriteId, artifactId) => {
+  const handleRemoveFromFavorites = async (artifactId) => {
     if (loadingFavorites) return
+
+    const favoriteId = favoriteArtifacts.get(artifactId)
+    if (!favoriteId) {
+      console.error('Favorite ID not found for artifact:', artifactId)
+      return
+    }
 
     setLoadingFavorites(true)
     try {
@@ -2462,9 +2495,9 @@ function TaskDetail() {
 
       // 更新收藏状态
       setFavoriteArtifacts(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(artifactId)
-        return newSet
+        const newMap = new Map(prev)
+        newMap.delete(artifactId)
+        return newMap
       })
     } catch (error) {
       console.error('从精选移除失败:', error)
@@ -2480,21 +2513,21 @@ function TaskDetail() {
     if (!artifacts || artifacts.length === 0) return
 
     try {
-      // 批量检查收藏状态
-      const checkPromises = artifacts.map(artifact =>
-        favoritesAPI.isFavorite(artifact.id).catch(() => false)
-      )
+      // 获取当前任务的所有精选
+      const response = await favoritesAPI.getFavorites({ taskId: task?.taskId })
 
-      const results = await Promise.all(checkPromises)
-      const favoriteIds = new Set()
+      // API 返回 { favorites: [...], total, ... } 结构
+      const favorites = response.favorites || []
 
-      results.forEach((isFavorite, index) => {
-        if (isFavorite) {
-          favoriteIds.add(artifacts[index].id)
+      // 建立 artifactId -> favoriteId 映射
+      const favoriteMap = new Map()
+      favorites.forEach(fav => {
+        if (fav.artifactId) {
+          favoriteMap.set(fav.artifactId, fav.id)
         }
       })
 
-      setFavoriteArtifacts(favoriteIds)
+      setFavoriteArtifacts(favoriteMap)
     } catch (error) {
       console.error('检查收藏状态失败:', error)
     }

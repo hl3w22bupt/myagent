@@ -7,6 +7,7 @@
 import { z as _z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import { ContextManager } from '../../src/core/context/manager';
 
 // 防重复请求存储，存储最近处理过的请求ID
 const processedRequests = new Map<string, number>();
@@ -169,6 +170,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
 
     // 获取或生成 sessionId
     let sessionId = request.body?.sessionId;
+    let taskStatus: string | undefined;
 
     // 如果前端没有提供 sessionId，从数据库中获取任务信息
     if (!sessionId) {
@@ -179,9 +181,11 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
 
         if (taskResult && taskResult.sessionId) {
           sessionId = taskResult.sessionId;
+          taskStatus = taskResult.status;
           logger.info('Task Chat API: Retrieved sessionId from database', {
             taskId,
-            sessionId
+            sessionId,
+            status: taskStatus
           });
         } else {
           logger.warn('Task Chat API: No sessionId found in database', {
@@ -194,6 +198,94 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
           taskId,
           error: dbError.message
         });
+      }
+    }
+
+    // === HITL Checkpoint: Handle clarification response ===
+    // Check if task is in awaiting_clarification status
+    if (taskStatus === 'awaiting_clarification') {
+      logger.info('Task Chat API: Received clarification for task', { taskId, message });
+
+      try {
+        const contextManager = new ContextManager();
+        const taskContext = await contextManager.getContext(taskId);
+
+        if (taskContext?.hitlState && taskContext.hitlState.status === 'awaiting') {
+          // Update HITL state to completed
+          taskContext.hitlState.status = 'completed';
+          taskContext.hitlState.response = {
+            content: message,
+            timestamp: new Date()
+          };
+
+          await contextManager.saveContext(taskContext);
+          logger.info('Task Chat API: HITL state updated to completed', { taskId });
+        }
+
+        // Send clarification message to stream (so frontend can display it)
+        const timestamp = Date.now();
+        const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
+
+        await streams.taskExecution.set(taskId, uniqueId, {
+          taskId: taskId,
+          task: message,
+          status: 'running',
+          sessionId: sessionId || '',
+          timestamp: new Date(timestamp).toISOString(),
+          type: 'task',
+          stage: 'processing',
+          progressType: 'chat',
+          metadata: {
+            data: {
+              message: message,
+              sender: 'user',
+              clarification: true // Mark as clarification response
+            }
+          }
+        });
+
+        logger.info('Task Chat API: Clarification message sent to stream', { taskId, message });
+
+        // Re-trigger task execution with clarified content
+        await emit({
+          topic: 'agent.task.execute',
+          data: {
+            task: message, // Use clarified message as new task
+            sessionId: sessionId || '',
+            taskId, // Same taskId to continue from checkpoint
+            isClarificationResponse: true, // Flag to indicate this is a clarification response
+          },
+        });
+
+        logger.info('Task Chat API: Task execution re-triggered after clarification', { taskId });
+
+        return {
+          status: 200,
+          body: {
+            success: true,
+            message: '澄清已收到，任务将继续执行',
+            data: {
+              taskId,
+              message,
+              timestamp: new Date().toISOString(),
+              clarification: true
+            },
+          },
+        };
+      } catch (hitlError: any) {
+        logger.error('Task Chat API: Failed to handle HITL clarification', {
+          taskId,
+          error: hitlError.message,
+          stack: hitlError.stack
+        });
+        return {
+          status: 500,
+          body: {
+            success: false,
+            message: 'Failed to process clarification',
+            error: hitlError.message,
+          },
+        };
       }
     }
 

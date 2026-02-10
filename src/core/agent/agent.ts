@@ -14,6 +14,8 @@ import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
 import { SkillDiscovery, getSkillDiscovery } from './skill-discovery';
 import { retryOperation, isDefaultRetryableError } from './retry';
 import { getAgentStreams } from './hooks/progress-notify';
+import { ContextManager } from '../context/manager';
+import { HITLState } from '../database/context-types';
 
 /**
  * Base Agent class with core Agent capabilities.
@@ -275,8 +277,99 @@ export class Agent {
     console.log('[Agent] About to generate PTC code');
 
     try {
+      // === HITL Checkpoint: Resume from previous checkpoint if exists ===
+      const hitlState = await this.checkHITLCheckpoint(taskId || '', context);
+      if (hitlState && hitlState.status === 'completed' && hitlState.response) {
+        console.log('[Agent] HITL checkpoint resumed, using clarified task:', hitlState.response.content);
+        task = hitlState.response.content;
+
+        // Update conversation history with user's clarification
+        this.state.conversationHistory.push({
+          role: 'user',
+          content: task,
+          timestamp: Date.now(),
+        });
+      }
+
       // ⭐ Step 0: Analyze intent and send notification
-      await this.notifyIntentAnalysis(task, context?.taskId);
+      const intent = await this.notifyIntentAnalysis(task, context?.taskId);
+
+      // === HITL Checkpoint: Check if clarification is needed ===
+      const clarification = await this.checkIntentClarification(intent, task, taskId || '', context);
+      if (clarification.needs) {
+        console.log('[Agent] Intent clarification needed, entering HITL checkpoint');
+
+        // Send clarification request via Stream
+        const streams = getAgentStreams();
+        if (streams?.taskExecution) {
+          const event = {
+            type: 'awaiting_clarification', // Use distinct type like intent_analysis
+            progressType: 'clarification',
+            status: 'awaiting_clarification',
+            taskId: taskId || `task-${Date.now()}`,
+            sessionId: this.sessionId,
+            timestamp: new Date().toISOString(),
+            data: {
+              detectedIntent: intent.intent,
+              reasoning: intent.reasoning,
+              category: intent.category,
+              confidence: intent.confidence,
+              question: clarification.question,
+              options: clarification.options,
+              stage: 'post_intent'
+            }
+          };
+
+          const groupId = event.taskId;
+          const timestamp = Date.now();
+          const entryId = `agent-awaiting_clarification-${groupId}-${timestamp}`;
+
+          await streams.taskExecution.set(groupId, entryId, {
+            ...event,
+            category: 'agent_hook',
+          });
+
+          console.log('[Agent] HITL checkpoint notification sent');
+        }
+
+        // Save HITL state to database
+        const effectiveTaskId = taskId || `task-${Date.now()}`;
+        await this.saveHITLState(effectiveTaskId, {
+          stage: 'post_intent',
+          status: 'awaiting',
+          question: clarification.question || '',
+          options: clarification.options,
+          createdAt: new Date()
+        });
+
+        // Return AWAITING_CLARIFICATION status
+        return {
+          success: false,
+          error: 'AWAITING_CLARIFICATION',
+          clarification: {
+            needs: true,
+            question: clarification.question,
+            options: clarification.options,
+            stage: 'post_intent'
+          },
+          steps: [{
+            type: 'hitl_checkpoint',
+            content: '任务需要澄清，等待用户补充信息',
+            timestamp: Date.now(),
+            metadata: { clarification, intent }
+          }],
+          executionTime: 0,
+          sessionId: this.sessionId,
+          metadata: {
+            llmCalls: 1,
+            skillCalls: 0,
+            totalTokens: 0,
+            hitl: true
+          }
+        };
+      }
+
+      // === HITL Checkpoint passed, continue normal flow ===
 
       // Step 1: Generate PTC code with retry logic
       steps.push({
@@ -762,6 +855,8 @@ export class Agent {
     intent: string;
     reasoning: string;
     category: string;
+    confidence?: number;
+    possibleIntents?: string[];
   }> {
     const streams = getAgentStreams();
 
@@ -857,6 +952,8 @@ export class Agent {
     intent: string;
     reasoning: string;
     category: string;
+    confidence: number;
+    possibleIntents?: string[];
   }> {
     try {
       const prompt = `Analyze the following task and identify the user's intent:
@@ -867,7 +964,9 @@ Please respond in the following JSON format:
 {
   "intent": "video_generation|code_generation|review|design|frontend_design|text_generation|general",
   "category": "creative|analytical|technical",
-  "reasoning": "Brief explanation of why this intent was chosen"
+  "reasoning": "Brief explanation of why this intent was chosen",
+  "confidence": 0.0-1.0,
+  "possibleIntents": ["alternative_intent_1", "alternative_intent_2"]  // Only include if confidence < 0.7
 }
 
 Intent types:
@@ -883,6 +982,13 @@ Categories:
 - creative: Creating new content (video, design, code)
 - analytical: Analyzing existing content (review, audit)
 - technical: Technical implementation (code, infrastructure)
+
+Confidence:
+- 0.9-1.0: Very clear intent with specific details
+- 0.7-0.9: Clear intent but minor ambiguity
+- 0.5-0.7: Somewhat unclear, multiple possible interpretations
+- 0.3-0.5: Vague, needs clarification
+- 0.0-0.3: Very vague, highly ambiguous
 
 Respond ONLY with valid JSON, no other text.`;
 
@@ -900,7 +1006,9 @@ Respond ONLY with valid JSON, no other text.`;
         return {
           intent: result.intent || 'general',
           reasoning: result.reasoning || 'General task',
-          category: result.category || 'general'
+          category: result.category || 'general',
+          confidence: result.confidence || 0.8,
+          possibleIntents: result.possibleIntents
         };
       } else {
         throw new Error('Invalid JSON response from LLM');
@@ -912,62 +1020,24 @@ Respond ONLY with valid JSON, no other text.`;
   }
 
   /**
-   * Fallback intent detection using simple keyword matching.
+   * Fallback intent detection - returns generic intent with low confidence.
+   * The low confidence will trigger LLM-based clarification in checkIntentClarification.
    */
-  private fallbackIntentDetection(task: string): {
+  private fallbackIntentDetection(_task: string): {
     intent: string;
     reasoning: string;
     category: string;
+    confidence: number;
+    possibleIntents?: string[];
   } {
-    const lowerTask = task.toLowerCase();
-
-    if (lowerTask.includes('视频') || lowerTask.includes('动画') || lowerTask.includes('remotion')) {
-      return {
-        intent: 'video_generation',
-        reasoning: '视频生成任务，需要使用 remotion-generator skill 创建动画效果',
-        category: 'creative'
-      };
-    }
-    if (lowerTask.includes('代码') || (lowerTask.includes('生成') && lowerTask.includes('码'))) {
-      return {
-        intent: 'code_generation',
-        reasoning: '代码生成任务，需要生成相应的代码实现',
-        category: 'technical'
-      };
-    }
-    if (lowerTask.includes('审查') || lowerTask.includes('分析') || lowerTask.includes('review')) {
-      return {
-        intent: 'review',
-        reasoning: '审查分析任务，需要对代码或内容进行评估',
-        category: 'analytical'
-      };
-    }
-    if (lowerTask.includes('图片') || lowerTask.includes('设计') || lowerTask.includes('infographic')) {
-      return {
-        intent: 'design',
-        reasoning: '设计任务，需要创建视觉内容或界面',
-        category: 'creative'
-      };
-    }
-    if (lowerTask.includes('前端') || lowerTask.includes('ui') || lowerTask.includes('界面')) {
-      return {
-        intent: 'frontend_design',
-        reasoning: '前端设计任务，需要生成前端代码和界面',
-        category: 'technical'
-      };
-    }
-    if (lowerTask.includes('文本') || lowerTask.includes('文档')) {
-      return {
-        intent: 'text_generation',
-        reasoning: '文本生成任务，需要创建文档或内容',
-        category: 'creative'
-      };
-    }
-
+    // Return generic intent with very low confidence
+    // This will trigger clarification in checkIntentClarification which uses LLM
     return {
       intent: 'general',
-      reasoning: '通用任务，将根据具体需求选择合适的处理方式',
-      category: 'general'
+      reasoning: 'LLM intent analysis unavailable, using generic fallback',
+      category: 'general',
+      confidence: 0.1,  // Very low confidence to trigger clarification
+      possibleIntents: ['code_generation', 'text_generation', 'design', 'video_generation']
     };
   }
 
@@ -979,4 +1049,125 @@ Respond ONLY with valid JSON, no other text.`;
     if (skills.length === 1) return `使用 ${skills[0]} skill`;
     return `使用 ${skills.join(' + ')} skills`;
   }
+
+  /**
+   * Check if intent clarification is needed using LLM.
+   * Returns a more intelligent clarification request based on task analysis.
+   */
+  private async checkIntentClarification(
+    intent: any,
+    task: string,
+    _taskId: string,
+    context: any
+  ): Promise<{ needs: boolean; question?: string; options?: string[] }> {
+    // Skip HITL in test environment or if explicitly disabled
+    if (process.env.NODE_ENV === 'test' || context?.skipHITL) {
+      return { needs: false };
+    }
+
+    // 如果置信度高，不需要澄清
+    if (intent.confidence >= 0.7) {
+      return { needs: false };
+    }
+
+    // 使用 LLM 判断是否需要澄清并生成澄清问题
+    try {
+      const prompt = `分析以下任务，判断是否需要向用户澄清才能更好地完成任务。
+
+任务: "${task}"
+
+当前意图分析:
+- 检测到的意图: ${intent.intent}
+- 置信度: ${intent.confidence}
+- 推理: ${intent.reasoning}
+- 类别: ${intent.category}
+- 可能的其他意图: ${intent.possibleIntents?.join(', ') || '无'}
+
+请以 JSON 格式回复，包含以下字段:
+{
+  "needs_clarification": true/false,  // 是否需要澄清
+  "question": "澄清问题",  // 如果需要澄清，向用户提出的问题
+  "options": ["选项1", "选项2", ...]  // 可选的回答选项（如果有）
+}
+
+澄清规则:
+1. 如果置信度 < 0.5，需要澄清
+2. 如果任务描述过于模糊（少于5个有意义的词），需要澄清
+3. 如果缺少关键信息（如 creative 类别缺少主题/风格，technical 类别缺少具体需求），需要澄清
+4. 澄清问题要具体、有帮助，引导用户提供更多信息
+5. 选项要简洁明了，通常 2-4 个选项
+
+如果不需要澄清，返回: {"needs_clarification": false}`;
+
+      const response = await this.llm.messagesCreate([
+        { role: 'user', content: prompt }
+      ], {
+        max_tokens: 500,
+        temperature: 0.3
+      });
+
+      const responseText = response.content || '{}';
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : '{}';
+      const clarification = JSON.parse(jsonStr);
+
+      if (clarification.needs_clarification) {
+        return {
+          needs: true,
+          question: clarification.question || `请提供更多关于"${task}"的信息`,
+          options: clarification.options || []
+        };
+      }
+
+      return { needs: false };
+    } catch (error) {
+      // 如果 LLM 调用失败，fallback 到简单规则
+      console.error('[Agent] LLM clarification check failed, using fallback rules:', error);
+      if (intent.confidence < 0.5) {
+        return {
+          needs: true,
+          question: `您的任务"${task}"不够详细，请问您想做什么？`,
+          options: intent.possibleIntents || ['创建视频', '编写代码', '生成文档', '数据分析']
+        };
+      }
+      return { needs: false };
+    }
+  }
+
+  /**
+   * Check if there's a pending HITL checkpoint to resume from.
+   */
+  private async checkHITLCheckpoint(taskId: string, context: any): Promise<HITLState | null> {
+    if (!taskId || !context) return null;
+
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+      return taskContext?.hitlState || null;
+    } catch (error) {
+      console.error('[Agent] Failed to check HITL checkpoint:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save HITL state to TaskContext.
+   */
+  private async saveHITLState(taskId: string, hitlState: HITLState): Promise<void> {
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext) {
+        taskContext.hitlState = hitlState;
+        await contextManager.saveContext(taskContext);
+        console.log('[Agent] HITL state saved:', hitlState);
+      } else {
+        console.warn('[Agent] TaskContext not found, cannot save HITL state');
+      }
+    } catch (error) {
+      console.error('[Agent] Failed to save HITL state:', error);
+    }
+  }
+
 }

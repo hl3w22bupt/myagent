@@ -97,6 +97,23 @@ export interface SessionState {
 }
 
 /**
+ * Clarification information for HITL (Human-in-the-Loop).
+ */
+export interface ClarificationInfo {
+  /** Whether clarification is needed */
+  needs: boolean;
+
+  /** Question to ask the user (required when needs=true) */
+  question?: string;
+
+  /** Optional predefined choices for the user */
+  options?: string[];
+
+  /** Stage where clarification is requested (for debugging) */
+  stage: 'pre_intent' | 'post_intent' | 'in_execution';
+}
+
+/**
  * Result from executing an Agent.
  */
 export interface AgentResult {
@@ -108,6 +125,9 @@ export interface AgentResult {
 
   /** Error message if failed */
   error?: string;
+
+  /** HITL clarification information (if awaiting user input) */
+  clarification?: ClarificationInfo;
 
   /** Execution steps taken */
   steps: AgentStep[];
@@ -143,6 +163,8 @@ export interface AgentResult {
       /** Whether the last attempt was successful after retries */
       recovered: boolean;
     };
+    /** HITL flag - indicates if task was paused for clarification */
+    hitl?: boolean;
   };
 
   /** Structured output from skill execution (at root level, not in metadata) */
@@ -164,7 +186,7 @@ export interface AgentResult {
  */
 export interface AgentStep {
   /** Step type */
-  type: 'planning' | 'ptc-generation' | 'execution' | 'delegation' | 'error';
+  type: 'planning' | 'ptc-generation' | 'execution' | 'delegation' | 'error' | 'hitl_checkpoint';
 
   /** Step content (can be PTC code, plan, etc.) */
   content: string;

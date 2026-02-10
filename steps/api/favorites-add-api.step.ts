@@ -73,8 +73,21 @@ export const handler = async (request: any, { logger }: any) => {
       };
     }
 
+    // 检查是否已收藏
+    const existing = await dataStore.getFavoriteByArtifactId(parsed.artifactId);
+    if (existing) {
+      return {
+        status: 200,
+        body: {
+          success: true,
+          message: 'Already in favorites',
+          favoriteId: existing.id,
+        },
+      };
+    }
+
     // 添加到精选
-    await dataStore.addFavorite({
+    const favoriteId = await dataStore.addFavorite({
       artifactId: parsed.artifactId,
       taskId: parsed.taskId,
     });
@@ -84,6 +97,7 @@ export const handler = async (request: any, { logger }: any) => {
       body: {
         success: true,
         message: 'Added to favorites',
+        favoriteId,
       },
     };
   } catch (error: any) {

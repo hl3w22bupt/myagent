@@ -148,7 +148,7 @@ export class MasterAgent extends Agent {
    * Extract keywords from subagent description and skills.
    * These keywords help match tasks to appropriate subagents.
    */
-  private extractKeywords(description: string, skills: string[]): string[] {
+  private extractSubagentKeywords(description: string, skills: string[]): string[] {
     const keywords: string[] = [];
     const combined = `${description} ${skills.join(' ')}`.toLowerCase();
 
@@ -301,7 +301,7 @@ export class MasterAgent extends Agent {
         const skills = skillsArray.length > 0 ? skillsArray.join(', ') : 'No skills';
 
         // Extract key capabilities from description and skills
-        const keywords = this.extractKeywords(description, skillsArray);
+        const keywords = this.extractSubagentKeywords(description, skillsArray);
 
         return `- ${name}:
   Description: ${description}

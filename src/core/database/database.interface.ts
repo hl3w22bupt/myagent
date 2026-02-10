@@ -54,9 +54,10 @@ export interface Database {
   addFavorite(favorite: {
     artifactId: string;
     taskId: string;
-  }): Promise<void>;
+  }): Promise<string | null>;  // Returns favoriteId or existing favoriteId
   removeFavorite(favoriteId: string): Promise<boolean>;
   getFavorite(favoriteId: string): Promise<any | null>;
+  getFavoriteByArtifactId(artifactId: string): Promise<any | null>;
   isFavorite(artifactId: string): Promise<boolean>;
   getFavorites(options: {
     page: number;

@@ -22,9 +22,9 @@ export const taskExecutionSchema = z.object({
   task: z.string(),
 
   /**
-   * Current status: pending, running, completed, failed
+   * Current status: pending, running, completed, failed, awaiting_clarification
    */
-  status: z.enum(['pending', 'started', 'running', 'completed', 'failed']),
+  status: z.enum(['pending', 'started', 'running', 'completed', 'failed', 'awaiting_clarification']),
 
   /**
    * Current output being generated.
@@ -57,9 +57,19 @@ export const taskExecutionSchema = z.object({
   timestamp: z.string(),
 
   /**
-   * Message type: task or skill
+   * Message type: task, skill, agent, or agent lifecycle events
    */
-  type: z.enum(['task', 'skill']).default('task'),
+  type: z.enum([
+    'task',                    // User task or chat message
+    'skill',                   // Skill execution
+    'agent',                   // Agent general message
+    'agent_created',           // Agent instance created
+    'agent_acquired',          // Agent instance acquired
+    'agent_status',            // Agent status update
+    'intent_analysis',         // Intent analysis result
+    'ptc_planning',            // PTC (Python Tool Chain) planning
+    'awaiting_clarification'   // HITL (Human-in-the-Loop) clarification request
+  ]).default('task'),
 
   /**
    * Skill name (only for skill type messages)

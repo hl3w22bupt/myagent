@@ -560,6 +560,37 @@ export const handler = async (
 
     const result = await agent.run(taskContext.task, taskId, taskContext.context);
 
+    // === HITL Checkpoint: Handle awaiting clarification status ===
+    if (result.error === 'AWAITING_CLARIFICATION' && result.clarification) {
+      logger.info('Task awaiting clarification', { taskId, question: result.clarification.question });
+
+      // Update task status to awaiting_clarification using DataStore
+      try {
+        const dataStore = getDataStore();
+        await dataStore.initialize();
+        await dataStore.updateTask(taskId, { status: TaskStatus.AWAITING_CLARIFICATION });
+        logger.info('Task status updated to awaiting_clarification', { taskId });
+      } catch (dbError: any) {
+        logger.error('Failed to update task status', { taskId, error: dbError.message });
+      }
+
+      // Update stream with awaiting_clarification status
+      // Stream provides real-time push to frontend subscribers
+      await updateStream('awaiting_clarification', {
+        clarification: result.clarification,
+        currentStep: 'Awaiting user clarification',
+        metadata: result.metadata,
+      });
+
+      return {
+        success: false,
+        awaitingClarification: true,
+        clarification: result.clarification,
+        taskId,
+        sessionId
+      };
+    }
+
     // Fallback: Read structuredOutput from file if Agent didn't return it
     if (!result.structuredOutput || Object.keys(result.structuredOutput).length === 0) {
       const fs = await import('fs');

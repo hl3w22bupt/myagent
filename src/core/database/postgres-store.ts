@@ -1164,7 +1164,7 @@ export class PostgresDataStore implements Database {
   async addFavorite(favorite: {
     artifactId: string;
     taskId: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const client = await this.pool.connect();
 
     try {
@@ -1187,8 +1187,8 @@ export class PostgresDataStore implements Database {
       );
 
       if (existingResult.rows.length > 0) {
-        // 已收藏，直接返回
-        return;
+        // 已收藏，返回现有的 favoriteId
+        return existingResult.rows[0].id;
       }
 
       // 添加到精选
@@ -1207,6 +1207,8 @@ export class PostgresDataStore implements Database {
           Date.now(),
         ]
       );
+
+      return id;
     } finally {
       client.release();
     }
@@ -1218,6 +1220,35 @@ export class PostgresDataStore implements Database {
     try {
       const result = await client.query('DELETE FROM favorites WHERE id = $1', [favoriteId]);
       return (result.rowCount || 0) > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFavoriteByArtifactId(artifactId: string): Promise<any | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM favorites WHERE artifact_id = $1',
+        [artifactId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        artifactId: row.artifact_id,
+        taskId: row.task_id,
+        artifactType: row.artifact_type,
+        path: row.path,
+        description: row.description,
+        metadata: row.metadata,
+        createdAt: row.created_at,
+      };
     } finally {
       client.release();
     }

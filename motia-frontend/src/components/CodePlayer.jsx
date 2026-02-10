@@ -36,6 +36,7 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
         'ts': 'typescript',
         'tsx': 'tsx',
         'py': 'python',
+        'python': 'python',  // 支持后端生成的 .python 扩展名
         'rb': 'ruby',
         'go': 'go',
         'rs': 'rust',

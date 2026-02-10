@@ -91,7 +91,7 @@ export const addToFavoriteHandler = async (request: any, { logger }: any) => {
     }
 
     // 添加到精选
-    await dataStore.addFavorite({
+    const favoriteId = await dataStore.addFavorite({
       artifactId: parsed.artifactId,
       taskId: parsed.taskId,
     });
@@ -100,6 +100,7 @@ export const addToFavoriteHandler = async (request: any, { logger }: any) => {
       status: 200,
       body: {
         success: true,
+        favoriteId,
         message: 'Added to favorites',
       },
     };
@@ -197,11 +198,35 @@ export const handler = async (request: any, { logger }: any) => {
       type,
     });
 
+    // 为 HTML 类型的产物添加 renderUrl
+    // 支持两种情况：
+    // 1. artifactType === 'html'
+    // 2. artifactType === 'code' 且 metadata.language === 'html'
+    const enrichedFavorites = result.favorites.map((favorite: any) => {
+      const shouldRender =
+        (favorite.artifactType === 'html' && favorite.path) ||
+        (favorite.artifactType === 'code' &&
+         favorite.metadata?.language === 'html' &&
+         favorite.path);
+
+      if (shouldRender) {
+        return {
+          ...favorite,
+          renderUrl: `/media?path=${encodeURIComponent(favorite.path)}`,
+        };
+      }
+      return favorite;
+    });
+
     return {
       status: 200,
       body: {
         success: true,
-        ...result,
+        favorites: enrichedFavorites,
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
       },
     };
   } catch (error: any) {
