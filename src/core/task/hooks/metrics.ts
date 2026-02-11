@@ -22,9 +22,6 @@ export class MetricsCollectorTaskHook extends BaseTaskHook {
     const metrics = {
       taskId: context.taskId,
       executionTime,
-      llmCalls: context.metadata.llmCalls,
-      skillCalls: context.metadata.skillCalls,
-      totalTokens: context.metadata.totalTokens,
       success: result.success,
     };
 

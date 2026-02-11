@@ -25,7 +25,10 @@ export class ContextCompressor {
    * 检查是否需要压缩（智能触发）
    */
   shouldCompress(context: TaskContext): boolean {
-    const { totalTokens, lastCompressedAt } = context.metadata;
+    const { lastCompressedAt } = context.metadata;
+
+    // Calculate total tokens from messages
+    const totalTokens = context.messages.reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
 
     // 条件1: Token数超过阈值
     if (totalTokens > this.maxTokens * this.threshold) {
@@ -84,7 +87,6 @@ export class ContextCompressor {
       metadata: {
         ...context.metadata,
         lastCompressedAt: new Date(),
-        totalTokens: this.estimateCompressedTokens(messagesToKeep, mergedSummary),
       },
     };
 

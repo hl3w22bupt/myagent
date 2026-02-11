@@ -95,6 +95,47 @@
   font-weight: 500;
 }
 
+/* 主视图 Tab 切换 */
+.main-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.main-view-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.5rem;
+  background-color: white;
+  color: #64748B;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.main-view-tab:hover {
+  border-color: #CBD5E1;
+  background-color: #F8FAFC;
+  color: #475569;
+}
+
+.main-view-tab.active {
+  border-color: #3B82F6;
+  background-color: #EFF6FF;
+  color: #3B82F6;
+  font-weight: 600;
+}
+
+.main-view-tab .tab-icon {
+  flex-shrink: 0;
+}
+
 .task-info {
   display: flex;
   flex-direction: column;
@@ -211,7 +252,7 @@
   }
 }
 
-/* 技能Badge样式 - 现代渐变设计 */
+/* 技能Badge样式 - 柔和配色设计 */
 .skill-badges {
   display: flex;
   flex-wrap: wrap;
@@ -221,24 +262,24 @@
 .skill-badge {
   display: inline-block;
   padding: 0.375rem 0.875rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #A5B4FC 0%, #C4B5FD 100%);
+  color: #4338ca;
   border-radius: 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.025em;
-  box-shadow: 0 1px 3px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 1px 3px rgba(139, 92, 246, 0.15);
   transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
 .skill-badge:hover {
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #C4B5FD 0%, #A5B4FC 100%);
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.25);
   transform: translateY(-1px);
 }
 
-/* 委派 Subagent Badge 样式 */
+/* 委派 Subagent Badge 样式 - 柔和配色 */
 .delegate-badges {
   display: flex;
   flex-wrap: wrap;
@@ -247,21 +288,21 @@
 
 .delegate-badge {
   display: inline-block;
-  padding: 0.375rem 0.75rem;
-  background-color: #8B5CF6;
-  color: white;
-  border-radius: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  background: linear-gradient(135deg, #A5B4FC 0%, #C4B5FD 100%);
+  color: #4338ca;
+  border-radius: 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.025em;
-  box-shadow: 0 1px 2px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 1px 3px rgba(139, 92, 246, 0.15);
   transition: all 0.2s ease;
-  text-transform: uppercase;
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
 .delegate-badge:hover {
-  background-color: #7C3AED;
-  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
+  background: linear-gradient(135deg, #C4B5FD 0%, #A5B4FC 100%);
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.25);
+  transform: translateY(-1px);
 }
 
 .status {

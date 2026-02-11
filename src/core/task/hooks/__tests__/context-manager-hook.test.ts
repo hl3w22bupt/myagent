@@ -30,9 +30,6 @@ describe('ContextManagerTaskHook Integration', () => {
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 0,
-        skillCalls: 0,
-        totalTokens: 0,
       },
       services: {
         streams: null,
@@ -75,17 +72,11 @@ describe('ContextManagerTaskHook Integration', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 1000,
-          llmCallsCount: 1,
-          skillCallsCount: 0,
         },
       },
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 0,
-        skillCalls: 0,
-        totalTokens: 0,
       },
       services: {
         streams: null,

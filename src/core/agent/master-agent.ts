@@ -101,9 +101,6 @@ export class MasterAgent extends Agent {
         steps,
         executionTime,
         metadata: {
-          llmCalls: 1,
-          skillCalls: result.metadata.skillCalls,
-          totalTokens: 0,
           delegates: plan.steps
             .filter((s) => s.delegateTo !== undefined)
             .map((s) => s.delegateTo as string),
@@ -126,9 +123,6 @@ export class MasterAgent extends Agent {
         steps,
         executionTime: Date.now() - startTime,
         metadata: {
-          llmCalls: 1,
-          skillCalls: 0,
-          totalTokens: 0,
           delegates: [],
         },
       };
@@ -392,7 +386,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
 - Consider if the task has sufficient context (files, data, specifics)
 `;
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'delegation planning');
 
     // Try multiple parsing strategies
     let parsedPlan: any = null;
@@ -559,7 +553,7 @@ Important rules:
 - consolidatedOutput can contain any JSON structure`;
 
     try {
-      const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
+      const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'results synthesis');
 
       // Try multiple parsing strategies (similar to planWithDelegation)
       let parsedSynthesis: any = null;

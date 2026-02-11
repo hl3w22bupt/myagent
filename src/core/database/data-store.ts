@@ -40,9 +40,6 @@ export interface Task {
   error?: string;
   executionTime?: number;
   metadata?: {
-    llmCalls?: number;
-    skillCalls?: number;
-    totalTokens?: number;
     retries?: {
       attempts: number;
       totalDelay: number;
@@ -602,11 +599,7 @@ export class DataStore {
       },
       artifactIndex: [],
       workingMemory: {},
-      metadata: {
-        totalTokens: 0,
-        llmCallsCount: 0,
-        skillCallsCount: 0,
-      },
+      metadata: {},
     };
 
     this.db.run(
@@ -740,9 +733,8 @@ export class DataStore {
       ]
     );
 
-    // 更新 currentTurn 和 metadata
+    // 更新 currentTurn
     const newCurrentTurn = context.currentTurn + 1;
-    const newTotalTokens = context.metadata.totalTokens + (message.metadata?.tokens || 0);
 
     this.db.run(
       `UPDATE task_contexts
@@ -750,10 +742,7 @@ export class DataStore {
        WHERE task_id = ?`,
       [
         newCurrentTurn,
-        JSON.stringify({
-          ...context.metadata,
-          totalTokens: newTotalTokens,
-        }),
+        JSON.stringify(context.metadata),
         Date.now(),
         taskId,
       ]

@@ -57,9 +57,6 @@ export interface TaskContext {
 
   // 元数据
   metadata: {
-    totalTokens: number;
-    llmCallsCount: number;
-    skillCallsCount: number;
     lastCompressedAt?: Date;
   };
 }
@@ -75,8 +72,7 @@ export interface Message {
   metadata: {
     timestamp: Date;
     tokens?: number;
-    llmCalls?: number;
-    skillCalls?: string[];
+    skillCalls?: string[];  // Skills used in this message
     sessionId?: string;
   };
   compressed?: boolean;

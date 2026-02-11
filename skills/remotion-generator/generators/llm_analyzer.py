@@ -53,7 +53,8 @@ class ContentAnalyzer(BaseGenerator):
                 prompt=prompt,
                 max_tokens=2000,
                 temperature=0.3,  # Low temperature for consistent analysis
-                system_prompt=self._get_system_prompt()
+                system_prompt=self._get_system_prompt(),
+                purpose="content analysis for video generation"
             )
 
             # Parse JSON response

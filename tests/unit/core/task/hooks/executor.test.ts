@@ -65,9 +65,6 @@ describe('TaskHookExecutor', () => {
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 0,
-        skillCalls: 0,
-        totalTokens: 0,
       },
       services: {
         streams: {

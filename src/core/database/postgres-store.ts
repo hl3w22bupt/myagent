@@ -204,7 +204,7 @@ export class PostgresDataStore implements Database {
           current_turn INTEGER DEFAULT 1,
           summary JSONB NOT NULL DEFAULT '{}'::jsonb,
           working_memory JSONB NOT NULL DEFAULT '{}'::jsonb,
-          metadata JSONB NOT NULL DEFAULT '{"totalTokens": 0, "llmCallsCount": 0, "skillCallsCount": 0}'::jsonb,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL
         )
@@ -697,11 +697,7 @@ export class PostgresDataStore implements Database {
           1,
           JSON.stringify({}),
           JSON.stringify({}),
-          JSON.stringify({
-            totalTokens: 0,
-            llmCallsCount: 0,
-            skillCallsCount: 0,
-          }),
+          JSON.stringify({}),
           now,
           now,
         ]
@@ -748,11 +744,7 @@ export class PostgresDataStore implements Database {
         },
         artifactIndex: [],
         workingMemory: {},
-        metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
-        },
+        metadata: {},
       };
     } finally {
       client.release();

@@ -137,9 +137,6 @@ export interface AgentResult {
 
   /** Execution metadata */
   metadata: {
-    llmCalls: number;
-    skillCalls: number;
-    totalTokens: number;
     skillNames?: string[];
     /** Subagents that were delegated to (for MasterAgent) */
     delegates?: string[];

@@ -69,7 +69,8 @@ export class RequestRewriter {
     try {
       const response = await this.llm.messagesCreate(
         [{ role: 'user', content: prompt }],
-        { max_tokens: 500 }
+        { max_tokens: 500 },
+        'request rewriting'
       );
 
       const rewritten = response.content.trim();

@@ -63,7 +63,8 @@ class RemotionCodeGenerator(BaseGenerator):
                 prompt=prompt,
                 max_tokens=4000,  # Longer for code
                 temperature=0.2,  # Lower for consistent code
-                system_prompt=self._get_system_prompt()
+                system_prompt=self._get_system_prompt(),
+                purpose="remotion code generation"
             )
 
             # Extract code from response

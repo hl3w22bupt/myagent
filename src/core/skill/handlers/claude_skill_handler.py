@@ -10,8 +10,11 @@ import os
 import re
 import json
 import sys
+import time
+import httpx
 from pathlib import Path
 from typing import Dict, Any, Optional
+from datetime import datetime
 
 # OutputBuilder 支持
 lib_path = Path(__file__).parent.parent.parent.parent.parent / "skills" / "lib"
@@ -46,7 +49,9 @@ class ClaudeSkillHandler:
         prompt_template: Optional[str] = None,
         # 通用参数
         mode: str = MODE_FILE,
-        timeout: int = 30000
+        timeout: int = 30000,
+        # Trace API 配置
+        trace_api_url: Optional[str] = None
     ):
         """
         初始化 Handler
@@ -57,12 +62,15 @@ class ClaudeSkillHandler:
             prompt_template: Prompt 模板字符串（Native Pure-Prompt）
             mode: 模式 ('file' 或 'template')
             timeout: 超时时间（毫秒）
+            trace_api_url: Trace API URL (e.g., 'http://localhost:3000/api/traces/submit')
         """
         self.skill_name = skill_name
         self.skill_root = Path(skill_root) if skill_root else None
         self.prompt_template = prompt_template
         self.mode = mode
         self.timeout = timeout / 1000  # 转换为秒
+        self.trace_api_url = trace_api_url or os.getenv('MOTIA_TRACE_API_URL', 'http://localhost:3000/api/traces/submit')
+        self._http_client: Optional[httpx.AsyncClient] = None
 
         # 初始化 LLM Client
         self._llm_client = self._create_llm_client()
@@ -75,6 +83,7 @@ class ClaudeSkillHandler:
             input_data: {
                 'task': '用户任务描述',
                 'context': {...},  # 可选
+                'purpose': 'LLM 调用目的描述',  # 可选
                 ...其他变量
             }
 
@@ -85,10 +94,13 @@ class ClaudeSkillHandler:
             # 1. 构建 prompt（根据模式选择来源）
             prompt = self._build_prompt(input_data)
 
-            # 2. 调用 LLM
-            llm_response = self._call_llm(prompt)
+            # 2. 提取 purpose（如果没有提供，使用 skill_name 作为默认值）
+            purpose = input_data.get('purpose') or input_data.get('llm_purpose') or f"execute skill prompt"
 
-            # 3. 转换为 OutputBuilder 格式
+            # 3. 调用 LLM
+            llm_response = self._call_llm(prompt, purpose)
+
+            # 4. 转换为 OutputBuilder 格式
             return self._convert_to_output_builder(llm_response)
 
         except Exception as e:
@@ -221,36 +233,157 @@ class ClaudeSkillHandler:
         # No frontmatter found
         return {}, content
 
-    def _call_llm(self, prompt: str) -> str:
+    def _call_llm(self, prompt: str, purpose: Optional[str] = None) -> str:
         """
         调用 LLM（统一入口）
 
         Args:
             prompt: 完整的 prompt
+            purpose: LLM 调用的目的描述（可选）
 
         Returns:
             LLM 响应文本
         """
+        start_time = time.time()
+
         try:
             # 优先使用 LLMClient（如果有）
             if self._llm_client:
-                return self._call_llm_with_client(prompt)
+                response = self._call_llm_with_client(prompt, purpose)
+                # 发送 trace
+                self._send_llm_trace(prompt, response, time.time() - start_time, client_type='llm_client', purpose=purpose)
+                return response
 
             # Fallback: 直接使用 Anthropic API
-            return self._call_anthropic_api(prompt)
+            response = self._call_anthropic_api(prompt)
+            # 发送 trace
+            self._send_llm_trace(prompt, response, time.time() - start_time, client_type='anthropic_api', purpose=purpose)
+            return response
 
         except Exception as e:
             raise Exception(f"LLM call failed: {str(e)}")
 
-    def _call_llm_with_client(self, prompt: str) -> str:
+    async def _send_trace(self, trace_data: Dict[str, Any]):
+        """
+        Send trace data to Motia executionTraces stream via API.
+
+        Args:
+            trace_data: Trace data matching executionTraceSchema
+        """
+        if not self.trace_api_url:
+            return
+
+        # Create HTTP client if needed
+        if not self._http_client:
+            self._http_client = httpx.AsyncClient(timeout=5.0)
+
+        try:
+            response = await self._http_client.post(
+                self.trace_api_url,
+                json=trace_data
+            )
+            response.raise_for_status()
+            print(f"[ClaudeSkillHandler] ✓ LLM trace sent: {trace_data.get('id')} - {trace_data.get('status')}")
+        except Exception as e:
+            print(f"[ClaudeSkillHandler] ✗ Failed to send LLM trace: {e}")
+
+    def _send_llm_trace(
+        self,
+        prompt: str,
+        response: str,
+        execution_time: float,
+        client_type: str = 'unknown',
+        llm_model: Optional[str] = None,
+        usage: Optional[Dict[str, int]] = None,
+        purpose: Optional[str] = None
+    ):
+        """
+        Send LLM call trace to executionTraces stream.
+
+        Args:
+            prompt: The prompt sent to LLM
+            response: The response from LLM
+            execution_time: Execution time in seconds
+            client_type: Type of LLM client ('llm_client' or 'anthropic_api')
+            llm_model: Model name (optional)
+            usage: Token usage info (optional)
+            purpose: Purpose description for this LLM call (e.g., "code generation", "analysis")
+        """
+        import asyncio
+
+        # Get trace context from environment or input
+        task_id = os.getenv('MOTIA_TASK_ID', 'unknown')
+        session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
+
+        id = f"llm-skill-{self.skill_name}-{task_id}-{int(time.time() * 1000)}"
+        timestamp_ms = int(time.time() * 1000)
+
+        trace_data = {
+            "id": id,
+            "level": "skill-internal",
+            "taskId": task_id,
+            "agentId": session_id,
+            "skillName": self.skill_name,
+            "stage": f"llm_call - {purpose}",
+            "status": "completed",
+            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
+            "metadata": {
+                "sessionId": session_id,
+                "llmProvider": "anthropic" if client_type == "anthropic_api" else "unknown",
+                "llmModel": llm_model or os.getenv('DEFAULT_LLM_MODEL', 'unknown'),
+                "llmRequest": {
+                    "prompt": prompt[:1000],  # Truncate long prompts
+                    "promptLength": len(prompt),
+                },
+                "llmResponse": {
+                    "content": response[:1000],  # Truncate long responses
+                    "responseLength": len(response),
+                },
+                "data": {
+                    "clientType": client_type,
+                    "totalTokens": usage.get('total_tokens', 0) if usage else 0,
+                }
+            }
+        }
+
+        # Add usage info if available
+        if usage:
+            trace_data["metadata"]["llmResponse"]["promptTokens"] = usage.get('prompt_tokens', 0)
+            trace_data["metadata"]["llmResponse"]["completionTokens"] = usage.get('completion_tokens', 0)
+            trace_data["metadata"]["llmResponse"]["totalTokens"] = usage.get('total_tokens', 0)
+
+        # Send trace asynchronously
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If there's already a running loop, create a task
+                asyncio.ensure_future(self._send_trace(trace_data))
+            else:
+                # If no loop is running, run in a new loop
+                loop.run_until_complete(self._send_trace(trace_data))
+        except Exception as e:
+            print(f"[ClaudeSkillHandler] Failed to send trace: {e}")
+
+    def _call_llm_with_client(self, prompt: str, purpose: Optional[str] = None) -> str:
         """使用 LLMClient 调用"""
         try:
             # 检查是否有 messagesCreate 方法（Anthropic 客户端）
             if hasattr(self._llm_client, 'messagesCreate'):
                 # Anthropic 客户端 - 同步调用
-                message = self._llm_client.messagesCreate([
-                    {"role": "user", "content": prompt}
-                ])
+                # 传递 purpose 参数（如果支持）
+                import inspect
+                sig = inspect.signature(self._llm_client.messagesCreate)
+                if 'purpose' in sig.parameters:
+                    message = self._llm_client.messagesCreate([
+                        {"role": "user", "content": prompt}
+                    ], purpose=purpose or self.skill_name)
+                else:
+                    # 不支持 purpose 参数，使用旧调用方式
+                    message = self._llm_client.messagesCreate([
+                        {"role": "user", "content": prompt}
+                    ])
+                # 返回文本内容（兼容现有代码）
                 return message.content[0].text
             elif hasattr(self._llm_client, 'generate'):
                 # LLMClient 有 generate 方法，但可能是协程

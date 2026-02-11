@@ -361,9 +361,6 @@ export class Agent {
           executionTime: 0,
           sessionId: this.sessionId,
           metadata: {
-            llmCalls: 1,
-            skillCalls: 0,
-            totalTokens: 0,
             hitl: true
           }
         };
@@ -448,12 +445,9 @@ export class Agent {
             lastErrorMessage = error.message || String(error);
             console.error(`[Agent] PTC generation failed on attempt ${attempt}:`, lastErrorMessage);
 
-            // Check if should retry
-            const isRetryable = isDefaultRetryableError(error);
-
-            if (!isRetryable || attempt >= maxPtcRetries) {
+            // PTC generation always retries (LLM has randomness, max 3 attempts)
+            if (attempt >= maxPtcRetries) {
               console.error('[Agent] PTC generation failed, will not retry', {
-                isRetryable,
                 attempt,
                 maxAttempts: maxPtcRetries
               });
@@ -633,9 +627,6 @@ export class Agent {
             variablesCount: this.state.variables.size,
           },
           metadata: {
-            llmCalls: 1,
-            skillCalls: 0,
-            totalTokens: 0,
             retries: retryInfo.attempts > 1 ? retryInfo : undefined,
             ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
           },
@@ -664,9 +655,6 @@ export class Agent {
         });
       }
 
-      // Count skill calls from PTC code
-      const skillCalls = this.countSkillCalls(ptcResult.code);
-
       // Extract artifact_type from skill output
       // Skills may return Python dict with 'metadata': {'artifact_type': 'video'}
       const artifactType = this.extractArtifactType(sandboxResult);
@@ -683,9 +671,6 @@ export class Agent {
           variablesCount: this.state.variables.size,
         },
         metadata: {
-          llmCalls: 1,
-          skillCalls,
-          totalTokens: 0,
           skillNames: ptcResult.selectedSkills,
           artifactType: artifactType, // Add artifact_type to metadata
           retries: retryInfo.attempts > 1 ? retryInfo : undefined,
@@ -722,11 +707,7 @@ export class Agent {
           executionCount: this.state.executionHistory.length,
           variablesCount: this.state.variables.size,
         },
-        metadata: {
-          llmCalls: 1,
-          skillCalls: 0,
-          totalTokens: 0,
-        },
+        metadata: {},
       };
     }
   }
@@ -837,6 +818,23 @@ export class Agent {
   }
 
   /**
+   * Update LLMClient trace configuration.
+   * Call this after setting agent streams via setAgentStreams().
+   */
+  updateLLMTraceConfig(taskId?: string): void {
+    const streams = getAgentStreams();
+    if (streams?.executionTraces && taskId) {
+      // Update LLMClient with streams and trace context
+      (this.llm as any).streams = streams;
+      (this.llm as any).traceContext = {
+        taskId,
+        agentId: this.sessionId,
+      };
+      console.log('[Agent] LLM trace config updated', { taskId, agentId: this.sessionId });
+    }
+  }
+
+  /**
    * Get skill discovery stats.
    */
   static getSkillStats(): {
@@ -893,6 +891,36 @@ export class Agent {
         category: 'agent_hook',
       });
 
+      // ⭐ Send to executionTraces stream
+      if (streams.executionTraces) {
+        const id = `intent-analysis-${groupId}-${timestamp}`;
+        await streams.executionTraces.set(groupId, id, {
+          id,
+          level: 'agent-internal',
+          taskId: groupId,
+          agentId: this.sessionId,
+          stage: 'intent_analysis',
+          status: 'completed',
+          inputData: JSON.stringify({ task, agentType: this.constructor.name }),
+          outputData: JSON.stringify({
+            intent: analysisResult.intent,
+            reasoning: analysisResult.reasoning,
+            category: analysisResult.category,
+            confidence: analysisResult.confidence,
+            possibleIntents: analysisResult.possibleIntents,
+          }),
+          timestamp: new Date(timestamp).toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            data: {
+              llmProvider: this.llm.getInfo().provider,
+              llmModel: this.llm.getInfo().model,
+            },
+          },
+        });
+        console.log('[Agent] ✅ Intent analysis trace sent');
+      }
+
       console.log('[Agent] ✅ Intent analysis notification sent');
       return analysisResult;
     } catch (error) {
@@ -938,6 +966,35 @@ export class Agent {
         ...event,
         category: 'agent_hook',
       });
+
+      // ⭐ Send to executionTraces stream
+      if (streams.executionTraces) {
+        const id = `ptc-planning-${groupId}-${timestamp}`;
+        await streams.executionTraces.set(groupId, id, {
+          id,
+          level: 'agent-internal',
+          taskId: groupId,
+          agentId: this.sessionId,
+          stage: 'ptc_planning',
+          status: 'completed',
+          inputData: JSON.stringify({ task, agentType: this.constructor.name }),
+          outputData: JSON.stringify({
+            selectedSkills: skills,
+            reasoning: ptcResult.reasoning,
+            executionPlan: this.formatExecutionPlan(skills),
+            codeLength: ptcResult.code?.length || 0,
+          }),
+          timestamp: new Date(timestamp).toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            data: {
+              llmProvider: this.llm.getInfo().provider,
+              llmModel: this.llm.getInfo().model,
+            },
+          },
+        });
+        console.log('[Agent] ✅ PTC planning trace sent');
+      }
 
       console.log('[Agent] ✅ PTC planning notification sent');
     } catch (error) {
@@ -994,7 +1051,8 @@ Respond ONLY with valid JSON, no other text.`;
 
       const response = await this.llm.messagesCreate(
         [{ role: 'user', content: prompt }],
-        { max_tokens: 500, temperature: 0.3 }
+        { max_tokens: 500, temperature: 0.3 },
+        'intent analysis'
       );
 
       const content = response.content.trim();
@@ -1104,7 +1162,7 @@ Respond ONLY with valid JSON, no other text.`;
       ], {
         max_tokens: 500,
         temperature: 0.3
-      });
+      }, 'clarification check');
 
       const responseText = response.content || '{}';
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);

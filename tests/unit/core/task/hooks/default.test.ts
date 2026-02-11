@@ -16,9 +16,6 @@ describe('DefaultTaskHook', () => {
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 5,
-        skillCalls: 3,
-        totalTokens: 1000,
       },
       services: {
         streams: {
@@ -49,9 +46,6 @@ describe('DefaultTaskHook', () => {
           status: 'started',
           task: 'test task',
           metadata: expect.objectContaining({
-            llmCalls: 5,
-            skillCalls: 3,
-            totalTokens: 1000,
           }),
         })
       );
@@ -87,9 +81,6 @@ describe('DefaultTaskHook', () => {
           status: 'completed',
           task: 'test task',
           metadata: expect.objectContaining({
-            llmCalls: 5,
-            skillCalls: 3,
-            totalTokens: 1000,
             data: result,
           }),
         })
@@ -109,9 +100,6 @@ describe('DefaultTaskHook', () => {
           status: 'failed',
           task: 'test task',
           metadata: expect.objectContaining({
-            llmCalls: 5,
-            skillCalls: 3,
-            totalTokens: 1000,
             data: result,
           }),
         })
@@ -130,7 +118,6 @@ describe('DefaultTaskHook', () => {
           status: 'completed',
           task: 'test task',
           artifactCount: 0,
-          skillCount: 3,
           executionTime: 5000
         }
       );
@@ -153,9 +140,6 @@ describe('DefaultTaskHook', () => {
         'Task progress',
         {
           taskId: 'test-1',
-          llmCalls: 5,
-          skillCalls: 3,
-          totalTokens: 1000,
         }
       );
     });

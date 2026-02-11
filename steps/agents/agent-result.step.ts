@@ -211,6 +211,7 @@ export const handler = async (request: any, { logger }: any) => {
         result: {
           taskId: task.id,
           task: task.task,
+          status: task.status,  // 返回实际状态
           success: success,
           output: task.output,
           error: task.error,

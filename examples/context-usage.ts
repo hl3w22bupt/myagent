@@ -117,7 +117,6 @@ async function compressionExample() {
 
   const context = await manager.getContext('task-3');
   if (context) {
-    console.log('总token数:', context.metadata.totalTokens);
     console.log('最后压缩时间:', context.metadata.lastCompressedAt);
     console.log('当前消息数:', context.messages.length);
   }

@@ -88,7 +88,6 @@ withApiKey('End-to-End Agent Flow', () => {
 
       // Verify metadata
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.llmCalls).toBeGreaterThan(0);
       expect(result.executionTime).toBeGreaterThan(0);
     }, 90000);
 
@@ -120,9 +119,6 @@ withApiKey('End-to-End Agent Flow', () => {
 
       // Verify metadata completeness
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.llmCalls).toBeGreaterThan(0);
-      expect(result.metadata.skillCalls).toBeGreaterThanOrEqual(0);
-      expect(result.metadata.totalTokens).toBeGreaterThanOrEqual(0);
       expect(result.executionTime).toBeGreaterThan(0);
     }, 90000);
   });
@@ -135,11 +131,6 @@ withApiKey('End-to-End Agent Flow', () => {
 
       // Verify execution completed
       expect(result).toBeDefined();
-
-      // Should have multiple skill calls for multi-skill task
-      if (result.success) {
-        expect(result.metadata.skillCalls).toBeGreaterThanOrEqual(2);
-      }
 
       // Should have planning steps
       expect(result.steps.some((s) => s.type === 'planning')).toBe(true);

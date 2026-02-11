@@ -1,9 +1,187 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { systemAPI, tasksAPI, skillsAPI, agentsAPI, favoritesAPI } from '../services/api'
 import AudioPlayer from '../components/AudioPlayer'
 import './Home.css'
+
+// 将预览组件移到组件外部，避免每次 Home 渲染时重新定义
+const FavoriteVideoPreview = ({ path, getMediaBlobUrl }) => {
+  const [videoUrl, setVideoUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const loadVideo = async () => {
+      if (!path) {
+        console.error('[FavoriteVideoPreview] No path provided')
+        setError(true)
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(false)
+
+      try {
+        const url = await getMediaBlobUrl(path)
+        if (url) {
+          setVideoUrl(url)
+        } else {
+          console.error('[FavoriteVideoPreview] getMediaBlobUrl returned null')
+          setError(true)
+        }
+      } catch (err) {
+        console.error('[FavoriteVideoPreview] Load error:', err)
+        setError(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadVideo()
+  }, [path, getMediaBlobUrl])
+
+  if (loading) {
+    return (
+      <div className="favorite-preview favorite-preview-video">
+        <div className="media-loading">加载中...</div>
+      </div>
+    )
+  }
+
+  if (error || !videoUrl) {
+    console.error('[FavoriteVideoPreview] Rendering error state, videoUrl:', videoUrl)
+    return (
+      <div className="favorite-preview favorite-preview-video">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9M4.5 14.25h9M4.5 9.75h9" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    )
+  }
+
+  return (
+    <div className="favorite-preview favorite-preview-video">
+      <video
+        src={videoUrl}
+        controls
+        className="favorite-video-player"
+        preload="metadata"
+        controlsList="nodownload"
+        onError={(e) => {
+          console.error('[FavoriteVideoPreview] Video element error:', e.target.error)
+          setError(true)
+        }}
+        onLoadedMetadata={(e) => {
+          // Video metadata loaded successfully
+        }}
+      />
+    </div>
+  )
+}
+
+const FavoriteImagePreview = ({ path, getMediaBlobUrl }) => {
+  const [imageUrl, setImageUrl] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const loadImage = async () => {
+      if (!path) {
+        console.error('[FavoriteImagePreview] No path provided')
+        setError(true)
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(false)
+
+      try {
+        const url = await getMediaBlobUrl(path)
+        if (url) {
+          setImageUrl(url)
+        } else {
+          console.error('[FavoriteImagePreview] getMediaBlobUrl returned null')
+          setError(true)
+        }
+      } catch (err) {
+        console.error('[FavoriteImagePreview] Load error:', err)
+        setError(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadImage()
+  }, [path, getMediaBlobUrl])
+
+  if (loading) {
+    return (
+      <div className="favorite-preview favorite-preview-image">
+        <div className="media-loading">加载中...</div>
+      </div>
+    )
+  }
+
+  if (error || !imageUrl) {
+    console.error('[FavoriteImagePreview] Rendering error state, imageUrl:', imageUrl)
+    return (
+      <div className="favorite-preview favorite-preview-image">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="8.5" cy="8.5" r="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    )
+  }
+
+  return (
+    <div className="favorite-preview favorite-preview-image">
+      <img
+        src={imageUrl}
+        alt="精选图片"
+        className="favorite-image-preview"
+        onError={(e) => {
+          console.error('[FavoriteImagePreview] Image element error:', e.target.error)
+          setError(true)
+        }}
+        onLoad={(e) => {
+          // Image loaded successfully
+        }}
+      />
+    </div>
+  )
+}
+
+const FavoriteAudioPreview = ({ path, getMediaBlobUrl }) => {
+  return (
+    <div className="favorite-preview favorite-preview-audio">
+      <AudioPlayer
+        audioPath={path}
+        getBlobUrl={getMediaBlobUrl}
+      />
+    </div>
+  )
+}
+
+const FavoriteHtmlPreview = ({ renderUrl }) => {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const fullUrl = `${API_BASE_URL}${renderUrl}`
+
+  return (
+    <div className="favorite-preview favorite-preview-html">
+      <iframe
+        src={fullUrl}
+        className="favorite-html-preview"
+        sandbox="allow-scripts allow-same-origin"
+        title="HTML 预览"
+      />
+    </div>
+  )
+}
 
 function Home() {
   const navigate = useNavigate()
@@ -28,8 +206,8 @@ function Home() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  // 获取媒体文件的 Blob URL - 完全复制任务详情页的实现
-  const getMediaBlobUrl = async (path) => {
+  // 获取媒体文件的 Blob URL - 使用 useCallback 优化，防止每次渲染都重新创建函数
+  const getMediaBlobUrl = useCallback(async (path) => {
     if (!path) return null
 
     try {
@@ -47,7 +225,7 @@ function Home() {
       console.error('Error loading media:', error)
       return null
     }
-  }
+  }, []) // 空依赖数组，函数引用永远不变
 
   useEffect(() => {
     const fetchData = async () => {
@@ -203,191 +381,6 @@ function Home() {
     )
   }
 
-  // 视频预览组件 - 使用原生 video 标签
-  const FavoriteVideoPreview = ({ path, getMediaBlobUrl }) => {
-    const [videoUrl, setVideoUrl] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(false)
-
-    useEffect(() => {
-      const loadVideo = async () => {
-        if (!path) {
-          console.error('[FavoriteVideoPreview] No path provided')
-          setError(true)
-          setLoading(false)
-          return
-        }
-
-        console.log('[FavoriteVideoPreview] Loading video:', path)
-        setLoading(true)
-        setError(false)
-
-        try {
-          const url = await getMediaBlobUrl(path)
-          console.log('[FavoriteVideoPreview] Video URL:', url)
-          if (url) {
-            setVideoUrl(url)
-          } else {
-            console.error('[FavoriteVideoPreview] getMediaBlobUrl returned null')
-            setError(true)
-          }
-        } catch (err) {
-          console.error('[FavoriteVideoPreview] Load error:', err)
-          setError(true)
-        } finally {
-          setLoading(false)
-        }
-      }
-
-      loadVideo()
-    }, [path, getMediaBlobUrl])
-
-    if (loading) {
-      return (
-        <div className="favorite-preview favorite-preview-video">
-          <div className="media-loading">加载中...</div>
-        </div>
-      )
-    }
-
-    if (error || !videoUrl) {
-      console.error('[FavoriteVideoPreview] Rendering error state, videoUrl:', videoUrl)
-      return (
-        <div className="favorite-preview favorite-preview-video">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9M4.5 14.25h9M4.5 9.75h9" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-      )
-    }
-
-    return (
-      <div className="favorite-preview favorite-preview-video">
-        <video
-          src={videoUrl}
-          controls
-          className="favorite-video-player"
-          preload="metadata"
-          controlsList="nodownload"
-          onError={(e) => {
-            console.error('[FavoriteVideoPreview] Video element error:', e.target.error)
-            setError(true)
-          }}
-          onLoadedMetadata={(e) => {
-            console.log('[FavoriteVideoPreview] Video metadata loaded, duration:', e.target.duration)
-          }}
-        />
-      </div>
-    )
-  }
-
-  // 图片预览组件
-  const FavoriteImagePreview = ({ path, getMediaBlobUrl }) => {
-    const [imageUrl, setImageUrl] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(false)
-
-    useEffect(() => {
-      const loadImage = async () => {
-        if (!path) {
-          console.error('[FavoriteImagePreview] No path provided')
-          setError(true)
-          setLoading(false)
-          return
-        }
-
-        console.log('[FavoriteImagePreview] Loading image:', path)
-        setLoading(true)
-        setError(false)
-
-        try {
-          const url = await getMediaBlobUrl(path)
-          console.log('[FavoriteImagePreview] Image URL:', url)
-          if (url) {
-            setImageUrl(url)
-          } else {
-            console.error('[FavoriteImagePreview] getMediaBlobUrl returned null')
-            setError(true)
-          }
-        } catch (err) {
-          console.error('[FavoriteImagePreview] Load error:', err)
-          setError(true)
-        } finally {
-          setLoading(false)
-        }
-      }
-
-      loadImage()
-    }, [path, getMediaBlobUrl])
-
-    if (loading) {
-      return (
-        <div className="favorite-preview favorite-preview-image">
-          <div className="media-loading">加载中...</div>
-        </div>
-      )
-    }
-
-    if (error || !imageUrl) {
-      console.error('[FavoriteImagePreview] Rendering error state, imageUrl:', imageUrl)
-      return (
-        <div className="favorite-preview favorite-preview-image">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="8.5" cy="8.5" r="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-      )
-    }
-
-    return (
-      <div className="favorite-preview favorite-preview-image">
-        <img
-          src={imageUrl}
-          alt="精选图片"
-          className="favorite-image-preview"
-          onError={(e) => {
-            console.error('[FavoriteImagePreview] Image element error:', e.target.error)
-            setError(true)
-          }}
-          onLoad={(e) => {
-            console.log('[FavoriteImagePreview] Image loaded successfully')
-          }}
-        />
-      </div>
-    )
-  }
-
-  // 音频预览组件
-  const FavoriteAudioPreview = ({ path, getMediaBlobUrl }) => {
-    return (
-      <div className="favorite-preview favorite-preview-audio">
-        <AudioPlayer
-          audioPath={path}
-          getBlobUrl={getMediaBlobUrl}
-        />
-      </div>
-    )
-  }
-
-  // HTML 预览组件 - 使用 iframe 渲染 HTML
-  const FavoriteHtmlPreview = ({ renderUrl }) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-    const fullUrl = `${API_BASE_URL}${renderUrl}`
-
-    return (
-      <div className="favorite-preview favorite-preview-html">
-        <iframe
-          src={fullUrl}
-          className="favorite-html-preview"
-          sandbox="allow-scripts allow-same-origin"
-          title="HTML 预览"
-        />
-      </div>
-    )
-  }
-
   // 模态框视频预览组件
   const ModalVideoPreview = ({ path, getMediaBlobUrl }) => {
     const [videoUrl, setVideoUrl] = useState(null)
@@ -450,13 +443,11 @@ function Home() {
           return
         }
 
-        console.log('[ModalImagePreview] Loading image:', path)
         setLoading(true)
         setError(false)
 
         try {
           const url = await getMediaBlobUrl(path)
-          console.log('[ModalImagePreview] Image URL:', url)
           if (url) {
             setImageUrl(url)
           } else {
@@ -519,7 +510,7 @@ function Home() {
           setError(true)
         }}
         onLoad={(e) => {
-          console.log('[ModalImagePreview] Image loaded successfully, dimensions:', e.target.naturalWidth, 'x', e.target.naturalHeight)
+          // Image loaded successfully
         }}
       />
     )

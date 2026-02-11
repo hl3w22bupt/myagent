@@ -22,6 +22,7 @@ import {
   ContextManagerTaskHook,
   UserAllowTaskHook,
   MetricsCollectorTaskHook,
+  TaskTraceHook,
   TaskContext,
 } from '../../src/core/task/hooks/index';
 import { ContextManager } from '../../src/core/context/manager';
@@ -35,6 +36,7 @@ import {
   AgentProgressNotifyHook,
   setAgentStreams,
 } from '../../src/core/agent/hooks/progress-notify';
+import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook';
 
 /**
  * Input schema for Master Agent step.
@@ -185,6 +187,10 @@ export const handler = async (
 
       // 执行Agent回复
       logger.info('Agent starting chat response', { taskId, sessionId });
+
+      // Update LLM trace configuration
+      agent.updateLLMTraceConfig(taskId);
+
       const result = await agent.run(chatPrompt, taskId, context);
 
       logger.info('Agent chat response completed', {
@@ -349,6 +355,7 @@ export const handler = async (
       notifyOnTaskStart: true,
       notifyOnTaskComplete: true,
     }));
+    hookManager.register(new AgentTraceHook());
     logger.info('Agent hooks registered', {
       hookCount: hookManager.getHookCount(),
     });
@@ -360,6 +367,7 @@ export const handler = async (
   taskHookExecutor.registerHook(new ContextManagerTaskHook());
   taskHookExecutor.registerHook(new UserAllowTaskHook());
   taskHookExecutor.registerHook(new MetricsCollectorTaskHook());
+  taskHookExecutor.registerHook(new TaskTraceHook());
 
   // Build TaskContext
   const taskContext: TaskContext = {
@@ -557,6 +565,9 @@ export const handler = async (
     // === Start progressing hooks ===
     taskHookExecutor.startProgressingHooks(taskContext);
     logger.info('Progressing hooks started', { taskId });
+
+    // Update LLM trace configuration
+    agent.updateLLMTraceConfig(taskId);
 
     const result = await agent.run(taskContext.task, taskId, taskContext.context);
 

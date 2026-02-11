@@ -11,6 +11,15 @@
 import { Anthropic } from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
+/**
+ * Streams interface for trace collection (minimal type)
+ */
+interface Streams {
+  executionTraces?: {
+    set(groupId: string, id: string, data: any): Promise<any>;
+  };
+}
+
 export type LLMProvider = 'anthropic' | 'openai-compatible';
 
 export interface LLMMessage {
@@ -33,6 +42,18 @@ export interface LLMClientConfig {
   apiKey: string;
   baseURL?: string;
   model?: string;
+  /**
+   * Optional streams for trace collection
+   */
+  streams?: Streams;
+  /**
+   * Optional trace context (taskId, agentId, skillName) for trace collection
+   */
+  traceContext?: {
+    taskId?: string;
+    agentId?: string;
+    skillName?: string;
+  };
 }
 
 /**
@@ -120,10 +141,18 @@ export class LLMClient {
   private model: string;
   private anthropic?: Anthropic;
   private openai?: OpenAI;
+  private streams?: Streams;
+  private traceContext?: {
+    taskId?: string;
+    agentId?: string;
+    skillName?: string;
+  };
 
   constructor(config: LLMClientConfig) {
     this.provider = config.provider;
     this.model = config.model || this.getDefaultModel(config.provider);
+    this.streams = config.streams;
+    this.traceContext = config.traceContext;
 
     switch (config.provider) {
       case 'anthropic':
@@ -150,6 +179,7 @@ export class LLMClient {
    *
    * @param messages - Array of messages
    * @param options - Additional options (max_tokens, temperature, etc.)
+   * @param purpose - Optional purpose description for this LLM call (e.g., "ptc codegen", "delegation planning")
    * @returns LLM response
    */
   async messagesCreate(
@@ -158,18 +188,89 @@ export class LLMClient {
       max_tokens?: number;
       temperature?: number;
       model?: string;
-    } = {}
+    } = {},
+    purpose?: string
   ): Promise<LLMResponse> {
     const { max_tokens = 2000, temperature = 0.7, model } = options;
     const actualModel = model || this.model;
 
+    const startTime = Date.now();
+
+    let response: LLMResponse;
     if (this.provider === 'anthropic' && this.anthropic) {
-      return await this.anthropicMessagesCreate(messages, max_tokens, temperature, actualModel);
+      response = await this.anthropicMessagesCreate(messages, max_tokens, temperature, actualModel);
     } else if (this.provider === 'openai-compatible' && this.openai) {
-      return await this.openaiMessagesCreate(messages, max_tokens, temperature, actualModel);
+      response = await this.openaiMessagesCreate(messages, max_tokens, temperature, actualModel);
+    } else {
+      throw new Error('LLM client not initialized');
     }
 
-    throw new Error('LLM client not initialized');
+    const executionTime = Date.now() - startTime;
+
+    // ⭐ Send LLM trace if streams and traceContext are available
+    await this.sendLLMTrace(messages, options, response, executionTime, purpose);
+
+    return response;
+  }
+
+  /**
+   * Send LLM call trace to executionTraces stream.
+   */
+  private async sendLLMTrace(
+    messages: LLMMessage[],
+    options: { max_tokens?: number; temperature?: number; model?: string },
+    response: LLMResponse,
+    executionTime: number,
+    purpose?: string
+  ): Promise<void> {
+    if (!this.streams?.executionTraces || !this.traceContext?.taskId) {
+      return;
+    }
+
+    try {
+      const { taskId, agentId, skillName } = this.traceContext;
+      const timestamp = Date.now();
+      const id = `llm-${skillName ? 'skill' : 'agent'}-${taskId}-${timestamp}`;
+
+      // Determine trace level based on whether it's a skill or agent call
+      const level = skillName ? 'skill-internal' : 'agent-internal';
+
+      await this.streams.executionTraces.set(taskId, id, {
+        id,
+        level,
+        taskId,
+        agentId,
+        skillName,
+        stage: 'llm_call',
+        status: 'completed',
+        executionTime,
+        timestamp: new Date(timestamp).toISOString(),
+        purpose, // Add purpose field to trace
+        metadata: {
+          llmProvider: this.provider,
+          llmModel: options.model || this.model,
+          sessionId: agentId,
+          llmRequest: {
+            messages,
+            maxTokens: options.max_tokens,
+            temperature: options.temperature,
+          },
+          llmResponse: {
+            content: response.content,
+            promptTokens: response.usage?.prompt_tokens,
+            completionTokens: response.usage?.completion_tokens,
+            totalTokens: response.usage?.total_tokens,
+          },
+          data: {
+            totalTokens: response.usage?.total_tokens || 0,
+          },
+        },
+      });
+
+      console.log(`[LLMClient] ✅ Trace sent: ${id}${purpose ? ` (${purpose})` : ''}`);
+    } catch (error) {
+      console.error('[LLMClient] Failed to send trace:', error);
+    }
   }
 
   /**

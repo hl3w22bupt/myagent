@@ -23,11 +23,7 @@ export class DefaultTaskHook extends BaseTaskHook {
       status: 'started',
       task: task,
       timestamp: new Date().toISOString(),
-      metadata: {
-        llmCalls: context.metadata.llmCalls,
-        skillCalls: context.metadata.skillCalls,
-        totalTokens: context.metadata.totalTokens,
-      },
+      metadata: {},
       category: 'task_hook',
     });
 
@@ -56,10 +52,7 @@ export class DefaultTaskHook extends BaseTaskHook {
     // 2. Get artifact count (from context.context.artifactIndex)
     const artifactCount = context.context?.artifactIndex?.length || 0;
 
-    // 3. Get skill count
-    const skillCount = context.metadata.skillCalls || 0;
-
-    // 4. Get original task (without conversation history)
+    // 3. Get original task (without conversation history)
     // If originalTask is available, use it; otherwise fallback to context.task
     const taskToDisplay = (context as any).originalTask || context.task;
 
@@ -73,9 +66,6 @@ export class DefaultTaskHook extends BaseTaskHook {
       task: taskToDisplay,  // 使用原始任务，不包含对话历史
       timestamp: new Date().toISOString(),
       metadata: {
-        llmCalls: context.metadata.llmCalls,
-        skillCalls: context.metadata.skillCalls,
-        totalTokens: context.metadata.totalTokens,
         data: {
           success: result.success,
           executionTime: result.executionTime,
@@ -91,7 +81,6 @@ export class DefaultTaskHook extends BaseTaskHook {
       status,
       task,
       artifactCount,
-      skillCount,
       executionTime: result.executionTime,
     });
   }
@@ -111,12 +100,9 @@ export class DefaultTaskHook extends BaseTaskHook {
     // This keeps Stream output minimal and focused on actual state changes
  
     // Add custom progress metrics logging
-    const { services, metadata } = context;
+    const { services } = context;
     services.logger.debug('Task progress', {
       taskId: context.taskId,
-      llmCalls: metadata.llmCalls,
-      skillCalls: metadata.skillCalls,
-      totalTokens: metadata.totalTokens,
     });
   }
 }

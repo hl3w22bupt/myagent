@@ -11,6 +11,7 @@ from .base import (
     SkillContext
 )
 from .executor import SkillHookExecutor
+from .trace_hook import SkillTraceHook
 
 __all__ = [
     'BaseHook',
@@ -19,4 +20,5 @@ __all__ = [
     'HookResultAction',
     'SkillContext',
     'SkillHookExecutor',
+    'SkillTraceHook',
 ]

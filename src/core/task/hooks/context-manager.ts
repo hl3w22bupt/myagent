@@ -74,11 +74,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         },
         artifactIndex: [],
         workingMemory: {},
-        metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
-        },
+        metadata: {},
       };
 
       return undefined;
@@ -153,7 +149,6 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         services.logger.info('Task context saved', {
           taskId,
           currentTurn: context.context.currentTurn,
-          totalTokens: context.context.metadata.totalTokens,
           messagesCount: context.context.messages.length,
           hasCompression: !!context.context.metadata.lastCompressedAt,
         });

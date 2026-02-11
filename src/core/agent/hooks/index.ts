@@ -30,3 +30,5 @@ export {
   setAgentStreams,
   getAgentStreams,
 } from './progress-notify';
+
+export { AgentTraceHook } from './trace-hook';

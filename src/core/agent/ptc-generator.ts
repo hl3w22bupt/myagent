@@ -261,7 +261,7 @@ Output format (JSON):
 }
 </plan>`;
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'skill selection');
 
     // Extract JSON - try multiple formats
     let jsonString: string | null = null;
@@ -848,7 +848,7 @@ TIPS FOR FILE/VIDEO GENERATION:
 
 Generate the code now:`;
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }]);
+    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'ptc codegen');
 
     // Extract code from code blocks - support multiple languages
     // Priority: python > typescript > javascript > generic

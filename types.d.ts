@@ -9,6 +9,7 @@ import { EventHandler, ApiRouteHandler, ApiResponse, MotiaStream, CronHandler } 
 declare module 'motia' {
   interface FlowContextStateStreams {
     'taskExecution': MotiaStream<{ taskId: string; task: string; status: 'pending' | 'started' | 'running' | 'completed' | 'failed' | 'awaiting_clarification'; output?: string; error?: string; currentStep?: string; executionTime?: number; sessionId?: string; timestamp: string; type: 'task' | 'skill' | 'agent' | 'agent_created' | 'agent_acquired' | 'agent_status' | 'intent_analysis' | 'ptc_planning' | 'awaiting_clarification'; skill?: string; stage?: 'pre' | 'processing' | 'post'; progressType?: 'step' | 'heartbeat' | 'status' | 'chat'; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number; data?: unknown } }>
+    'executionTraces': MotiaStream<{ traceId: string; level: 'task' | 'agent' | 'skill' | 'agent-internal' | 'skill-internal'; taskId: string; agentId?: string; skillName?: string; parentTraceId?: string; stage: 'pre' | 'processing' | 'post' | 'intent_analysis' | 'ptc_planning' | 'llm_call' | 'skill_generation'; purpose?: string; status: 'started' | 'running' | 'completed' | 'failed' | 'retried'; inputData?: string; outputData?: string; error?: string; errorStack?: string; retryCount: number; maxRetries: number; executionTime?: number; timestamp: string; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number; sessionId?: string; data?: unknown; llmProvider?: string; llmModel?: string; llmRequest?: { messages?: Array<{ role: string; content: string }>; maxTokens?: number; temperature?: number }; llmResponse?: { content?: string; promptTokens?: number; completionTokens?: number; totalTokens?: number } } }>
   }
 
   interface Handlers {
@@ -16,6 +17,8 @@ declare module 'motia' {
     'output-history-tracker': EventHandler<never, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'execution-traces-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'stream-history-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

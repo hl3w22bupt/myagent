@@ -13,9 +13,6 @@ describe('MetricsCollectorTaskHook', () => {
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 5,
-        skillCalls: 3,
-        totalTokens: 1000,
       },
       services: {
         streams: { taskExecution: { set: jest.fn() } },
@@ -31,8 +28,6 @@ describe('MetricsCollectorTaskHook', () => {
       'Task metrics',
       expect.objectContaining({
         taskId: 'test-1',
-        llmCalls: 5,
-        skillCalls: 3,
         success: true,
       })
     );

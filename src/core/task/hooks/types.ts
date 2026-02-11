@@ -22,9 +22,6 @@ export interface TaskContext {
     artifactIndex: any[];
     workingMemory: Record<string, any>;
     metadata: {
-      totalTokens: number;
-      llmCallsCount: number;
-      skillCallsCount: number;
       lastCompressedAt?: Date;
     };
   } | null;
@@ -33,9 +30,6 @@ export interface TaskContext {
   metadata: {
     createdAt: Date;
     updatedAt: Date;
-    llmCalls: number;
-    skillCalls: number;
-    totalTokens: number;
     userId?: string;
   };
 

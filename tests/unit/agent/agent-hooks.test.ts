@@ -44,9 +44,6 @@ class MockAgent {
       steps: [],
       executionTime: 100,
       metadata: {
-        llmCalls: 1,
-        skillCalls: 0,
-        totalTokens: 100,
       },
     };
   }
@@ -133,9 +130,6 @@ describe('AgentMonitoringHook', () => {
       steps: [],
       executionTime: 500,
       metadata: {
-        llmCalls: 2,
-        skillCalls: 1,
-        totalTokens: 500,
       },
     };
 
@@ -185,9 +179,6 @@ describe('AgentContextSyncHook', () => {
       steps: [],
       executionTime: 500,
       metadata: {
-        llmCalls: 1,
-        skillCalls: 0,
-        totalTokens: 100,
       },
     };
 
@@ -262,9 +253,6 @@ describe('AgentProgressNotifyHook', () => {
       steps: [],
       executionTime: 500,
       metadata: {
-        llmCalls: 1,
-        skillCalls: 0,
-        totalTokens: 100,
       },
     };
 

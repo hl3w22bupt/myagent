@@ -47,7 +47,10 @@ export interface AgentProgressNotifyConfig {
  */
 interface Streams {
   taskExecution?: {
-    set: (groupId: string, entryId: string, value: any) => Promise<void>;
+    set(groupId: string, entryId: string, value: any): Promise<void>;
+  };
+  executionTraces?: {
+    set(groupId: string, id: string, data: any): Promise<any>;
   };
 }
 
@@ -264,9 +267,6 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
                             context.context?.artifactIndex?.length ||
                             0;
 
-      // 获取使用的 skill 数量
-      const skillCount = result.metadata.skillCalls;
-
       const event = {
         type: 'agent',  // 统一为 'agent'
         stage: 'post',  // 统一使用 stage 字段
@@ -278,7 +278,6 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         data: {
           success: result.success,
           artifactCount,
-          skillCount,
         }
       };
 
@@ -289,7 +288,6 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         taskId,
         success: result.success,
         artifactCount,
-        skillCount,
       });
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send task complete notification', {

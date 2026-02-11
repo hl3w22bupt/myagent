@@ -64,6 +64,12 @@ class SkillExecutor:
         if notify_hook_api_url is None:
             notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL', 'http://localhost:3000/api/notify')
 
+        # Get trace_hook_api_url from environment variable
+        trace_hook_api_url = os.getenv('MOTIA_TRACE_API_URL', 'http://localhost:3000/api/traces/submit')
+
+        # Store trace API URL for handler use
+        self.trace_api_url = trace_hook_api_url
+
         # Get default hook configuration
         from config.hooks import get_default_hooks
 
@@ -72,7 +78,7 @@ class SkillExecutor:
         # - hooks=[] (explicit empty): Disable all hooks
         # - hooks=[...]: Use custom hooks
         if hooks is None:
-            default_hooks = get_default_hooks(notify_hook_api_url)
+            default_hooks = get_default_hooks(notify_hook_api_url, trace_hook_api_url)
         elif hooks == []:  # Explicitly empty list - disable all hooks
             default_hooks = []
         else:  # User provided custom hooks
@@ -317,7 +323,8 @@ class SkillExecutor:
         handler = ClaudeSkillHandler(
             skill_name=skill.name,
             prompt_template=skill.prompt_template,  # ← 从字段读取
-            mode=ClaudeSkillHandler.MODE_TEMPLATE  # ← template 模式
+            mode=ClaudeSkillHandler.MODE_TEMPLATE,  # ← template 模式
+            trace_api_url=self.trace_api_url  # ← trace API
         )
 
         return handler.execute(input_data)
@@ -442,7 +449,8 @@ class SkillExecutor:
             skill_name=skill.name,
             skill_root=skill_root,
             timeout=timeout,
-            mode='file' if skill_root else 'template'  # Explicitly set mode based on skill_root
+            mode='file' if skill_root else 'template',  # Explicitly set mode based on skill_root
+            trace_api_url=self.trace_api_url  # ← trace API
         )
 
         # Execute skill

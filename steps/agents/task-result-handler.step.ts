@@ -663,9 +663,6 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
     logger.info('✅ Task Execution Successful', {
       output: outputPreview,
-      llmCalls: normalizedResult.metadata?.llmCalls,
-      skillCalls: normalizedResult.metadata?.skillCalls,
-      totalTokens: normalizedResult.metadata?.totalTokens,
     });
   } else {
     // Handle both string and object outputs for errors

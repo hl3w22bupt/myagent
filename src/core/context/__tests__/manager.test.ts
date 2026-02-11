@@ -41,7 +41,6 @@ describe('ContextManager', () => {
 
     expect(updated.currentTurn).toBe(1);
     expect(updated.messages).toHaveLength(1);
-    expect(updated.metadata.totalTokens).toBe(10);
   });
 
   it('should compress context when token threshold exceeded', async () => {
@@ -80,7 +79,6 @@ describe('ContextManager', () => {
       metadata: {
         timestamp: new Date(),
         tokens: 20,
-        skillCalls: ['file-write'],
       },
     };
 

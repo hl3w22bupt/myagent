@@ -172,15 +172,20 @@ export class ContextManager {
 
       const compressed = await this.compressor.compress(updatedContext, llmSummarize);
 
+      // Calculate token counts from messages
+      const originalTokenCount = updatedContext.messages
+        .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
+      const compressedTokenCount = compressed.messages
+        .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
+
       // 5. 保存压缩历史
       await this.store.saveCompressionHistory({
         id: `comp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         taskId,
         compressedAt: new Date(),
-        originalTokenCount: updatedContext.metadata.totalTokens,
-        compressedTokenCount: compressed.metadata.totalTokens,
-        compressionRatio:
-          compressed.metadata.totalTokens / updatedContext.metadata.totalTokens,
+        originalTokenCount,
+        compressedTokenCount,
+        compressionRatio: compressedTokenCount / originalTokenCount,
         summary: compressed.summary,
         truncatedMessageIds: updatedContext.messages
           .slice(0, -20)

@@ -6,6 +6,7 @@ import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
 import CodePlayer from '../components/CodePlayer'
 import AudioPlayer from '../components/AudioPlayer'
 import HtmlRenderer from '../components/HtmlRenderer'
+import ExecutionTracesInline from '../components/ExecutionTracesInline'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -78,6 +79,21 @@ const formatAgentHookMessage = (event) => {
       console.warn('[formatAgentHookMessage] 未知事件类型:', type)
       return `[ℹ️ 系统]: ${type || '未知事件'}`
   }
+}
+
+/**
+ * 获取状态文本（用于任务详情页面的状态显示）
+ */
+const getStatusText = (status, executionTime) => {
+  if (status === 'running') return '执行中'
+  if (status === 'completed') return '成功'
+  if (status === 'failed') return '失败'
+  if (status === 'pending') return '等待中'
+  if (status === 'started') return '已开始'
+  if (status === 'awaiting_clarification') return '需要澄清'
+  // 兼容旧逻辑：如果没有 status 字段，回退到使用 executionTime 判断
+  if (executionTime === null) return '执行中'
+  return status || '未知'
 }
 
 /**
@@ -256,6 +272,7 @@ function TaskDetail() {
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
+  const [mainView, setMainView] = useState('result') // only 'result' - traces view integrated into result section
   const [mediaUrls, setMediaUrls] = useState({}) // Cache for blob URLs
   const [messages, setMessages] = useState([]) // 所有消息（包括进度和聊天）
   const [inputValue, setInputValue] = useState('') // 聊天输入框内容
@@ -1985,38 +2002,44 @@ function TaskDetail() {
         {/* Tab切换 */}
         <div className="result-tabs">
           {hasVisual && (
-            <>
-              <button
-                className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
-                onClick={() => setActiveTab('visual')}
-              >
-                {visualTabConfig.icon}
-                {visualTabConfig.label}
-              </button>
-              <button
-                className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
-                onClick={() => setActiveTab('text')}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-                  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                  <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                </svg>
-                原始数据
-              </button>
-            </>
+            <button
+              className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
+              onClick={() => setActiveTab('visual')}
+            >
+              {visualTabConfig.icon}
+              {visualTabConfig.label}
+            </button>
           )}
+          <button
+            className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
+            onClick={() => setActiveTab('text')}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+              <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+            原始数据
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'traces' ? 'active' : ''}`}
+            onClick={() => setActiveTab('traces')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="tab-icon">
+              <rect x="2" y="2" width="6" height="4" fill="#669df6"/>
+              <rect x="2" y="10" width="10" height="4" fill="#669df6"/>
+              <polygon points="8 22 12 22 12 18 8 18" fill="#669df6"/>
+              <polygon points="12 14 22 14 22 10 12 10" fill="#4285f4"/>
+              <polygon points="12 22 22 22 22 18 12 18" fill="#4285f4"/>
+            </svg>
+            运行追踪
+          </button>
         </div>
 
         {/* 内容区域 */}
         <div className="result-content">
-          {hasVisual ? (
-            <>
-              {activeTab === 'visual' && renderVisualContent(result)}
-              {activeTab === 'text' && renderTextContent(result)}
-            </>
-          ) : (
-            renderTextContent(result)
-          )}
+          {activeTab === 'visual' && hasVisual && renderVisualContent(result)}
+          {activeTab === 'text' && renderTextContent(result)}
+          {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
         </div>
       </div>
     )
@@ -2089,8 +2112,8 @@ function TaskDetail() {
       if (message.type === 'skill') {
         return (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
           </svg>
         )
       }
@@ -2102,8 +2125,12 @@ function TaskDetail() {
             <rect x="3" y="11" width="18" height="10" rx="2"/>
             <circle cx="12" cy="5" r="2"/>
             <path d="M12 7v4"/>
-            <line x1="8" y1="16" x2="8" y2="16"/>
-            <line x1="16" y1="16" x2="16" y2="16"/>
+            <circle cx="8" cy="16" r="1" fill="#10B981"/>
+            <circle cx="16" cy="16" r="1" fill="#10B981"/>
+            <path d="M8 8l-4 4"/>
+            <path d="M16 8l4 4"/>
+            <circle cx="5" cy="5" r="1"/>
+            <circle cx="19" cy="5" r="1"/>
           </svg>
         )
       }
@@ -2434,8 +2461,15 @@ function TaskDetail() {
           const task = await tasksAPI.getTaskDetails(id)
           setTask(task)
           setError('')
-          setLoading(false)
-          setPolling(false)
+
+          // 如果任务正在运行或等待中，继续轮询
+          if (task.status === 'running' || task.status === 'pending' || task.status === 'started') {
+            setTimeout(fetchTaskDetails, 1000)
+          } else {
+            // 任务完成或失败，停止轮询
+            setLoading(false)
+            setPolling(false)
+          }
         } catch (error) {
           console.error('Error fetching task details:', error)
           if (error.response?.status === 404) {
@@ -2603,8 +2637,8 @@ function TaskDetail() {
             <div className="info-item">
               <span className="info-label">状态:</span>
               <div className="info-value-with-action">
-                <span className={`info-value status status-${task.executionTime === null ? (task.status === 'started' ? 'started' : 'running') : (task.success ? 'completed' : 'failed')}`}>
-                  {task.executionTime === null ? (task.status === 'started' ? '已开始' : '执行中') : (task.success ? '成功' : '失败')}
+                <span className={`info-value status status-${task.status || 'pending'}`}>
+                  {getStatusText(task.status, task.executionTime)}
                 </span>
                 {task.executionTime !== null && !task.success && (
                   <button
@@ -2658,7 +2692,7 @@ function TaskDetail() {
                 <div className="delegate-badges">
                   {task.metadata.delegates.map((delegate, index) => (
                     <span key={index} className="delegate-badge">
-                      🤖 {delegate}
+                      {delegate}
                     </span>
                   ))}
                 </div>
@@ -2675,14 +2709,14 @@ function TaskDetail() {
       </div>
 
           {/* 混合UI区域：左侧进度流 + 右侧结果区 */}
-        <div className="hybrid-ui-container">
-          {/* 左侧进度流区域 */}
-          <div className="progress-stream">
-            <div className="progress-stream-header">
-              <h3>任务执行进度</h3>
-              <span className="stream-count">{messages.length} 条消息</span>
-            </div>
-            <div className="progress-stream-content">
+          <div className="hybrid-ui-container">
+            {/* 左侧进度流区域 */}
+            <div className="progress-stream">
+              <div className="progress-stream-header">
+                <h3>任务执行进度</h3>
+                <span className="stream-count">{messages.length} 条消息</span>
+              </div>
+              <div className="progress-stream-content">
               {/* 统一的消息列表：进度流 + 聊天（使用分组） */}
               {(() => {
                 // 按时间排序所有消息
@@ -2809,8 +2843,8 @@ function TaskDetail() {
             )}
           </div>
         </div>
-    </div>
-  )
+      </div>
+    )
 }
 
 // Video Player Component

@@ -355,7 +355,8 @@ class RemotionVideoGenerator:
 
                 code = await self._generate_with_llm_two_stage(
                     description, duration, fps, resolution, style,
-                    error_context=last_error  # Pass previous error for context
+                    error_context=last_error,  # Pass previous error for context
+                    retry_attempt=attempt - 1  # Pass retry attempt (0-based)
                 )
 
                 logging.info(f"[RETRY-{attempt}/{max_attempts}] LLM generation DONE, code length: {len(code) if code else 0}")
@@ -413,7 +414,8 @@ class RemotionVideoGenerator:
         fps: int,
         resolution: str,
         style: str,
-        error_context: Optional[str] = None
+        error_context: Optional[str] = None,
+        retry_attempt: int = 0
     ) -> str:
         """
         Generate Remotion code using two-stage LLM process.
@@ -428,6 +430,7 @@ class RemotionVideoGenerator:
             resolution: Video resolution (e.g., "1920x1080")
             style: Video style (can inform visualization choices)
             error_context: Optional error feedback for retry
+            retry_attempt: Which retry attempt (0 = first attempt)
 
         Returns:
             Complete TypeScript/Remotion code
@@ -449,7 +452,8 @@ class RemotionVideoGenerator:
             duration=duration,
             fps=fps,
             resolution=resolution,
-            error_context=error_context
+            error_context=error_context,
+            retry_attempt=retry_attempt
         )
         logging.info("Code generation complete")
 

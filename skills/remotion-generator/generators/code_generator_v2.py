@@ -76,7 +76,8 @@ class RemotionCodeGeneratorV2(BaseGenerator):
         duration: int = 10,
         fps: int = 30,
         resolution: str = "1920x1080",
-        error_context: Optional[str] = None
+        error_context: Optional[str] = None,
+        retry_attempt: int = 0
     ) -> str:
         """
         Generate Remotion code from content analysis.
@@ -87,6 +88,7 @@ class RemotionCodeGeneratorV2(BaseGenerator):
             fps: Frames per second
             resolution: Video resolution (e.g., "1920x1080")
             error_context: Optional error feedback for retry
+            retry_attempt: Which retry attempt (0 = first attempt)
 
         Returns:
             Complete TypeScript/Remotion code
@@ -111,7 +113,9 @@ class RemotionCodeGeneratorV2(BaseGenerator):
                 prompt=prompt,
                 max_tokens=8000,  # Increased to prevent code truncation
                 temperature=0.2,  # Lower for consistent code
-                system_prompt=self._get_system_prompt_v2()
+                system_prompt=self._get_system_prompt_v2(),
+                purpose="remotion code generation v2",
+                retry_attempt=retry_attempt
             )
 
             # Extract code from response

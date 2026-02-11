@@ -8,9 +8,12 @@ for content analysis and code generation.
 import os
 import asyncio
 import json
+import time
+import httpx
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from pathlib import Path
+from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
 
@@ -56,7 +59,11 @@ class LLMClient:
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: int = 180
+        timeout: int = 180,
+        # Trace API configuration
+        trace_api_url: Optional[str] = None,
+        task_id: Optional[str] = None,
+        skill_name: str = "remotion-generator"
     ):
         """
         Initialize LLM client.
@@ -65,6 +72,9 @@ class LLMClient:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
             model: Model identifier (defaults to DEFAULT_LLM_MODEL env var or claude-3-5-sonnet-20241022)
             timeout: Request timeout in seconds
+            trace_api_url: Trace API URL (defaults to MOTIA_TRACE_API_URL env var)
+            task_id: Task ID for tracing (defaults to MOTIA_TASK_ID env var)
+            skill_name: Skill name for tracing
         """
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
@@ -76,6 +86,12 @@ class LLMClient:
         # Use model from param, env var, or fallback to default
         self.model = model or os.getenv("DEFAULT_LLM_MODEL", "claude-3-5-sonnet-20241022")
         self.timeout = timeout
+
+        # Trace configuration
+        self.trace_api_url = trace_api_url or os.getenv('MOTIA_TRACE_API_URL', 'http://localhost:3000/api/traces/submit')
+        self.task_id = task_id or os.getenv('MOTIA_TASK_ID', 'unknown')
+        self.skill_name = skill_name
+        self._http_client: Optional[httpx.AsyncClient] = None
 
         # Get base URL from environment if available
         base_url = os.getenv("LLM_BASE_URL")
@@ -89,13 +105,114 @@ class LLMClient:
         else:
             self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
+    async def _send_trace(self, trace_data: Dict[str, Any]):
+        """
+        Send trace data to Motia executionTraces stream via API.
+
+        Args:
+            trace_data: Trace data matching executionTraceSchema
+        """
+        if not self.trace_api_url:
+            return
+
+        # Create HTTP client if needed
+        if not self._http_client:
+            self._http_client = httpx.AsyncClient(timeout=5.0)
+
+        try:
+            response = await self._http_client.post(
+                self.trace_api_url,
+                json=trace_data
+            )
+            response.raise_for_status()
+            print(f"[LLMClient] ✓ LLM trace sent: {trace_data.get('id')} - {trace_data.get('status')}")
+        except Exception as e:
+            print(f"[LLMClient] ✗ Failed to send LLM trace: {e}")
+
+    def _send_llm_trace(
+        self,
+        prompt: str,
+        response: LLMResponse,
+        execution_time: float,
+        max_tokens: int,
+        temperature: float,
+        purpose: Optional[str] = None,
+        is_retry: bool = False,
+        retry_attempt: int = 0
+    ):
+        """
+        Send LLM call trace to executionTraces stream.
+
+        Args:
+            prompt: The prompt sent to LLM
+            response: The LLMResponse from LLM
+            execution_time: Execution time in seconds
+            max_tokens: Max tokens requested
+            temperature: Temperature used
+            purpose: Purpose description for this LLM call (optional)
+            is_retry: Whether this is a retry attempt
+            retry_attempt: Which retry attempt (0 = first attempt)
+        """
+        # Get trace context from environment
+        session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
+
+        trace_id = f"llm-skill-{self.skill_name}-{self.task_id}-{int(time.time() * 1000)}"
+        timestamp_ms = int(time.time() * 1000)
+
+        trace_data = {
+            "id": trace_id,
+            "level": "skill-internal",
+            "taskId": self.task_id,
+            "agentId": session_id,
+            "skillName": self.skill_name,
+            "stage": f"llm_call - {purpose}" if purpose else "llm_call",
+            "status": "completed",
+            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
+            "isRetry": is_retry,
+            "retryAttempt": retry_attempt,
+            "metadata": {
+                "sessionId": session_id,
+                "llmProvider": "anthropic",
+                "llmModel": response.model,
+                "llmRequest": {
+                    "prompt": prompt[:1000],  # Truncate long prompts
+                    "promptLength": len(prompt),
+                    "maxTokens": max_tokens,
+                    "temperature": temperature,
+                },
+                "llmResponse": {
+                    "content": response.content[:1000],  # Truncate long responses
+                    "responseLength": len(response.content),
+                    "promptTokens": response.usage['input_tokens'],
+                    "completionTokens": response.usage['output_tokens'],
+                    "totalTokens": response.usage['input_tokens'] + response.usage['output_tokens'],
+                }
+            }
+        }
+
+        # Send trace asynchronously
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If there's already a running loop, create a task
+                asyncio.ensure_future(self._send_trace(trace_data))
+            else:
+                # If no loop is running, run in a new loop
+                loop.run_until_complete(self._send_trace(trace_data))
+        except Exception as e:
+            print(f"[LLMClient] Failed to send trace: {e}")
+
     async def generate(
         self,
         prompt: str,
         max_tokens: int = 2000,
         temperature: float = 0.3,
         system_prompt: Optional[str] = None,
-        response_format: str = "text"  # "text" or "json"
+        response_format: str = "text",  # "text" or "json"
+        purpose: Optional[str] = None,
+        is_retry: bool = False,
+        retry_attempt: int = 0
     ) -> LLMResponse:
         """
         Generate content using LLM.
@@ -106,6 +223,9 @@ class LLMClient:
             temperature: Sampling temperature (0-1)
             system_prompt: Optional system prompt
             response_format: Response format ("text" or "json")
+            purpose: Purpose description for this LLM call (optional)
+            is_retry: Whether this is a retry attempt
+            retry_attempt: Which retry attempt (0 = first attempt, 1 = first retry, etc.)
 
         Returns:
             LLMResponse with content and metadata
@@ -114,6 +234,8 @@ class LLMClient:
             asyncio.TimeoutError: If request times out
             Exception: For API errors
         """
+        start_time = time.time()
+
         # Prepare messages
         messages = [{"role": "user", "content": prompt}]
 
@@ -147,12 +269,22 @@ class LLMClient:
                 "output_tokens": response.usage.output_tokens,
             }
 
-            return LLMResponse(
+            llm_response = LLMResponse(
                 content=content,
                 model=response.model,
                 usage=usage,
                 stop_reason=response.stop_reason
             )
+
+            # Send trace
+            execution_time = time.time() - start_time
+            self._send_llm_trace(
+                prompt, llm_response, execution_time,
+                max_tokens, temperature, purpose,
+                is_retry, retry_attempt
+            )
+
+            return llm_response
 
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(
@@ -200,7 +332,13 @@ class LLMClient:
 
         for attempt in range(max_retries + 1):
             try:
-                return await self.generate(prompt, **kwargs)
+                # Pass retry information to generate()
+                return await self.generate(
+                    prompt,
+                    is_retry=(attempt > 0),
+                    retry_attempt=attempt,
+                    **kwargs
+                )
             except Exception as e:
                 last_error = e
                 if attempt < max_retries:
@@ -267,12 +405,20 @@ class LLMClient:
 _llm_client_instance: Optional[LLMClient] = None
 
 
-def get_llm_client(model: Optional[str] = None) -> LLMClient:
+def get_llm_client(
+    model: Optional[str] = None,
+    trace_api_url: Optional[str] = None,
+    task_id: Optional[str] = None,
+    skill_name: str = "remotion-generator"
+) -> LLMClient:
     """
     Get or create singleton LLM client instance.
 
     Args:
         model: Optional model override
+        trace_api_url: Optional trace API URL override
+        task_id: Optional task ID for tracing
+        skill_name: Optional skill name for tracing
 
     Returns:
         LLMClient instance
@@ -284,6 +430,11 @@ def get_llm_client(model: Optional[str] = None) -> LLMClient:
     effective_model = model or default_model
 
     if _llm_client_instance is None or effective_model != _llm_client_instance.model:
-        _llm_client_instance = LLMClient(model=effective_model)
+        _llm_client_instance = LLMClient(
+            model=effective_model,
+            trace_api_url=trace_api_url,
+            task_id=task_id,
+            skill_name=skill_name
+        )
 
     return _llm_client_instance

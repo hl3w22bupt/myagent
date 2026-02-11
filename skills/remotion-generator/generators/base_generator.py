@@ -121,6 +121,7 @@ class BaseGenerator(ABC):
         prompt: str,
         system_prompt: Optional[str] = None,
         fallback_value: Optional[str] = None,
+        retry_attempt: int = 0,
         **llm_kwargs
     ) -> str:
         """
@@ -130,6 +131,7 @@ class BaseGenerator(ABC):
             prompt: User prompt
             system_prompt: Optional system prompt
             fallback_value: Fallback value if LLM fails
+            retry_attempt: Which retry attempt (0 = first attempt)
             **llm_kwargs: Additional LLM parameters
 
         Returns:
@@ -137,9 +139,15 @@ class BaseGenerator(ABC):
         """
         logger.info(f"[DEBUG] _llm_call_with_fallback: kwargs keys: {list(llm_kwargs.keys())}")
         try:
-            response = await self.llm.generate_with_retry(
+            # Extract retry_attempt from llm_kwargs if present (it might be passed there)
+            # Otherwise use the parameter
+            final_retry_attempt = llm_kwargs.pop('retry_attempt', retry_attempt)
+
+            response = await self.llm.generate(
                 prompt=prompt,
                 system_prompt=system_prompt,
+                is_retry=(final_retry_attempt > 0),
+                retry_attempt=final_retry_attempt,
                 **llm_kwargs
             )
             return response.content

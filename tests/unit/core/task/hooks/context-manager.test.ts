@@ -39,9 +39,6 @@ describe('ContextManagerTaskHook', () => {
       metadata: {
         createdAt: new Date(),
         updatedAt: new Date(),
-        llmCalls: 0,
-        skillCalls: 0,
-        totalTokens: 0,
       },
       services: {
         streams: {
@@ -79,9 +76,6 @@ describe('ContextManagerTaskHook', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
         },
       });
 
@@ -130,9 +124,6 @@ describe('ContextManagerTaskHook', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 100,
-          llmCallsCount: 2,
-          skillCallsCount: 3,
           lastCompressedAt: new Date(),
         },
       };
@@ -150,7 +141,6 @@ describe('ContextManagerTaskHook', () => {
         expect.objectContaining({
           taskId: 'test-1',
           currentTurn: 1,
-          totalTokens: 100,
           hasCompression: true,
         })
       );
@@ -176,9 +166,6 @@ describe('ContextManagerTaskHook', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
         },
       };
 
@@ -215,9 +202,6 @@ describe('ContextManagerTaskHook', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
         },
       };
 
@@ -252,9 +236,6 @@ describe('ContextManagerTaskHook', () => {
         artifactIndex: [],
         workingMemory: {},
         metadata: {
-          totalTokens: 0,
-          llmCallsCount: 0,
-          skillCallsCount: 0,
         },
       };
 
