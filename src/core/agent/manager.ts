@@ -45,6 +45,9 @@ export interface AcquireOptions {
 
   /** Optional: Available skills to filter (whitelist) */
   availableSkills?: string[];
+
+  /** Optional: Specific subagents to delegate to (bypasses intelligent analysis) */
+  delegateTo?: string[];
 }
 
 /**
@@ -126,6 +129,23 @@ export class AgentManager {
       const agent = this.sessions.get(sessionId)!;
       this.lastActivity.set(sessionId, Date.now());
 
+      console.log('[AgentManager] Session exists, reusing agent', {
+        sessionId,
+        agentType: agent.constructor.name,
+        hasOptions: !!options,
+        hasDelegateTo: !!options?.delegateTo,
+        delegateTo: options?.delegateTo,
+      });
+
+      // Update MasterAgent's explicitDelegateTo if provided in options
+      if (options?.delegateTo && agent instanceof MasterAgent) {
+        (agent as any).explicitDelegateTo = options.delegateTo;
+        console.log('[AgentManager] Updated MasterAgent explicitDelegateTo:', {
+          sessionId,
+          delegateTo: options.delegateTo,
+        });
+      }
+
       // Execute onAgentAcquire hook (for reused Agent)
       await this.hookManager.executeHook('onAgentAcquire', agent, sessionId);
 
@@ -142,9 +162,18 @@ export class AgentManager {
     let config: AgentConfig | MasterAgentConfig;
     if (agentType === 'master') {
       const baseConfig = this.config.masterAgentConfig!;
-      config = options?.availableSkills
-        ? { ...baseConfig, availableSkills: options.availableSkills }
-        : baseConfig;
+      const masterConfig: MasterAgentConfig = {
+        ...baseConfig,
+        ...(options?.availableSkills && { availableSkills: options.availableSkills }),
+        ...(options?.delegateTo && { delegateTo: options.delegateTo }),
+      };
+      config = masterConfig;
+
+      console.log('[AgentManager] MasterAgent config created:', {
+        sessionId,
+        'config.delegateTo': masterConfig.delegateTo,
+        'options.delegateTo': options?.delegateTo,
+      });
     } else {
       const baseConfig = this.config.agentConfig;
       config = options?.availableSkills

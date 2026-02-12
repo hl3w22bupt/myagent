@@ -163,8 +163,8 @@
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem 1.5rem;
 }
 
 .info-item {
@@ -177,8 +177,23 @@
 
 .info-item.full-width {
   grid-column: 1 / -1;
-  flex-direction: column;
   align-items: flex-start;
+}
+
+/* 包含委派给和技能的 full-width 元素保持水平布局 */
+.info-item.full-width.inline-badges {
+  flex-direction: row;
+  align-items: center;
+}
+
+.badge-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge-group + .badge-group {
+  margin-left: 1.5rem;
 }
 
 .info-label {
@@ -191,6 +206,13 @@
 .info-value {
   font-size: 0.875rem;
   color: #1e293b;
+}
+
+.info-separator {
+  width: 1px;
+  height: 1.5rem;
+  background-color: #e2e8f0;
+  margin: 0 0.5rem;
 }
 
 /* 状态和操作按钮的容器 */

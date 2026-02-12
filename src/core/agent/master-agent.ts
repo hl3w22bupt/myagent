@@ -7,6 +7,7 @@
 
 import { Agent } from './agent';
 import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
+import { getAgentStreams } from './hooks/progress-notify';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -19,6 +20,7 @@ export class MasterAgent extends Agent {
   private subagentConfigs: Map<string, any>;
   private cacheVersion: string; // Cache version based on subagents config
   private masterConfig: MasterAgentConfig; // Store typed config
+  private explicitDelegateTo: string[] | undefined; // Explicit delegation targets
 
   // Delegation plan cache to reduce LLM calls
   private delegationPlansCache: Map<string, { plan: DelegationPlan; timestamp: number; cacheVersion: string }>;
@@ -28,9 +30,17 @@ export class MasterAgent extends Agent {
   constructor(config: MasterAgentConfig, sessionId: string) {
     super(config, sessionId);
     this.masterConfig = config; // Store typed config
+    this.explicitDelegateTo = config.delegateTo; // Store explicit delegation
+    this.agentName = 'Master Agent'; // Set display name
     this.subagents = new Map();
     this.subagentConfigs = new Map();
     this.delegationPlansCache = new Map();
+
+    console.log('[MasterAgent] Constructor called', {
+      sessionId,
+      'config.delegateTo': config.delegateTo,
+      'this.explicitDelegateTo': this.explicitDelegateTo,
+    });
 
     // Generate cache version from subagents list
     this.cacheVersion = this.generateCacheVersion();
@@ -47,8 +57,36 @@ export class MasterAgent extends Agent {
     const startTime = Date.now();
     const steps: any[] = [];
 
+    console.log('[MasterAgent] run() called', {
+      sessionId: this.sessionId,
+      explicitDelegateTo: this.explicitDelegateTo,
+      hasExplicitDelegateTo: !!this.explicitDelegateTo,
+      length: this.explicitDelegateTo?.length || 0,
+    });
+
     try {
-      // Step 1: Create delegation plan
+      // If explicit delegateTo is specified, skip intelligent planning
+      if (this.explicitDelegateTo && this.explicitDelegateTo.length > 0) {
+        console.log('[MasterAgent] Using direct delegation (bypassing LLM planning)', {
+          delegateTo: this.explicitDelegateTo,
+        });
+        steps.push({
+          type: 'planning',
+          content: 'Direct delegation (bypassing intelligent analysis)',
+          timestamp: Date.now(),
+          metadata: {
+            task,
+            delegateTo: this.explicitDelegateTo,
+          },
+        });
+
+        // ⭐ Send direct delegation notification to taskExecution stream
+        await this.sendDirectDelegationNotification(task, this.explicitDelegateTo, _taskId);
+
+        return this.executeDirectDelegation(task, this.explicitDelegateTo, steps, startTime, _taskId, 'direct');
+      }
+
+      // Step 1: Create delegation plan (intelligent analysis)
       steps.push({
         type: 'planning',
         content: 'Creating delegation plan',
@@ -56,7 +94,7 @@ export class MasterAgent extends Agent {
         metadata: { task },
       });
 
-      const plan = await this.planWithDelegation(task);
+      const plan = await this.planWithDelegation(task, _taskId);
 
       steps.push({
         type: 'delegation',
@@ -70,9 +108,30 @@ export class MasterAgent extends Agent {
         },
       });
 
-      // Step 2: Combine all steps into a single task
-      const combinedTask = plan.steps.map((step, index) => {
-        return `Step ${index + 1}: ${step.task} (${step.delegateTo ? `Delegate to ${step.delegateTo}` : 'Execute directly'})`;
+      // Step 2: Check if plan has delegation steps
+      const delegationSteps = plan.steps.filter((s) => s.delegateTo);
+      const directExecutionSteps = plan.steps.filter((s) => !s.delegateTo);
+
+      if (delegationSteps.length > 0) {
+        // Has delegation - execute with the first delegated subagent
+        const delegateTarget = delegationSteps[0].delegateTo!;
+        console.log('[MasterAgent] Delegating to:', delegateTarget);
+
+        steps.push({
+          type: 'execution',
+          content: `Delegating to ${delegateTarget}`,
+          timestamp: Date.now(),
+        });
+
+        return this.executeDirectDelegation(task, [delegateTarget], steps, startTime, _taskId, 'planned');
+      }
+
+      // No delegation - execute directly
+      console.log('[MasterAgent] Executing directly (no delegation needed)');
+
+      // Combine all direct execution steps into a single task
+      const combinedTask = directExecutionSteps.map((step, index) => {
+        return `Step ${index + 1}: ${step.task}`;
       }).join('\n\n');
 
       console.log('[MasterAgent] Combined task:', combinedTask);
@@ -278,7 +337,7 @@ export class MasterAgent extends Agent {
    * Uses LLM to intelligently delegate tasks to appropriate subagents.
    * Implements caching to reduce LLM calls for similar tasks.
    */
-  private async planWithDelegation(task: string): Promise<DelegationPlan> {
+  private async planWithDelegation(task: string, taskId?: string): Promise<DelegationPlan> {
     // Step 1: Check cache first
     const cachedPlan = this.getCachedPlan(task);
     if (cachedPlan) {
@@ -386,6 +445,32 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
 - Consider if the task has sufficient context (files, data, specifics)
 `;
 
+    // ⭐ Send delegation planning notification (analyzing status)
+    const streams = getAgentStreams();
+    const effectiveTaskId = taskId || `task-${Date.now()}`;
+
+    if (streams?.taskExecution) {
+      const analyzingEvent = {
+        type: 'delegation_planning',
+        progressType: 'delegation',
+        status: 'analyzing',
+        taskId: effectiveTaskId,
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          task,
+          subjectTitle: 'Master Agent',
+        }
+      };
+      const timestamp = Date.now();
+      const entryId = `agent-delegation_planning-analyzing-${effectiveTaskId}-${timestamp}`;
+      await streams.taskExecution.set(effectiveTaskId, entryId, {
+        ...analyzingEvent,
+        category: 'agent_hook',
+      });
+      console.log('[MasterAgent] Delegation planning (analyzing) notification sent');
+    }
+
     const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'delegation planning');
 
     // Try multiple parsing strategies
@@ -395,6 +480,41 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
     // Helper to cache and return plan
     const cacheAndReturn = (plan: DelegationPlan): DelegationPlan => {
       this.cachePlan(task, plan);
+
+      // ⭐ Send delegation plan completed notification
+      const streams = getAgentStreams();
+      if (streams?.taskExecution) {
+        (async () => {
+          try {
+            const planEvent = {
+              type: 'delegation_plan',
+              progressType: 'delegation',
+              status: 'completed',
+              taskId: effectiveTaskId,
+              sessionId: this.sessionId,
+              timestamp: new Date().toISOString(),
+              data: {
+                task,
+                plan: {
+                  steps: plan.steps,
+                  reasoning: plan.reasoning,
+                },
+                subjectTitle: 'Master Agent',
+              }
+            };
+            const timestamp = Date.now();
+            const entryId = `agent-delegation_plan-completed-${effectiveTaskId}-${timestamp}`;
+            await streams.taskExecution?.set(effectiveTaskId, entryId, {
+              ...planEvent,
+              category: 'agent_hook',
+            });
+            console.log('[MasterAgent] Delegation plan (completed) notification sent');
+          } catch (error) {
+            console.error('[MasterAgent] Failed to send delegation plan notification:', error);
+          }
+        })();
+      }
+
       return plan;
     };
 
@@ -473,11 +593,13 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
     // This is a simplified version - actual implementation would load full config
     const config = this.subagentConfigs.get(name);
 
-    // Create unique sessionId for subagent: masterSessionId-subagentName
-    const subagentSessionId = `${this.sessionId}-${name}`;
+    // Create unique sessionId for subagent with clear prefix
+    // Using independent namespace to distinguish from master agent
+    const subagentSessionId = `subagent-${name}-${Date.now()}`;
 
     const subagent = new Agent(
       {
+        name,  // Set name for getSubjectInfo() to use as subjectSubTitle
         systemPrompt: config?.systemPrompt || `You are ${name}.`,
         availableSkills: config?.availableSkills || [],
         llm: this.config.llm,
@@ -488,7 +610,182 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
 
     this.subagents.set(name, subagent);
 
+    console.log(`[MasterAgent] Created subagent: ${name}`, {
+      subagentSessionId,
+      masterSessionId: this.sessionId,
+    });
+
     return subagent;
+  }
+
+  /**
+   * Send direct delegation notification to taskExecution stream.
+   * Called when user explicitly specifies delegateTo, bypassing LLM planning.
+   */
+  private async sendDirectDelegationNotification(
+    task: string,
+    delegates: string[],
+    taskId?: string
+  ): Promise<void> {
+    const streams = getAgentStreams();
+    const effectiveTaskId = taskId || `task-${Date.now()}`;
+
+    if (streams?.taskExecution) {
+      try {
+        const event = {
+          type: 'delegation_plan',
+          progressType: 'delegation',
+          status: 'completed',
+          taskId: effectiveTaskId,
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          data: {
+            task,
+            plan: {
+              steps: delegates.map((delegate) => ({
+                delegateTo: delegate,
+                description: `Delegating to ${delegate}`,
+              })),
+            },
+            subjectTitle: 'Master Agent',
+          }
+        };
+        const timestamp = Date.now();
+        const entryId = `agent-delegation_plan-direct-${effectiveTaskId}-${timestamp}`;
+        await streams.taskExecution.set(effectiveTaskId, entryId, {
+          ...event,
+          category: 'agent_hook',
+        });
+        console.log('[MasterAgent] Direct delegation notification sent', {
+          taskId: effectiveTaskId,
+          delegates,
+        });
+      } catch (error) {
+        console.error('[MasterAgent] Failed to send direct delegation notification:', error);
+      }
+    }
+  }
+
+  /**
+   * Execute direct delegation to specified subagents.
+   * @param delegationType - 'direct' (user specified) or 'planned' (LLM decided)
+   */
+  private async executeDirectDelegation(
+    task: string,
+    delegates: string[],
+    steps: any[],
+    startTime: number,
+    taskId?: string,
+    delegationType: 'direct' | 'planned' = 'direct'
+  ): Promise<AgentResult> {
+    try {
+      // For simplicity, delegate to the first subagent in the list
+      const subagentName = delegates[0];
+
+      // Record direct delegation in traces (bypassing LLM planning)
+      // and send delegation planning notification to taskExecution stream (for chat display)
+      const streams = getAgentStreams();
+      if (streams && streams.executionTraces && taskId) {
+        // 1. Record delegation planning trace
+        const delegationId = `delegation-planning-${this.sessionId}-${Date.now()}`;
+        await streams.executionTraces.set(taskId, delegationId, {
+          id: delegationId,
+          level: 'agent-internal',
+          taskId,
+          agentId: this.sessionId,
+          stage: 'delegation_planning',
+          status: 'completed',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            delegationType: delegationType,  // 'direct' (user specified) or 'planned' (LLM decided)
+            delegates: delegates,
+            reasoning: delegationType === 'direct'
+              ? `Direct delegation to ${subagentName} (user specified via delegateTo parameter)`
+              : `Planned delegation to ${subagentName} (based on LLM analysis)`,
+          }
+        });
+        console.log('[MasterAgent] Direct delegation trace recorded', { taskId, subagentName });
+      }
+
+
+      steps.push({
+        type: 'delegation',
+        content: `Directing delegating to ${subagentName}`,
+        timestamp: Date.now(),
+        metadata: { delegateTo: subagentName },
+      });
+
+      // Get or create subagent instance
+      const subagent = await this.getOrCreateSubagent(subagentName);
+
+      // === Trigger subagent hooks (like step layer does for MasterAgent) ===
+      const subagentContext = {
+        agentType: 'Agent',
+        agentId: (subagent as any).sessionId, // Access private sessionId via type assertion
+        sessionId: (subagent as any).sessionId, // Add sessionId for notification hooks
+        taskId: taskId, // Add taskId for notification hooks
+        agent: subagent,
+      };
+
+      // Call onTaskStart hook
+      if (this.hookManager) {
+        console.log(`[MasterAgent] Calling subagent onTaskStart hook`, {
+          subagentName,
+          subagentSessionId: (subagent as any).sessionId,
+          agentInfo: (subagent as any).getSubjectInfo?.(),
+        });
+        await this.hookManager.executeHook('onTaskStart', task, taskId, subagentContext);
+        console.log(`[MasterAgent] Subagent onTaskStart hook executed`, { subagentName });
+      }
+
+      // Execute task with subagent
+      const result = await subagent.run(task, taskId);
+
+      // Call onTaskComplete hook
+      if (this.hookManager) {
+        console.log(`[MasterAgent] Calling subagent onTaskComplete hook`, {
+          subagentName,
+          subagentSessionId: (subagent as any).sessionId,
+          agentInfo: (subagent as any).getSubjectInfo?.(),
+          resultSuccess: result.success,
+        });
+        await this.hookManager.executeHook('onTaskComplete', result, subagentContext);
+        console.log(`[MasterAgent] Subagent onTaskComplete hook executed`, { subagentName });
+      }
+
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        output: result.output,
+        steps,
+        executionTime,
+        metadata: {
+          delegates: [subagentName],
+          skillNames: result.metadata?.skillNames,
+        },
+        structuredOutput: result.structuredOutput, // ← 添加这个字段
+      };
+    } catch (error: any) {
+      console.error('[MasterAgent] Direct delegation failed:', {
+        message: error.message,
+        stack: error.stack,
+        task,
+        delegates,
+      });
+
+      return {
+        success: false,
+        error: error.message,
+        output: undefined,
+        steps,
+        executionTime: Date.now() - startTime,
+        metadata: {
+          delegates: delegates,
+        },
+      };
+    }
   }
 
   /**
@@ -710,6 +1007,17 @@ Important rules:
       ...baseInfo,
       type: 'MasterAgent',
       subagents: Array.from(this.subagentConfigs.keys()),
+    };
+  }
+
+  /**
+   * Get subject info for trace display.
+   * MasterAgent always shows "Master Agent" without subtitle.
+   */
+  getSubjectInfo(): { subjectTitle: string; subjectSubTitle?: string } {
+    return {
+      subjectTitle: 'Master Agent',
+      subjectSubTitle: undefined, // Master Agent has no subtitle
     };
   }
 }

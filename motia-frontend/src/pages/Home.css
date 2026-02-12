@@ -107,6 +107,73 @@
   position: relative;
 }
 
+/* Subagent 选择器 - 左下角 */
+.agent-selector-wrapper {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  display: inline-flex;
+  align-items: center;
+  z-index: 10;
+}
+
+.agent-select-input {
+  position: absolute;
+  min-width: 3.5rem;
+  height: 3.5rem;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+  font-size: 11px !important;
+}
+
+.agent-select-input option {
+  font-size: 11px !important;
+  padding: 2px 4px;
+}
+
+.agent-select-input:focus {
+  outline: none;
+}
+
+.agent-selector-button {
+  height: 3.5rem;
+  padding: 0 0.5rem;
+  background: transparent;
+  color: #64748b;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.agent-selector-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* 当 select 聚焦或悬停时 */
+.agent-select-input:focus + .agent-selector-button,
+.agent-selector-wrapper:hover .agent-selector-button {
+  color: #475569;
+}
+
+.agent-select-input:active + .agent-selector-button {
+  color: #334155;
+}
+
+/* 禁用状态 */
+.agent-select-input:disabled + .agent-selector-button {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .hero-task-input {
   width: 100%;
   padding: 1.25rem;
@@ -246,6 +313,12 @@
   height: 2.5rem;
   stroke-width: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.agent-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  stroke-width: 2;
 }
 
 .submit-icon.spinning {

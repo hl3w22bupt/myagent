@@ -30,14 +30,19 @@ const formatAgentHookMessage = (event) => {
 
   switch (type) {
     case 'agent':
+      // 获取 agent 类型信息
+      const subjectTitle = data?.subjectTitle || 'Agent'
+      const subjectSubTitle = data?.subjectSubTitle
+      const agentDisplayName = subjectSubTitle ? `${subjectTitle} / ${subjectSubTitle}` : subjectTitle
+
       if (stage === 'pre') {
-        // Agent pre hook - 直接显示任务内容（作为用户消息）
+        // Agent pre hook - 显示 agent 类型和任务内容
         const taskContent = data?.task || ''
-        return `[🤖 agent启动]：${taskContent}`
+        return `[🤖 ${agentDisplayName} 启动]：${taskContent}`
       } else if (stage === 'post') {
         // Agent post hook - 任务完成
         const success = data?.success ? '✅ 成功' : '❌ 失败'
-        return `[🤖 agent完成]：${success}`
+        return `[🤖 ${agentDisplayName} 完成]：${success}`
       }
       break
 
@@ -64,6 +69,29 @@ const formatAgentHookMessage = (event) => {
       } else {
         const skillsList = skills.join('、')
         return `[📋 执行计划]：依次使用 ${skillsList} skills`
+      }
+
+    case 'delegation_planning':
+      const delegationType = data?.delegationType || 'planned'
+      const delegateTargets = data?.delegates || []
+      const delegateList = delegateTargets.join('、')
+      if (delegationType === 'direct') {
+        return `[🎯 委派计划]：直接委派给 ${delegateList}`
+      } else if (status === 'analyzing') {
+        return `[🔍 委派分析中]：正在分析任务 "${data?.task || ''}"`
+      } else {
+        return `[🎯 委派计划]：委派给 ${delegateList}`
+      }
+
+    case 'delegation_plan':
+      const plan = data?.plan || {}
+      const planSteps = plan.steps || []
+      const delegationCount = planSteps.filter(s => s.delegateTo).length
+      if (delegationCount > 0) {
+        const delegates = planSteps.filter(s => s.delegateTo).map(s => s.delegateTo).join('、')
+        return `[✅ 委派规划完成]：决定委派给 ${delegates}\n📝 推理：${plan.reasoning || ''}`
+      } else {
+        return `[✅ 委派规划完成]：直接处理任务\n📝 推理：${plan.reasoning || ''}`
       }
 
     case 'awaiting_clarification':
@@ -2674,36 +2702,35 @@ function TaskDetail() {
               <span className="info-label">产物数:</span>
               <span className="info-value">{task.artifacts?.length || 0} 个</span>
             </div>
-            {task.metadata?.skillNames && task.metadata.skillNames.length > 0 && (
-              <div className="info-item">
-                <span className="info-label">技能:</span>
-                <div className="skill-badges">
-                  {task.metadata.skillNames.map((skill, index) => (
-                    <span key={index} className="skill-badge">
-                      {skill}
-                    </span>
-                  ))}
-                </div>
+            {(task.metadata?.delegates && task.metadata.delegates.length > 0) ||
+             (task.metadata?.skillNames && task.metadata.skillNames.length > 0) ? (
+              <div className="info-item full-width inline-badges">
+                {task.metadata?.delegates && task.metadata.delegates.length > 0 && (
+                  <div className="badge-group">
+                    <span className="info-label">委派给:</span>
+                    <div className="delegate-badges">
+                      {task.metadata.delegates.map((delegate, index) => (
+                        <span key={index} className="delegate-badge">
+                          {delegate}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {task.metadata?.skillNames && task.metadata.skillNames.length > 0 && (
+                  <div className="badge-group">
+                    <span className="info-label">技能:</span>
+                    <div className="skill-badges">
+                      {task.metadata.skillNames.map((skill, index) => (
+                        <span key={index} className="skill-badge">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {task.metadata?.delegates && task.metadata.delegates.length > 0 && (
-              <div className="info-item">
-                <span className="info-label">委派给:</span>
-                <div className="delegate-badges">
-                  {task.metadata.delegates.map((delegate, index) => (
-                    <span key={index} className="delegate-badge">
-                      {delegate}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="info-item full-width">
-              <span className="info-label">任务内容:</span>
-              <div className="task-content">
-                <pre>{task.task}</pre>
-              </div>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>

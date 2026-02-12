@@ -113,7 +113,7 @@ export const tasksAPI = {
     })),
   getTaskDetails: (id) =>
     apiClient.get('/agent/result', { params: { id } }).then(response => response.data.result),
-  submitTask: (task, sessionId) => {
+  submitTask: (task, sessionId, delegateTo) => {
     const requestKey = `submit_${task}_${sessionId}`
 
     // 检查是否有相同的请求正在处理中
@@ -125,7 +125,12 @@ export const tasksAPI = {
     // 添加到待处理请求集合
     pendingRequests.add(requestKey)
 
-    return apiClient.post('/agent/execute', { task, sessionId })
+    const payload = { task, sessionId }
+    if (delegateTo && delegateTo.length > 0) {
+      payload.delegateTo = delegateTo
+    }
+
+    return apiClient.post('/agent/execute', payload)
       .finally(() => {
         // 请求完成后移除
         pendingRequests.delete(requestKey)

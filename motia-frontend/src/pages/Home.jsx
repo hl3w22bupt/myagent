@@ -205,6 +205,7 @@ function Home() {
   const [taskContent, setTaskContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [selectedAgent, setSelectedAgent] = useState('') // 选中的 subagent（空字符串表示自动选择）
 
   // 获取媒体文件的 Blob URL - 使用 useCallback 优化，防止每次渲染都重新创建函数
   const getMediaBlobUrl = useCallback(async (path) => {
@@ -610,7 +611,11 @@ function Home() {
     try {
       // 生成新的sessionId
       const sessionId = uuidv4()
-      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId)
+
+      // 如果选中了 agent，作为 delegateTo 传递
+      const delegateTo = selectedAgent ? [selectedAgent] : undefined
+
+      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId, delegateTo)
 
       if (response.data && response.data.taskId) {
         // 保存sessionId到sessionStorage
@@ -668,6 +673,42 @@ function Home() {
                   className="hero-task-input"
                   disabled={submitting}
                 />
+
+                {/* Subagent 选择器 - 左下角 */}
+                {agents.length > 0 && (
+                  <div className="agent-selector-wrapper">
+                    <select
+                      className="agent-select-input"
+                      value={selectedAgent}
+                      onChange={(e) => setSelectedAgent(e.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="">自动选择</option>
+                      {agents.map(agent => (
+                        <option key={agent.name} value={agent.name}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="agent-selector-button">
+                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="10" rx="2"/>
+                        <circle cx="12" cy="5" r="2"/>
+                        <path d="M12 7v4"/>
+                        <circle cx="8" cy="16" r="1" fill="currentColor"/>
+                        <circle cx="16" cy="16" r="1" fill="currentColor"/>
+                        <path d="M8 8l-4 4"/>
+                        <path d="M16 8l4 4"/>
+                        <circle cx="5" cy="5" r="1"/>
+                        <circle cx="19" cy="5" r="1"/>
+                      </svg>
+                      <span className="agent-selector-label">
+                        {selectedAgent || '自动选择'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   className="hero-submit-button-icon"

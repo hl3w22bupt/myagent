@@ -27,10 +27,14 @@ export class Agent {
   protected ptcGenerator: PTCGenerator;
   protected sessionId: string;
   private state: SessionState;
+  protected agentName: string = ''; // Agent display name (e.g., "Master Agent", "system-guide")
 
   // Dynamic skill discovery
   private skillDiscovery: SkillDiscovery;
   private static skillsRegistry: Array<{ name: string; description: string; tags: string[] }> = [];
+
+  // Hook manager for agent lifecycle hooks
+  protected hookManager: any = null;
 
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
@@ -81,6 +85,9 @@ export class Agent {
       executionHistory: [],
       variables: new Map(),
     };
+
+    // Initialize agent name from config if provided
+    this.agentName = (config as any).name || '';
 
     // Debug: Log config.availableSkills
     console.log(`[Agent ${sessionId}] Constructor config.availableSkills:`, config.availableSkills);
@@ -228,6 +235,9 @@ export class Agent {
     const effectiveTaskId = taskId || context?.taskId;
 
     console.log('[Agent] Using effective taskId:', effectiveTaskId, 'for all notifications');
+
+    // ✅ 设置 LLM trace 配置（确保 Subagent 也能记录 LLM trace）
+    this.updateLLMTraceConfig(effectiveTaskId);
 
     // CRITICAL FIX: Wait for skills to be initialized before task execution
     // This prevents "Skill not found" errors due to race conditions
@@ -800,6 +810,25 @@ export class Agent {
       sandboxType: this.config.sandbox?.type,
       discoveredSkills: Agent.skillsRegistry.length,
     };
+  }
+
+  /**
+   * Get subject info for trace display.
+   * Returns subjectTitle and subjectSubTitle for UI rendering.
+   */
+  getSubjectInfo(): { subjectTitle: string; subjectSubTitle?: string } {
+    // Default: Subagent (will be overridden by MasterAgent)
+    const subjectTitle = 'Subagent';
+    const subjectSubTitle = this.agentName || undefined;
+    return { subjectTitle, subjectSubTitle };
+  }
+
+  /**
+   * Set hook manager for this agent instance.
+   * Allows agent to trigger its own lifecycle hooks.
+   */
+  setHookManager(hookManager: any): void {
+    this.hookManager = hookManager;
   }
 
   /**

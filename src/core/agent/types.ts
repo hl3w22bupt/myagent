@@ -12,6 +12,9 @@ export { PTCGenerator } from './ptc-generator';
  * Configuration for creating an Agent.
  */
 export interface AgentConfig {
+  /** Optional display name for the Agent (used for trace display) */
+  name?: string;
+
   /** System prompt for the Agent */
   systemPrompt: string;
 
@@ -62,6 +65,9 @@ export interface AgentConfig {
 export interface MasterAgentConfig extends AgentConfig {
   /** List of subagent names this MasterAgent can delegate to */
   subagents: string[];
+
+  /** Optional: Specific subagents to delegate to (bypasses intelligent analysis) */
+  delegateTo?: string[];
 }
 
 /**

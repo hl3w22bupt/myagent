@@ -50,6 +50,13 @@ export const bodySchema = z.object({
    * If not provided, uses default subagents.
    */
   subagents: z.array(z.string()).optional().describe('List of subagent names for delegation'),
+
+  /**
+   * Optional: Explicitly delegate to specific subagents without LLM planning.
+   * When specified, MasterAgent will skip intelligent analysis and delegate directly.
+   * This is more efficient than useDelegation+subagents which uses LLM planning.
+   */
+  delegateTo: z.array(z.string()).optional().describe('Explicit subagent delegation (bypasses LLM planning)'),
 });
 
 /**
@@ -98,7 +105,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents } =
+  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -111,6 +118,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     skills: availableSkills,
     useDelegation,
     subagents,
+    delegateTo,
   });
 
   // Log if no skills provided - PTCGenerator will handle selection
@@ -130,6 +138,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
       useDelegation,
       subagents,
+      delegateTo, // Pass explicit delegation to MasterAgent
     },
   });
 
