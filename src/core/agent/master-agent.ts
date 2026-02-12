@@ -103,7 +103,7 @@ export class MasterAgent extends Agent {
         metadata: {
           steps: plan.steps.length,
           delegates: plan
-            .steps.filter((s) => s.delegateTo)
+            .steps.filter((s) => s.delegateTo != null)
             .map((s) => s.delegateTo),
         },
       });
@@ -123,6 +123,10 @@ export class MasterAgent extends Agent {
           timestamp: Date.now(),
         });
 
+        // ⭐ Notify task decomposition even when delegating
+        // User should see how task was analyzed before delegation
+        await this.notifyTaskDecomposition(task, delegationSteps[0].task, plan, _taskId);
+
         return this.executeDirectDelegation(task, [delegateTarget], steps, startTime, _taskId, 'planned');
       }
 
@@ -136,7 +140,10 @@ export class MasterAgent extends Agent {
 
       console.log('[MasterAgent] Combined task:', combinedTask);
 
-      // Step 3: Execute combined task with single PTC generation
+      // Step 3: Notify task decomposition before execution
+      await this.notifyTaskDecomposition(task, combinedTask, plan, _taskId);
+
+      // Step 4: Execute combined task with single PTC generation
       steps.push({
         type: 'execution',
         content: 'Executing combined task',
@@ -161,7 +168,7 @@ export class MasterAgent extends Agent {
         executionTime,
         metadata: {
           delegates: plan.steps
-            .filter((s) => s.delegateTo !== undefined)
+            .filter((s) => s.delegateTo != null)
             .map((s) => s.delegateTo as string),
           skillNames: result.metadata.skillNames,
         },
@@ -486,10 +493,16 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
       if (streams?.taskExecution) {
         (async () => {
           try {
+            // Analyze delegation decision for better user communication
+            const hasDelegation = plan.steps.some(s => s.delegateTo);
+            const delegationDecision = hasDelegation
+              ? '委派给子代理'
+              : '未找到匹配的子代理，MasterAgent 直接执行';
+
             const planEvent = {
               type: 'delegation_plan',
               progressType: 'delegation',
-              status: 'completed',
+              status: 'resolved',
               taskId: effectiveTaskId,
               sessionId: this.sessionId,
               timestamp: new Date().toISOString(),
@@ -500,6 +513,10 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
                   reasoning: plan.reasoning,
                 },
                 subjectTitle: 'Master Agent',
+                delegationDecision,  // ← 新增：清晰说明委派决策
+                matchedSubagents: plan.steps
+                  .filter(s => s.delegateTo)
+                  .map(s => s.delegateTo),  // ← 新增：显示匹配的子代理（如果有）
               }
             };
             const timestamp = Date.now();
@@ -508,7 +525,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
               ...planEvent,
               category: 'agent_hook',
             });
-            console.log('[MasterAgent] Delegation plan (completed) notification sent');
+            console.log('[MasterAgent] Delegation plan (resolved) notification sent');
           } catch (error) {
             console.error('[MasterAgent] Failed to send delegation plan notification:', error);
           }
@@ -635,7 +652,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
         const event = {
           type: 'delegation_plan',
           progressType: 'delegation',
-          status: 'completed',
+          status: 'resolved',
           taskId: effectiveTaskId,
           sessionId: this.sessionId,
           timestamp: new Date().toISOString(),
@@ -996,6 +1013,63 @@ Important rules:
       availableSkills: config.agent.available_skills || config.agent.availableSkills,
       constraints: config.agent.constraints,
     };
+  }
+
+  /**
+   * Notify task decomposition to stream.
+   * Shows how the original task was broken down into combinedTask.
+   */
+  private async notifyTaskDecomposition(
+    originalTask: string,
+    combinedTask: string,
+    plan: DelegationPlan,
+    taskId?: string
+  ): Promise<void> {
+    const streams = getAgentStreams();
+    const effectiveTaskId = taskId || `task-${Date.now()}`;
+
+    if (!streams?.taskExecution) {
+      console.warn('[MasterAgent] No taskExecution stream available for task decomposition');
+      return;
+    }
+
+    try {
+      const decomposedSteps = plan.steps.map((s, i) => ({
+        stepNumber: i + 1,
+        task: s.task,
+        delegateTo: s.delegateTo || 'MasterAgent (直接执行)',
+        reason: s.reason,
+      }));
+
+      const event = {
+        type: 'task_decomposition',
+        progressType: 'task-breakdown',
+        status: 'resolved',
+        taskId: effectiveTaskId,
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          originalTask,
+          decomposedSteps,
+          combinedTaskPreview: combinedTask.substring(0, 200) + (combinedTask.length > 200 ? '...' : ''),
+          subjectTitle: 'Master Agent',
+        }
+      };
+
+      const timestamp = Date.now();
+      const entryId = `agent-task_decomposition-${effectiveTaskId}-${timestamp}`;
+      await streams.taskExecution.set(effectiveTaskId, entryId, {
+        ...event,
+        category: 'agent_hook',
+      });
+
+      console.log('[MasterAgent] Task decomposition notification sent', {
+        effectiveTaskId,
+        stepsCount: decomposedSteps.length,
+      });
+    } catch (error) {
+      console.error('[MasterAgent] Failed to send task decomposition notification:', error);
+    }
   }
 
   /**

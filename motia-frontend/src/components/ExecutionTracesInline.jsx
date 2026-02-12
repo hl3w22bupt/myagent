@@ -444,12 +444,17 @@ function ExecutionTracesInline({ taskId }) {
                         </div>
 
                         {/* 追踪内容 */}
-                        <div className="trace-content">
+                        <div className={`trace-content ${trace.isRetry ? 'trace-retry' : ''}`}>
                           <div className="trace-meta">
                             <span className={`trace-stage-badge stage-${stageLabel}`}>
                               {stageLabel}
                               {trace.purpose && ` - ${trace.purpose}`}
                             </span>
+                            {trace.isRetry && (
+                              <span className="trace-retry-badge" title={`第 ${trace.retryAttempt || 0} 次重试`}>
+                                重试 #{trace.retryAttempt || 0}
+                              </span>
+                            )}
                             {trace.timestamp && (
                               <span className="trace-timestamp">
                                 {new Date(trace.timestamp).toLocaleTimeString('zh-CN', {
