@@ -68,6 +68,13 @@ export class AgentTraceHook extends BaseAgentHook {
     const id = `agent-${sessionId}-pre`;
 
     try {
+      // Get subject info from agent instance
+      const agent = context.agent as any;
+      const subjectInfo = agent?.getSubjectInfo?.() || {
+        subjectTitle: context.agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
+        subjectSubTitle: context.subagentName || undefined,
+      };
+
       // Create initial agent trace entry
       await streams.executionTraces.set(taskId, id, {
         id,
@@ -81,6 +88,13 @@ export class AgentTraceHook extends BaseAgentHook {
           agentType: context.agentType,
         }),
         timestamp: new Date().toISOString(),
+        metadata: {
+          sessionId,
+          subjectTitle: subjectInfo.subjectTitle,
+          subjectSubTitle: subjectInfo.subjectSubTitle,
+          llmProvider: context.llmProvider,
+          llmModel: context.llmModel,
+        }
       });
 
       // Store trace info for post-execution (use sessionId as key)
@@ -118,6 +132,13 @@ export class AgentTraceHook extends BaseAgentHook {
     const id = `agent-${sessionId}-post`;
 
     try {
+      // Get subject info from agent instance
+      const agent = context.agent as any;
+      const subjectInfo = agent?.getSubjectInfo?.() || {
+        subjectTitle: context.agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
+        subjectSubTitle: context.subagentName || undefined,
+      };
+
       // Determine final status
       const status = result.success ? 'completed' : 'failed';
 
@@ -133,6 +154,12 @@ export class AgentTraceHook extends BaseAgentHook {
         error: result.error,
         executionTime: result.executionTime,
         timestamp: new Date().toISOString(),
+        metadata: {
+          sessionId,
+          subjectTitle: subjectInfo.subjectTitle,
+          subjectSubTitle: subjectInfo.subjectSubTitle,
+          success: result.success,
+        }
       });
 
       // Clear stored trace info

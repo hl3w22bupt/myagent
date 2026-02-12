@@ -64,15 +64,11 @@ export const inputSchema = _z.object({
   continue: _z.boolean().optional(),
 
   /**
-   * Optional: Use MasterAgent with delegation.
-   * When true, creates MasterAgent instance instead of regular Agent.
+   * Optional: List of subagents for delegation.
+   * When specified, delegates directly to these subagents without intelligent analysis.
+   * When not specified, MasterAgent intelligently analyzes and decides.
    */
-  useDelegation: _z.boolean().optional(),
-
-  /**
-   * Optional: List of subagents for delegation (requires useDelegation=true).
-   */
-  subagents: _z.array(_z.string()).optional(),
+  delegateTo: _z.array(_z.string()).optional(),
 
   /**
    * Optional: System prompt override.
@@ -159,15 +155,28 @@ export const handler = async (
         agentType: agent.constructor.name,
       });
 
+      // Set hookManager to agent so it can trigger its own hooks
+      if (agent.setHookManager) {
+        agent.setHookManager(hookManager);
+        logger.info('HookManager set on agent for chat', { sessionId });
+      }
+
       // 获取上下文
       const contextManager = new ContextManager();
       const context = await contextManager.getContext(taskId);
       const contextStr = await contextManager.getContextForLLM(taskId);
 
+      // 添加 agent 相关信息到 context
+      // 这确保 hooks 和 agent.run() 能够访问 agentType 和 agent 实例
+      const agentTypeName = agent.constructor.name;
+      (context as any).agentType = agentTypeName;
+      (context as any).agent = agent;
+
       logger.info('Context loaded for chat', {
         taskId,
         hasContext: !!contextStr,
         contextLength: contextStr?.length || 0,
+        agentType: agentTypeName,
       });
 
       // 构造聊天提示词
@@ -471,29 +480,40 @@ export const handler = async (
     // Update status to running
     await updateStream('running', { currentStep: 'Acquiring agent' });
 
-    // Determine agent type
-    const useMasterAgent = input.useDelegation || false;
-    const agentType = useMasterAgent ? 'master' : 'agent';
-
-    logger.info('Acquiring agent', {
+    // Always use MasterAgent for all requests
+    logger.info('Acquiring MasterAgent', {
       sessionId,
-      agentType,
-      useDelegation: useMasterAgent,
+      delegateTo: input.delegateTo,
       availableSkills: input.availableSkills,
       skillCount: input.availableSkills?.length || 0
     });
 
-    // Get Agent or MasterAgent from Manager
-    // each session has independent Agent/MasterAgent instance
+    console.log('[master-agent.step] Input received:', {
+      taskId,
+      sessionId,
+      'input.delegateTo': input.delegateTo,
+      'input.availableSkills': input.availableSkills,
+    });
+
+    // Get MasterAgent from Manager
+    // each session has independent MasterAgent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
     // Note: Only pass availableSkills if it's a non-empty array
     // Empty array means "use all skills" (not "restrict to no skills")
     const acquireOptions: any = {
-      agentType,
+      agentType: 'master',
     };
     if (input.availableSkills && input.availableSkills.length > 0) {
       acquireOptions.availableSkills = input.availableSkills;
     }
+    if (input.delegateTo && input.delegateTo.length > 0) {
+      acquireOptions.delegateTo = input.delegateTo;
+      console.log('[master-agent.step] Added delegateTo to acquireOptions:', input.delegateTo);
+    } else {
+      console.log('[master-agent.step] No delegateTo in input or empty array');
+    }
+
+    console.log('[master-agent.step] Calling agentManager.acquire with options:', acquireOptions);
 
     const agent = await agentManager.acquire(sessionId, acquireOptions);
 
@@ -505,8 +525,32 @@ export const handler = async (
       isMasterAgent: agentTypeName === 'MasterAgent',
     });
 
+    // Set hookManager to agent so it can trigger its own hooks
+    // This allows subagents to also record traces when they execute
+    if (agent.setHookManager) {
+      agent.setHookManager(hookManager);
+      logger.info('HookManager set on agent', { sessionId });
+    }
+
     // 设置 taskContext 的 agentType，供 hook 使用
     (taskContext as any).agentType = agentTypeName;
+
+    // 初始化 taskContext.context 并添加 agent 相关信息
+    // 这确保 hooks 和 agent.run() 能够访问 agentType 和 agent 实例
+    if (!taskContext.context) {
+      taskContext.context = {
+        taskId: '',
+        sessionId: '',
+        currentTurn: 0,
+        messages: [],
+        summary: null,
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {},
+      };
+    }
+    (taskContext.context as any).agentType = agentTypeName;
+    (taskContext.context as any).agent = agent;
 
     await updateStream('running', {
       currentStep: `${agentTypeName} acquired, starting execution`,

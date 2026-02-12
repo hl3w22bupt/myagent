@@ -209,6 +209,13 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       const sessionId = context.sessionId;
       const agentType = context.agentType || 'Agent';
 
+      // Get subject info from agent instance
+      const agent = context.agent as any;
+      const subjectInfo = agent?.getSubjectInfo?.() || {
+        subjectTitle: agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
+        subjectSubTitle: undefined,
+      };
+
       const event = {
         type: 'agent',  // 统一为 'agent'
         stage: 'pre',   // 统一使用 stage 字段
@@ -221,6 +228,8 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
           task: task.substring(0, 200),
           taskLength: task.length,
           agentType,
+          subjectTitle: subjectInfo.subjectTitle,
+          subjectSubTitle: subjectInfo.subjectSubTitle,
         }
       };
 
@@ -230,6 +239,8 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         sessionId,
         taskId,
         agentType,
+        subjectTitle: subjectInfo.subjectTitle,
+        subjectSubTitle: subjectInfo.subjectSubTitle,
       });
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send task start notification', {
@@ -262,6 +273,14 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       const sessionId = context.sessionId;
       const taskId = context.taskId;
 
+      // Get subject info from agent instance
+      const agent = context.agent as any;
+      const agentType = agent?.constructor?.name || context.agentType || 'Agent';
+      const subjectInfo = agent?.getSubjectInfo?.() || {
+        subjectTitle: agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
+        subjectSubTitle: undefined,
+      };
+
       // 获取 artifact 数量（支持多种 context 结构）
       const artifactCount = context.artifactIndex?.length ||
                             context.context?.artifactIndex?.length ||
@@ -278,6 +297,9 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         data: {
           success: result.success,
           artifactCount,
+          agentType,
+          subjectTitle: subjectInfo.subjectTitle,
+          subjectSubTitle: subjectInfo.subjectSubTitle,
         }
       };
 
@@ -288,6 +310,9 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         taskId,
         success: result.success,
         artifactCount,
+        agentType,
+        subjectTitle: subjectInfo.subjectTitle,
+        subjectSubTitle: subjectInfo.subjectSubTitle,
       });
     } catch (error) {
       console.error('[AgentProgressNotifyHook] Failed to send task complete notification', {
@@ -366,7 +391,11 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
         groupId,
         entryId,
         eventType: event.type,
+        stage: event.stage,
         taskId: event.taskId,
+        subjectTitle: event.data?.subjectTitle,
+        subjectSubTitle: event.data?.subjectSubTitle,
+        status: event.status,
       });
 
       // 发送到 taskExecution stream（与 task hook 和 skill hook 统一）

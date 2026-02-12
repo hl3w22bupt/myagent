@@ -1,4 +1,4 @@
-name: CodeReviewer
+name: code reviewer
 description: Specialized agent for code review and quality analysis
 
 agent:

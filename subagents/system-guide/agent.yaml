@@ -1,4 +1,4 @@
-name: SystemGuide
+name: system guide
 description: Expert assistant for answering questions about the system architecture, APIs, and technology stack
 
 agent:

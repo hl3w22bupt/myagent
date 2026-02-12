@@ -122,8 +122,9 @@ export const handler = async (request: any, { logger }: any) => {
     // Query from database using optimized (cached) store
     const unifiedStore = await getOptimizedStore();
 
-    // Map status filter to TaskStatus
-    const taskStatus = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : undefined;
+    // Map status filter to TaskStatus (direct mapping, only validate if valid status)
+    const validStatuses = ['pending', 'running', 'completed', 'failed', 'awaiting_clarification'];
+    const taskStatus = status && validStatuses.includes(status) ? status as any : undefined;
 
     const { tasks, total } = await unifiedStore.listTasks({
       sessionId,
@@ -150,6 +151,7 @@ export const handler = async (request: any, { logger }: any) => {
       taskId: task.id,
       task: task.task,
       success: task.status === 'completed',
+      status: task.status,
       output: task.output,
       error: task.error,
       executionTime: task.executionTime,

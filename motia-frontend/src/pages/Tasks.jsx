@@ -334,6 +334,8 @@ function Tasks() {
 
   const statusOptions = [
     { value: 'all', label: '全部' },
+    { value: 'pending', label: '待执行' },
+    { value: 'running', label: '执行中' },
     { value: 'completed', label: '已完成' },
     { value: 'failed', label: '失败' }
   ]
@@ -513,10 +515,10 @@ function Tasks() {
                       {task.task}
                     </Link>
                     <div className="task-status-actions">
-                      <span className={`status status-${task.executionTime === null ? 'running' : (task.success ? 'completed' : 'failed')}`}>
-                        {task.executionTime === null ? '执行中' : (task.success ? '已完成' : '失败')}
+                      <span className={`status status-${task.status || 'pending'}`}>
+                        {task.status === 'running' ? '执行中' : task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : task.status === 'pending' ? '待执行' : task.status === 'resolved' ? '已解决' : task.status || '待执行'}
                       </span>
-                      {task.executionTime !== null && !task.success && (
+                      {task.status === 'failed' && (
                         <button
                           className="retry-button-small"
                           onClick={(e) => handleRetryTask(task.taskId, e)}

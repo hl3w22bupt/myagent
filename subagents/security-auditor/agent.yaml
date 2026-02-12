@@ -1,4 +1,4 @@
-name: SecurityAuditor
+name: security auditor
 description: Specialized agent for security analysis and vulnerability detection
 
 agent:

@@ -27,10 +27,14 @@ export class Agent {
   protected ptcGenerator: PTCGenerator;
   protected sessionId: string;
   private state: SessionState;
+  protected agentName: string = ''; // Agent display name (e.g., "Master Agent", "system-guide")
 
   // Dynamic skill discovery
   private skillDiscovery: SkillDiscovery;
   private static skillsRegistry: Array<{ name: string; description: string; tags: string[] }> = [];
+
+  // Hook manager for agent lifecycle hooks
+  protected hookManager: any = null;
 
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
@@ -81,6 +85,9 @@ export class Agent {
       executionHistory: [],
       variables: new Map(),
     };
+
+    // Initialize agent name from config if provided
+    this.agentName = (config as any).name || '';
 
     // Debug: Log config.availableSkills
     console.log(`[Agent ${sessionId}] Constructor config.availableSkills:`, config.availableSkills);
@@ -224,6 +231,14 @@ export class Agent {
   async run(task: string, taskId?: string, context?: any): Promise<AgentResult> {
     console.log('[Agent] agent.run() called', { sessionId: this.sessionId, task, taskId });
 
+    // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
+    const effectiveTaskId = taskId || context?.taskId;
+
+    console.log('[Agent] Using effective taskId:', effectiveTaskId, 'for all notifications');
+
+    // ✅ 设置 LLM trace 配置（确保 Subagent 也能记录 LLM trace）
+    this.updateLLMTraceConfig(effectiveTaskId);
+
     // CRITICAL FIX: Wait for skills to be initialized before task execution
     // This prevents "Skill not found" errors due to race conditions
     await Agent.initializeSkillsRegistry();
@@ -278,7 +293,7 @@ export class Agent {
 
     try {
       // === HITL Checkpoint: Resume from previous checkpoint if exists ===
-      const hitlState = await this.checkHITLCheckpoint(taskId || '', context);
+      const hitlState = await this.checkHITLCheckpoint(effectiveTaskId || '', context);
       if (hitlState && hitlState.status === 'completed' && hitlState.response) {
         console.log('[Agent] HITL checkpoint resumed, using clarified task:', hitlState.response.content);
         task = hitlState.response.content;
@@ -292,10 +307,10 @@ export class Agent {
       }
 
       // ⭐ Step 0: Analyze intent and send notification
-      const intent = await this.notifyIntentAnalysis(task, context?.taskId);
+      const intent = await this.notifyIntentAnalysis(task, effectiveTaskId);
 
       // === HITL Checkpoint: Check if clarification is needed ===
-      const clarification = await this.checkIntentClarification(intent, task, taskId || '', context);
+      const clarification = await this.checkIntentClarification(intent, task, effectiveTaskId || '', context);
       if (clarification.needs) {
         console.log('[Agent] Intent clarification needed, entering HITL checkpoint');
 
@@ -306,7 +321,7 @@ export class Agent {
             type: 'awaiting_clarification', // Use distinct type like intent_analysis
             progressType: 'clarification',
             status: 'awaiting_clarification',
-            taskId: taskId || `task-${Date.now()}`,
+            taskId: effectiveTaskId || `task-${Date.now()}`,
             sessionId: this.sessionId,
             timestamp: new Date().toISOString(),
             data: {
@@ -333,8 +348,7 @@ export class Agent {
         }
 
         // Save HITL state to database
-        const effectiveTaskId = taskId || `task-${Date.now()}`;
-        await this.saveHITLState(effectiveTaskId, {
+        await this.saveHITLState(effectiveTaskId || `task-${Date.now()}`, {
           stage: 'post_intent',
           status: 'awaiting',
           question: clarification.question || '',
@@ -424,7 +438,7 @@ export class Agent {
             });
 
             // ⭐ Send PTC planning notification
-            await this.notifyPTCPlanning(task, result, context?.taskId);
+            await this.notifyPTCPlanning(task, result, effectiveTaskId);
 
             // Success
             if (attempt > 1) {
@@ -796,6 +810,25 @@ export class Agent {
       sandboxType: this.config.sandbox?.type,
       discoveredSkills: Agent.skillsRegistry.length,
     };
+  }
+
+  /**
+   * Get subject info for trace display.
+   * Returns subjectTitle and subjectSubTitle for UI rendering.
+   */
+  getSubjectInfo(): { subjectTitle: string; subjectSubTitle?: string } {
+    // Default: Subagent (will be overridden by MasterAgent)
+    const subjectTitle = 'Subagent';
+    const subjectSubTitle = this.agentName || undefined;
+    return { subjectTitle, subjectSubTitle };
+  }
+
+  /**
+   * Set hook manager for this agent instance.
+   * Allows agent to trigger its own lifecycle hooks.
+   */
+  setHookManager(hookManager: any): void {
+    this.hookManager = hookManager;
   }
 
   /**
