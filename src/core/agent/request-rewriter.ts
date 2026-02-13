@@ -3,6 +3,10 @@
  *
  * Rewrites user requests to be complete and self-contained by adding
  * missing context from conversation history.
+ *
+ * Uses proper message structure:
+ * - System message: Instructions for rewriting
+ * - User message: Context + current request
  */
 
 import { LLMClient } from './llm-client';
@@ -81,15 +85,16 @@ export class RequestRewriter {
       return currentRequest;
     }
 
-    const prompt = this.buildRewritePrompt(
-      currentRequest,
-      recentHistory,
-      options?.contextSummary
-    );
-
     try {
+      // Build messages with proper system/user separation
+      const messages = this.buildMessages(
+        currentRequest,
+        recentHistory,
+        options?.contextSummary
+      );
+
       const response = await this.llm.messagesCreate(
-        [{ role: 'user', content: prompt }],
+        messages,
         { max_tokens: 500 },
         'request rewriting'
       );
@@ -110,13 +115,13 @@ export class RequestRewriter {
   }
 
   /**
-   * Build prompt for request rewriting.
+   * Build messages with proper system/user role separation.
    */
-  private buildRewritePrompt(
+  private buildMessages(
     currentRequest: string,
     conversationHistory: Array<{role: string; content: string}>,
     contextSummary?: ContextSummary
-  ): string {
+  ): Array<{role: 'system' | 'user' | 'assistant'; content: string}> {
     const history = conversationHistory
       .map(msg => `${msg.role}: ${msg.content}`)
       .join('\n');
@@ -129,16 +134,10 @@ export class RequestRewriter {
 </context_summary>
 ` : '';
 
-    return `You are a conversation context analyzer. Your task is to rewrite the user's current request to make it complete and self-contained.
-
-<conversation_history>
-${history}
-</conversation_history>
-
-${summary}
-<current_request>
-${currentRequest}
-</current_request>
+    // System message: Instructions for the LLM
+    const systemMessage: {role: 'system'; content: string} = {
+      role: 'system',
+      content: `You are a conversation context analyzer. Your task is to rewrite the user's current request to make it complete and self-contained.
 
 IMPORTANT:
 1. The user's current request may be incomplete or refer to previous context
@@ -152,6 +151,22 @@ Examples:
 - User says "再做一个蓝色的" → Rewrite to "再生成一个蓝色的 iPhone 17 介绍页面"
 - User says "把视频时长改为 30 秒" → Rewrite to "把生成的视频时长从当前的 10 秒改为 30 秒"
 
-Output ONLY the rewritten request, nothing else.`;
+Output ONLY the rewritten request, nothing else.`
+    };
+
+    // User message: Context + current request
+    const userMessage: {role: 'user'; content: string} = {
+      role: 'user',
+      content: `<conversation_history>
+${history}
+</conversation_history>
+
+${summary}
+<current_request>
+${currentRequest}
+</current_request>`
+    };
+
+    return [systemMessage, userMessage];
   }
 }

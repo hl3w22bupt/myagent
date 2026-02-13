@@ -459,9 +459,31 @@ export class MasterAgent extends Agent {
       })
       .join('\n');
 
-    const prompt = `You are a master agent planning task execution with intelligent delegation to specialized subagents.
+    // Use PromptBuilder for proper message construction
+    const systemPrompt = `You are a master agent planning task execution with intelligent delegation to specialized subagents.
 
-<available_subagents>
+## Confidence-Based Delegation
+
+You MUST evaluate your CONFIDENCE in delegating to a subagent using a 0-100 scale:
+
+**CONFIDENCE SCORE (0-100):**
+- **90-100**: PERFECT match - task explicitly mentions the subagent's specialty domain keywords (e.g., "security review" + security-auditor)
+- **70-89**: STRONG match - task clearly falls within the subagent's domain with specific context
+- **50-69**: MODERATE match - task relates to the domain but is general/vague or requires creative work
+- **30-49**: WEAK match - task has some keyword overlap but is clearly outside the subagent's core expertise
+- **0-29**: NO match - task is unrelated to any subagent
+
+**DELEGATION THRESHOLD: ONLY delegate when confidence >= 70**
+
+Subagents are SPECIALIZED for domain-specific analysis (code review, data analysis, security audit, system documentation). They are NOT general-purpose assistants for creative tasks like:
+- Creating web pages, generating HTML/CSS
+- Writing new features from scratch
+- Content generation (articles, images, videos)
+- General coding tasks without clear domain alignment
+
+When confidence < 70, ALWAYS handle directly with the master agent.`;
+
+    const userPrompt = `<available_subagents>
 ${subagentsList}
 </available_subagents>
 
@@ -473,29 +495,33 @@ ${task}
 
 Analyze the task and decide: delegate to a specialized subagent OR handle with master agent.
 
-### When to DELEGATE:
-1. The task clearly matches a subagent's description (keywords overlap)
-2. The task uses skills that a subagent has available
-3. The subagent's specialty is relevant to the task
+### When to DELEGATE (confidence >= 70):
+1. The task explicitly mentions domain-specific keywords matching a subagent's description
+2. The task is about ANALYZING, REVIEWING, or AUDITING existing code/data/systems
+3. The subagent's specialty is the PRIMARY focus of the task (not tangential)
+4. Sufficient context is provided (file paths, specific systems, clear scope)
 
-### When to HANDLE DIRECTLY:
-1. No subagent's specialty matches the task
-2. The task is too vague (e.g., "review the code" without specifying which file)
-3. The task requires general capabilities not tied to any subagent
-4. Multiple subagents could handle it - better to handle with master
-5. **VIDEO GENERATION OR ENHANCEMENT TASKS** - These should ALWAYS be handled directly using remotion-generator skill:
-   - Tasks mentioning "video", "animation", "visual", "render", "motion graphics"
-   - Tasks to "create", "generate", "enhance", "add to", "modify", "update" videos
-   - Tasks involving Remotion, video editing, visual effects, animations
-   - Example: "Add animation highlights to the video", "Create a Pascal Triangle video"
-   - **DO NOT delegate video tasks to subagents - handle them directly**
+### When to HANDLE DIRECTLY (confidence < 70):
+1. CREATIVE tasks: creating web pages, writing content, generating features
+2. General tasks without clear domain alignment (e.g., "create a webpage")
+3. Tasks that require broad capabilities beyond a single domain
+4. Vague tasks lacking specific context (e.g., "review the code" without file)
+5. **VIDEO GENERATION OR ENHANCEMENT TASKS** - ALWAYS handle directly
+6. **FRONTEND/WEB DEVELOPMENT TASKS** - typically require creative design, not code analysis
 
-### Decision Process:
+### Domain Alignment Examples:
+- "Review auth.ts for security" → security-auditor (confidence: 95) ✓
+- "Analyze the CSV sales data" → data-analyst (confidence: 90) ✓
+- "Create an iPhone product page" → NO subagent (confidence: ~20) - handle directly
+- "Generate HTML for landing page" → NO subagent (confidence: ~15) - handle directly
+- "Fix the bug in checkout" → NO subagent (confidence: ~30) - handle directly
+
+## Decision Process:
 1. Extract key concepts and requirements from the task
 2. Match against subagent descriptions, skills, and keywords
-3. Check if the task has sufficient context (file paths, data, specifics)
-4. Delegate if there's a CLEAR and SPECIFIC match
-5. Otherwise, handle directly
+3. Calculate your confidence score (0-100)
+4. If confidence < 70: handle directly
+5. If confidence >= 70: delegate to the matching subagent
 
 ## Response Format
 
@@ -505,6 +531,7 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
     {
       "task": "specific task or subtask",
       "delegateTo": "subagent-name (optional - omit if handling directly)",
+      "confidence": 85,
       "reason": "why this matches the subagent OR why handling directly"
     }
   ],
@@ -514,30 +541,49 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 
 ## Examples
 
-Example 1 - Clear Match:
+Example 1 - Perfect Match (confidence 95):
 Task: "Review the authentication code in auth.ts for security issues"
 → Delegate to: security-auditor
-→ Reason: "Security review of auth code matches security-auditor's specialty"
+→ Confidence: 95
+→ Reason: "Explicit security review of authentication code directly matches security-auditor's specialty"
 
-Example 2 - Vague Task:
+Example 2 - Strong Match (confidence 80):
+Task: "Analyze the user_behavior.csv dataset and create visualizations"
+→ Delegate to: data-analyst
+→ Confidence: 80
+→ Reason: "CSV analysis and visualization directly matches data-analyst's skills"
+
+Example 3 - Low Confidence - Handle Directly (confidence 25):
+Task: "Create an iPhone 18 product promotional webpage"
+→ Handle directly
+→ Confidence: 25
+→ Reason: "Creative web development task, not code analysis. No subagent specializes in web page creation."
+
+Example 4 - Vague Task (confidence 0):
 Task: "Review the code"
-→ Handle directly: "No specific file mentioned - need clarification"
+→ Handle directly
+→ Confidence: 0
+→ Reason: "No specific file or domain mentioned - insufficient context for delegation"
 
-Example 3 - No Match:
-Task: "Calculate the meaning of life"
-→ Handle directly: "No subagent specializes in philosophical questions"
+Example 5 - Creative Task (confidence 15):
+Task: "Generate a landing page for our product"
+→ Handle directly
+→ Confidence: 15
+→ Reason: "Frontend development requires creative design, not code review or analysis. No relevant subagent."
 
-Example 4 - Video Task (HANDLE DIRECTLY):
+Example 6 - Video Task (confidence 0):
 Task: "Add animation highlights to the Pascal Triangle video"
-Handle directly: "Video enhancement task - use remotion-generator skill directly, DO NOT delegate"
-Reason: "Video generation/enhancement tasks should always be handled directly using skills"
+→ Handle directly
+→ Confidence: 0
+→ Reason: "Video enhancement task - use remotion-generator skill directly"
 
 ## Important Rules:
 - Output ONLY valid JSON inside <plan> tags
-- Delegate ONLY when there's a clear, specific match
+- Include "confidence" field (0-100) for every step
+- Delegate ONLY when confidence >= 70 AND there's a clear domain match
 - Omit "delegateTo" field if handling directly
 - **CRITICAL**: Use EXACTLY the subagent name from the list above (lowercase with hyphens, e.g., "code-reviewer", "security-auditor"). Do NOT transform the name format.
-- Provide specific reasoning based on descriptions and skills
+- **CRITICAL**: CREATIVE tasks (web pages, content generation, new features) should ALWAYS be handled directly, NOT delegated
 - Consider if the task has sufficient context (files, data, specifics)
 - **CRITICAL**: If no subagent matches, NEVER use "none", "null", "master", or any placeholder as delegateTo value. Simply omit the "delegateTo" field entirely to indicate handling directly.
 `;
@@ -568,7 +614,11 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
       console.log('[MasterAgent] Delegation planning (analyzing) notification sent');
     }
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'delegation planning');
+    // Proper message structure: system message for instructions, user message for content
+    const response = await this.llm.messagesCreate([
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'user' as const, content: userPrompt }
+    ], {}, 'delegation planning');
 
     // Try multiple parsing strategies
     let parsedPlan: any = null;
@@ -624,10 +674,19 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
         (async () => {
           try {
             // Analyze delegation decision for better user communication
-            const hasDelegation = sanitizedPlan.steps.some(s => s.delegateTo);
+            const delegatedSteps = sanitizedPlan.steps.filter(s => s.delegateTo);
+            const hasDelegation = delegatedSteps.length > 0;
+
+            // Build confidence summary for notification
+            const confidenceSummary = sanitizedPlan.steps.map(s => ({
+              task: s.task,
+              delegateTo: s.delegateTo || 'MasterAgent',
+              confidence: s.confidence ?? 0,
+            }));
+
             const delegationDecision = hasDelegation
-              ? '委派给子代理'
-              : '未找到匹配的子代理，MasterAgent 直接执行';
+              ? `委派给子代理 (${delegatedSteps.map(s => `${s.delegateTo}(confidence:${s.confidence ?? 'N/A'})`).join(', ')})`
+              : '未找到匹配的子代理 (confidence < 70)，MasterAgent 直接执行';
 
             const planEvent = {
               type: 'delegation_plan',
@@ -643,10 +702,9 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
                   reasoning: sanitizedPlan.reasoning,
                 },
                 subjectTitle: 'Master Agent',
-                delegationDecision,  // ← 新增：清晰说明委派决策
-                matchedSubagents: sanitizedPlan.steps
-                  .filter(s => s.delegateTo)
-                  .map(s => s.delegateTo),  // ← 新增：显示匹配的子代理（如果有）
+                delegationDecision,
+                matchedSubagents: delegatedSteps.map(s => s.delegateTo),
+                confidenceSummary,
               }
             };
             const timestamp = Date.now();
@@ -997,7 +1055,11 @@ Important rules:
 - consolidatedOutput can contain any JSON structure`;
 
     try {
-      const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'results synthesis');
+      // Proper message structure: system message for instructions, user message for content
+      const response = await this.llm.messagesCreate([
+        { role: 'system' as const, content: `You are a master agent synthesizing results from multiple subagents.` },
+        { role: 'user' as const, content: prompt }
+      ], {}, 'results synthesis');
 
       // Try multiple parsing strategies (similar to planWithDelegation)
       let parsedSynthesis: any = null;
