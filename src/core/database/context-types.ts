@@ -58,6 +58,7 @@ export interface TaskContext {
   // 元数据
   metadata: {
     lastCompressedAt?: Date;
+    compressed?: boolean;
   };
 }
 

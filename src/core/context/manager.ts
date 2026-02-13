@@ -180,37 +180,36 @@ export class ContextManager {
     //   await this.store.addArtifact({ ...artifact, taskId });
     // }
 
-    // 4. 检查是否需要压缩
-    if (this.compressor.shouldCompress(updatedContext)) {
-      // 生成压缩摘要
-      const llmSummarize = async (messages: Message[]) => {
-        if (this.summarizer) {
-          return await this.summarizer.summarizeContext(messages);
-        } else {
-          // Fallback: 简单摘要
-          return {
-            sessionIntent: '会话意图',
-            currentTask: context.summary.currentTask,
-            completedSteps: messages.map(m => m.content).slice(0, 5),
-            filesModified: [],
-            decisionsMade: [],
-            currentStatus: 'compressed',
-            nextSteps: [],
-            errorsAndSolutions: [],
-            technicalDetails: {},
-          };
-        }
-      };
+    // 4. 压缩逻辑由 compressor 内部处理
+    // compressor.compress() 方法内部会自动判断是否需要压缩
+    const compressed = await this.compressor.compress(updatedContext, async (messages: Message[]) => {
+      if (this.summarizer) {
+        return await this.summarizer.summarizeContext(messages);
+      } else {
+        // Fallback: 简单摘要
+        return {
+          sessionIntent: '会话意图',
+          currentTask: context.summary.currentTask,
+          completedSteps: messages.map(m => m.content).slice(0, 5),
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'compressed',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        };
+      }
+    });
 
-      const compressed = await this.compressor.compress(updatedContext, llmSummarize);
-
+    // 如果返回的是压缩后的上下文（消息数量减少），则保存压缩历史
+    if (compressed.messages.length < updatedContext.messages.length) {
       // Calculate token counts from messages
       const originalTokenCount = updatedContext.messages
         .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
       const compressedTokenCount = compressed.messages
         .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
 
-      // 5. 保存压缩历史
+      // 保存压缩历史
       await this.store.saveCompressionHistory({
         id: `comp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         taskId,
@@ -224,13 +223,11 @@ export class ContextManager {
           .map(m => m.id),
       });
 
-      // 6. 保存压缩后的上下文
+      // 保存压缩后的上下文
       await this.store.saveContext(compressed);
-
-      return compressed;
     }
 
-    return updatedContext;
+    return compressed.messages.length < updatedContext.messages.length ? compressed : updatedContext;
   }
 
   /**

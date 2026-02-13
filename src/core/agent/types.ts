@@ -263,6 +263,9 @@ export interface DelegationStep {
   /** Subagent to delegate to (undefined = execute self) */
   delegateTo?: string;
 
+  /** Confidence score for delegation decision (0-100) */
+  confidence?: number;
+
   /** Reasoning for this step */
   reason: string;
 }
