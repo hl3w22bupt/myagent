@@ -40,3 +40,8 @@ export async function getContext(taskId: string): Promise<any> {
 export async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+export async function getTraces(taskId: string): Promise<any> {
+  const response = await axios.get(`${API_BASE_URL}/api/tasks/${taskId}/traces`);
+  return response.data;
+}

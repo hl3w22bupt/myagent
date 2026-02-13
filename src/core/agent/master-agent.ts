@@ -8,6 +8,9 @@
 import { Agent } from './agent';
 import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
 import { getAgentStreams } from './hooks/progress-notify';
+import { RequestRewriter } from './request-rewriter';
+import { ContextManager } from '../context/manager';
+import { getDataStore } from '../database/data-store';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -21,6 +24,8 @@ export class MasterAgent extends Agent {
   private cacheVersion: string; // Cache version based on subagents config
   private masterConfig: MasterAgentConfig; // Store typed config
   private explicitDelegateTo: string[] | undefined; // Explicit delegation targets
+  private requestRewriter: RequestRewriter; // Request rewriter for multi-turn conversations
+  private contextManager: ContextManager; // Context manager for conversation history
 
   // Delegation plan cache to reduce LLM calls
   private delegationPlansCache: Map<string, { plan: DelegationPlan; timestamp: number; cacheVersion: string }>;
@@ -35,6 +40,12 @@ export class MasterAgent extends Agent {
     this.subagents = new Map();
     this.subagentConfigs = new Map();
     this.delegationPlansCache = new Map();
+
+    // Initialize RequestRewriter with agent's LLM config
+    this.requestRewriter = RequestRewriter.createWithAgentConfig(config);
+
+    // Initialize ContextManager
+    this.contextManager = new ContextManager(getDataStore());
 
     console.log('[MasterAgent] Constructor called', {
       sessionId,
@@ -62,7 +73,75 @@ export class MasterAgent extends Agent {
       explicitDelegateTo: this.explicitDelegateTo,
       hasExplicitDelegateTo: !!this.explicitDelegateTo,
       length: this.explicitDelegateTo?.length || 0,
+      originalTask: task,
     });
+
+    // === Step 0: Request Rewriting (Multi-turn conversation enhancement) ===
+    const effectiveTaskId = _taskId || `task-${Date.now()}`;
+
+    try {
+      // Get conversation history from context manager
+      const taskContext = await this.contextManager.getContext(effectiveTaskId);
+      const conversationHistory = taskContext?.messages || [];
+
+      console.log('[MasterAgent] Conversation history for rewrite:', {
+        historyLength: conversationHistory.length,
+        taskId: effectiveTaskId,
+      });
+
+      // ⭐ Configure trace for request rewriter's LLM calls
+      // This ensures request rewriting is visible in execution traces
+      const streams = getAgentStreams();
+      if (streams?.executionTraces) {
+        this.requestRewriter.setTraceConfig({
+          streams: { executionTraces: streams.executionTraces },
+          traceContext: {
+            taskId: effectiveTaskId,
+            agentId: this.sessionId,
+          },
+        });
+        console.log('[MasterAgent] RequestRewriter trace config set');
+      }
+
+      // Rewrite request based on conversation history
+      const rewrittenTask = await this.requestRewriter.rewriteRequest(
+        task,
+        conversationHistory,
+        {
+          maxHistoryMessages: 10,
+          contextSummary: taskContext?.summary ? {
+            currentTask: taskContext.summary.currentTask || task,
+            completedSteps: taskContext.summary.completedSteps || [],
+            artifactIndex: taskContext.artifactIndex || [],
+          } : undefined,
+        }
+      );
+
+      // Use rewritten task for all subsequent processing
+      if (rewrittenTask !== task) {
+        console.log('[MasterAgent] Task rewritten:', {
+          original: task,
+          rewritten: rewrittenTask,
+        });
+
+        steps.push({
+          type: 'request_rewrite',
+          content: 'Request rewritten with conversation context',
+          timestamp: Date.now(),
+          metadata: {
+            originalTask: task,
+            rewrittenTask: rewrittenTask,
+            historyLength: conversationHistory.length,
+          },
+        });
+
+        // Replace task with rewritten version
+        task = rewrittenTask;
+      }
+    } catch (error) {
+      console.error('[MasterAgent] Request rewriting failed, using original task:', error);
+      // Continue with original task if rewrite fails
+    }
 
     try {
       // If explicit delegateTo is specified, skip intelligent planning
@@ -353,22 +432,32 @@ export class MasterAgent extends Agent {
     }
 
     // Step 2: Not in cache, create new plan
-    // Dynamically generate subagent descriptions with specialties
+    // Dynamically generate structured subagent descriptions with specialties
     const subagentsList = Array.from(this.subagentConfigs.entries())
       .map(([name, config]) => {
         const description = config?.description || 'No description';
         const skillsArray = config?.availableSkills || [];
         const skills = skillsArray.length > 0 ? skillsArray.join(', ') : 'No skills';
+        const specialties = config?.specialties || [];
+        const specialtyList = specialties.length > 0 ? specialties.join(', ') : 'No specialties';
 
         // Extract key capabilities from description and skills
         const keywords = this.extractSubagentKeywords(description, skillsArray);
 
-        return `- ${name}:
-  Description: ${description}
-  Skills: ${skills}
-  Keywords: ${keywords.join(', ')}`;
+        // Format as structured XML for better parsing
+        const tags = [...skillsArray, ...specialties];
+        const tagList = tags.length > 0 ? tags.map(t => `'${t}'`).join(', ') : 'No tags';
+
+        return `<agent>
+  <name>${name}</name>
+  <description>${description}</description>
+  <skills>${skills}</skills>
+  <specialties>${specialtyList}</specialties>
+  <tags>${tagList}</tags>
+  <keywords>${keywords.join(', ')}</keywords>
+</agent>`;
       })
-      .join('\n\n');
+      .join('\n');
 
     const prompt = `You are a master agent planning task execution with intelligent delegation to specialized subagents.
 
@@ -450,6 +539,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
 - **CRITICAL**: Use EXACTLY the subagent name from the list above (lowercase with hyphens, e.g., "code-reviewer", "security-auditor"). Do NOT transform the name format.
 - Provide specific reasoning based on descriptions and skills
 - Consider if the task has sufficient context (files, data, specifics)
+- **CRITICAL**: If no subagent matches, NEVER use "none", "null", "master", or any placeholder as delegateTo value. Simply omit the "delegateTo" field entirely to indicate handling directly.
 `;
 
     // ⭐ Send delegation planning notification (analyzing status)
@@ -484,9 +574,49 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
     let parsedPlan: any = null;
     let lastError: Error | null = null;
 
+    // Helper to validate and sanitize plan by checking delegateTo values
+    const validateAndSanitizePlan = (plan: DelegationPlan): DelegationPlan => {
+      if (!plan.steps || !Array.isArray(plan.steps)) {
+        return plan;
+      }
+
+      const validSubagentNames = new Set(this.subagentConfigs.keys());
+      let sanitizedCount = 0;
+
+      const sanitizedSteps = plan.steps.map((step: any) => {
+        if (step.delegateTo) {
+          // Check if delegateTo is a valid subagent name
+          if (!validSubagentNames.has(step.delegateTo)) {
+            console.warn(
+              `[MasterAgent] Invalid delegateTo "${step.delegateTo}" detected. ` +
+              `Valid subagents: ${Array.from(validSubagentNames).join(', ')}. ` +
+              `Removing delegateTo field to handle directly.`
+            );
+            sanitizedCount++;
+            // Remove the invalid delegateTo field
+            const { delegateTo: _delegateTo, ...rest } = step;
+            return rest;
+          }
+        }
+        return step;
+      });
+
+      if (sanitizedCount > 0) {
+        console.log(`[MasterAgent] Sanitized ${sanitizedCount} invalid delegation(s) from plan`);
+      }
+
+      return {
+        ...plan,
+        steps: sanitizedSteps,
+      };
+    };
+
     // Helper to cache and return plan
     const cacheAndReturn = (plan: DelegationPlan): DelegationPlan => {
-      this.cachePlan(task, plan);
+      // Validate and sanitize plan before caching
+      const sanitizedPlan = validateAndSanitizePlan(plan);
+
+      this.cachePlan(task, sanitizedPlan);
 
       // ⭐ Send delegation plan completed notification
       const streams = getAgentStreams();
@@ -494,7 +624,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
         (async () => {
           try {
             // Analyze delegation decision for better user communication
-            const hasDelegation = plan.steps.some(s => s.delegateTo);
+            const hasDelegation = sanitizedPlan.steps.some(s => s.delegateTo);
             const delegationDecision = hasDelegation
               ? '委派给子代理'
               : '未找到匹配的子代理，MasterAgent 直接执行';
@@ -509,12 +639,12 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
               data: {
                 task,
                 plan: {
-                  steps: plan.steps,
-                  reasoning: plan.reasoning,
+                  steps: sanitizedPlan.steps,
+                  reasoning: sanitizedPlan.reasoning,
                 },
                 subjectTitle: 'Master Agent',
                 delegationDecision,  // ← 新增：清晰说明委派决策
-                matchedSubagents: plan.steps
+                matchedSubagents: sanitizedPlan.steps
                   .filter(s => s.delegateTo)
                   .map(s => s.delegateTo),  // ← 新增：显示匹配的子代理（如果有）
               }
@@ -532,7 +662,7 @@ Reason: "Video generation/enhancement tasks should always be handled directly us
         })();
       }
 
-      return plan;
+      return sanitizedPlan;
     };
 
     // Strategy 1: Extract from <plan> tags (non-greedy)

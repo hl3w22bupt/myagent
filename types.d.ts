@@ -28,6 +28,7 @@ declare module 'motia' {
     'favorites-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'context-outputs-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-compression-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

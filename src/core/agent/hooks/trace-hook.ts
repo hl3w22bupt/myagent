@@ -65,7 +65,7 @@ export class AgentTraceHook extends BaseAgentHook {
 
     const sessionId = this.getSessionId(context);
     const agentId = context.agentId || sessionId;
-    const id = `agent-${sessionId}-pre`;
+    const id = `agent-${sessionId}-pre-${Date.now()}`;
 
     try {
       // Get subject info from agent instance
@@ -129,7 +129,7 @@ export class AgentTraceHook extends BaseAgentHook {
     }
 
     const { taskId } = stored;
-    const id = `agent-${sessionId}-post`;
+    const id = `agent-${sessionId}-post-${Date.now()}`;
 
     try {
       // Get subject info from agent instance

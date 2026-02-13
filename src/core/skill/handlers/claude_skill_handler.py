@@ -333,11 +333,11 @@ class ClaudeSkillHandler:
                 "llmProvider": "anthropic" if client_type == "anthropic_api" else "unknown",
                 "llmModel": llm_model or os.getenv('DEFAULT_LLM_MODEL', 'unknown'),
                 "llmRequest": {
-                    "prompt": prompt[:1000],  # Truncate long prompts
+                    "prompt": prompt,
                     "promptLength": len(prompt),
                 },
                 "llmResponse": {
-                    "content": response[:1000],  # Truncate long responses
+                    "content": response,
                     "responseLength": len(response),
                 },
                 "data": {

@@ -7,6 +7,7 @@
  */
 
 import { LLMClient } from './llm-client';
+import { LLMClientFactory } from '../llm/factory';
 import { PTCGenerationOptions, PTCResult } from './types';
 import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
 
@@ -34,6 +35,14 @@ export class PTCGenerator {
     for (const skill of skills) {
       this.skills.set(skill.name, skill);
     }
+  }
+
+  /**
+   * Static factory method to create PTCGenerator with agent's LLM configuration
+   */
+  static createWithAgentConfig(skills: SkillMetadata[], agentConfig: { llm?: any }): PTCGenerator {
+    const llm = LLMClientFactory.createForAgent(agentConfig);
+    return new PTCGenerator(llm, skills);
   }
 
   /**
@@ -242,6 +251,9 @@ SKILL SELECTION STRATEGY:
 - Prioritize skills that are specifically designed for the task type
 - If multiple skills could work, choose the most specific one
 - Review the skill's input schema to ensure it can handle the task requirements
+- CRITICAL: You MUST use exact skill names from the available skills list (see list below).
+- DO NOT transform skill names (e.g., do not convert 'web-search' to 'web_search').
+- DO NOT use placeholders like 'first-skill', 'second-skill' - always use the actual skill name.
 
 Please output:
 1. Which skills to use (in order)
@@ -516,7 +528,9 @@ ${skillsBlock}
 </skills>
 
 <available_skills>
-${selectedSkills.join(', ')}
+${skillsDetails.map(skill => `- ${skill.name}: ${skill.description}
+  Tags: ${skill.tags.join(', ')}
+  Task Parameter: ${this.findTaskParameter(skill.name)}`).join('\n')}
 </available_skills>
 
 CRITICAL LANGUAGE REQUIREMENT:

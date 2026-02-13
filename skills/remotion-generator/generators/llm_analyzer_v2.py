@@ -60,12 +60,13 @@ class ContentAnalyzerV2(BaseGenerator):
             self.rule_loader = None
             logger.warning("⚠️  RuleLoader not available - analyzing without scene pattern guidance")
 
-    async def analyze(self, description: str) -> Dict[str, Any]:
+    async def analyze(self, description: str, retry_attempt: int = 0) -> Dict[str, Any]:
         """
         Analyze user description and extract structured information.
 
         Args:
             description: User's natural language description of desired video
+            retry_attempt: Which retry attempt (0 = first attempt)
 
         Returns:
             Dict with structured analysis including:
@@ -92,7 +93,8 @@ class ContentAnalyzerV2(BaseGenerator):
                 max_tokens=2500,  # Increased for Few-Shot examples
                 temperature=0.3,  # Low temperature for consistent analysis
                 system_prompt=self._get_system_prompt_v2(),
-                purpose="content analysis for video generation v2"
+                purpose="content analysis for video generation v2",
+                retry_attempt=retry_attempt  # Pass retry attempt for tracing
             )
 
             # Parse JSON response

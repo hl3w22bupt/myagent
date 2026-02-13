@@ -142,6 +142,20 @@ export interface ArtifactIndex {
 }
 
 /**
+ * Output索引 - 用于跟踪多轮对话的输出记录
+ * 设计类似 ArtifactIndex，分离关注点，避免并发问题
+ */
+export interface OutputIndex {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  round: number;
+  output: string;
+  executionTime?: number;
+  timestamp: Date;
+}
+
+/**
  * 文件修改记录
  */
 export interface FileModification {

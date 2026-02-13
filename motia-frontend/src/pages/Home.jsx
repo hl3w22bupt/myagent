@@ -674,41 +674,6 @@ function Home() {
                   disabled={submitting}
                 />
 
-                {/* Subagent 选择器 - 左下角 */}
-                {agents.length > 0 && (
-                  <div className="agent-selector-wrapper">
-                    <select
-                      className="agent-select-input"
-                      value={selectedAgent}
-                      onChange={(e) => setSelectedAgent(e.target.value)}
-                      disabled={submitting}
-                    >
-                      <option value="">自动选择</option>
-                      {agents.map(agent => (
-                        <option key={agent.name} value={agent.name}>
-                          {agent.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="agent-selector-button">
-                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="10" rx="2"/>
-                        <circle cx="12" cy="5" r="2"/>
-                        <path d="M12 7v4"/>
-                        <circle cx="8" cy="16" r="1" fill="currentColor"/>
-                        <circle cx="16" cy="16" r="1" fill="currentColor"/>
-                        <path d="M8 8l-4 4"/>
-                        <path d="M16 8l4 4"/>
-                        <circle cx="5" cy="5" r="1"/>
-                        <circle cx="19" cy="5" r="1"/>
-                      </svg>
-                      <span className="agent-selector-label">
-                        {selectedAgent || '自动选择'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   className="hero-submit-button-icon"
@@ -726,6 +691,38 @@ function Home() {
                     </svg>
                   )}
                 </button>
+
+                {/* Agent 选择器 - 左下角，与提交按钮水平对齐 */}
+                {agents.length > 0 && (
+                  <div className="agent-selector-corner">
+                    <select
+                      className="agent-select-input"
+                      value={selectedAgent}
+                      onChange={(e) => setSelectedAgent(e.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="">Auto</option>
+                      {agents.map(agent => (
+                        <option key={agent.name} value={agent.name}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="agent-selector-button">
+                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4"/>
+                        <path d="M12 8h.01"/>
+                      </svg>
+                      <span className="agent-selector-label">
+                        {selectedAgent ? selectedAgent : 'Auto'}
+                      </span>
+                      <svg className="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m6 9 6 6 6-6"/>
+                      </svg>
+                    </div>
+                  </div>
+                )}
               </div>
             </form>
           </div>

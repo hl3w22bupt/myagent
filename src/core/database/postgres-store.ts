@@ -18,6 +18,7 @@ import type {
   Message,
   ArtifactIndex,
   CompressionHistory,
+  OutputIndex,
 } from './context-types';
 
 /**
@@ -257,6 +258,24 @@ export class PostgresDataStore implements Database {
       `);
 
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_compression_task_id ON compression_history(task_id)');
+
+      // Outputs table - Track multi-round conversation outputs
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS outputs (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL,
+          round INTEGER NOT NULL,
+          output TEXT NOT NULL,
+          execution_time INTEGER,
+          timestamp BIGINT NOT NULL
+        )
+      `);
+
+      // Indexes for outputs table
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_outputs_task_id ON outputs(task_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_outputs_session_id ON outputs(session_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_outputs_round ON outputs(task_id, round)');
 
       // Sessions table
       await safeQuery(`
@@ -1031,6 +1050,71 @@ export class PostgresDataStore implements Database {
         summary: row.summary,
         truncatedMessageIds: row.truncated_message_ids,
       }));
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // Output Operations - Track execution outputs across multiple rounds
+  // ============================================================================
+
+  async addOutput(output: Omit<OutputIndex, 'id'> & { id?: string }): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const id = output.id || `output-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const timestamp = output.timestamp instanceof Date ? output.timestamp.getTime() : Date.now();
+
+      await client.query(
+        `INSERT INTO outputs (id, task_id, session_id, round, output, execution_time, timestamp)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          id,
+          output.taskId!,
+          output.sessionId || '',
+          output.round,
+          output.output,
+          output.executionTime || null,
+          timestamp,
+        ]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async getOutputs(taskId: string): Promise<OutputIndex[]> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        `SELECT * FROM outputs WHERE task_id = $1 ORDER BY round ASC`,
+        [taskId]
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        sessionId: row.session_id,
+        round: row.round,
+        output: row.output,
+        executionTime: row.execution_time,
+        timestamp: new Date(parseInt(row.timestamp)),
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteOutputs(taskId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'DELETE FROM outputs WHERE task_id = $1',
+        [taskId]
+      );
+      return result.rowCount || 0;
     } finally {
       client.release();
     }

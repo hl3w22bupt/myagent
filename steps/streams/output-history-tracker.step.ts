@@ -2,7 +2,8 @@
  * Output History Tracker Step.
  *
  * Tracks output history for multi-turn conversations.
- * Each execution round's output is saved to allow users to view all generated files.
+ * Each execution round's output is saved to a separate outputs table (similar to artifacts).
+ * This design avoids race conditions and concurrent update issues.
  */
 
 import { z } from 'zod';
@@ -55,10 +56,17 @@ export const config: EventConfig = {
  * This allows users to view all generated outputs across conversation rounds.
  */
 export const handler = async (input: z.infer<typeof inputSchema>, { logger }: any) => {
-  const { taskId, result } = input;
+  const { taskId, sessionId, result } = input;
+
+  logger.info('[Output History Tracker] Received event', {
+    taskId,
+    sessionId,
+    hasResult: !!result,
+    hasOutput: !!(result?.output),
+  });
 
   if (!result || !result.output) {
-    logger.debug('No output to save', { taskId });
+    logger.debug('[Output History Tracker] No output to save', { taskId });
     return { tracked: false };
   }
 
@@ -67,42 +75,44 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger }: an
     const task = await store.getTask(taskId);
 
     if (!task) {
-      logger.warn('Task not found for output history tracking', { taskId });
+      logger.warn('[Output History Tracker] Task not found', { taskId });
       return { tracked: false, error: 'Task not found' };
     }
 
-    // Initialize output history if not exists
-    const metadata = task.metadata || {};
-    const outputHistory = metadata.outputHistory || [];
+    // Get existing outputs to determine round number
+    const existingOutputs = await store.getOutputs(taskId);
+    const round = existingOutputs.length + 1;
 
-    // Add current output to history
-    outputHistory.push({
-      round: outputHistory.length + 1,
-      output: result.output,
-      timestamp: new Date().toISOString(),
-      executionTime: result.executionTime,
-    });
-
-    // Update task metadata with output history
-    await store.updateTask(taskId, {
-      metadata: {
-        ...metadata,
-        outputHistory,
-      },
-    });
-
-    logger.info('Output history saved', {
+    logger.info('[Output History Tracker] Saving output', {
       taskId,
-      round: outputHistory.length,
+      sessionId: sessionId || task.sessionId,
+      round,
+      existingOutputsCount: existingOutputs.length,
+      outputLength: result.output?.length || 0,
+    });
+
+    // Add current output to outputs table (append, not overwrite)
+    await store.addOutput({
+      taskId,
+      sessionId: sessionId || task.sessionId,
+      round,
+      output: result.output,
+      executionTime: result.executionTime,
+      timestamp: new Date(),
+    });
+
+    logger.info('[Output History Tracker] Output saved successfully', {
+      taskId,
+      round,
       outputLength: result.output.length,
     });
 
     return {
       tracked: true,
-      round: outputHistory.length,
+      round,
     };
   } catch (error: any) {
-    logger.error('Failed to save output history', {
+    logger.error('[Output History Tracker] Failed to save output', {
       taskId,
       error: error.message,
       stack: error.stack,

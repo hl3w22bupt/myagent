@@ -5,10 +5,11 @@
  */
 
 import { LLMClient } from './client';
+import { LLMClientFactory } from './factory';
 import type { Message, StructuredSummary } from '../database/context-types';
 
 export interface LLMSummarizerConfig {
-  apiKey: string;
+  apiKey?: string;
   model?: string;
   baseURL?: string;
 }
@@ -16,15 +17,16 @@ export interface LLMSummarizerConfig {
 export class LLMSummarizer {
   private client: LLMClient;
 
-  constructor(config: LLMSummarizerConfig) {
-    this.client = new LLMClient(config);
+  constructor(config?: LLMSummarizerConfig) {
+    // Use factory to create LLM client for summarizer (no trace)
+    this.client = LLMClientFactory.createForSummarizer(config);
   }
 
   /**
    * 为LLM调用提供方法（用于测试Mock）
    */
   callLLM: (prompt: string) => Promise<string> = async (prompt: string) => {
-    const response = await this.client.chat([
+    const response = await this.client.messagesCreate([
       { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: prompt },
     ]);

@@ -67,6 +67,7 @@ import type {
   TaskContext,
   Message,
   ArtifactIndex,
+  OutputIndex,
   CompressionHistory,
 } from './context-types';
 
@@ -257,7 +258,21 @@ export class DataStore {
       )
     `);
 
-    // 6. 压缩历史表 (依赖于 tasks)
+    // 6. Outputs 表 - 跟踪多轮对话的输出记录
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS outputs (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        round INTEGER NOT NULL,
+        output TEXT NOT NULL,
+        execution_time INTEGER,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 7. 压缩历史表 (依赖于 tasks)
     this.db.run(`
       CREATE TABLE IF NOT EXISTS compression_history (
         id TEXT PRIMARY KEY,
@@ -297,6 +312,11 @@ export class DataStore {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_favorites_artifact_id ON favorites(artifact_id)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_favorites_created_at ON favorites(created_at DESC)`);
+
+    // Outputs 表索引
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_outputs_task_id ON outputs(task_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_outputs_session_id ON outputs(session_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_outputs_round ON outputs(task_id, round)`);
 
     // 自动迁移：为 artifacts 表添加 metadata 列（如果不存在）
     try {
@@ -646,7 +666,10 @@ export class DataStore {
         taskId: msgRow.task_id,
         role: msgRow.role,
         content: msgRow.content,
-        metadata: msgRow.metadata ? JSON.parse(msgRow.metadata) : undefined,
+        metadata: msgRow.metadata ? JSON.parse(msgRow.metadata) : {
+          timestamp: new Date(),
+          tokens: 0,
+        },
         compressed: msgRow.compressed === 1,
       });
     }
@@ -803,6 +826,75 @@ export class DataStore {
 
     return artifacts;
   }
+
+  // ============================================================================
+  // Output Operations - Track execution outputs across multiple rounds
+  // ============================================================================
+
+  async addOutput(output: Omit<OutputIndex, 'id'> & { id?: string }): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const outputId = output.id || `output-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    this.db.run(
+      `INSERT INTO outputs (id, task_id, session_id, round, output, execution_time, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        outputId,
+        output.taskId!,
+        output.sessionId || '',
+        output.round,
+        output.output,
+        output.executionTime || null,
+        output.timestamp instanceof Date ? output.timestamp.getTime() : Date.now(),
+      ]
+    );
+
+    await this.save();
+  }
+
+  async getOutputs(taskId: string): Promise<OutputIndex[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM outputs WHERE task_id = ? ORDER BY round ASC');
+    stmt.bind([taskId]);
+
+    const outputs: OutputIndex[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as any;
+      outputs.push({
+        id: row.id,
+        taskId: row.task_id,
+        sessionId: row.session_id,
+        round: row.round,
+        output: row.output,
+        executionTime: row.execution_time,
+        timestamp: new Date(row.timestamp),
+      });
+    }
+    stmt.free();
+
+    return outputs;
+  }
+
+  async deleteOutputs(taskId: string): Promise<number> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM outputs WHERE task_id = ?');
+    stmt.bind([taskId]);
+    stmt.step();
+    const changes = this.db.getRowsModified();
+    stmt.free();
+
+    return changes;
+  }
+
+  // ============================================================================
+  // Compression History Operations
+  // ============================================================================
 
   async saveCompressionHistory(history: CompressionHistory): Promise<void> {
     await this.ensureInitialized();

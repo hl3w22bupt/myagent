@@ -6,7 +6,7 @@
  */
 
 import type { TaskStatus, Task, CreateTaskData, Session } from './data-store';
-import type { TaskContext, Message, ArtifactIndex, CompressionHistory } from './context-types';
+import type { TaskContext, Message, ArtifactIndex, CompressionHistory, OutputIndex } from './context-types';
 
 export interface Database {
   /**
@@ -47,6 +47,13 @@ export interface Database {
    */
   addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void>;
   getArtifacts(taskId: string): Promise<ArtifactIndex[]>;
+
+  /**
+   * Output operations - Track execution outputs across multiple rounds
+   */
+  addOutput(output: Omit<OutputIndex, 'id'> & { id?: string }): Promise<void>;
+  getOutputs(taskId: string): Promise<OutputIndex[]>;
+  deleteOutputs(taskId: string): Promise<number>;
 
   /**
    * Favorite operations

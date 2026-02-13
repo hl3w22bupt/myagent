@@ -47,7 +47,9 @@ export class ContextManager {
 
       // 继承 messages 和 summary，但使用新的 taskId
       context.messages = [...previousContext.messages];
-      context.currentTurn = previousContext.currentTurn;
+      // ✅ 修复：基于消息数量计算 currentTurn，而不是直接继承
+      // 这样每次创建新 context 时，currentTurn 会正确递增
+      context.currentTurn = previousContext.messages.length + 1;
       context.summary = { ...previousContext.summary };
       context.summary.currentTask = input; // 更新当前任务
       context.artifactIndex = [...previousContext.artifactIndex];
@@ -62,6 +64,36 @@ export class ContextManager {
         inheritedMessages: context.messages.length,
         inheritedTurn: context.currentTurn
       });
+    } else {
+      // ⚠️ 修复：当找不到 previous context 时，从头开始创建新的 context
+      // 避免访问 null 的 messages 属性导致错误 "Cannot read properties of null"
+      console.warn('[ContextManager] No previous context found, starting fresh context');
+      context.messages = [];
+      context.currentTurn = 1; // 第一轮从 turn 1 开始
+      context.summary = {
+        sessionIntent: '',
+        currentTask: input,
+        completedSteps: [],
+        filesModified: [],
+        decisionsMade: [],
+        currentStatus: 'pending',
+        nextSteps: [],
+        errorsAndSolutions: [],
+        technicalDetails: {},
+      };
+      context.artifactIndex = [];
+      context.workingMemory = {};
+      context.metadata = {};
+
+      // 保存新创建的上下文
+      await this.store.saveContext(context);
+      console.log('[ContextManager] Started fresh context', {
+        taskId,
+        messagesCount: context.messages.length,
+        currentTurn: context.currentTurn
+      });
+
+      return context;
     }
 
     return context;

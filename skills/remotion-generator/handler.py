@@ -441,7 +441,7 @@ class RemotionVideoGenerator:
         # Stage 1: Analyze content
         analyzer = ContentAnalyzer()
         logging.info("Stage 1: Analyzing content...")
-        analysis = await analyzer.analyze(description)
+        analysis = await analyzer.analyze(description, retry_attempt=retry_attempt)
         logging.info(f"Analysis complete: {analysis['topic']['name']}")
 
         # Stage 2: Generate code

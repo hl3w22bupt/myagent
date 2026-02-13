@@ -6,6 +6,7 @@
  */
 
 import { LLMClient } from './llm-client';
+import { LLMClientFactory, LLMTraceConfig } from '../llm/factory';
 
 export interface ContextSummary {
   currentTask: string;
@@ -28,8 +29,28 @@ export class RequestRewriter {
   private llm: LLMClient;
   private readonly DEFAULT_MAX_HISTORY = 10;
 
-  constructor(llm: LLMClient) {
-    this.llm = llm;
+  constructor(llm?: LLMClient) {
+    // If no LLMClient provided, create one using factory (no trace for request rewriting)
+    this.llm = llm || LLMClientFactory.createForSummarizer();
+  }
+
+  /**
+   * Update LLM client trace configuration.
+   * Allows setting trace context after construction.
+   */
+  setTraceConfig(traceConfig: LLMTraceConfig): void {
+    if (this.llm && traceConfig.streams) {
+      LLMClientFactory.updateClientTraceConfig(this.llm, traceConfig);
+      console.log('[RequestRewriter] Trace config updated');
+    }
+  }
+
+  /**
+   * Static factory method to create RequestRewriter with agent's LLM configuration
+   */
+  static createWithAgentConfig(agentConfig: { llm?: any }): RequestRewriter {
+    const llm = LLMClientFactory.createForAgent(agentConfig);
+    return new RequestRewriter(llm);
   }
 
   /**

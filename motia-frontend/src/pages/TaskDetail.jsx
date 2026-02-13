@@ -7,6 +7,7 @@ import CodePlayer from '../components/CodePlayer'
 import AudioPlayer from '../components/AudioPlayer'
 import HtmlRenderer from '../components/HtmlRenderer'
 import ExecutionTracesInline from '../components/ExecutionTracesInline'
+import SandboxLogsTab from '../components/SandboxLogsTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -1885,77 +1886,9 @@ function TaskDetail() {
     return <div className="no-visual">此结果类型不支持可视化预览</div>
   }
 
-  // 渲染文本内容
-  const renderTextContent = (result) => {
-    let textContent = ''
-
-    if (typeof result === 'string') {
-      // 过滤掉调试信息和多余内容
-      textContent = result
-        .split('\n')
-        .filter(line => {
-          // 过滤掉DEBUG信息
-          if (line.trim().startsWith('[DEBUG]')) return false
-          // 过滤掉成功消息
-          if (line.trim().startsWith('success=True')) return false
-          if (line.trim().startsWith('✅')) return false
-          if (line.trim().startsWith('📸')) return false
-          // 过滤掉长输出语句
-          if (line.includes('export=') && line.length > 200) return false
-          return true
-        })
-        .join('\n')
-        .trim()
-
-      // 如果过滤后为空或太短，显示有用的信息
-      if (textContent.length < 10) {
-        // 尝试提取关键信息
-        const urlMatch = result.match(/(https?:\/\/[^\s]+)/)
-        if (urlMatch) {
-          textContent = `结果URL: ${urlMatch[1]}`
-        } else if (result.includes('output=')) {
-          // 如果有output=，提取这个值
-          const outputMatch = result.match(/output\s*=\s*({[^}]+})/s)
-          if (outputMatch) {
-            textContent = `任务执行成功\n\n${outputMatch[1]}`
-          }
-        } else {
-          textContent = result || '暂无文本内容'
-        }
-      }
-    } else if (typeof result === 'object') {
-      // 新增：检查 output 属性（原始 stdout）
-      if (result.output && typeof result.output === 'string') {
-        // 对 output 应用相同的过滤逻辑
-        textContent = result.output
-          .split('\n')
-          .filter(line => {
-            if (line.trim().startsWith('[DEBUG]')) return false
-            if (line.trim().startsWith('success=True')) return false
-            if (line.trim().startsWith('✅')) return false
-            if (line.trim().startsWith('📸')) return false
-            if (line.includes('export=') && line.length > 200) return false
-            return true
-          })
-          .join('\n')
-          .trim()
-      } else if (result.text) {
-        textContent = result.text
-      } else if (result.content?.text) {
-        textContent = result.content.text
-      } else {
-        textContent = JSON.stringify(result, null, 2)
-      }
-    }
-
-    return (
-      <div className="result-text-content">
-        <pre className="result-text">{textContent || '暂无文本内容'}</pre>
-      </div>
-    )
-  }
-
   // 获取 Tab 的配置信息（icon 和 label）
+  // 注意：renderTextContent 已被 SandboxLogsTab 组件替代
+  // 该函数保留仅供参考，不再使用
   const getTabConfig = (tabName, resultType) => {
     const tabConfigs = {
       visual: {
@@ -2095,7 +2028,7 @@ function TaskDetail() {
         {/* 内容区域 */}
         <div className="result-content">
           {activeTab === 'visual' && hasVisual && renderVisualContent(result)}
-          {activeTab === 'text' && renderTextContent(result)}
+          {activeTab === 'text' && <SandboxLogsTab taskId={id} />}
           {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
         </div>
       </div>
@@ -2850,16 +2783,20 @@ function TaskDetail() {
           {/* 右侧结果区 */}
           <div className="task-result-right">
             {/* 任务结果 */}
-            {task.output && (
+            {(task.output || task.metadata?.outputHistory) && (
               <div className="info-section">
                 <h2>{(() => {
-                  // 组合 output 和 structuredOutput 用于获取标题
-                  const resultData = task.output;
+                  // 优先使用 outputHistory，回退到 output 字段
+                  const hasOutputHistory = task.metadata?.outputHistory && task.metadata.outputHistory.length > 0;
+                  const resultData = hasOutputHistory
+                    ? task.metadata.outputHistory[task.metadata.outputHistory.length - 1].output
+                    : task.output;
                   // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
                   const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
                   if (typeof resultData === 'string' && hasStructuredOutput) {
                     const combinedResult = {
                       output: resultData,
+                      outputHistory: task.metadata?.outputHistory,
                       structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
                       metadata: task.metadata
                     };
@@ -2869,11 +2806,22 @@ function TaskDetail() {
                 })()}</h2>
                 <div className="task-result">
                   {(() => {
-                    // 组合 output 和 structuredOutput
-                    const resultData = task.output;
+                    // 优先使用 outputHistory，回退到 output 字段
+                    const hasOutputHistory = task.metadata?.outputHistory && task.metadata.outputHistory.length > 0;
+                    const resultData = hasOutputHistory
+                      ? { outputHistory: task.metadata.outputHistory }
+                      : task.output;
                     // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
                     const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
-                    if (typeof resultData === 'string' && hasStructuredOutput) {
+                    if (hasOutputHistory && hasStructuredOutput) {
+                      // 如果有 outputHistory 和 structuredOutput，创建包含所有数据的对象
+                      const combinedResult = {
+                        outputHistory: task.metadata.outputHistory,
+                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                        metadata: task.metadata
+                      };
+                      return renderResult(combinedResult);
+                    } else if (typeof resultData === 'string' && hasStructuredOutput) {
                       // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
                       const combinedResult = {
                         output: resultData,

@@ -100,6 +100,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           MOTIA_TASK_ID: options.metadata?.taskId || '',
           MOTIA_SKILL_PATH: skillPath,
           MOTIA_NOTIFY_API_URL: 'http://localhost:3000/api/notify',
+          MOTIA_TRACE_API_URL: 'http://localhost:3000/api/traces/submit',
           MOTIA_SESSION_ID: options.sessionId,
           PYTHONPATH: pythonPathEnv,
           ...options.env,

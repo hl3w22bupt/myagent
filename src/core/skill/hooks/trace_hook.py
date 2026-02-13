@@ -76,7 +76,7 @@ class SkillTraceHook(BaseHook):
             start_time_ms = int(time.time() * 1000)
 
             # Generate unique trace ID (with -pre suffix to distinguish from post)
-            id = f"{task_id}-{skill_name}-skill-pre"
+            id = f"{task_id}-{skill_name}-skill-pre-{start_time_ms}"
 
             # Get agentId if available
             agent_id = getattr(context, 'agent_id', None)
@@ -140,7 +140,7 @@ class SkillTraceHook(BaseHook):
             start_time_ms = trace_info["start_time_ms"]
             completed_at_ms = int(time.time() * 1000)
             duration_ms = completed_at_ms - start_time_ms
-            id = f"{task_id}-{skill_name}-skill-post"
+            id = f"{task_id}-{skill_name}-skill-post-{completed_at_ms}"
 
             # Determine final status
             success = result.get("success", True)
