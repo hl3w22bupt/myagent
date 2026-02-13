@@ -340,6 +340,7 @@ function TaskDetail() {
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(null) // 当前选择的视频轮次
   const [selectedImageIndex, setSelectedImageIndex] = useState(null) // 当前选择的图片轮次
   const [selectedCodeIndex, setSelectedCodeIndex] = useState(null) // 当前选择的代码轮次
+  const [selectedTextIndex, setSelectedTextIndex] = useState(null) // 当前选择的文本轮次
   const [selectedAudioIndex, setSelectedAudioIndex] = useState(null) // 当前选择的音频轮次
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
   const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Map()) // artifactId -> favoriteId 映射
@@ -789,6 +790,7 @@ function TaskDetail() {
       const videoCount = task.artifacts.filter(a => a.type === 'video').length
       const imageCount = task.artifacts.filter(a => a.type === 'image').length
       const codeCount = task.artifacts.filter(a => a.type === 'code').length
+      const textCount = task.artifacts.filter(a => a.type === 'text').length
       if (videoCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedVideoIndex(null)
@@ -800,6 +802,10 @@ function TaskDetail() {
       if (codeCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedCodeIndex(null)
+      }
+      if (textCount > 0) {
+        // 重置为null，这样会自动选择最新的轮次
+        setSelectedTextIndex(null)
       }
     }
   }, [task?.artifacts])
@@ -1576,6 +1582,106 @@ function TaskDetail() {
       )
     }
 
+    // 处理 TEXT artifacts（纯文本内容）
+    const textArtifacts = task?.artifacts
+      ? task.artifacts
+          .filter(artifact => artifact.type === 'text')
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+
+    if (textArtifacts.length > 0) {
+      const currentIndex = selectedTextIndex !== null
+        ? selectedTextIndex
+        : textArtifacts.length - 1; // 默认最后一轮
+
+      const selectedArtifact = textArtifacts[currentIndex];
+      let textPath = selectedArtifact.path;
+      // 移除前导的/outputs/如果存在
+      textPath = textPath.replace(/^\/?outputs\//, '');
+
+      return (
+        <div className="result-visual result-visual-with-text">
+          {/* 版本选择器 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedTextIndex !== null ? selectedTextIndex : textArtifacts.length - 1}
+                onChange={(e) => setSelectedTextIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {textArtifacts.map((artifact, index) => {
+                  const isLatest = index === textArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
+
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            {/* 版本描述 */}
+            {(() => {
+              const currentIndex = selectedTextIndex !== null ? selectedTextIndex : textArtifacts.length - 1;
+              const artifact = textArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
+                  </span>
+                </Tooltip>
+              );
+            })()}
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 文本内容查看器 */}
+          <TextViewer
+            textPath={textPath}
+            getBlobUrl={getMediaBlobUrl}
+            description={selectedArtifact.description}
+          />
+        </div>
+      )
+    }
+
     if (resultType === 'image' && parsedResult.content?.path) {
       // 处理图片
       let imagePath = parsedResult.content.path
@@ -1883,6 +1989,24 @@ function TaskDetail() {
       )
     }
 
+    // 新增：TEXT 渲染（纯文本内容）
+    if (resultType === 'text') {
+      let textContent = ''
+      if (typeof result === 'object') {
+        textContent = result.content || result.text || String(result)
+      } else if (typeof result === 'string') {
+        textContent = result
+      } else {
+        textContent = String(result)
+      }
+
+      return (
+        <div className="result-visual result-visual-text">
+          <pre className="text-artifact-content">{textContent}</pre>
+        </div>
+      )
+    }
+
     return <div className="no-visual">此结果类型不支持可视化预览</div>
   }
 
@@ -1965,6 +2089,15 @@ function TaskDetail() {
             </svg>
           ),
           label: 'JSON'
+        },
+        text: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M4 1.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5V4.707l-3.207-3.207H4zM3 1a1 1 0 0 1 1-1h4.293a1 1 0 0 1 .707.293l3.5 3.5A1 1 0 0 1 13 4.5V13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V1z"/>
+              <path d="M5 6a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
+            </svg>
+          ),
+          label: '文本'
         }
       },
       text: {
@@ -1982,7 +2115,7 @@ function TaskDetail() {
     }
 
     const resultType = getResultType(result)
-    const hasVisual = ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json'].includes(resultType)
+    const hasVisual = ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json', 'text'].includes(resultType)
 
     // 获取 visual tab 的配置
     const visualTabConfig = getTabConfig('visual', resultType)
@@ -3018,6 +3151,55 @@ function CodeViewer({ codePath, getBlobUrl, language }) {
   }
 
   return <CodePlayer code={code} language={language || 'text'} filename={codePath.split('/').pop()} />
+}
+
+// Text Viewer Component - 用于显示 TEXT 类型的 artifact
+function TextViewer({ textPath, getBlobUrl, description }) {
+  const [text, setText] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const loadText = async () => {
+      setLoading(true)
+      setError(false)
+      try {
+        const url = await getBlobUrl(textPath)
+        if (url) {
+          const response = await fetch(url)
+          if (response.ok) {
+            const textContent = await response.text()
+            setText(textContent)
+          } else {
+            setError(true)
+          }
+        } else {
+          setError(true)
+        }
+      } catch (err) {
+        console.error('Failed to load text:', err)
+        setError(true)
+      }
+      setLoading(false)
+    }
+
+    loadText()
+  }, [textPath, getBlobUrl])
+
+  if (loading) {
+    return <div className="media-loading">加载文本内容...</div>
+  }
+
+  if (error || !text) {
+    return <div className="media-error">文本加载失败</div>
+  }
+
+  return (
+    <div className="text-viewer-wrapper">
+      {description && <div className="text-description">{description}</div>}
+      <pre className="text-artifact-content">{text}</pre>
+    </div>
+  )
 }
 
 export default TaskDetail
