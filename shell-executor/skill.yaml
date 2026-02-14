@@ -1,7 +1,7 @@
 name: shell-executor
 version: 1.0.0
-description: "Execute shell commands safely with intelligent output parsing"
-tags: [shell, command, cli, executor, utility]
+description: "Execute shell commands like ls, find, grep, cat safely with intelligent output parsing. Use this for file system operations, listing files, searching content, and shell utilities."
+tags: [shell, command, cli, executor, utility, file, filesystem, ls, find, grep, cat]
 type: pure-script
 
 input_schema:
@@ -9,9 +9,12 @@ input_schema:
   required:
     - command
   properties:
+    task:
+      type: string
+      description: "Main task/command to execute using shell (e.g., ls /tmp, find . -name '*.py', grep pattern file.txt)"
     command:
       type: string
-      description: "Command to execute (must be in whitelist)"
+      description: "Shell command to execute (e.g., ls, find, grep, cat)"
     args:
       type: array
       items:
