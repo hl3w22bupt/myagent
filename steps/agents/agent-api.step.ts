@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 
 /**
  * Task counter for generating unique task IDs.
@@ -97,6 +98,10 @@ export const config: ApiRouteConfig = {
  * Note: Skill selection is now handled by PTCGenerator inside the Agent execution flow.
  * If availableSkills is not provided, PTCGenerator will automatically select appropriate skills
  * based on the task description and available skill registry.
+ *
+ * IMPORTANT: To fix race condition where frontend queries task before it's persisted,
+ * we create the task record in the database BEFORE emitting the event. This ensures
+ * that when the frontend immediately queries /agent/result, the task will exist.
  */
 export const handler = async (request: any, { emit, logger }: any) => {
   // Validate request body
@@ -111,9 +116,12 @@ export const handler = async (request: any, { emit, logger }: any) => {
   // Generate unique taskId with counter to prevent conflicts
   const taskId = `task-${Date.now()}-${++taskCounter}`;
 
+  // Generate sessionId if not provided (for multi-turn conversations)
+  const finalSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
   logger.info('Agent API: Received task request', {
     task,
-    sessionId,
+    sessionId: finalSessionId,
     taskId,
     skills: availableSkills,
     useDelegation,
@@ -126,6 +134,21 @@ export const handler = async (request: any, { emit, logger }: any) => {
     logger.info('No skills provided - PTCGenerator will auto-select skills', { taskId });
   }
 
+  // CRITICAL: Create task record in database BEFORE emitting the event.
+  // This prevents race condition where frontend queries /agent/result before
+  // master-agent event handler persists the task.
+  // The master-agent handler already has logic to check if task exists (lines 406-421)
+  // to avoid duplicate creation on retries/re-emits.
+  const store = getDataStore();
+  await store.initialize(); // Ensure DB is initialized
+  await store.createTask({
+    id: taskId,
+    task: task,
+    sessionId: finalSessionId,
+    status: TaskStatus.PENDING,
+  });
+  logger.info('Task record created in database', { taskId, status: 'PENDING' });
+
   // Emit agent task execution event
   // This will be picked up by the master-agent step
   await emit({
@@ -133,7 +156,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     data: {
       taskId,
       task,
-      sessionId,
+      sessionId: finalSessionId,
       systemPrompt,
       availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
       useDelegation,
@@ -152,7 +175,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
         : 'Task submitted for execution',
       taskId,
       task,
-      sessionId,
+      sessionId: finalSessionId,
       useDelegation,
       availableSkills,
     },

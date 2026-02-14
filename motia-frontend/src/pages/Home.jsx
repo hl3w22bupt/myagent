@@ -710,9 +710,14 @@ function Home() {
                     </select>
                     <div className="agent-selector-button">
                       <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 16v-4"/>
-                        <path d="M12 8h.01"/>
+                        {/* Subagent 图标：主圆圈代表主 agent，小圆圈代表 subagent，连线表示层级关系 */}
+                        <circle cx="12" cy="6" r="3"/>
+                        <circle cx="6" cy="18" r="3"/>
+                        <circle cx="18" cy="18" r="3"/>
+                        <path d="M12 9v6"/>
+                        <path d="M9 18h6"/>
+                        <path d="M12 12l-3 3"/>
+                        <path d="M12 12l3 3"/>
                       </svg>
                       <span className="agent-selector-label">
                         {selectedAgent ? selectedAgent : 'Auto'}
