@@ -1,17 +1,19 @@
 name: shell-executor
-version: 1.0.0
-description: "Execute shell commands safely with intelligent output parsing"
-tags: [shell, command, cli, executor, utility]
+version: 1.1.0
+description: "Execute shell commands safely. Provide a natural language task and LLM generates the appropriate shell command. Also supports direct command/args execution. Use for file system operations, listing files, searching content, and shell utilities."
+tags: [shell, command, cli, executor, utility, file, filesystem, ls, find, grep, cat]
 type: pure-script
 
 input_schema:
   type: object
-  required:
-    - command
+  required: []
   properties:
+    task:
+      type: string
+      description: "Natural language task description. LLM will generate appropriate shell command (e.g., '列出 /tmp 目录的文件', '查找所有 .py 文件')"
     command:
       type: string
-      description: "Command to execute (must be in whitelist)"
+      description: "Shell command to execute (e.g., ls, find, grep, cat)"
     args:
       type: array
       items:
@@ -27,32 +29,10 @@ input_schema:
       type: integer
       description: "Command timeout in seconds (default: 30)"
       default: 30
-    output_format:
-      type: string
-      enum: [raw, json, table, kv, csv, auto]
-      description: "Output parsing format (default: auto)"
-      default: auto
-    parse_options:
-      type: object
-      properties:
-        delimiter:
-          type: string
-          description: "Delimiter for table/kv/csv parsing (default: auto-detect)"
-        skip_rows:
-          type: integer
-          description: "Number of rows to skip (default: 0)"
-        skip_empty:
-          type: boolean
-          description: "Skip empty rows (default: true)"
-          default: true
-        trim:
-          type: boolean
-          description: "Trim whitespace from values (default: true)"
-          default: true
   description: |
-    Execute shell commands safely with a whitelist mechanism. Supports intelligent
-    output parsing for various formats including tables (psql, ls -l), JSON, CSV,
-    and key-value pairs. Default output_format='auto' will attempt to detect format.
+    Execute shell commands safely with a whitelist mechanism. Returns raw text
+    output and execution metadata. Use for file system operations, listing files,
+    searching content, and shell utilities.
 
 output_schema:
   type: object
@@ -64,36 +44,15 @@ output_schema:
   properties:
     result_type:
       type: string
-      enum: [table, text, json, error]
+      enum: [text, error]
       description: "Type of result"
     success:
       type: boolean
       description: "Whether the command succeeded"
     content:
       oneOf:
-        - type: object
-          required: [headers, rows]
-          properties:
-            headers:
-              type: array
-              items:
-                type: string
-              description: "Column names"
-            rows:
-              type: array
-              items:
-                type: array
-              description: "Row values"
-            title:
-              type: string
-              description: "Table title"
-            sortable:
-              type: boolean
-              description: "Whether the table is sortable"
         - type: string
           description: "Raw text output"
-        - type: object
-          description: "Parsed JSON output"
         - type: object
           required: [type, message]
           properties:
@@ -139,4 +98,4 @@ output_schema:
 execution:
   handler: handler.py
   function: execute_shell_command
-  timeout: 60000
+  timeout: 120000

@@ -13,10 +13,8 @@ from pathlib import Path
 
 try:
     from .security_validator import SecurityValidator
-    from .output_parser import OutputParser
 except ImportError:
     from security_validator import SecurityValidator
-    from output_parser import OutputParser
 
 
 class CommandExecutor:
@@ -35,7 +33,6 @@ class CommandExecutor:
             whitelist: Set of allowed commands (None for default)
         """
         self.validator = SecurityValidator(whitelist)
-        self.parser = OutputParser()
 
     def execute(
         self,
@@ -43,9 +40,7 @@ class CommandExecutor:
         args: Optional[List[str]] = None,
         env: Optional[Dict[str, str]] = None,
         working_dir: Optional[str] = None,
-        timeout: int = 30,
-        output_format: str = 'auto',
-        parse_options: Optional[Dict[str, Any]] = None
+        timeout: int = 30
     ) -> Dict[str, Any]:
         """
         Execute a shell command.
@@ -56,11 +51,9 @@ class CommandExecutor:
             env: Environment variables
             working_dir: Working directory
             timeout: Timeout in seconds
-            output_format: How to parse output (auto, raw, json, table, kv, csv)
-            parse_options: Options for output parser
 
         Returns:
-            Dictionary with execution results
+            Dictionary with execution results (stdout, stderr, exit_code, etc.)
         """
         start_time = time.time()
         args = args or []
@@ -131,10 +124,6 @@ class CommandExecutor:
                 stdout = stdout[:self.MAX_OUTPUT_SIZE]
                 stderr = stderr[:self.MAX_OUTPUT_SIZE]
 
-            # Parse output
-            parser = OutputParser(parse_options)
-            parsed = parser.parse(stdout, output_format)
-
             execution_time = int((time.time() - start_time) * 1000)
 
             return {
@@ -142,7 +131,6 @@ class CommandExecutor:
                 'exit_code': exit_code,
                 'stdout': stdout,
                 'stderr': stderr,
-                'parsed_output': parsed,
                 'execution_time': execution_time,
                 'output_size': output_size,
                 'truncated': truncated,
@@ -204,53 +192,3 @@ class CommandExecutor:
                 'exit_code': -1,
                 'execution_time': execution_time
             }
-
-    def execute_psql(
-        self,
-        query: str,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        database: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        timeout: int = 30
-    ) -> Dict[str, Any]:
-        """
-        Execute psql command with connection parameters.
-
-        Args:
-            query: SQL query or psql meta-command
-            host: Database host
-            port: Database port
-            database: Database name
-            user: Database user
-            password: Database password
-            timeout: Query timeout
-
-        Returns:
-            Execution result
-        """
-        # Import here to avoid circular dependency
-        try:
-            from .output_parser import PostgresHelper
-        except ImportError:
-            from output_parser import PostgresHelper
-
-        # Build command
-        cmd, args, env = PostgresHelper.build_psql_command(
-            query=query,
-            host=host or os.environ.get('PGHOST'),
-            port=port or int(os.environ.get('PGPORT', 5432)),
-            database=database or os.environ.get('PGDATABASE'),
-            user=user or os.environ.get('PGUSER'),
-            password=password or os.environ.get('PGPASSWORD')
-        )
-
-        # Execute
-        return self.execute(
-            command=cmd,
-            args=args,
-            env=env,
-            timeout=timeout,
-            output_format='table'
-        )

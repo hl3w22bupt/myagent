@@ -54,7 +54,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       await writeFile(scriptPath, wrappedCode, 'utf-8');
 
       // 3. Spawn Python process
-      const skillPath = options.skillImplPath || process.cwd();
+      // Default to project root for shared library access, or use skillImplPath if provided
+      const projectRoot = process.cwd();
+      const skillPath = options.skillImplPath || projectRoot;
 
       // Determine if pythonPath is in a venv
       const venvMatch = this.pythonPath.match(/^(.+\/venv\/)bin\/python3$/);
@@ -92,6 +94,8 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       }
 
       const pythonPathEnv = pythonPaths.join(':');
+      const srcPath = join(projectRoot, 'src');
+      pythonPaths.push(srcPath);
 
       const childProcess = spawn(this.pythonPath, [scriptPath], {
         env: {

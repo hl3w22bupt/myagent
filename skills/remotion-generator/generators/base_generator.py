@@ -9,8 +9,15 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import json
 import logging
+import sys
+from pathlib import Path
 
-from .llm_client import LLMClient, get_llm_client
+# Add src to path for core.skill.llm_client import
+src_dir = Path(__file__).parent.parent.parent.parent / "src"
+if src_dir.exists():
+    sys.path.insert(0, str(src_dir))
+
+from core.skill.llm_client import LLMClient, get_llm_client
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -49,7 +56,7 @@ class BaseGenerator(ABC):
         Args:
             llm_client: Optional LLM client (uses singleton if not provided)
         """
-        self.llm = llm_client or get_llm_client()
+        self.llm = llm_client or get_llm_client(skill_name="remotion-generator")
         self.cache: Dict[str, Any] = {}
         self.stats = {
             "total_generations": 0,
@@ -143,9 +150,13 @@ class BaseGenerator(ABC):
             # Otherwise use the parameter
             final_retry_attempt = llm_kwargs.pop('retry_attempt', retry_attempt)
 
-            response = await self.llm.generate(
+            # Use generate_async for async LLM calls
+            # Remove purpose from llm_kwargs to avoid conflict with generate_async's purpose parameter
+            llm_kwargs_purpose = llm_kwargs.pop('purpose', None)
+            response = await self.llm.generate_async(
                 prompt=prompt,
                 system_prompt=system_prompt,
+                purpose=llm_kwargs_purpose,
                 is_retry=(final_retry_attempt > 0),
                 retry_attempt=final_retry_attempt,
                 **llm_kwargs

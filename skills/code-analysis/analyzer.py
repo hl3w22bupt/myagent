@@ -10,13 +10,13 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-# Add parent lib for OutputBuilder (absolute path to skills/lib)
-lib_dir = Path(__file__).parent.parent / "lib"
-if lib_dir.exists():
-    sys.path.insert(0, str(lib_dir))
+# Add src to path for shared utilities (src must be in path for 'from core.skill' to work)
+src_dir = Path(__file__).parent.parent.parent / "src"
+if src_dir.exists():
+    sys.path.insert(0, str(src_dir))
 
 try:
-    from output_builder import OutputBuilder
+    from core.skill.output_builder import OutputBuilder
     OUTPUT_BUILDER_AVAILABLE = True
 except ImportError:
     OUTPUT_BUILDER_AVAILABLE = False

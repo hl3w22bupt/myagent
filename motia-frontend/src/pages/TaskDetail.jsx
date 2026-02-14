@@ -1993,7 +1993,8 @@ function TaskDetail() {
     if (resultType === 'text') {
       let textContent = ''
       if (typeof result === 'object') {
-        textContent = result.content || result.text || String(result)
+        // 优先使用 parsedResult（即 structuredOutput）
+        textContent = parsedResult.content || result.content || result.text || String(parsedResult)
       } else if (typeof result === 'string') {
         textContent = result
       } else {
