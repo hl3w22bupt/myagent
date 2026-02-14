@@ -65,7 +65,7 @@ def call_llm_for_command(task: str) -> Dict[str, Any]:
     Returns:
         Dict with command, args, reasoning
     """
-    from llm_client import get_llm_client
+    from core.skill.llm_client import get_llm_client
 
     try:
         llm = get_llm_client(skill_name="shell-executor")

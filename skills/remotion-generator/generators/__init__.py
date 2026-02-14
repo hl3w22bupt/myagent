@@ -22,30 +22,6 @@ from .llm_analyzer import ContentAnalyzer
 from .code_generator import RemotionCodeGenerator
 from .validator import CodeValidator
 
-"""
-Remotion Code Generators
-
-This package contains LLM-driven code generation modules for creating
-Remotion video components from natural language descriptions.
-"""
-
-import sys
-from pathlib import Path
-import asyncio
-from typing import Optional
-
-# Add src to path for shared utilities (src must be in path for 'from core.skill' to work)
-src_dir = Path(__file__).parent.parent.parent.parent / "src"
-if src_dir.exists():
-    sys.path.insert(0, str(src_dir))
-
-from core.skill import llm_client as core_llm_client_module
-
-from .base_generator import BaseGenerator, GenerationResult
-from .llm_analyzer import ContentAnalyzer
-from .code_generator import RemotionCodeGenerator
-from .validator import CodeValidator
-
 class LLMClient(core_llm_client_module.LLMClient):
     """
     Wrapper around core.skill.llm_client.LLMClient for remotion-generator.

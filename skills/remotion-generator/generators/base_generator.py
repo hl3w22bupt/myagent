@@ -56,7 +56,7 @@ class BaseGenerator(ABC):
         Args:
             llm_client: Optional LLM client (uses singleton if not provided)
         """
-        self.llm = llm_client or get_llm_client()
+        self.llm = llm_client or get_llm_client(skill_name="remotion-generator")
         self.cache: Dict[str, Any] = {}
         self.stats = {
             "total_generations": 0,

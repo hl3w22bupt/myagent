@@ -78,7 +78,7 @@ class LLMClient:
         # Trace API configuration
         trace_api_url: Optional[str] = None,
         task_id: Optional[str] = None,
-        skill_name: str = "motia-skill"
+        skill_name: str = "unknown-skill"
     ):
         """
         Initialize LLM client.
@@ -617,7 +617,7 @@ def get_llm_client(
     model: Optional[str] = None,
     trace_api_url: Optional[str] = None,
     task_id: Optional[str] = None,
-    skill_name: str = "motia-skill",
+    skill_name: str = "unknown-skill",
     force_new: bool = False
 ) -> LLMClient:
     """
