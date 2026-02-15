@@ -609,6 +609,16 @@ class LLMClient:
         return model_info
 
 
+@dataclass
+class LLMToolUseResponse:
+    """Response from LLM with tool use support."""
+    text: str
+    tool_calls: List[Dict[str, Any]]
+    stop_reason: str
+    model: str
+    usage: Dict[str, int]
+
+
 # Singleton instance for reuse
 _llm_client_instance: Optional[LLMClient] = None
 
@@ -649,3 +659,125 @@ def get_llm_client(
         )
 
     return _llm_client_instance
+
+
+# Extend LLMClient with tool use methods
+def _generate_with_tools(
+    llm_client: LLMClient,
+    prompt: str,
+    tools: List[Dict[str, Any]],
+    max_tokens: int = 4096,
+    temperature: float = 0.3,
+    system_prompt: Optional[str] = None,
+    purpose: Optional[str] = None
+) -> LLMToolUseResponse:
+    """
+    Generate content with tool use support.
+
+    Args:
+        llm_client: LLMClient instance
+        prompt: User prompt
+        tools: List of tool definitions (Anthropic format)
+        max_tokens: Maximum tokens in response
+        temperature: Sampling temperature
+        system_prompt: Optional system prompt
+        purpose: Purpose description for tracing
+
+    Returns:
+        LLMToolUseResponse with tool_calls if LLM wants to use tools
+    """
+    messages = [{"role": "user", "content": prompt}]
+
+    api_params = {
+        "model": llm_client.model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+        "tools": tools,
+    }
+
+    if system_prompt:
+        api_params["system"] = system_prompt
+
+    response = llm_client.client.messages.create(**api_params)
+
+    # Parse response
+    tool_calls = []
+    text_content = []
+
+    for block in response.content:
+        if block.type == "text":
+            text_content.append(block.text)
+        elif block.type == "tool_use":
+            tool_calls.append({
+                "id": block.id,
+                "name": block.name,
+                "input": block.input
+            })
+
+    return LLMToolUseResponse(
+        text="\n".join(text_content),
+        tool_calls=tool_calls,
+        stop_reason=response.stop_reason,
+        model=response.model,
+        usage={
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+    )
+
+
+def _continue_tool_use(
+    llm_client: LLMClient,
+    messages: List[Dict],
+    tools: List[Dict[str, Any]],
+    max_tokens: int = 4096
+) -> LLMToolUseResponse:
+    """
+    Continue conversation after tool execution.
+
+    Args:
+        llm_client: LLMClient instance
+        messages: Complete message history including tool results
+        tools: Tool definitions
+        max_tokens: Maximum tokens
+
+    Returns:
+        LLMToolUseResponse with next turn
+    """
+    response = llm_client.client.messages.create(
+        model=llm_client.model,
+        max_tokens=max_tokens,
+        messages=messages,
+        tools=tools
+    )
+
+    # Parse response
+    tool_calls = []
+    text_content = []
+
+    for block in response.content:
+        if block.type == "text":
+            text_content.append(block.text)
+        elif block.type == "tool_use":
+            tool_calls.append({
+                "id": block.id,
+                "name": block.name,
+                "input": block.input
+            })
+
+    return LLMToolUseResponse(
+        text="\n".join(text_content),
+        tool_calls=tool_calls,
+        stop_reason=response.stop_reason,
+        model=response.model,
+        usage={
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+    )
+
+
+# Monkey-patch methods onto LLMClient class
+LLMClient.generate_with_tools = _generate_with_tools
+LLMClient.continue_tool_use = _continue_tool_use

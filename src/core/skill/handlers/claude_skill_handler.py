@@ -97,8 +97,8 @@ class ClaudeSkillHandler:
             # 2. 提取 purpose（如果没有提供，使用 skill_name 作为默认值）
             purpose = input_data.get('purpose') or input_data.get('llm_purpose') or f"execute skill prompt"
 
-            # 3. 调用 LLM
-            llm_response = self._call_llm(prompt, purpose)
+            # 3. 调用 LLM（支持 tool use）
+            llm_response = self._call_llm_with_tools(prompt, purpose)
 
             # 4. 转换为 OutputBuilder 格式
             return self._convert_to_output_builder(llm_response)
@@ -503,6 +503,208 @@ class ClaudeSkillHandler:
         """检测是否是 Markdown"""
         markdown_indicators = ['#', '```', '*', '-', '>']
         return any(text.strip().startswith(indicator) for indicator in markdown_indicators)
+
+    # ============ Tool Use Support =============
+
+    def _discover_tool_skills(self) -> list:
+        """
+        动态发现所有 tool-* skills
+
+        从 skill.yaml 直接读取 input_schema（已兼容 Anthropic 格式）
+        """
+        tools = []
+        skills_dir = Path(__file__).parent.parent.parent.parent.parent / "skills"
+
+        for skill_path in skills_dir.glob("tool-*"):
+            yaml_path = skill_path / "skill.yaml"
+            if not yaml_path.exists():
+                continue
+
+            try:
+                import yaml
+                config = yaml.safe_load(yaml_path.read_text())
+
+                # 直接使用 skill.yaml 的 input_schema（已兼容 Anthropic 格式）
+                tool_def = {
+                    "name": config["name"],
+                    "description": config.get("description", ""),
+                    "input_schema": config.get("input_schema", {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    })
+                }
+
+                # 缓存调用信息
+                tool_def["_skill_path"] = str(skill_path)
+                tool_def["_handler"] = config.get("execution", {}).get("handler", "handler.py")
+                tool_def["_function"] = config.get("execution", {}).get("function", "execute")
+
+                tools.append(tool_def)
+
+            except Exception as e:
+                print(f"Warning: Failed to load tool skill {skill_path.name}: {e}")
+
+        return tools
+
+    def _execute_tool_call(self, tool_name: str, tool_input: dict, tool_def: dict) -> str:
+        """
+        执行工具调用 - 直接 import handler
+
+        Args:
+            tool_name: Tool name (e.g., "tool-read")
+            tool_input: Input parameters from LLM
+            tool_def: Tool definition with _skill_path, _handler, _function
+
+        Returns:
+            Result string to return to LLM
+        """
+        skill_path = tool_def.get("_skill_path")
+        handler_file = tool_def.get("_handler", "handler.py")
+        function_name = tool_def.get("_function", "execute")
+
+        if not skill_path:
+            return f"Error: Tool {tool_name} has no path"
+
+        try:
+            # 动态导入 handler
+            import importlib.util
+            handler_path = Path(skill_path) / handler_file
+            spec = importlib.util.spec_from_file_location(
+                f"{tool_name}.handler",
+                handler_path
+            )
+            module = importlib.util.module_from_spec(spec)
+
+            # 设置 sys.path 确保 OutputBuilder 可用
+            src_path = Path(skill_path).parent.parent / "src"
+            if src_path.exists() and str(src_path) not in sys.path:
+                sys.path.insert(0, str(src_path))
+
+            spec.loader.exec_module(module)
+
+            # 调用 execute 函数
+            execute_func = getattr(module, function_name)
+            result = execute_func(tool_input)
+
+            # 转换为字符串返回给 LLM
+            if result.get('success'):
+                content = result.get('content')
+                if isinstance(content, str):
+                    return content
+                elif isinstance(content, dict):
+                    # 提取主要内容
+                    if 'text' in content:
+                        return content['text']
+                    elif 'code' in content:
+                        return content['code']
+                    else:
+                        import json
+                        return json.dumps(content, ensure_ascii=False)
+                else:
+                    return str(content)
+            else:
+                error = result.get('content', {})
+                if isinstance(error, dict):
+                    return f"Error: {error.get('message', 'Unknown error')}"
+                return f"Error: {error}"
+
+        except Exception as e:
+            return f"Error executing {tool_name}: {str(e)}"
+
+    def _call_llm_with_tools(
+        self,
+        prompt: str,
+        purpose: Optional[str] = None
+    ) -> str:
+        """
+        调用 LLM，支持 tool use 的多轮对话
+
+        只处理对 tool-* skills 的调用
+        """
+        if not self._llm_client:
+            # Fallback 到简单调用
+            return self._call_anthropic_api(prompt)
+
+        # 获取可用的 tool skills
+        tools = self._discover_tool_skills()
+
+        if not tools:
+            return self._call_anthropic_api(prompt)
+
+        # 创建 tool name 到 tool def 的映射
+        tools_map = {t["name"]: t for t in tools}
+
+        max_iterations = 5
+        messages = [{"role": "user", "content": prompt}]
+
+        for iteration in range(max_iterations):
+            # 调用 LLM（带 tools）
+            response = self._llm_client.generate_with_tools(
+                prompt=prompt,
+                tools=tools,
+                purpose=purpose
+            )
+
+            # 保存 assistant 响应（包含 tool_use blocks）
+            assistant_content = [{"type": "text", "text": response.text}]
+            for tc in response.tool_calls:
+                assistant_content.append({
+                    "type": "tool_use",
+                    "id": tc["id"],
+                    "name": tc["name"],
+                    "input": tc["input"]
+                })
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            # 检查是否有工具调用
+            if response.stop_reason == "tool_use" and response.tool_calls:
+                # 执行所有工具调用
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_input = tool_call["input"]
+
+                    # 只处理 tool-* skills
+                    if not tool_name.startswith("tool-"):
+                        result_text = f"Error: Only tool-* skills can be called, got {tool_name}"
+                    else:
+                        tool_def = tools_map.get(tool_name)
+                        if not tool_def:
+                            result_text = f"Error: Unknown tool {tool_name}"
+                        else:
+                            result_text = self._execute_tool_call(
+                                tool_name,
+                                tool_input,
+                                tool_def
+                            )
+
+                    # 添加工具结果到消息
+                    messages.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": tool_call["id"],
+                            "content": result_text
+                        }]
+                    })
+
+                # 继续对话
+                response = self._llm_client.continue_tool_use(
+                    messages=messages,
+                    tools=tools
+                )
+
+                # 如果还有更多工具调用，继续循环
+                if response.stop_reason == "tool_use":
+                    continue
+                else:
+                    return response.text
+            else:
+                return response.text
+
+        return "Error: Maximum tool use iterations exceeded"
+
+    # ============ End Tool Use Support =============
 
     def _create_llm_client(self) -> Any:
         """创建 LLM Client（可选）"""

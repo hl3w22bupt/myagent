@@ -1,0 +1,22 @@
+name: tool-write
+version: 1.0.0
+description: "Write content to a file. Supports natural language task or direct parameters."
+tags: [file, io, filesystem, tool]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "Natural language task description"
+    file_path:
+      type: string
+      description: "Direct file path to write"
+    content:
+      type: string
+      description: "Content to write to the file"
+
+execution:
+  handler: handler.py
+  function: execute
