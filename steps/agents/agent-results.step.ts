@@ -131,6 +131,7 @@ export const handler = async (request: any, { logger }: any) => {
       limit: resultLimit,
       offset: resultOffset,
       status: taskStatus as any,
+      skills: skillsArray.length > 0 ? skillsArray : undefined,
     });
 
     // 批量获取任务的产物数量

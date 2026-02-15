@@ -482,6 +482,7 @@ export class PostgresDataStore implements Database {
   async listTasks(filters?: {
     sessionId?: string;
     status?: TaskStatus;
+    skills?: string[];
     limit?: number;
     offset?: number;
   }): Promise<{ tasks: Task[]; total: number }> {
@@ -503,6 +504,16 @@ export class PostgresDataStore implements Database {
       if (filters?.status) {
         conditions.push(`status = $${paramIndex++}`);
         values.push(filters.status);
+      }
+      if (filters?.skills && filters.skills.length > 0) {
+        // Check if metadata->'skillNames' array contains any of the specified skills
+        // Using the ? operator to check if the skill name exists in the JSONB array
+        const skillConditions: string[] = [];
+        for (const skill of filters.skills) {
+          skillConditions.push(`metadata->'skillNames' ? $${paramIndex++}`);
+          values.push(skill);
+        }
+        conditions.push(`(${skillConditions.join(' OR ')})`);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
