@@ -28,6 +28,7 @@ export interface Database {
   listTasks(filters?: {
     sessionId?: string;
     status?: TaskStatus;
+    skills?: string[];
     limit?: number;
     offset?: number;
   }): Promise<{ tasks: Task[]; total: number }>;

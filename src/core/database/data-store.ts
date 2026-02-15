@@ -475,6 +475,7 @@ export class DataStore {
   async listTasks(filters?: {
     sessionId?: string;
     status?: TaskStatus;
+    skills?: string[];
     limit?: number;
     offset?: number;
   }): Promise<{ tasks: Task[]; total: number }> {
@@ -491,6 +492,16 @@ export class DataStore {
     if (filters?.status) {
       query += ' AND status = ?';
       params.push(filters.status);
+    }
+    if (filters?.skills && filters.skills.length > 0) {
+      // Check if metadata JSON contains the skill in skillNames array
+      // SQLite's json_extract can parse JSON, we use LIKE to check array membership
+      const skillConditions = filters.skills.map(() => {
+        return `json_extract(metadata, '$.skillNames') LIKE ?`;
+      });
+      query += ` AND (${skillConditions.join(' OR ')})`;
+      // For JSON array ["skill1", "skill2"], we search for '"skill1"' to match exactly
+      params.push(...filters.skills.map(skill => `%"${skill}"%`));
     }
 
     query += ' ORDER BY created_at DESC';
