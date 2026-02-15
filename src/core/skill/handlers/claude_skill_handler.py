@@ -17,15 +17,17 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 # OutputBuilder 支持
-lib_path = Path(__file__).parent.parent.parent.parent.parent / "skills" / "lib"
-if lib_path.exists():
-    sys.path.insert(0, str(lib_path))
-
+# OutputBuilder 在 src/core/skill/output_builder.py（当前目录的父目录）
 try:
-    from output_builder import OutputBuilder
+    from ..output_builder import OutputBuilder
     OUTPUT_BUILDER_AVAILABLE = True
 except ImportError:
-    OUTPUT_BUILDER_AVAILABLE = False
+    # 备选：尝试绝对导入
+    try:
+        from src.core.skill.output_builder import OutputBuilder
+        OUTPUT_BUILDER_AVAILABLE = True
+    except ImportError:
+        OUTPUT_BUILDER_AVAILABLE = False
 
 
 class ClaudeSkillHandler:
@@ -117,9 +119,19 @@ class ClaudeSkillHandler:
                     ) \
                     .build()
             else:
+                # Fallback - 返回符合 OutputBuilder 格式的错误
                 return {
+                    'result_type': 'error',
                     'success': False,
-                    'error': str(e)
+                    'content': {
+                        'type': 'unknown',
+                        'message': str(e)
+                    },
+                    'metadata': {
+                        'execution_time': 0,
+                        'skills_used': [],
+                        'fallback': True
+                    }
                 }
 
     def _build_prompt(self, input_data: Dict[str, Any]) -> str:
@@ -431,10 +443,26 @@ class ClaudeSkillHandler:
         - Markdown/HTML → set_markdown() 或 set_text()
         """
         if not OUTPUT_BUILDER_AVAILABLE:
-            # Fallback
+            # Fallback - 返回符合 OutputBuilder 格式的字典
+            # 检测响应类型以设置适当的 result_type
+            if self._is_markdown(llm_response):
+                result_type = "markdown"
+            elif self._is_json(llm_response):
+                result_type = "json"
+            elif self._extract_code_block(llm_response):
+                result_type = "code"
+            else:
+                result_type = "text"
+
             return {
+                'result_type': result_type,
                 'success': True,
-                'output': llm_response
+                'content': llm_response,
+                'metadata': {
+                    'execution_time': 0,
+                    'skills_used': [],
+                    'fallback': True  # 标记这是 fallback 格式
+                }
             }
 
         # 1. 尝试提取代码块

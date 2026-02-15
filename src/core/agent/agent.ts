@@ -529,6 +529,7 @@ export class Agent {
               traceId: this.sessionId,
               task,
               taskId,
+              maxIterations: this.config.constraints?.maxIterations || 5, // Agent loop support
             },
           });
         }
@@ -546,6 +547,7 @@ export class Agent {
                 task,
                 taskId,
                 retryAttempt: retryInfo.attempts,
+                maxIterations: this.config.constraints?.maxIterations || 5, // Agent loop support
               },
             });
 
