@@ -1,7 +1,7 @@
-name: shell-executor
-version: 1.1.0
-description: "Execute shell commands safely. Provide a natural language task and LLM generates the appropriate shell command. Also supports direct command/args execution. Use for file system operations, listing files, searching content, and shell utilities."
-tags: [shell, command, cli, executor, utility, file, filesystem, ls, find, grep, cat]
+name: tool-bash
+version: 1.2.0
+description: "Execute shell commands safely. Supports hybrid mode: natural language task (LLM generates command) OR direct command/args execution. Use for file system operations, listing files, searching content, and shell utilities."
+tags: [tool, shell, bash, command, cli, executor, utility, file, filesystem, ls, find, grep, cat]
 type: pure-script
 
 input_schema:

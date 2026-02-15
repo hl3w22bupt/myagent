@@ -1,0 +1,23 @@
+name: tool-read
+version: 1.0.0
+description: "Read file contents. Supports natural language task or direct file_path parameter."
+tags: [file, io, filesystem, tool]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "Natural language task (e.g., '读取 package.json 的内容')"
+    file_path:
+      type: string
+      description: "Direct file path to read (skips internal LLM)"
+    encoding:
+      type: string
+      description: "File encoding (default: utf-8)"
+      default: "utf-8"
+
+execution:
+  handler: handler.py
+  function: execute

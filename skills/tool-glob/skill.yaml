@@ -1,0 +1,22 @@
+name: tool-glob
+version: 1.0.0
+description: "Find files matching a glob pattern. Supports natural language task or direct parameters."
+tags: [file, search, filesystem, tool]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "Natural language task description"
+    pattern:
+      type: string
+      description: "Glob pattern (e.g., **/*.py, src/**/*.ts)"
+    path:
+      type: string
+      description: "Directory to search in (default: current directory)"
+
+execution:
+  handler: handler.py
+  function: execute

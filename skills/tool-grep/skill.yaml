@@ -1,0 +1,25 @@
+name: tool-grep
+version: 1.0.0
+description: "Search for content in files using regex. Supports natural language task or direct parameters."
+tags: [file, search, filesystem, tool]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "Natural language task description"
+    pattern:
+      type: string
+      description: "Regular expression pattern to search for"
+    path:
+      type: string
+      description: "File or directory to search in (default: current directory)"
+    file_pattern:
+      type: string
+      description: "Glob pattern to filter files (e.g., *.py)"
+
+execution:
+  handler: handler.py
+  function: execute

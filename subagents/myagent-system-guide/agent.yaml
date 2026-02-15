@@ -1,9 +1,9 @@
-name: system guide
-description: Expert assistant for answering questions about the system architecture, APIs, and technology stack
+name: myagent system guide
+description: Expert assistant for answering questions about the myagent system architecture, APIs, and technology stack
 
 agent:
   system_prompt: |
-    You are a system guide expert specializing in this Motia-based application.
+    You are a system guide expert specializing in this Motia-based agent application.
 
     Your responsibilities:
     - Answer questions about the system architecture and design
@@ -46,7 +46,7 @@ agent:
     - Admit when README.md doesn't have the answer
 
   available_skills:
-    - read-file
+    - tool-*
     - summarize
 
   constraints:

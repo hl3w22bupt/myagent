@@ -1,0 +1,25 @@
+name: tool-edit
+version: 1.0.0
+description: "Edit file by exact string replacement. Supports natural language task or direct parameters."
+tags: [file, io, filesystem, tool]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    task:
+      type: string
+      description: "Natural language task description"
+    file_path:
+      type: string
+      description: "Path to the file to edit"
+    old_string:
+      type: string
+      description: "String to replace"
+    new_string:
+      type: string
+      description: "Replacement string"
+
+execution:
+  handler: handler.py
+  function: execute

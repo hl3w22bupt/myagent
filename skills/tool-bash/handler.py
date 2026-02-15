@@ -68,7 +68,7 @@ def call_llm_for_command(task: str) -> Dict[str, Any]:
     from core.skill.llm_client import get_llm_client
 
     try:
-        llm = get_llm_client(skill_name="shell-executor")
+        llm = get_llm_client(skill_name="tool-bash")
     except ValueError as e:
         return {
             "error": str(e),
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     # Test 1: Direct command execution
     result = execute_shell_command({
         "command": "echo",
-        "args": ["Hello from shell-executor!"]
+        "args": ["Hello from tool-bash!"]
     })
     print("Direct command test:")
     print(json.dumps(result, indent=2))
