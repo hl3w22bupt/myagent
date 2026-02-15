@@ -331,6 +331,9 @@ export class LocalSandboxAdapter implements SandboxAdapter {
      * 3. Wraps user code in async main()
      * 4. Handles exceptions
      */
+    // Extract maxIterations from metadata for agent loop support
+    const maxIterations = options.metadata?.maxIterations || 5;
+
     // Normalize code indentation while preserving relative indentation:
     // 1. Split into lines
     // 2. Find minimum indentation (excluding empty lines)
@@ -411,7 +414,10 @@ import sys
 import os
 import json
 
-# 新增：创建结构化输出目录
+# Agent loop support: MAX_ITERATIONS for fallback mode
+MAX_ITERATIONS = ${maxIterations}
+
+# 创建结构化输出目录
 STRUCTURED_OUTPUT_DIR = '/tmp/motia-sandbox/structured_outputs'
 os.makedirs(STRUCTURED_OUTPUT_DIR, exist_ok=True)
 

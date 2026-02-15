@@ -141,6 +141,18 @@ export class PTCGenerator {
    * Step 1: Planning phase - Select appropriate skills.
    */
   private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
+    // 🔥 CRITICAL: If no skills are available, directly return FALLBACK mode
+    // This avoids the LLM trying to select skills from an empty list,
+    // which causes confusion with the "NEVER return empty selected_skills" instruction.
+    if (this.skills.size === 0) {
+      console.info('[PTC Generator] No skills available - entering FALLBACK mode');
+      return {
+        code: '', // Will be generated in step 2
+        selectedSkills: [], // Empty array triggers FALLBACK prompt in generateCode
+        reasoning: 'No skills available - will solve task directly with pure Python code',
+      };
+    }
+
     // Build skills list
     const skillsList = Array.from(this.skills.values())
       .map((s) => `- ${s.name}: ${s.description}`)
@@ -765,14 +777,52 @@ if result1['success']:
     )`;
       })()
     : `CRITICAL - NO SKILLS SELECTED:
-This is a FALLBACK path - you should only be here if NO skills matched the task.
-
-You MUST solve the task directly with native Python code.
+This is a FALLBACK path - solve the task directly with native Python code.
 DO NOT try to call executor.execute() - no skills are available.
 
-Write pure Python code to solve the task.
-Use standard libraries and any available imports.
-Print or return the result directly.`
+🔥 MANDATORY: YOU MUST USE THE AGENT LOOP PATTERN BELOW FOR ALL TASKS!
+Even if the task seems simple, you MUST wrap your code in the loop structure.
+MAX_ITERATIONS is available (default: 5).
+
+REQUIRED LOOP PATTERN:
+
+# Context accumulates information across iterations
+context = {
+    "task": task,
+    "iteration": 0,
+    "findings": [],
+    "intermediate_results": {}
+}
+
+for i in range(MAX_ITERATIONS):
+    context["iteration"] = i + 1
+
+    # STEP 1: Do work for this iteration
+    result = process_step(context)
+    context["intermediate_results"][f"step_{i+1}"] = result
+
+    # STEP 2: Check if task is complete
+    if is_task_complete(result):
+        print(format_final_result(result))
+        break
+
+    # STEP 3: Accumulate findings for next iteration
+    context["findings"].append(extract_findings(result))
+
+    # STEP 4: Update context with new insights
+    context = update_context(context, result)
+else:
+    # Max iterations reached, return best partial result
+    print(format_partial_result(context))
+
+IMPORTANT GUIDELINES:
+1. Each iteration should make PROGRESS toward the goal
+2. Accumulate useful information in context for next iteration
+3. Check completion condition clearly after each step
+4. Use context["findings"] to track discoveries
+5. If MAX_ITERATIONS is reached, return best partial result
+6. Use standard libraries and any available imports
+7. For simple tasks, the loop will complete in 1 iteration - that's fine!`
 }
 
 Code requirements:
