@@ -136,18 +136,18 @@ def _call_llm_for_params(task: str) -> Dict[str, Any]:
     except ValueError:
         raise ValueError("LLM client initialization failed")
 
+    json_example = '{"file_path": "...", "old_string": "...", "new_string": "..."}'
     prompt = f"""You are a parameter parser for file editing operations.
 
 Task: {task}
 
-Extract the file_path, old_string, and new_string from the task. Return ONLY valid JSON:
-{{"file_path": "...", "old_string": "...", "new_string": "..."}}}
+Extract the file_path, old_string, and new_string from the task. Return ONLY valid JSON in this format: {json_example}
 
 The old_string must be an EXACT match from the file, including spacing and case.
 
 Examples:
-- "Replace 'Hello' with 'Hi' in greeting.txt" -> {{"file_path": "greeting.txt", "old_string": "Hello", "new_string": "Hi"}}
-- "把 config.json 中的 debug: false 改成 debug: true" -> {{"file_path": "config.json", "old_string": "debug: false", "new_string": "debug: true"}}
+- "Replace 'Hello' with 'Hi' in greeting.txt" -> file_path=greeting.txt, old_string=Hello, new_string=Hi
+- "把 config.json 中的 debug: false 改成 debug: true" -> file_path=config.json, old_string=debug: false, new_string=debug: true
 
 Return ONLY JSON, no other text, no markdown, no code blocks."""
 
