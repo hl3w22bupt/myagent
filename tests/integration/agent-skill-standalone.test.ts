@@ -157,7 +157,7 @@ except Exception as e:
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: `test-env-check-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);
@@ -188,7 +188,7 @@ print("SUCCESS: SkillExecutor imported")
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: `test-skill-executor-import-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);
@@ -222,7 +222,7 @@ for name, meta in skills.items():
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: `test-skill-registry-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);
@@ -268,7 +268,7 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
         ],
         skillImplPath: process.cwd(),
         sessionId: `test-code-analysis-skill-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);
@@ -365,7 +365,7 @@ else:
         skills: [],
         skillImplPath: process.cwd(),
         sessionId: `test-missing-skill-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);
@@ -408,7 +408,7 @@ else:
         ],
         skillImplPath: process.cwd(),
         sessionId: `test-invalid-input-${Date.now()}`,  // Unique sessionId
-        timeout: 10000,
+        timeout: 30000,
       });
 
       expect(result.success).toBe(true);

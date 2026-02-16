@@ -385,10 +385,26 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       .map((line) => '        ' + line)
       .join('\n');
 
-    // Always include SkillExecutor and retry_utils (needed for progress notifications)
-    const skillExecutorImports = `
+    // Check if the code uses SkillExecutor or needs skills
+    // We include SkillExecutor if:
+    // 1. Skills are explicitly requested, OR
+    // 2. The code imports SkillExecutor (detected by checking for 'SkillExecutor' in code)
+    const usesSkillExecutor = code.includes('SkillExecutor');
+    const hasSkills = options.skills && options.skills.length > 0;
+    const needsSkillExecutor = hasSkills || usesSkillExecutor;
+
+    // Only import SkillExecutor when needed (skills requested or code uses it)
+    const skillExecutorImports = needsSkillExecutor ? `
 # Import and create SkillExecutor instance for skill execution
 from core.skill.executor import SkillExecutor
+` : '';
+
+    // Virtual registry and hooks are only needed when skills are requested (not just SkillExecutor import)
+    // But when code uses SkillExecutor directly (not via skills list), we still need to create executor instance
+    let skillHooksAndRegistry = '';
+    if (hasSkills && !usesSkillExecutor) {
+      // Full setup with virtual registry for skill-based execution
+      skillHooksAndRegistry = `
 from core.sandbox.retry_utils import execute_with_retry
 
 # Import virtual skill registry for Claude Skills
@@ -407,6 +423,18 @@ virtual_registry = asyncio.run(create_virtual_registry())
 # Create SkillExecutor with virtual registry support
 executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_registry=virtual_registry)
 `;
+    } else if (usesSkillExecutor && !hasSkills) {
+      // Code uses SkillExecutor directly (e.g., for testing), create basic instance without virtual registry
+      skillHooksAndRegistry = `
+# Get notify API URL for progress notifications
+notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
+task_id = os.getenv('MOTIA_TASK_ID')
+
+# Create basic SkillExecutor instance (for direct usage in tests)
+executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
+`;
+    }
+
 
     return `
 import asyncio
@@ -442,7 +470,7 @@ python_modules_paths = glob.glob(os.path.join(skill_path if skill_path else '.',
 for python_modules in python_modules_paths:
     if os.path.exists(python_modules) and python_modules not in sys.path:
         sys.path.insert(0, python_modules)
-${skillExecutorImports}
+${skillExecutorImports}${skillHooksAndRegistry}
 async def main():
     try:
 ${normalizedCode}

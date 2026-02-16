@@ -104,12 +104,18 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
             result_text += "\n  (No matches found)"
 
         if OUTPUT_BUILDER_AVAILABLE:
-            return OutputBuilder().set_text(result_text).build()
+            output = OutputBuilder().set_text(result_text)
+            # Add matched_files to metadata for programmatic access
+            output.set_metadata("pattern", pattern)
+            output.set_metadata("matched_files", relative_files)
+            return output.build()
         else:
             return {
                 "success": True,
                 "result_type": "text",
-                "content": result_text
+                "content": result_text,
+                "matched_files": relative_files,
+                "pattern": pattern
             }
     except Exception as e:
         if OUTPUT_BUILDER_AVAILABLE:

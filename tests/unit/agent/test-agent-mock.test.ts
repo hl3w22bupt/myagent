@@ -5,7 +5,10 @@ class MockLLMClient {
   async messagesCreate(messages: any[]): Promise<any> {
     console.log("模拟 LLM 调用:", messages);
     // 检查是否是技能选择阶段还是代码生成阶段
-    if (messages[0].content.includes("selected_skills")) {
+    // messages[0] 是 system prompt, messages[1] 是 user prompt
+    const userPrompt = messages.length > 1 ? messages[1].content : messages[0].content;
+
+    if (userPrompt.includes("selected_skills")) {
       // 技能选择阶段
       return {
         content: `

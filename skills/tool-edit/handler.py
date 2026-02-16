@@ -101,14 +101,17 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         path.write_text(new_content, encoding="utf-8")
 
         if OUTPUT_BUILDER_AVAILABLE:
-            return OutputBuilder() \
-                .set_text(f"Successfully edited {file_path}: replaced 1 occurrence") \
-                .build()
+            output = OutputBuilder() \
+                .set_text(f"Successfully edited {file_path}: replaced 1 occurrence")
+            # Add output_files metadata for tracking (use set_metadata to avoid x- prefix)
+            output.set_metadata("output_files", [file_path])
+            return output.build()
         else:
             return {
                 "success": True,
                 "result_type": "text",
-                "content": f"Successfully edited {file_path}: replaced 1 occurrence"
+                "content": f"Successfully edited {file_path}: replaced 1 occurrence",
+                "output_files": [file_path]
             }
     except FileNotFoundError as e:
         if OUTPUT_BUILDER_AVAILABLE:

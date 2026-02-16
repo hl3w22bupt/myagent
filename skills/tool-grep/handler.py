@@ -71,7 +71,7 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
                 error=ValueError("pattern is required"),
-                suggestions=["Provide 'pattern' parameter (e.g., 'import', 'def\\s+\w+')"]
+                suggestions=[r"Provide 'pattern' parameter (e.g., 'import', r'def\s+\w+')"]
             ).build()
         else:
             return {"success": False, "error": "pattern is required"}
@@ -147,12 +147,20 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
             result_text = f"No matches found for pattern '{pattern}'"
 
         if OUTPUT_BUILDER_AVAILABLE:
-            return OutputBuilder().set_text(result_text).build()
+            output = OutputBuilder().set_text(result_text)
+            # Add pattern and matches to metadata for programmatic access
+            output.set_metadata("pattern", pattern)
+            output.set_metadata("matches", matches)
+            output.set_metadata("match_count", len(matches))
+            return output.build()
         else:
             return {
                 "success": True,
                 "result_type": "text",
-                "content": result_text
+                "content": result_text,
+                "pattern": pattern,
+                "matches": matches,
+                "match_count": len(matches)
             }
     except Exception as e:
         if OUTPUT_BUILDER_AVAILABLE:

@@ -1,5 +1,5 @@
 name: tool-edit
-version: 1.0.0
+version: 1.1.0
 description: "Edit file by exact string replacement. Supports natural language task or direct parameters."
 tags: [file, io, filesystem, tool]
 type: pure-script
@@ -19,6 +19,32 @@ input_schema:
     new_string:
       type: string
       description: "Replacement string"
+
+output_schema:
+  type: object
+  required:
+    - success
+    - result_type
+    - content
+    - output_files
+  properties:
+    success:
+      type: boolean
+      description: "Whether the operation succeeded"
+    result_type:
+      type: string
+      description: "Type of result (text, error, etc.)"
+    content:
+      type: string
+      description: "Success message or error details"
+    output_files:
+      type: array
+      items:
+        type: string
+      description: "List of file paths that were edited"
+    metadata:
+      type: object
+      description: "Additional metadata (execution_time, skills_used, etc.)"
 
 execution:
   handler: handler.py

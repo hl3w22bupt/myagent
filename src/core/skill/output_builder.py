@@ -593,6 +593,20 @@ class OutputBuilder:
         self._metadata[key] = value
         return self
 
+    def set_metadata(self, key: str, value: Any) -> 'OutputBuilder':
+        """
+        设置元数据(通用方法，支持任意键值对)
+
+        Args:
+            key: 键
+            value: 值
+
+        Returns:
+            self
+        """
+        self._metadata[key] = value
+        return self
+
     def build(self) -> Dict[str, Any]:
         """
         构建最终输出
@@ -632,6 +646,20 @@ class OutputBuilder:
             output["title"] = self._title
         if self._description is not None:
             output["description"] = self._description
+
+        # 提升常用元数据到顶层（用于 tool skills 追踪和调试）
+        if "output_files" in metadata:
+            output["output_files"] = metadata["output_files"]
+        if "command" in metadata:
+            output["command"] = metadata["command"]
+        if "pattern" in metadata:
+            output["pattern"] = metadata["pattern"]
+        if "matched_files" in metadata:
+            output["matched_files"] = metadata["matched_files"]
+        if "matches" in metadata:
+            output["matches"] = metadata["matches"]
+        if "match_count" in metadata:
+            output["match_count"] = metadata["match_count"]
 
         return output
 

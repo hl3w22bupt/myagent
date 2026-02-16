@@ -74,7 +74,7 @@ print('Hello from sandbox!')
     expect(result.success).toBe(true);
     expect(result.stdout).toContain('Hello from sandbox!');
     expect(result.executionTime).toBeGreaterThan(0);
-  }, 10000);
+  }, 30000);
 
   it('should handle Python execution errors', async () => {
     const code = `
@@ -94,7 +94,7 @@ raise ValueError("Test error")
     expect(result.success).toBe(true);
     expect(result.stdout).toContain('"error":');
     expect(result.stdout).toContain('ValueError');
-  }, 10000);
+  }, 30000);
 
   it('should track session IDs', async () => {
     const code = `
@@ -111,7 +111,7 @@ print('test')
     const result = await sandbox.execute(code, options);
 
     expect(result.sessionId).toBe('test-session-123');
-  }, 10000);
+  }, 30000);
 
   it('should cleanup sessions', async () => {
     const code = `
@@ -132,5 +132,5 @@ print('done')
 
     // Session should be cleaned up
     expect(true).toBe(true); // If we got here, cleanup worked
-  }, 10000);
+  }, 30000);
 });

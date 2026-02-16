@@ -285,7 +285,15 @@ Output format (JSON):
 }
 </plan>`;
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'skill selection');
+    // Build system prompt for skill selection
+    const systemPrompt = `You are an expert at selecting appropriate skills for task execution.
+Your role is to analyze tasks and choose the most suitable skills from the available list.
+Always prioritize available skills over direct computation or common knowledge.`;
+
+    const response = await this.llm.messagesCreate([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ], {}, 'skill selection');
 
     // Extract JSON - try multiple formats
     let jsonString: string | null = null;
@@ -912,7 +920,15 @@ TIPS FOR FILE/VIDEO GENERATION:
 
 Generate the code now:`;
 
-    const response = await this.llm.messagesCreate([{ role: 'user', content: prompt }], {}, 'ptc codegen');
+    // Build system prompt for code generation
+    const codegenSystemPrompt = `You are a Python code generator. Your role is to generate clean, efficient Python code that uses the provided skills correctly.
+Always follow the skill execution patterns and parameter requirements specified in the task.
+Generate production-ready code with proper error handling and async patterns.`;
+
+    const response = await this.llm.messagesCreate([
+      { role: 'system', content: codegenSystemPrompt },
+      { role: 'user', content: prompt }
+    ], {}, 'ptc codegen');
 
     // Extract code from code blocks - support multiple languages
     // Priority: python > typescript > javascript > generic

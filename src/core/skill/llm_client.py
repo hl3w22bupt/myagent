@@ -63,6 +63,16 @@ class LLMResponse:
     stop_reason: str
 
 
+@dataclass
+class LLMToolUseResponse:
+    """Response from LLM with tool use support."""
+    text: str
+    tool_calls: List[Dict[str, Any]]
+    stop_reason: str
+    model: str
+    usage: Dict[str, int]
+
+
 class LLMClient:
     """
     LLM Client for Anthropic Claude API (Sync version).
@@ -237,7 +247,7 @@ class LLMClient:
             self._send_llm_trace(
                 prompt, llm_response, execution_time,
                 max_tokens, temperature, purpose,
-                is_retry, retry_attempt
+                is_retry, retry_attempt, system_prompt  # Issue #17: include system_prompt in trace
             )
 
             return llm_response
@@ -280,7 +290,8 @@ class LLMClient:
         temperature: float,
         purpose: Optional[str] = None,
         is_retry: bool = False,
-        retry_attempt: int = 0
+        retry_attempt: int = 0,
+        system_prompt: Optional[str] = None
     ):
         """
         Send LLM call trace to executionTraces stream.
@@ -294,12 +305,19 @@ class LLMClient:
             purpose: Purpose description for this LLM call (optional)
             is_retry: Whether this is a retry attempt
             retry_attempt: Which retry attempt (0 = first attempt)
+            system_prompt: System prompt used (Issue #17 - for unified prompt structure)
         """
         # Get trace context from environment
         session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
 
         trace_id = f"llm-skill-{self.skill_name}-{self.task_id}-{int(time.time() * 1000)}"
         timestamp_ms = int(time.time() * 1000)
+
+        # Build messages array for unified trace format (Issue #17)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
         trace_data = {
             "id": trace_id,
@@ -315,17 +333,14 @@ class LLMClient:
             "retryAttempt": retry_attempt,
             "metadata": {
                 "sessionId": session_id,
+                "purpose": purpose or self.skill_name,
                 "llmProvider": "anthropic",
                 "llmModel": response.model,
                 "llmRequest": {
-                    "prompt": prompt[:1000],  # Truncate long prompts
-                    "promptLength": len(prompt),
-                    "maxTokens": max_tokens,
-                    "temperature": temperature,
+                    "messages": messages,
                 },
                 "llmResponse": {
-                    "content": response.content[:1000] if response.content else "",  # Truncate long responses
-                    "responseLength": len(response.content) if response.content else 0,
+                    "content": response.content[:2000] if response.content else "",  # Longer limit for code
                     "promptTokens": response.usage['input_tokens'],
                     "completionTokens": response.usage['output_tokens'],
                     "totalTokens": response.usage['input_tokens'] + response.usage['output_tokens'],
@@ -608,15 +623,236 @@ class LLMClient:
         }
         return model_info
 
+    def generate_with_tools(
+        self,
+        prompt: str,
+        tools: List[Dict[str, Any]],
+        max_tokens: int = 16384,
+        temperature: float = 0.3,
+        system_prompt: Optional[str] = None,
+        purpose: Optional[str] = None
+    ) -> LLMToolUseResponse:
+        """
+        Generate content with tool use support (Issue #17: with trace support).
 
-@dataclass
-class LLMToolUseResponse:
-    """Response from LLM with tool use support."""
-    text: str
-    tool_calls: List[Dict[str, Any]]
-    stop_reason: str
-    model: str
-    usage: Dict[str, int]
+        Args:
+            prompt: User prompt
+            tools: List of tool definitions (Anthropic format)
+            max_tokens: Maximum tokens in response
+            temperature: Sampling temperature
+            system_prompt: Optional system prompt
+            purpose: Purpose description for tracing
+
+        Returns:
+            LLMToolUseResponse with tool_calls if LLM wants to use tools
+        """
+        start_time = time.time()
+
+        messages = [{"role": "user", "content": prompt}]
+
+        api_params = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": messages,
+            "tools": tools,
+        }
+
+        if system_prompt:
+            api_params["system"] = system_prompt
+
+        response = self.client.messages.create(**api_params)
+
+        # Parse response
+        tool_calls = []
+        text_content = []
+
+        for block in response.content:
+            if block.type == "text":
+                text_content.append(block.text)
+            elif block.type == "tool_use":
+                tool_calls.append({
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input
+                })
+
+        result = LLMToolUseResponse(
+            text="\n".join(text_content),
+            tool_calls=tool_calls,
+            stop_reason=response.stop_reason,
+            model=response.model,
+            usage={
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        )
+
+        # Send trace (Issue #17)
+        execution_time = time.time() - start_time
+        self._send_llm_trace_with_tools(
+            prompt=prompt,
+            response=result,
+            tools=tools,
+            execution_time=execution_time,
+            system_prompt=system_prompt,
+            purpose=purpose
+        )
+
+        return result
+
+    def continue_tool_use(
+        self,
+        messages: List[Dict],
+        tools: List[Dict[str, Any]],
+        max_tokens: int = 16384,
+        system_prompt: Optional[str] = None
+    ) -> LLMToolUseResponse:
+        """
+        Continue conversation after tool execution (Issue #17: with trace support).
+
+        Args:
+            messages: Complete message history including tool results
+            tools: Tool definitions
+            max_tokens: Maximum tokens
+            system_prompt: Optional system prompt
+
+        Returns:
+            LLMToolUseResponse with next turn
+        """
+        start_time = time.time()
+
+        api_params = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "tools": tools
+        }
+
+        if system_prompt:
+            api_params["system"] = system_prompt
+
+        response = self.client.messages.create(**api_params)
+
+        # Parse response
+        tool_calls = []
+        text_content = []
+
+        for block in response.content:
+            if block.type == "text":
+                text_content.append(block.text)
+            elif block.type == "tool_use":
+                tool_calls.append({
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input
+                })
+
+        result = LLMToolUseResponse(
+            text="\n".join(text_content),
+            tool_calls=tool_calls,
+            stop_reason=response.stop_reason,
+            model=response.model,
+            usage={
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        )
+
+        # Send trace for continuation (Issue #17)
+        execution_time = time.time() - start_time
+        self._send_llm_trace_with_tools(
+            prompt="(continuation after tool use)",
+            response=result,
+            tools=tools,
+            execution_time=execution_time,
+            system_prompt=system_prompt,
+            purpose="tool_use_continuation"
+        )
+
+        return result
+
+    def _send_llm_trace_with_tools(
+        self,
+        prompt: str,
+        response: LLMToolUseResponse,
+        tools: List[Dict[str, Any]],
+        execution_time: float,
+        system_prompt: Optional[str] = None,
+        purpose: Optional[str] = None
+    ):
+        """
+        Send LLM call trace with tool use info to executionTraces stream (Issue #17).
+
+        Args:
+            prompt: The prompt sent to LLM
+            response: The LLMToolUseResponse from LLM
+            tools: Tools that were available
+            execution_time: Execution time in seconds
+            system_prompt: System prompt used
+            purpose: Purpose description for this LLM call
+        """
+        import httpx
+
+        if not self.trace_api_url:
+            return
+
+        session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
+
+        trace_id = f"llm-skill-{self.skill_name}-{self.task_id}-{int(time.time() * 1000)}"
+        timestamp_ms = int(time.time() * 1000)
+
+        # Build messages array for unified trace format (Issue #17)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        trace_data = {
+            "id": trace_id,
+            "level": "skill-internal",
+            "taskId": self.task_id,
+            "agentId": session_id,
+            "skillName": self.skill_name,
+            "stage": f"llm_call - {purpose}" if purpose else "llm_call_with_tools",
+            "status": "completed",
+            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
+            "isRetry": False,
+            "retryAttempt": 0,
+            "metadata": {
+                "sessionId": session_id,
+                "purpose": purpose or f"{self.skill_name}_with_tools",
+                "llmProvider": "anthropic",
+                "llmModel": response.model,
+                "llmRequest": {
+                    "messages": messages,
+                    "tools": tools,
+                },
+                "llmResponse": {
+                    "content": response.text[:2000] if response.text else "",
+                    "toolCalls": response.tool_calls,
+                    "stopReason": response.stop_reason,
+                    "promptTokens": response.usage['input_tokens'],
+                    "completionTokens": response.usage['output_tokens'],
+                    "totalTokens": response.usage['input_tokens'] + response.usage['output_tokens'],
+                }
+            }
+        }
+
+        # Send trace synchronously using httpx
+        try:
+            with httpx.Client(timeout=5) as client:
+                response_obj = client.post(
+                    self.trace_api_url,
+                    json=trace_data
+                )
+                if response_obj.status_code == 200:
+                    print(f"[LLMClient] ✓ LLM trace with tools sent: {trace_id}")
+                else:
+                    print(f"[LLMClient] ✗ Failed to send LLM trace: HTTP {response_obj.status_code}")
+        except Exception as e:
+            print(f"[LLMClient] ✗ Failed to send LLM trace with tools: {e}")
 
 
 # Singleton instance for reuse
@@ -659,125 +895,3 @@ def get_llm_client(
         )
 
     return _llm_client_instance
-
-
-# Extend LLMClient with tool use methods
-def _generate_with_tools(
-    llm_client: LLMClient,
-    prompt: str,
-    tools: List[Dict[str, Any]],
-    max_tokens: int = 4096,
-    temperature: float = 0.3,
-    system_prompt: Optional[str] = None,
-    purpose: Optional[str] = None
-) -> LLMToolUseResponse:
-    """
-    Generate content with tool use support.
-
-    Args:
-        llm_client: LLMClient instance
-        prompt: User prompt
-        tools: List of tool definitions (Anthropic format)
-        max_tokens: Maximum tokens in response
-        temperature: Sampling temperature
-        system_prompt: Optional system prompt
-        purpose: Purpose description for tracing
-
-    Returns:
-        LLMToolUseResponse with tool_calls if LLM wants to use tools
-    """
-    messages = [{"role": "user", "content": prompt}]
-
-    api_params = {
-        "model": llm_client.model,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "messages": messages,
-        "tools": tools,
-    }
-
-    if system_prompt:
-        api_params["system"] = system_prompt
-
-    response = llm_client.client.messages.create(**api_params)
-
-    # Parse response
-    tool_calls = []
-    text_content = []
-
-    for block in response.content:
-        if block.type == "text":
-            text_content.append(block.text)
-        elif block.type == "tool_use":
-            tool_calls.append({
-                "id": block.id,
-                "name": block.name,
-                "input": block.input
-            })
-
-    return LLMToolUseResponse(
-        text="\n".join(text_content),
-        tool_calls=tool_calls,
-        stop_reason=response.stop_reason,
-        model=response.model,
-        usage={
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        }
-    )
-
-
-def _continue_tool_use(
-    llm_client: LLMClient,
-    messages: List[Dict],
-    tools: List[Dict[str, Any]],
-    max_tokens: int = 4096
-) -> LLMToolUseResponse:
-    """
-    Continue conversation after tool execution.
-
-    Args:
-        llm_client: LLMClient instance
-        messages: Complete message history including tool results
-        tools: Tool definitions
-        max_tokens: Maximum tokens
-
-    Returns:
-        LLMToolUseResponse with next turn
-    """
-    response = llm_client.client.messages.create(
-        model=llm_client.model,
-        max_tokens=max_tokens,
-        messages=messages,
-        tools=tools
-    )
-
-    # Parse response
-    tool_calls = []
-    text_content = []
-
-    for block in response.content:
-        if block.type == "text":
-            text_content.append(block.text)
-        elif block.type == "tool_use":
-            tool_calls.append({
-                "id": block.id,
-                "name": block.name,
-                "input": block.input
-            })
-
-    return LLMToolUseResponse(
-        text="\n".join(text_content),
-        tool_calls=tool_calls,
-        stop_reason=response.stop_reason,
-        model=response.model,
-        usage={
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        }
-    )
-
-
-# Monkey-patch methods onto LLMClient class
-LLMClient.generate_with_tools = _generate_with_tools
-LLMClient.continue_tool_use = _continue_tool_use
