@@ -200,7 +200,7 @@ export class PostgresDataStore implements Database {
       // Task contexts table
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS task_contexts (
-          task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+          task_id TEXT PRIMARY KEY,
           session_id TEXT NOT NULL,
           current_turn INTEGER DEFAULT 1,
           summary JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -215,7 +215,7 @@ export class PostgresDataStore implements Database {
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS messages (
           id TEXT PRIMARY KEY,
-          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL,
           role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
           content TEXT NOT NULL,
           metadata JSONB,
@@ -230,7 +230,7 @@ export class PostgresDataStore implements Database {
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS artifacts (
           id TEXT PRIMARY KEY,
-          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL,
           artifact_type TEXT NOT NULL,
           action TEXT NOT NULL,
           path TEXT NOT NULL,
@@ -247,7 +247,7 @@ export class PostgresDataStore implements Database {
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS compression_history (
           id TEXT PRIMARY KEY,
-          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL,
           compressed_at BIGINT NOT NULL,
           original_token_count INTEGER NOT NULL,
           compressed_token_count INTEGER NOT NULL,
@@ -263,7 +263,7 @@ export class PostgresDataStore implements Database {
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS outputs (
           id TEXT PRIMARY KEY,
-          task_id TEXT NOT NULL REFERENCES task_contexts(task_id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL,
           session_id TEXT NOT NULL,
           round INTEGER NOT NULL,
           output TEXT NOT NULL,
@@ -312,8 +312,7 @@ export class PostgresDataStore implements Database {
           path TEXT NOT NULL,
           description TEXT,
           metadata JSONB,
-          created_at BIGINT NOT NULL,
-          CONSTRAINT fk_favorites_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+          created_at BIGINT NOT NULL
         )
       `);
 
@@ -322,10 +321,65 @@ export class PostgresDataStore implements Database {
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_task_id ON favorites(task_id)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_artifact_id ON favorites(artifact_id)');
 
-      // 迁移：移除 favorites 表的 artifact_id 外键约束（解决死锁问题）
+      // 迁移：移除所有遗留的外键约束
       await safeQuery(`
         DO $$
         BEGIN
+          -- 移除 task_contexts 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'task_contexts_task_id_fkey'
+              AND table_name = 'task_contexts'
+          ) THEN
+            ALTER TABLE task_contexts DROP CONSTRAINT task_contexts_task_id_fkey;
+          END IF;
+
+          -- 移除 messages 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'messages_task_id_fkey'
+              AND table_name = 'messages'
+          ) THEN
+            ALTER TABLE messages DROP CONSTRAINT messages_task_id_fkey;
+          END IF;
+
+          -- 移除 artifacts 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'artifacts_task_id_fkey'
+              AND table_name = 'artifacts'
+          ) THEN
+            ALTER TABLE artifacts DROP CONSTRAINT artifacts_task_id_fkey;
+          END IF;
+
+          -- 移除 compression_history 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'compression_history_task_id_fkey'
+              AND table_name = 'compression_history'
+          ) THEN
+            ALTER TABLE compression_history DROP CONSTRAINT compression_history_task_id_fkey;
+          END IF;
+
+          -- 移除 outputs 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'outputs_task_id_fkey'
+              AND table_name = 'outputs'
+          ) THEN
+            ALTER TABLE outputs DROP CONSTRAINT outputs_task_id_fkey;
+          END IF;
+
+          -- 移除 favorites 的外键约束
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'fk_favorites_task'
+              AND table_name = 'favorites'
+          ) THEN
+            ALTER TABLE favorites DROP CONSTRAINT fk_favorites_task;
+          END IF;
+
+          -- 移除 favorites 的 artifact_id 外键约束（遗留）
           IF EXISTS (
             SELECT 1 FROM information_schema.table_constraints
             WHERE constraint_name = 'fk_favorites_artifact'
@@ -570,11 +624,52 @@ export class PostgresDataStore implements Database {
     }
   }
 
-  async deleteTasks(taskIds: string[]): Promise<number> {
+  /**
+   * 删除任务（带死锁重试）
+   * 使用分步顺序删除 + 死锁重试机制来避免死锁问题
+   *
+   * @param taskIds 要删除的任务ID列表
+   * @param maxRetries 最大重试次数（默认3次）
+   * @returns 实际删除的任务数量
+   */
+  async deleteTasks(taskIds: string[], maxRetries: number = 3): Promise<number> {
     if (taskIds.length === 0) {
       return 0;
     }
 
+    // 死锁重试机制
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.deleteTasksInternal(taskIds);
+      } catch (error: any) {
+        // 检查是否为死锁错误 (code: '40P01')
+        if (error.code === '40P01' && attempt < maxRetries) {
+          // 死锁错误，等待随机时间后重试
+          const backoffMs = Math.random() * 100 + 50; // 50-150ms 随机退避
+          console.warn(
+            `[PostgresDataStore] deleteTasks: Deadlock detected on attempt ${attempt}/${maxRetries}, ` +
+            `retrying after ${backoffMs.toFixed(0)}ms...`
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        // 非死锁错误或已达最大重试次数，抛出错误
+        throw error;
+      }
+    }
+
+    // 理论上不会到达这里，但 TypeScript 需要 return
+    return 0;
+  }
+
+  /**
+   * 内部方法：执行分步顺序删除
+   * 使用固定删除顺序避免 CTE 带来的并发不确定性
+   *
+   * @param taskIds 要删除的任务ID列表
+   * @returns 实际删除的任务数量
+   */
+  private async deleteTasksInternal(taskIds: string[]): Promise<number> {
     // Sort task IDs to ensure consistent lock order
     const sortedTaskIds = [...taskIds].sort();
 
@@ -587,65 +682,55 @@ export class PostgresDataStore implements Database {
       const startTime = Date.now();
 
       // ============================================
-      // 使用 CTE (Common Table Expression) 批量删除
+      // 分步顺序删除 - 固定删除顺序避免死锁
       // ============================================
-      // 优化：移除了 favorites.artifact_id 外键约束，避免死锁
-      // 现在只需要通过 task_id 删除 favorites 即可
+      // 不使用 CTE，而是直接分步执行 DELETE 语句
+      // 这样可以确保删除顺序固定，减少并发冲突
       // ============================================
 
-      const result = await client.query(
-        `
-        WITH target_tasks AS (
-          -- 选择要删除的任务
-          SELECT id AS task_id FROM tasks WHERE id = ANY($1)
-        ),
-        target_contexts AS (
-          -- 选择相关的 task_contexts
-          SELECT tc.task_id FROM task_contexts tc
-          INNER JOIN target_tasks tt ON tc.task_id = tt.task_id
-        ),
-        deleted_fav AS (
-          -- 删除 favorites (通过 task_id)
-          DELETE FROM favorites
-          WHERE task_id = ANY(SELECT task_id FROM target_tasks)
-          RETURNING 1
-        ),
-        deleted_compression AS (
-          -- 删除 compression_history
-          DELETE FROM compression_history
-          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
-          RETURNING 1
-        ),
-        deleted_artifacts AS (
-          -- 删除 artifacts
-          DELETE FROM artifacts
-          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
-          RETURNING 1
-        ),
-        deleted_messages AS (
-          -- 删除 messages
-          DELETE FROM messages
-          WHERE task_id = ANY(SELECT task_id FROM target_contexts)
-          RETURNING 1
-        ),
-        deleted_contexts AS (
-          -- 删除 task_contexts
-          DELETE FROM task_contexts
-          WHERE task_id = ANY(SELECT task_id FROM target_tasks)
-          RETURNING 1
-        ),
-        deleted_tasks AS (
-          -- 最后删除 tasks
-          DELETE FROM tasks
-          WHERE id = ANY($1)
-          RETURNING id
-        )
-        SELECT COUNT(*) as deleted_count FROM deleted_tasks
-        `,
+      // 1. 删除 favorites (通过 task_id)
+      await client.query(
+        'DELETE FROM favorites WHERE task_id = ANY($1)',
         [sortedTaskIds]
       );
 
-      const deletedCount = parseInt(result.rows[0].deleted_count, 10);
+      // 2. 删除 compression_history (通过 task_id)
+      await client.query(
+        'DELETE FROM compression_history WHERE task_id = ANY($1)',
+        [sortedTaskIds]
+      );
+
+      // 3. 删除 artifacts (通过 task_id)
+      await client.query(
+        'DELETE FROM artifacts WHERE task_id = ANY($1)',
+        [sortedTaskIds]
+      );
+
+      // 4. 删除 messages (通过 task_id)
+      await client.query(
+        'DELETE FROM messages WHERE task_id = ANY($1)',
+        [sortedTaskIds]
+      );
+
+      // 5. 删除 outputs (通过 task_id)
+      await client.query(
+        'DELETE FROM outputs WHERE task_id = ANY($1)',
+        [sortedTaskIds]
+      );
+
+      // 6. 删除 task_contexts (通过 task_id)
+      await client.query(
+        'DELETE FROM task_contexts WHERE task_id = ANY($1)',
+        [sortedTaskIds]
+      );
+
+      // 7. 最后删除 tasks
+      const result = await client.query(
+        'DELETE FROM tasks WHERE id = ANY($1) RETURNING id',
+        [sortedTaskIds]
+      );
+
+      const deletedCount = result.rows.length;
 
       // ✅ 提交事务 - 所有删除操作永久生效
       await client.query('COMMIT');
