@@ -1,7 +1,7 @@
 """
 Virtual Skill Registry
 
-In-memory registry for Claude Skills adapted to Motia.
+In-memory registry for Claude Skills adapted to myagent.
 
 This registry provides fast access to adapted Claude Skills without
 generating skill.yaml files. It integrates with the existing SkillRegistry.
@@ -13,16 +13,16 @@ from pathlib import Path
 
 from .claude_skill_scanner import ClaudeSkillScanner, ClaudeSkillFile
 from .claude_skill_analyzer import ClaudeSkillAnalyzer, ClaudeSkillInfo
-from .motia_skill_generator import MotiaSkillGenerator
+from .myagent_skill_generator import MyagentSkillGenerator
 
 from ..types import SkillDefinition, SkillMetadata
 
 
 class VirtualSkill:
     """
-    Represents a Claude Skill adapted for Motia.
+    Represents a Claude Skill adapted for myagent.
 
-    A VirtualSkill wraps a Claude Skill with Motia-compatible metadata.
+    A VirtualSkill wraps a Claude Skill with myagent-compatible metadata.
     """
 
     def __init__(
@@ -35,7 +35,7 @@ class VirtualSkill:
 
         Args:
             skill_info: Parsed ClaudeSkillInfo
-            definition: Motia SkillDefinition
+            definition: myagent SkillDefinition
         """
         self.skill_info = skill_info
         self.definition = definition
@@ -56,7 +56,7 @@ class VirtualSkill:
 
 class VirtualSkillRegistry:
     """
-    In-memory registry for Claude Skills adapted to Motia.
+    In-memory registry for Claude Skills adapted to myagent.
 
     This registry scans Claude Skills, analyzes them, and creates
     virtual mappings that can be used by the SkillExecutor.
@@ -66,7 +66,7 @@ class VirtualSkillRegistry:
         self,
         scanner: Optional[ClaudeSkillScanner] = None,
         analyzer: Optional[ClaudeSkillAnalyzer] = None,
-        generator: Optional[MotiaSkillGenerator] = None
+        generator: Optional[MyagentSkillGenerator] = None
     ):
         """
         Initialize the Virtual Skill Registry.
@@ -74,11 +74,11 @@ class VirtualSkillRegistry:
         Args:
             scanner: Optional ClaudeSkillScanner instance
             analyzer: Optional ClaudeSkillAnalyzer instance
-            generator: Optional MotiaSkillGenerator instance
+            generator: Optional MyagentSkillGenerator instance
         """
         self.scanner = scanner or ClaudeSkillScanner()
         self.analyzer = analyzer or ClaudeSkillAnalyzer()
-        self.generator = generator or MotiaSkillGenerator()
+        self.generator = generator or MyagentSkillGenerator()
 
         self._virtual_skills: Dict[str, VirtualSkill] = {}
         self._loaded = False

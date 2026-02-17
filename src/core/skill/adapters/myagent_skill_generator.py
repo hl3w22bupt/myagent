@@ -1,9 +1,9 @@
 """
-Motia Skill Generator
+myagent Skill Generator
 
-Generates Motia skill.yaml mappings from Claude Skill metadata.
+Generates myagent skill.yaml mappings from Claude Skill metadata.
 
-This component converts ClaudeSkillInfo into Motia-compatible skill definitions.
+This component converts ClaudeSkillInfo into myagent-compatible skill definitions.
 It can either generate skill.yaml files or create virtual skill mappings.
 """
 
@@ -18,11 +18,11 @@ if TYPE_CHECKING:
     from .virtual_skill_registry import VirtualSkill
 
 
-class MotiaSkillGenerator:
+class MyagentSkillGenerator:
     """
-    Generator for Motia skill definitions from Claude Skills.
+    Generator for myagent skill definitions from Claude Skills.
 
-    Converts ClaudeSkillInfo into Motia-compatible skill.yaml format.
+    Converts ClaudeSkillInfo into myagent-compatible skill.yaml format.
     Can generate files or create virtual mappings.
     """
 
@@ -32,7 +32,7 @@ class MotiaSkillGenerator:
         default_timeout: int = 30000
     ):
         """
-        Initialize the Motia Skill Generator.
+        Initialize the myagent Skill Generator.
 
         Args:
             handler_path: Path to the Claude skill handler
@@ -43,7 +43,7 @@ class MotiaSkillGenerator:
 
     def generate_yaml(self, skill_info: ClaudeSkillInfo) -> Dict[str, Any]:
         """
-        Generate a Motia skill.yaml definition from Claude Skill info.
+        Generate a myagent skill.yaml definition from Claude Skill info.
 
         Args:
             skill_info: Parsed ClaudeSkillInfo
@@ -239,9 +239,9 @@ class MotiaSkillGenerator:
 
 
 # Convenience function for quick generation
-def generate_motia_skill(skill_info: ClaudeSkillInfo) -> Dict[str, Any]:
+def generate_myagent_skill(skill_info: ClaudeSkillInfo) -> Dict[str, Any]:
     """
-    Convenience function to generate Motia skill definition.
+    Convenience function to generate myagent skill definition.
 
     Args:
         skill_info: ClaudeSkillInfo
@@ -249,5 +249,5 @@ def generate_motia_skill(skill_info: ClaudeSkillInfo) -> Dict[str, Any]:
     Returns:
         Skill definition dictionary
     """
-    generator = MotiaSkillGenerator()
+    generator = MyagentSkillGenerator()
     return generator.generate_yaml(skill_info)

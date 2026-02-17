@@ -6,7 +6,7 @@
  * - API layer (skills-api)
  *
  * Loads skills from multiple sources:
- * 1. Motia native skills (/skills directory with skill.yaml)
+ * 1. myagent native skills (/skills directory with skill.yaml)
  * 2. Claude Skills (/claude_skills directory with SKILL.md)
  */
 
@@ -29,7 +29,7 @@ export interface UnifiedSkillMetadata {
 }
 
 /**
- * Load skill metadata from skill.yaml files (Motia native skills).
+ * Load skill metadata from skill.yaml files (myagent native skills).
  *
  * Scans the /skills directory for subdirectories containing skill.yaml files.
  */
@@ -145,7 +145,7 @@ export function loadClaudeSkills(): UnifiedSkillMetadata[] {
 /**
  * Load all skills from all sources.
  *
- * Returns both Motia native skills and Claude Skills in a unified format.
+ * Returns both myagent native skills and Claude Skills in a unified format.
  */
 export function loadAllSkills(): UnifiedSkillMetadata[] {
   const nativeSkills = loadNativeSkills();
