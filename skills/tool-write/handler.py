@@ -83,14 +83,17 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         Path(file_path).write_text(content, encoding="utf-8")
 
         if OUTPUT_BUILDER_AVAILABLE:
-            return OutputBuilder() \
-                .set_text(f"Successfully wrote {len(content)} characters to {file_path}") \
-                .build()
+            output = OutputBuilder() \
+                .set_text(f"Successfully wrote {len(content)} characters to {file_path}")
+            # Add output_files metadata for tracking (use set_metadata to avoid x- prefix)
+            output.set_metadata("output_files", [file_path])
+            return output.build()
         else:
             return {
                 "success": True,
                 "result_type": "text",
-                "content": f"Successfully wrote {len(content)} characters to {file_path}"
+                "content": f"Successfully wrote {len(content)} characters to {file_path}",
+                "output_files": [file_path]
             }
     except Exception as e:
         if OUTPUT_BUILDER_AVAILABLE:

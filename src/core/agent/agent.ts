@@ -1084,8 +1084,15 @@ Confidence:
 
 Respond ONLY with valid JSON, no other text.`;
 
+      // Build system prompt for intent analysis
+      const intentSystemPrompt = `You are an intent analyzer. Your task is to determine the user's intent from their request.
+Analyze the task description and categorize it appropriately. Provide confidence scores to indicate certainty.`;
+
       const response = await this.llm.messagesCreate(
-        [{ role: 'user', content: prompt }],
+        [
+          { role: 'system', content: intentSystemPrompt },
+          { role: 'user', content: prompt }
+        ],
         { max_tokens: 500, temperature: 0.3 },
         'intent analysis'
       );

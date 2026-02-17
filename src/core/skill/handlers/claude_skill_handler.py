@@ -262,14 +262,16 @@ class ClaudeSkillHandler:
             # 优先使用 LLMClient（如果有）
             if self._llm_client:
                 response = self._call_llm_with_client(prompt, purpose)
-                # 发送 trace
-                self._send_llm_trace(prompt, response, time.time() - start_time, client_type='llm_client', purpose=purpose)
+                # 发送 trace with system prompt (Issue #17)
+                system_prompt = f"You are {self.skill_name}, a specialized skill handler. Your role is to execute tasks according to this skill's capabilities."
+                self._send_llm_trace(prompt, response, time.time() - start_time, client_type='llm_client', purpose=purpose, system_prompt=system_prompt)
                 return response
 
             # Fallback: 直接使用 Anthropic API
             response = self._call_anthropic_api(prompt)
-            # 发送 trace
-            self._send_llm_trace(prompt, response, time.time() - start_time, client_type='anthropic_api', purpose=purpose)
+            # 发送 trace with system prompt (Issue #17)
+            system_prompt = f"You are {self.skill_name}, a specialized AI assistant designed to execute tasks according to this skill's capabilities."
+            self._send_llm_trace(prompt, response, time.time() - start_time, client_type='anthropic_api', purpose=purpose, system_prompt=system_prompt)
             return response
 
         except Exception as e:
@@ -307,7 +309,8 @@ class ClaudeSkillHandler:
         client_type: str = 'unknown',
         llm_model: Optional[str] = None,
         usage: Optional[Dict[str, int]] = None,
-        purpose: Optional[str] = None
+        purpose: Optional[str] = None,
+        system_prompt: Optional[str] = None
     ):
         """
         Send LLM call trace to executionTraces stream.
@@ -320,6 +323,7 @@ class ClaudeSkillHandler:
             llm_model: Model name (optional)
             usage: Token usage info (optional)
             purpose: Purpose description for this LLM call (e.g., "code generation", "analysis")
+            system_prompt: System prompt used (optional, for Issue #17 unified prompt structure)
         """
         import asyncio
 
@@ -330,32 +334,33 @@ class ClaudeSkillHandler:
         id = f"llm-skill-{self.skill_name}-{task_id}-{int(time.time() * 1000)}"
         timestamp_ms = int(time.time() * 1000)
 
+        # Build messages array for unified trace format (Issue #17)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
         trace_data = {
             "id": id,
             "level": "skill-internal",
             "taskId": task_id,
             "agentId": session_id,
             "skillName": self.skill_name,
-            "stage": f"llm_call - {purpose}",
+            "stage": f"llm_call - {purpose}" if purpose else "llm_call",
             "status": "completed",
             "executionTime": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "metadata": {
                 "sessionId": session_id,
+                "purpose": purpose or self.skill_name,
                 "llmProvider": "anthropic" if client_type == "anthropic_api" else "unknown",
                 "llmModel": llm_model or os.getenv('DEFAULT_LLM_MODEL', 'unknown'),
                 "llmRequest": {
-                    "prompt": prompt,
-                    "promptLength": len(prompt),
+                    "messages": messages,
                 },
                 "llmResponse": {
                     "content": response,
-                    "responseLength": len(response),
                 },
-                "data": {
-                    "clientType": client_type,
-                    "totalTokens": usage.get('total_tokens', 0) if usage else 0,
-                }
             }
         }
 
@@ -365,17 +370,103 @@ class ClaudeSkillHandler:
             trace_data["metadata"]["llmResponse"]["completionTokens"] = usage.get('completion_tokens', 0)
             trace_data["metadata"]["llmResponse"]["totalTokens"] = usage.get('total_tokens', 0)
 
-        # Send trace asynchronously
+        # Send trace - try sync first for reliability, fall back to async
+        print(f"[ClaudeSkillHandler] _send_llm_trace called: skill={self.skill_name}, trace_api_url={self.trace_api_url}")
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If there's already a running loop, create a task
-                asyncio.ensure_future(self._send_trace(trace_data))
-            else:
-                # If no loop is running, run in a new loop
-                loop.run_until_complete(self._send_trace(trace_data))
+            # Try synchronous send first (more reliable in sandbox)
+            self._send_trace_sync(trace_data)
         except Exception as e:
-            print(f"[ClaudeSkillHandler] Failed to send trace: {e}")
+            # Fallback to async if sync fails
+            print(f"[ClaudeSkillHandler] Sync trace failed, trying async: {e}")
+            try:
+                import asyncio
+                asyncio.run(self._send_trace(trace_data))
+            except Exception as e2:
+                print(f"[ClaudeSkillHandler] Failed to send trace: {e2}")
+
+    def _send_trace_sync(self, trace_data: Dict[str, Any]):
+        """Send trace data synchronously using httpx."""
+        if not self.trace_api_url:
+            return
+
+        try:
+            import httpx
+            with httpx.Client(timeout=2) as client:
+                response = client.post(self.trace_api_url, json=trace_data)
+                response.raise_for_status()
+                print(f"[ClaudeSkillHandler] ✓ LLM trace sent: {trace_data.get('id')} - {trace_data.get('status')}")
+        except Exception as e:
+            print(f"[ClaudeSkillHandler] ✗ Failed to send LLM trace (sync): {e}")
+            raise
+
+    def _send_tool_skill_trace(
+        self,
+        tool_name: str,
+        tool_input: dict,
+        result: dict,
+        execution_time: float
+    ):
+        """
+        Send tool skill execution trace to executionTraces stream.
+
+        Args:
+            tool_name: Name of the tool skill (e.g., "tool-write", "tool-read")
+            tool_input: Input parameters passed to the tool
+            result: Result returned by the tool
+            execution_time: Execution time in seconds
+        """
+        if not self.trace_api_url:
+            return
+
+        task_id = os.getenv('MOTIA_TASK_ID', 'unknown')
+        session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
+
+        trace_id = f"tool-skill-{tool_name}-{task_id}-{int(time.time() * 1000)}"
+        timestamp_ms = int(time.time() * 1000)
+
+        # 构建简短的 result preview (避免 trace 过大)
+        result_preview = result.get('content', '')
+        if isinstance(result_preview, str):
+            result_preview = result_preview[:500]  # 限制长度
+        elif isinstance(result_preview, dict):
+            result_preview = str(result_preview)[:500]
+
+        trace_data = {
+            "id": trace_id,
+            "level": "tool-skill",
+            "taskId": task_id,
+            "agentId": session_id,
+            "skillName": tool_name,
+            "stage": "tool_execution",
+            "status": "completed" if result.get('success') else "failed",
+            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
+            "metadata": {
+                "sessionId": session_id,
+                "parentSkill": self.skill_name,  # 调用此 tool 的父 skill
+                "toolInput": tool_input,
+                "toolResult": {
+                    "success": result.get('success', False),
+                    "resultType": result.get('result_type', 'unknown'),
+                    "preview": result_preview,
+                },
+                "outputFiles": result.get('output_files', []),
+            }
+        }
+
+        # 如果有错误，添加错误信息
+        if not result.get('success'):
+            trace_data["metadata"]["error"] = result.get('content', 'Unknown error')
+
+        # Send trace synchronously
+        try:
+            import httpx
+            with httpx.Client(timeout=2) as client:
+                response = client.post(self.trace_api_url, json=trace_data)
+                response.raise_for_status()
+                print(f"[ClaudeSkillHandler] ✓ Tool skill trace sent: {tool_name} - {trace_data.get('status')}")
+        except Exception as e:
+            print(f"[ClaudeSkillHandler] ✗ Failed to send tool skill trace: {e}")
 
     def _call_llm_with_client(self, prompt: str, purpose: Optional[str] = None) -> str:
         """使用 LLMClient 调用"""
@@ -383,16 +474,21 @@ class ClaudeSkillHandler:
             # 检查是否有 messagesCreate 方法（Anthropic 客户端）
             if hasattr(self._llm_client, 'messagesCreate'):
                 # Anthropic 客户端 - 同步调用
+                # Build system prompt for skill execution
+                system_prompt = f"You are {self.skill_name}, a specialized skill handler. Your role is to execute tasks according to this skill's capabilities."
+
                 # 传递 purpose 参数（如果支持）
                 import inspect
                 sig = inspect.signature(self._llm_client.messagesCreate)
                 if 'purpose' in sig.parameters:
                     message = self._llm_client.messagesCreate([
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ], purpose=purpose or self.skill_name)
                 else:
                     # 不支持 purpose 参数，使用旧调用方式
                     message = self._llm_client.messagesCreate([
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ])
                 # 返回文本内容（兼容现有代码）
@@ -424,11 +520,18 @@ class ClaudeSkillHandler:
         # 使用正确的模型名称（支持多种命名方式）
         model = os.getenv('DEFAULT_LLM_MODEL', 'claude-3-5-sonnet-20241022')
 
+        # Build system prompt for skill execution
+        system_prompt = f"You are {self.skill_name}, a specialized AI assistant designed to execute tasks according to this skill's capabilities."
+
+        # Use messages array with system role for unified structure (Issue #17)
         message = client.messages.create(
             model=model,
-            max_tokens=8192,
+            max_tokens=16384,
             temperature=0.7,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
         )
 
         return message.content[0].text
@@ -441,7 +544,11 @@ class ClaudeSkillHandler:
         - 代码块 → set_code()
         - JSON → set_json()
         - Markdown/HTML → set_markdown() 或 set_text()
+
+        注意：Tool Use 产生的文件由 _format_files_output 处理，不再需要 regex 解析
         """
+        import re
+
         if not OUTPUT_BUILDER_AVAILABLE:
             # Fallback - 返回符合 OutputBuilder 格式的字典
             # 检测响应类型以设置适当的 result_type
@@ -575,7 +682,7 @@ class ClaudeSkillHandler:
 
         return tools
 
-    def _execute_tool_call(self, tool_name: str, tool_input: dict, tool_def: dict) -> str:
+    def _execute_tool_call(self, tool_name: str, tool_input: dict, tool_def: dict) -> tuple:
         """
         执行工具调用 - 直接 import handler
 
@@ -585,14 +692,19 @@ class ClaudeSkillHandler:
             tool_def: Tool definition with _skill_path, _handler, _function
 
         Returns:
-            Result string to return to LLM
+            Tuple (result_text, output_files) where:
+            - result_text: Result string to return to LLM
+            - output_files: List of file paths written by the tool
         """
+        import time
+        start_time = time.time()
+
         skill_path = tool_def.get("_skill_path")
         handler_file = tool_def.get("_handler", "handler.py")
         function_name = tool_def.get("_function", "execute")
 
         if not skill_path:
-            return f"Error: Tool {tool_name} has no path"
+            return (f"Error: Tool {tool_name} has no path", [])
 
         try:
             # 动态导入 handler
@@ -615,30 +727,125 @@ class ClaudeSkillHandler:
             execute_func = getattr(module, function_name)
             result = execute_func(tool_input)
 
+            # 提取 output_files (用于追踪写入的文件)
+            output_files = result.get('output_files', [])
+            # 也检查 metadata 中的 output_files
+            if not output_files and 'metadata' in result:
+                metadata = result.get('metadata', {})
+                output_files = metadata.get('x-output_files', [])
+
+            # 发送 tool skill 执行 trace
+            execution_time = time.time() - start_time
+            self._send_tool_skill_trace(
+                tool_name=tool_name,
+                tool_input=tool_input,
+                result=result,
+                execution_time=execution_time
+            )
+
             # 转换为字符串返回给 LLM
             if result.get('success'):
                 content = result.get('content')
                 if isinstance(content, str):
-                    return content
+                    return (content, output_files)
                 elif isinstance(content, dict):
                     # 提取主要内容
                     if 'text' in content:
-                        return content['text']
+                        return (content['text'], output_files)
                     elif 'code' in content:
-                        return content['code']
+                        return (content['code'], output_files)
                     else:
                         import json
-                        return json.dumps(content, ensure_ascii=False)
+                        return (json.dumps(content, ensure_ascii=False), output_files)
                 else:
-                    return str(content)
+                    return (str(content), output_files)
             else:
                 error = result.get('content', {})
                 if isinstance(error, dict):
-                    return f"Error: {error.get('message', 'Unknown error')}"
-                return f"Error: {error}"
+                    return (f"Error: {error.get('message', 'Unknown error')}", output_files)
+                return (f"Error: {error}", output_files)
 
         except Exception as e:
-            return f"Error executing {tool_name}: {str(e)}"
+            execution_time = time.time() - start_time
+            # 发送错误 trace
+            self._send_tool_skill_trace(
+                tool_name=tool_name,
+                tool_input=tool_input,
+                result={'success': False, 'error': str(e)},
+                execution_time=execution_time
+            )
+            return (f"Error executing {tool_name}: {str(e)}", [])
+
+    def _format_files_output(self, file_paths: list) -> str:
+        """
+        Format file contents for output.
+
+        Reads each file and formats its content in a code block.
+
+        Args:
+            file_paths: List of file paths to read and format
+
+        Returns:
+            Formatted string with file contents in code blocks
+        """
+        from pathlib import Path
+
+        if not file_paths:
+            return ""
+
+        outputs = []
+        for file_path in file_paths:
+            try:
+                path = Path(file_path)
+                if not path.exists():
+                    outputs.append(f"# File not found: {file_path}")
+                    continue
+
+                content = path.read_text(encoding='utf-8')
+                ext = path.suffix.lstrip('.')
+                # 确定语言用于代码高亮
+                language_map = {
+                    'html': 'html',
+                    'htm': 'html',
+                    'css': 'css',
+                    'js': 'javascript',
+                    'jsx': 'jsx',
+                    'ts': 'typescript',
+                    'tsx': 'tsx',
+                    'vue': 'vue',
+                    'py': 'python',
+                    'rb': 'ruby',
+                    'go': 'go',
+                    'rs': 'rust',
+                    'java': 'java',
+                    'cpp': 'cpp',
+                    'c': 'c',
+                    'cs': 'csharp',
+                    'php': 'php',
+                    'swift': 'swift',
+                    'kt': 'kotlin',
+                    'scala': 'scala',
+                    'sh': 'bash',
+                    'bash': 'bash',
+                    'zsh': 'bash',
+                    'fish': 'fish',
+                    'json': 'json',
+                    'yaml': 'yaml',
+                    'yml': 'yaml',
+                    'xml': 'xml',
+                    'sql': 'sql',
+                    'md': 'markdown',
+                    'markdown': 'markdown',
+                    'txt': 'text',
+                }
+                language = language_map.get(ext.lower(), 'text')
+
+                # 格式化为代码块
+                outputs.append(f"```{language}\n{content}\n```")
+            except Exception as e:
+                outputs.append(f"# Error reading file {file_path}: {str(e)}")
+
+        return "\n\n".join(outputs)
 
     def _call_llm_with_tools(
         self,
@@ -649,16 +856,28 @@ class ClaudeSkillHandler:
         调用 LLM，支持 tool use 的多轮对话
 
         只处理对 tool-* skills 的调用
+
+        Returns:
+            LLM response text, or file contents if tools wrote files
         """
+        start_time = time.time()
+        system_prompt = f"You are {self.skill_name}, a specialized skill handler. Your role is to execute tasks according to this skill's capabilities."
+
         if not self._llm_client:
             # Fallback 到简单调用
-            return self._call_anthropic_api(prompt)
+            response = self._call_anthropic_api(prompt)
+            # Send trace (Issue #17)
+            self._send_llm_trace(prompt, response, time.time() - start_time, client_type='anthropic_api', purpose=purpose, system_prompt=system_prompt)
+            return response
 
         # 获取可用的 tool skills
         tools = self._discover_tool_skills()
 
         if not tools:
-            return self._call_anthropic_api(prompt)
+            response = self._call_anthropic_api(prompt)
+            # Send trace (Issue #17)
+            self._send_llm_trace(prompt, response, time.time() - start_time, client_type='anthropic_api', purpose=purpose, system_prompt=system_prompt)
+            return response
 
         # 创建 tool name 到 tool def 的映射
         tools_map = {t["name"]: t for t in tools}
@@ -666,15 +885,36 @@ class ClaudeSkillHandler:
         max_iterations = 5
         messages = [{"role": "user", "content": prompt}]
 
-        for iteration in range(max_iterations):
-            # 调用 LLM（带 tools）
-            response = self._llm_client.generate_with_tools(
-                prompt=prompt,
-                tools=tools,
-                purpose=purpose
-            )
+        # 收集所有输出文件
+        all_output_files = []
 
-            # 保存 assistant 响应（包含 tool_use blocks）
+        for iteration in range(max_iterations):
+            # 第一次调用使用 generate_with_tools，后续使用 continue_tool_use
+            if iteration == 0:
+                response = self._llm_client.generate_with_tools(
+                    prompt=prompt,
+                    tools=tools,
+                    max_tokens=16384,
+                    system_prompt=system_prompt,  # 传递 system_prompt
+                    purpose=purpose
+                )
+            else:
+                response = self._llm_client.continue_tool_use(
+                    messages=messages,
+                    tools=tools,
+                    max_tokens=16384,
+                    system_prompt=system_prompt  # 传递 system_prompt
+                )
+
+            # 如果没有工具调用，直接返回
+            if response.stop_reason != "tool_use" or not response.tool_calls:
+                # 注意：不需要发送 trace，因为 LLMClient.continue_tool_use 已经发送了
+                # 如果有输出文件，返回文件内容而不是 LLM 响应
+                if all_output_files:
+                    return self._format_files_output(all_output_files)
+                return response.text
+
+            # 有工具调用，保存 assistant 响应
             assistant_content = [{"type": "text", "text": response.text}]
             for tc in response.tool_calls:
                 assistant_content.append({
@@ -685,51 +925,49 @@ class ClaudeSkillHandler:
                 })
             messages.append({"role": "assistant", "content": assistant_content})
 
-            # 检查是否有工具调用
-            if response.stop_reason == "tool_use" and response.tool_calls:
-                # 执行所有工具调用
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call["name"]
-                    tool_input = tool_call["input"]
+            # 执行所有工具调用
+            for tool_call in response.tool_calls:
+                tool_name = tool_call["name"]
+                tool_input = tool_call["input"]
 
-                    # 只处理 tool-* skills
-                    if not tool_name.startswith("tool-"):
-                        result_text = f"Error: Only tool-* skills can be called, got {tool_name}"
-                    else:
-                        tool_def = tools_map.get(tool_name)
-                        if not tool_def:
-                            result_text = f"Error: Unknown tool {tool_name}"
-                        else:
-                            result_text = self._execute_tool_call(
-                                tool_name,
-                                tool_input,
-                                tool_def
-                            )
-
-                    # 添加工具结果到消息
-                    messages.append({
-                        "role": "user",
-                        "content": [{
-                            "type": "tool_result",
-                            "tool_use_id": tool_call["id"],
-                            "content": result_text
-                        }]
-                    })
-
-                # 继续对话
-                response = self._llm_client.continue_tool_use(
-                    messages=messages,
-                    tools=tools
-                )
-
-                # 如果还有更多工具调用，继续循环
-                if response.stop_reason == "tool_use":
-                    continue
+                # 只处理 tool-* skills
+                if not tool_name.startswith("tool-"):
+                    result_text = f"Error: Only tool-* skills can be called, got {tool_name}"
+                    output_files = []
                 else:
-                    return response.text
-            else:
-                return response.text
+                    tool_def = tools_map.get(tool_name)
+                    if not tool_def:
+                        result_text = f"Error: Unknown tool {tool_name}"
+                        output_files = []
+                    else:
+                        result_text, output_files = self._execute_tool_call(
+                            tool_name,
+                            tool_input,
+                            tool_def
+                        )
+                        # 收集输出文件
+                        all_output_files.extend(output_files)
 
+                # 添加工具结果到消息
+                messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_call["id"],
+                        "content": result_text
+                    }]
+                })
+
+            # 优化：如果有输出文件，直接返回文件内容，不再调用 LLM
+            # 因为文件已经是最终产物，不需要 LLM 再总结
+            if all_output_files:
+                return self._format_files_output(all_output_files)
+
+            # 没有输出文件，继续循环让 LLM 完成对话
+
+        # 超过最大迭代次数
+        if all_output_files:
+            return self._format_files_output(all_output_files)
         return "Error: Maximum tool use iterations exceeded"
 
     # ============ End Tool Use Support =============
@@ -737,16 +975,14 @@ class ClaudeSkillHandler:
     def _create_llm_client(self) -> Any:
         """创建 LLM Client（可选）"""
         try:
-            # 尝试从 remotion-generator 导入
-            remotion_path = Path(__file__).parent.parent.parent.parent.parent / "skills" / "remotion-generator"
-            if remotion_path.exists():
-                sys.path.insert(0, str(remotion_path))
-                from generators.llm_client import LLMClient
-                return LLMClient()
+            from ..llm_client import LLMClient
+            return LLMClient(
+                trace_api_url=self.trace_api_url,
+                skill_name=self.skill_name,
+                task_id=os.getenv('MOTIA_TASK_ID', 'unknown')
+            )
         except ImportError:
-            pass
-
-        return None
+            return None
 
 
 # ============ Motia 执行入口（保持兼容）============

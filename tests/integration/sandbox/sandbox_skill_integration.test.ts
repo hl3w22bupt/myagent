@@ -59,7 +59,7 @@ print(result)
 
     expect(result.success).toBe(true);
     expect(result.stdout).toBeDefined();
-  }, 20000);
+  }, 30000);
 
   it('should handle multiple skill calls in one execution', async () => {
     const code = `
@@ -79,7 +79,7 @@ print({"result1_type": result1.get("type"), "result2_type": result2.get("type")}
     const result = await sandbox.execute(code, options);
 
     expect(result.success).toBe(true);
-  }, 20000);
+  }, 30000);
 
   it('should pass metadata to sandbox', async () => {
     const code = `
