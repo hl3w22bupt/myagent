@@ -86,7 +86,7 @@ class SkillTraceHook(BaseHook):
                 "id": id,
                 "taskId": task_id,
                 "level": "skill",
-                "stage": "pre_execution",
+                "stage": "pre",
                 "skillName": skill_name,
                 "inputData": {
                     "skill_name": skill_name,
@@ -154,7 +154,7 @@ class SkillTraceHook(BaseHook):
                 "id": id,
                 "taskId": task_id,
                 "level": "skill",
-                "stage": "post_execution",
+                "stage": "post",
                 "skillName": skill_name,
                 "status": status,
                 "startedAt": start_time_ms,
