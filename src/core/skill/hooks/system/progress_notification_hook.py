@@ -1,7 +1,7 @@
 """
 Progress Notification Hook
 
-System built-in hook that sends progress updates to Motia Stream.
+System built-in hook that sends progress updates to the Stream.
 This is the core hook that enables real-time progress tracking.
 """
 
@@ -15,7 +15,7 @@ class ProgressNotificationHook(BaseHook):
     """
     System built-in hook for progress notifications.
 
-    Sends skill execution progress to Motia Stream API,
+    Sends skill execution progress to the Stream API,
     which forwards to frontend for real-time updates.
     """
 
@@ -24,7 +24,7 @@ class ProgressNotificationHook(BaseHook):
         Initialize the progress notification hook.
 
         Args:
-            notify_api_url: Motia Notify API URL (e.g., 'http://localhost:3000/api/notify')
+            notify_api_url: Notify API URL (e.g., 'http://localhost:3000/api/notify')
         """
         self.notify_api_url = notify_api_url
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -37,7 +37,7 @@ class ProgressNotificationHook(BaseHook):
         stage: str = "processing"
     ):
         """
-        Send notification to Motia Stream API.
+        Send notification to the Stream API.
 
         Args:
             context: Execution context
@@ -65,7 +65,7 @@ class ProgressNotificationHook(BaseHook):
                 "data": data
             }
 
-            # Send to Motia Notify API
+            # Send to Notify API
             response = await self._http_client.post(
                 self.notify_api_url,
                 json=payload
@@ -155,7 +155,7 @@ class ProgressNotificationHook(BaseHook):
         progress_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Forward progress updates to Motia Stream.
+        Forward progress updates to the Stream.
 
         This method is called by SkillHookExecutor.report_progress()
         to send intermediate progress updates.

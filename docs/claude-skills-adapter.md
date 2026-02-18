@@ -1,8 +1,8 @@
-# Claude Skills Adapter for Motia
+# Claude Skills Adapter for myagent
 
 ## Overview
 
-The Claude Skills Adapter enables Motia to discover, analyze, and execute Claude Skills (defined in SKILL.md files). This creates a unified interface where both native Motia skills and Claude Skills can be used interchangeably.
+The Claude Skills Adapter enables myagent to discover, analyze, and execute Claude Skills (defined in SKILL.md files). This creates a unified interface where both native myagent skills and Claude Skills can be used interchangeably.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ The Claude Skills Adapter enables Motia to discover, analyze, and execute Claude
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                   Motia Skill Layer                         │
+│                   myagent Skill Layer                       │
 │  SkillRegistry (unified interface)                          │
 │  SkillExecutor (unified execution)                          │
 └─────────────────────────────────────────────────────────────┘
@@ -64,14 +64,14 @@ print(f"Tags: {skill_info.tags}")
 print(f"Has Script: {skill_info.has_script}")
 ```
 
-### 3. MotiaSkillGenerator
+### 3. MyagentSkillGenerator
 
-Converts Claude Skills to Motia-compatible definitions.
+Converts Claude Skills to myagent-compatible definitions.
 
 ```python
-from src.core.skill import MotiaSkillGenerator
+from src.core.skill import MyagentSkillGenerator
 
-generator = MotiaSkillGenerator()
+generator = MyagentSkillGenerator()
 definition = generator.generate_yaml(skill_info)
 
 # Or create a VirtualSkill

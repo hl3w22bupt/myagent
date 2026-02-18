@@ -5,7 +5,7 @@ The Registry implements a two-level loading strategy:
 - Level 1 (Metadata): Scan all skills at startup, load only metadata
 - Level 2 (Full Definition): Load complete Skill definition on demand
 
-Supports both native Motia skills and adapted Claude Skills via VirtualSkillRegistry.
+Supports both native myagent skills and adapted Claude Skills via VirtualSkillRegistry.
 """
 
 import os

@@ -1,5 +1,5 @@
 """
-Motia Skill Output Builder
+myagent Skill Output Builder
 
 提供统一的输出格式构建工具,确保所有 skill 输出符合标准化 schema。
 

@@ -1,7 +1,7 @@
 """
 Claude Skills Integration
 
-Convenience functions for integrating Claude Skills with the Motia system.
+Convenience functions for integrating Claude Skills with the myagent system.
 
 This module provides simple entry points for:
 - Creating a SkillExecutor with Claude Skills support
@@ -16,7 +16,7 @@ from .registry import SkillRegistry
 from .adapters.virtual_skill_registry import VirtualSkillRegistry
 from .adapters.claude_skill_scanner import ClaudeSkillScanner
 from .adapters.claude_skill_analyzer import ClaudeSkillAnalyzer
-from .adapters.motia_skill_generator import MotiaSkillGenerator
+from .adapters.myagent_skill_generator import MyagentSkillGenerator
 from .hooks.base import BaseHook
 
 
@@ -30,10 +30,10 @@ async def create_executor_with_claude_skills(
     Create a SkillExecutor with Claude Skills support.
 
     This is the recommended way to create an executor that supports both
-    native Motia skills and Claude Skills.
+    native myagent skills and Claude Skills.
 
     Args:
-        skills_dir: Path to native Motia skills directory
+        skills_dir: Path to native myagent skills directory
         claude_skills_paths: List of paths to scan for Claude Skills (SKILL.md files)
         hooks: Optional list of hook instances
         notify_hook_api_url: Optional URL for progress notifications
@@ -61,7 +61,7 @@ async def create_executor_with_claude_skills(
     if skill_files:
         # Create analyzer and generator
         analyzer = ClaudeSkillAnalyzer()
-        generator = MotiaSkillGenerator()
+        generator = MyagentSkillGenerator()
 
         # Create virtual registry
         virtual_registry = VirtualSkillRegistry(
@@ -98,7 +98,7 @@ async def list_all_skills(
     List all available skills (both native and Claude Skills).
 
     Args:
-        skills_dir: Path to native Motia skills directory
+        skills_dir: Path to native myagent skills directory
         claude_skills_paths: Optional paths to scan for Claude Skills
 
     Returns:

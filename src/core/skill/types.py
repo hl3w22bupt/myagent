@@ -1,5 +1,5 @@
 """
-Skill type definitions for the Motia Agent System.
+Skill type definitions for the myagent system.
 
 This module defines the core data models for Skills using Pydantic.
 Skills are reusable capability units that can be executed by Agents.

@@ -1,5 +1,5 @@
 """
-LLM Client for Motia Skills
+LLM Client for myagent Skills
 
 Provides a unified interface for interacting with LLM APIs (Anthropic Claude)
 for content analysis, code generation, and command generation tasks.
@@ -257,7 +257,7 @@ class LLMClient:
 
     async def _send_trace(self, trace_data: Dict[str, Any]):
         """
-        Send trace data to Motia executionTraces stream via API.
+        Send trace data to executionTraces stream via API.
 
         Args:
             trace_data: Trace data matching executionTraceSchema

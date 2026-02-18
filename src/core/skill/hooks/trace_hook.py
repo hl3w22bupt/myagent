@@ -3,7 +3,7 @@ Skill Trace Hook.
 
 Captures detailed execution traces at the Skill level.
 Records input/output, errors, retries, timing, and metadata for skill execution.
-Sends traces to Motia executionTraces stream via API.
+Sends traces to executionTraces stream via API.
 """
 
 import time
@@ -17,7 +17,7 @@ class SkillTraceHook(BaseHook):
     """
     Skill-level execution tracing hook.
 
-    Sends trace data to Motia executionTraces stream via REST API.
+    Sends trace data to executionTraces stream via REST API.
     Similar to ProgressNotificationHook approach.
     """
 
@@ -26,7 +26,7 @@ class SkillTraceHook(BaseHook):
         Initialize the skill trace hook.
 
         Args:
-            trace_api_url: Motia Trace Submit API URL (e.g., 'http://localhost:3000/api/traces/submit')
+            trace_api_url: Trace Submit API URL (e.g., 'http://localhost:3000/api/traces/submit')
         """
         self.trace_api_url = trace_api_url
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -37,7 +37,7 @@ class SkillTraceHook(BaseHook):
         trace_data: Dict[str, Any],
     ):
         """
-        Send trace data to Motia executionTraces stream via API.
+        Send trace data to executionTraces stream via API.
 
         Args:
             trace_data: Trace data matching executionTraceSchema
@@ -51,7 +51,7 @@ class SkillTraceHook(BaseHook):
             self._http_client = httpx.AsyncClient(timeout=5.0)
 
         try:
-            # Send to Motia Trace Submit API
+            # Send to Trace Submit API
             response = await self._http_client.post(
                 self.trace_api_url,
                 json=trace_data
