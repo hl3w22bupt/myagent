@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 /**
  * PTC Code Tab Component
@@ -20,7 +20,8 @@ export default function PtcCodeTab({ taskId }) {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/ptc-code`);
+        // Use relative URL to go through Vite proxy
+        const response = await fetch(`/api/tasks/${taskId}/ptc-code`);
         const data = await response.json();
 
         if (data.success) {
@@ -123,9 +124,16 @@ export default function PtcCodeTab({ taskId }) {
               <strong>Reasoning:</strong> {selectedCode.reasoning}
             </div>
           )}
-          <pre className="code-content">
-            <code>{selectedCode.code}</code>
-          </pre>
+          <div className="code-content">
+            <SyntaxHighlighter
+              language="python"
+              style={vscDarkPlus}
+              showLineNumbers={true}
+              customStyle={{ fontSize: '13px', lineHeight: '1.6' }}
+            >
+              {selectedCode.code}
+            </SyntaxHighlighter>
+          </div>
         </div>
       )}
     </div>

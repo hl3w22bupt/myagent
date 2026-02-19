@@ -2139,8 +2139,14 @@ function TaskDetail() {
             className={`tab-button ${activeTab === 'ptc-code' ? 'active' : ''}`}
             onClick={() => setActiveTab('ptc-code')}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
-              <path d="M4 1.5a.5.5 0 0 1 .5.5v13a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5h1zm8 0a.5.5 0 0 1 .5.5v13a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5h1zM4.5 3h-1v8h1V3zm8 0h-1v8h1V3z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+              <rect x="2" y="3" width="6" height="4" rx="1"/>
+              <path d="M5 7v3"/>
+              <polyline points="3.5 9 5 10.5 6.5 9"/>
+              <rect x="9" y="11" width="6" height="4" rx="1"/>
+              <path d="M12 15v3"/>
+              <polyline points="10.5 17 12 18.5 13.5 17"/>
+              <rect x="16" y="19" width="6" height="4" rx="1"/>
             </svg>
             PTC CodeGen
           </button>
