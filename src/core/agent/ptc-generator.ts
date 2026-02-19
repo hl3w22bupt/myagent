@@ -473,82 +473,6 @@ Always prioritize available skills over direct computation or common knowledge.`
   }
 
   /**
-   * Generate utility functions for data format conversion in multi-skill chains.
-   * Provides Python helper functions that LLM can use to convert skill outputs.
-   *
-   * @returns Python utility functions code
-   */
-  private generateUtilityFunctions(): string {
-    return `
-# ============================================
-# UTILITY FUNCTIONS FOR DATA CONVERSION
-# ============================================
-# Use these functions to convert skill outputs before passing to next skill.
-
-def format_skill_output(output_content, target_skill_name=None):
-    """
-    Convert skill output to appropriate format for next skill.
-
-    Args:
-        output_content: result['content'] from previous skill
-        target_skill_name: name of the skill that will receive this data
-
-    Returns:
-        Formatted content (usually string)
-    """
-    import json
-
-    # If already a string, return as-is
-    if isinstance(output_content, str):
-        return output_content
-
-    # If it's a dict, check the structure
-    if isinstance(output_content, dict):
-        # Table data format (from web-search, postgres-api-sql-query, etc.)
-        if 'columns' in output_content and 'rows' in output_content:
-            return format_table_as_markdown(output_content)
-
-        # File object (from file-writing skills)
-        if 'path' in output_content:
-            return f"File created: {output_content['path']}"
-
-        # Generic object - convert to JSON string
-        return json.dumps(output_content, ensure_ascii=False, indent=2)
-
-    # If it's a list, format nicely
-    if isinstance(output_content, list):
-        return json.dumps(output_content, ensure_ascii=False, indent=2)
-
-    return str(output_content)
-
-
-def format_table_as_markdown(table_data):
-    """Format table data as Markdown list or table."""
-    lines = []
-    title = table_data.get('title', 'Search Results')
-    columns = table_data.get('columns', [])
-    rows = table_data.get('rows', [])
-
-    lines.append(f"# {title}\\n")
-
-    # Format as list for better readability
-    for row in rows:
-        if len(row) >= 2:
-            # First column is usually title/name, second is value/description
-            lines.append(f"- **{row[0]}**: {row[1]}")
-            if len(row) > 2 and row[2]:
-                lines.append(f"  {row[2]}")
-
-    return '\\n'.join(lines)
-
-
-# ============================================
-# END UTILITY FUNCTIONS
-# ============================================
-`;
-  }
-
-  /**
    * Generate skill execution example for multi-skill chaining.
    * Shows the LLM exactly how to call multiple skills in sequence.
    *
@@ -585,6 +509,14 @@ def format_table_as_markdown(table_data):
         lines.push(`        # Add other parameters based on skill schema...`);
         lines.push(`    }`);
         lines.push(`)`);
+        // Add error handling for first skill
+        lines.push(``);
+        lines.push(`# 🔥 CRITICAL: If first skill fails, stop execution`);
+        lines.push(`if not ${resultVar}['success']:`);
+        lines.push(`    error_msg = ${resultVar}['content'].get('message', 'Unknown error') if isinstance(${resultVar}['content'], dict) else str(${resultVar}['content'])`);
+        lines.push(`    print(f'Skill ${skillName} failed: {error_msg}')`);
+        lines.push(`    # Exit early - don't continue with remaining skills`);
+        lines.push(`    return`);
       } else {
         // Subsequent skills - chain from previous result WITH FORMAT CONVERSION
         lines.push('');
@@ -592,23 +524,31 @@ def format_table_as_markdown(table_data):
         lines.push(`# 🔥 CRITICAL: Format the previous skill output for ${skillName}`);
         lines.push(`# Different skills return different data formats - convert before passing:`);
         lines.push(`#`);
-        lines.push(`# PREVIOUS OUTPUT TYPES → CONVERSION:`);
-        lines.push(`#   - Table (dict with 'columns'/'rows'): Use format_table_as_markdown()`);
+        lines.push(`# PREVIOUS OUTPUT TYPES → CONVERSION (implement inline):`);
+        lines.push(`#   - Table (dict with 'columns'/'rows'): Format as markdown list`);
         lines.push(`#   - Object (dict): Convert to JSON string`);
         lines.push(`#   - File (dict with 'path'): Extract the path value`);
         lines.push(`#   - String: Use as-is`);
         lines.push(`#`);
-        lines.push(`# Example formatting code:`);
-        lines.push(`#   formatted_content = format_skill_output(${prevResultVar}['content'], '${skillName}')`);
-        lines.push('');
+        lines.push(`# ⚠️ IMPORTANT: Check the skill's schema to know which parameter receives the formatted content!`);
+        lines.push(`#   - For ${skillName}:`);
+        lines.push(`#     - Main task parameter: '${taskParam}'`);
+        lines.push(`#     - If skill has 'content' parameter (like tool-write), pass formatted content there`);
+        lines.push(`#     - Otherwise pass to the main task parameter`);
+        lines.push(`#`);
+        lines.push(`# 🔥 CRITICAL: Only proceed if previous step succeeded`);
         lines.push(`if ${prevResultVar}['success']:`);
-        lines.push(`    # Format previous output for ${skillName}`);
+        lines.push(`    # Format previous output for ${skillName} - IMPLEMENT INLINE`);
         lines.push(`    raw_content = ${prevResultVar}['content']`);
-        lines.push('');
+        lines.push(``);
         lines.push(`    # Apply smart formatting based on content type`);
         lines.push(`    if isinstance(raw_content, dict) and 'columns' in raw_content and 'rows' in raw_content:`);
         lines.push(`        # Table data - format as markdown list`);
-        lines.push(`        formatted_content = format_table_as_markdown(raw_content)`);
+        lines.push(`        lines = []`);
+        lines.push(`        for row in raw_content['rows'][:10]:  # Limit to first 10 rows`);
+        lines.push(`            if len(row) >= 2:`);
+        lines.push(`                lines.append(f"- **{row[0]}**: {row[1]}")`);
+        lines.push(`        formatted_content = '\\n'.join(lines)`);
         lines.push(`    elif isinstance(raw_content, dict) and 'path' in raw_content:`);
         lines.push(`        # File result - extract path`);
         lines.push(`        formatted_content = raw_content['path']`);
@@ -619,16 +559,21 @@ def format_table_as_markdown(table_data):
         lines.push(`    else:`);
         lines.push(`        # Already a string or other type`);
         lines.push(`        formatted_content = str(raw_content)`);
-        lines.push('');
+        lines.push(``);
         lines.push(`    # Now call next skill with formatted content`);
         lines.push(`    ${resultVar} = await execute_with_retry(`);
         lines.push(`        execute_func=executor.execute,`);
         lines.push(`        skill_name='${skillName}',  # ← REAL skill name`);
         lines.push(`        input_data={`);
-        lines.push(`            '${taskParam}': formatted_content,  # ✅ Use formatted result`);
+        lines.push(`            '${taskParam}': '''TASK DESCRIPTION FOR ${skillName}''',  # Main task parameter`);
+        lines.push(`            'content': formatted_content,  # ✅ Pass formatted content to 'content' parameter`);
         lines.push(`            # Add other parameters based on skill schema...`);
         lines.push(`        }`);
         lines.push(`    )`);
+        lines.push(`else:`);
+        lines.push(`    # Previous skill failed - don't continue`);
+        lines.push(`    print(f'Step ${i} failed, skipping ${skillName}')`);
+        lines.push(`    ${resultVar} = {'success': False, 'content': {'message': 'Previous step failed'}}`);
       }
     }
 
@@ -638,6 +583,10 @@ def format_table_as_markdown(table_data):
     lines.push(`# Output final result`);
     lines.push(`if ${finalResult}['success']:`);
     lines.push(`    actual_output = ${finalResult}['content']`);
+    lines.push(`    print(f'Task completed successfully')`);
+    lines.push(`else:`);
+    lines.push(`    error_msg = ${finalResult}['content'].get('message', 'Unknown error') if isinstance(${finalResult}['content'], dict) else str(${finalResult}['content'])`);
+    lines.push(`    print(f'Task failed: {error_msg}')`);
 
     return lines.join('\n');
   }
@@ -932,8 +881,6 @@ For each skill, you MUST extract ALL mentioned parameters from the task:
 3. PASS as SEPARATE parameters in input_data (NOT just in the task string)
 4. Use DEFAULT values for unspecified parameters based on skill schema
 
-Available skills:
-${this.generateUtilityFunctions()}
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
 import os

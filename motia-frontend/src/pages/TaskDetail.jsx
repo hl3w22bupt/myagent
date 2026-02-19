@@ -2933,8 +2933,8 @@ function TaskDetail() {
 
           {/* 右侧结果区 */}
           <div className="task-result-right">
-            {/* 任务结果 */}
-            {(task.output || task.metadata?.outputHistory) && (
+            {/* 任务结果 - 修复：添加 structuredOutput 判断条件 */}
+            {(task.output || task.metadata?.outputHistory || task.structuredOutput) && (
               <div className="info-section">
                 <h2>{(() => {
                   // 优先使用 outputHistory，回退到 output 字段
@@ -2974,6 +2974,14 @@ function TaskDetail() {
                       return renderResult(combinedResult);
                     } else if (typeof resultData === 'string' && hasStructuredOutput) {
                       // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
+                      const combinedResult = {
+                        output: resultData,
+                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                        metadata: task.metadata
+                      };
+                      return renderResult(combinedResult);
+                    } else if (hasStructuredOutput) {
+                      // 修复：只有 structuredOutput 的情况（output 为 null 且没有 outputHistory）
                       const combinedResult = {
                         output: resultData,
                         structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
