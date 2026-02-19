@@ -425,6 +425,14 @@ Always prioritize available skills over direct computation or common knowledge.`
       '',
       '# CRITICAL - SKILL OUTPUT/INPUT SCHEMA MAPPING:',
       '# When chaining skills, pass the OUTPUT from previous skill to INPUT of next skill',
+      '#',
+      '# 🔥 CRITICAL - DATA TYPE CONVERSION:',
+      '# Different skills return different data formats. You MUST convert before passing to next skill:',
+      '#   - Table data (dict with columns/rows): Use format_table_as_markdown() to convert to string',
+      '#   - Object (dict): Convert to JSON string using json.dumps()',
+      '#   - File result (dict with path): Extract the path value as string',
+      '#   - String: Pass directly',
+      '# See the multi-skill execution example below for complete formatting code.',
       ''
     ];
 
@@ -465,6 +473,82 @@ Always prioritize available skills over direct computation or common knowledge.`
   }
 
   /**
+   * Generate utility functions for data format conversion in multi-skill chains.
+   * Provides Python helper functions that LLM can use to convert skill outputs.
+   *
+   * @returns Python utility functions code
+   */
+  private generateUtilityFunctions(): string {
+    return `
+# ============================================
+# UTILITY FUNCTIONS FOR DATA CONVERSION
+# ============================================
+# Use these functions to convert skill outputs before passing to next skill.
+
+def format_skill_output(output_content, target_skill_name=None):
+    """
+    Convert skill output to appropriate format for next skill.
+
+    Args:
+        output_content: result['content'] from previous skill
+        target_skill_name: name of the skill that will receive this data
+
+    Returns:
+        Formatted content (usually string)
+    """
+    import json
+
+    # If already a string, return as-is
+    if isinstance(output_content, str):
+        return output_content
+
+    # If it's a dict, check the structure
+    if isinstance(output_content, dict):
+        # Table data format (from web-search, postgres-api-sql-query, etc.)
+        if 'columns' in output_content and 'rows' in output_content:
+            return format_table_as_markdown(output_content)
+
+        # File object (from file-writing skills)
+        if 'path' in output_content:
+            return f"File created: {output_content['path']}"
+
+        # Generic object - convert to JSON string
+        return json.dumps(output_content, ensure_ascii=False, indent=2)
+
+    # If it's a list, format nicely
+    if isinstance(output_content, list):
+        return json.dumps(output_content, ensure_ascii=False, indent=2)
+
+    return str(output_content)
+
+
+def format_table_as_markdown(table_data):
+    """Format table data as Markdown list or table."""
+    lines = []
+    title = table_data.get('title', 'Search Results')
+    columns = table_data.get('columns', [])
+    rows = table_data.get('rows', [])
+
+    lines.append(f"# {title}\\n")
+
+    # Format as list for better readability
+    for row in rows:
+        if len(row) >= 2:
+            # First column is usually title/name, second is value/description
+            lines.append(f"- **{row[0]}**: {row[1]}")
+            if len(row) > 2 and row[2]:
+                lines.append(f"  {row[2]}")
+
+    return '\\n'.join(lines)
+
+
+# ============================================
+# END UTILITY FUNCTIONS
+# ============================================
+`;
+  }
+
+  /**
    * Generate skill execution example for multi-skill chaining.
    * Shows the LLM exactly how to call multiple skills in sequence.
    *
@@ -502,17 +586,48 @@ Always prioritize available skills over direct computation or common knowledge.`
         lines.push(`    }`);
         lines.push(`)`);
       } else {
-        // Subsequent skills - chain from previous result
+        // Subsequent skills - chain from previous result WITH FORMAT CONVERSION
         lines.push('');
         lines.push(`# Step ${i + 1}: Call ${skillName} (receives output from step ${i})`);
+        lines.push(`# 🔥 CRITICAL: Format the previous skill output for ${skillName}`);
+        lines.push(`# Different skills return different data formats - convert before passing:`);
+        lines.push(`#`);
+        lines.push(`# PREVIOUS OUTPUT TYPES → CONVERSION:`);
+        lines.push(`#   - Table (dict with 'columns'/'rows'): Use format_table_as_markdown()`);
+        lines.push(`#   - Object (dict): Convert to JSON string`);
+        lines.push(`#   - File (dict with 'path'): Extract the path value`);
+        lines.push(`#   - String: Use as-is`);
+        lines.push(`#`);
+        lines.push(`# Example formatting code:`);
+        lines.push(`#   formatted_content = format_skill_output(${prevResultVar}['content'], '${skillName}')`);
+        lines.push('');
         lines.push(`if ${prevResultVar}['success']:`);
+        lines.push(`    # Format previous output for ${skillName}`);
+        lines.push(`    raw_content = ${prevResultVar}['content']`);
+        lines.push('');
+        lines.push(`    # Apply smart formatting based on content type`);
+        lines.push(`    if isinstance(raw_content, dict) and 'columns' in raw_content and 'rows' in raw_content:`);
+        lines.push(`        # Table data - format as markdown list`);
+        lines.push(`        formatted_content = format_table_as_markdown(raw_content)`);
+        lines.push(`    elif isinstance(raw_content, dict) and 'path' in raw_content:`);
+        lines.push(`        # File result - extract path`);
+        lines.push(`        formatted_content = raw_content['path']`);
+        lines.push(`    elif isinstance(raw_content, dict):`);
+        lines.push(`        # Generic dict - convert to JSON string`);
+        lines.push(`        import json`);
+        lines.push(`        formatted_content = json.dumps(raw_content, ensure_ascii=False, indent=2)`);
+        lines.push(`    else:`);
+        lines.push(`        # Already a string or other type`);
+        lines.push(`        formatted_content = str(raw_content)`);
+        lines.push('');
+        lines.push(`    # Now call next skill with formatted content`);
         lines.push(`    ${resultVar} = await execute_with_retry(`);
         lines.push(`        execute_func=executor.execute,`);
         lines.push(`        skill_name='${skillName}',  # ← REAL skill name`);
         lines.push(`        input_data={`);
-        lines.push(`        '${taskParam}': ${prevResultVar}['content'],  # Pass previous output`);
-        lines.push(`        # Add other parameters based on skill schema...`);
-        lines.push(`    }`);
+        lines.push(`            '${taskParam}': formatted_content,  # ✅ Use formatted result`);
+        lines.push(`            # Add other parameters based on skill schema...`);
+        lines.push(`        }`);
         lines.push(`    )`);
       }
     }
@@ -818,6 +933,7 @@ For each skill, you MUST extract ALL mentioned parameters from the task:
 4. Use DEFAULT values for unspecified parameters based on skill schema
 
 Available skills:
+${this.generateUtilityFunctions()}
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
 import os
