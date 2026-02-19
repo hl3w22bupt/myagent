@@ -26,6 +26,17 @@ export enum TaskStatus {
 }
 
 /**
+ * PTC Code record for storing generated PTC code
+ */
+export interface PtcCodeRecord {
+  round: number;
+  code: string;
+  selectedSkills: string[];
+  reasoning?: string;
+  timestamp: number;
+}
+
+/**
  * Task interface
  */
 export interface Task {
@@ -54,6 +65,8 @@ export interface Task {
   };
   /** Structured output from skill execution (at root level, not in metadata) */
   structuredOutput?: any;
+  /** PTC generated codes (one per round, stores final code only) */
+  ptcCodes?: PtcCodeRecord[];
   retryCount: number;
   isRetry: boolean;
 }
@@ -129,6 +142,8 @@ export class DataStore {
         const buffer = fs.readFileSync(this.dbPath);
         this.db = new SQL.Database(buffer);
         console.log('[DataStore] Loaded existing database');
+        // Run migrations for existing databases
+        this.runMigrations();
       } else {
         this.db = new SQL.Database();
         this.initSchema();
@@ -143,6 +158,32 @@ export class DataStore {
     } catch (error) {
       console.error('[DataStore] Failed to initialize database:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Run database migrations to add new columns/tables
+   */
+  private runMigrations() {
+    if (!this.db) return;
+
+    console.log('[DataStore] Running database migrations...');
+
+    try {
+      // Migration 1: Add ptc_codes column to tasks table
+      const tableInfo = this.db.exec('PRAGMA table_info(tasks)');
+      const hasPtcCodes = tableInfo[0]?.values?.some((row: any[]) => row[1] === 'ptc_codes');
+
+      if (!hasPtcCodes) {
+        console.log('[DataStore] Migration: Adding ptc_codes column to tasks table');
+        this.db.run('ALTER TABLE tasks ADD COLUMN ptc_codes TEXT');
+        console.log('[DataStore] Migration: ptc_codes column added successfully');
+      } else {
+        console.log('[DataStore] Migration: ptc_codes column already exists');
+      }
+    } catch (error) {
+      console.error('[DataStore] Migration error:', error);
+      // Don't throw - allow app to continue even if migration fails
     }
   }
 
@@ -432,6 +473,14 @@ export class DataStore {
     if (updates.metadata !== undefined) {
       fields.push('metadata = ?');
       values.push(JSON.stringify(updates.metadata));
+    }
+    if (updates.structuredOutput !== undefined) {
+      fields.push('structured_output = ?');
+      values.push(JSON.stringify(updates.structuredOutput));
+    }
+    if (updates.ptcCodes !== undefined) {
+      fields.push('ptc_codes = ?');
+      values.push(JSON.stringify(updates.ptcCodes));
     }
     if (updates.completedAt !== undefined) {
       fields.push('completed_at = ?');
@@ -1263,6 +1312,8 @@ export class DataStore {
       error: row.error,
       executionTime: row.execution_time,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      structuredOutput: row.structured_output ? JSON.parse(row.structured_output) : undefined,
+      ptcCodes: row.ptc_codes ? JSON.parse(row.ptc_codes) : undefined,
       retryCount: row.retry_count,
       isRetry: row.is_retry === 1,
     };

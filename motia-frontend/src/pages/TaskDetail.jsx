@@ -8,6 +8,7 @@ import AudioPlayer from '../components/AudioPlayer'
 import HtmlRenderer from '../components/HtmlRenderer'
 import ExecutionTracesInline from '../components/ExecutionTracesInline'
 import SandboxLogsTab from '../components/SandboxLogsTab'
+import PtcCodeTab from '../components/PtcCodeTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -2135,6 +2136,15 @@ function TaskDetail() {
             </button>
           )}
           <button
+            className={`tab-button ${activeTab === 'ptc-code' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ptc-code')}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M4 1.5a.5.5 0 0 1 .5.5v13a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5h1zm8 0a.5.5 0 0 1 .5.5v13a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5h1zM4.5 3h-1v8h1V3zm8 0h-1v8h1V3z"/>
+            </svg>
+            PTC CodeGen
+          </button>
+          <button
             className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
             onClick={() => setActiveTab('text')}
           >
@@ -2162,6 +2172,7 @@ function TaskDetail() {
         {/* 内容区域 */}
         <div className="result-content">
           {activeTab === 'visual' && hasVisual && renderVisualContent(result)}
+          {activeTab === 'ptc-code' && <PtcCodeTab taskId={id} />}
           {activeTab === 'text' && <SandboxLogsTab taskId={id} />}
           {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
         </div>

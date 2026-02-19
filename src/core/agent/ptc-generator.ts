@@ -13,7 +13,7 @@ import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
 
 /**
  * Simplified Skill Metadata for PTC Generator.
- * Includes metadata field for input_schema access.
+ * Includes metadata field for input_schema and output_schema access.
  */
 interface SkillMetadata {
   name: string;
@@ -406,6 +406,128 @@ Always prioritize available skills over direct computation or common knowledge.`
   }
 
   /**
+   * Generate explicit schema-to-schema mapping instructions for multi-skill chaining.
+   * This tells LLM exactly which output fields map to which input fields.
+   *
+   * @param selectedSkills - Skills selected for execution
+   * @param skillsDetails - Full skill metadata including schemas
+   * @returns Schema mapping instructions as a formatted string
+   */
+  private generateSchemaMappingInstructions(
+    selectedSkills: string[],
+    skillsDetails: SkillMetadata[]
+  ): string {
+    if (selectedSkills.length <= 1) {
+      return '';
+    }
+
+    const lines: string[] = [
+      '',
+      '# CRITICAL - SKILL OUTPUT/INPUT SCHEMA MAPPING:',
+      '# When chaining skills, pass the OUTPUT from previous skill to INPUT of next skill',
+      ''
+    ];
+
+    for (let i = 0; i < selectedSkills.length - 1; i++) {
+      const currentSkill = skillsDetails[i];
+      const nextSkill = skillsDetails[i + 1];
+      const currentTaskParam = this.findTaskParameter(selectedSkills[i]);
+      const nextTaskParam = this.findTaskParameter(selectedSkills[i + 1]);
+
+      lines.push(`# ${selectedSkills[i]} → ${selectedSkills[i + 1]}:`);
+
+      // Get output schema from current skill
+      const outputSchema = currentSkill.metadata?.output_schema;
+      if (outputSchema?.properties) {
+        const outputFields = Object.keys(outputSchema.properties);
+        lines.push(`#   Output fields: ${outputFields.length > 0 ? outputFields.join(', ') : '(no schema defined)'}`);
+      } else {
+        lines.push('#   Output fields: (no output_schema defined)');
+      }
+
+      // Get input schema from next skill (excluding main task param)
+      const inputSchema = nextSkill.metadata?.input_schema;
+      if (inputSchema?.properties) {
+        const inputFields = Object.keys(inputSchema.properties)
+          .filter(f => f !== nextTaskParam);  // Skip the main task param
+        lines.push(`#   Input fields (excluding main param '${nextTaskParam}'): ${inputFields.length > 0 ? inputFields.join(', ') : '(none)'}`);
+      } else {
+        lines.push(`#   Input fields: (no input_schema defined)`);
+      }
+
+      // Generate explicit mapping instruction
+      lines.push(`#   Mapping: result${i + 1}['content'] → ${nextTaskParam}`);
+      lines.push(`#   Example: ${nextTaskParam}='${currentTaskParam}'`);  // Use previous result's content
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Generate skill execution example for multi-skill chaining.
+   * Shows the LLM exactly how to call multiple skills in sequence.
+   *
+   * @param selectedSkills - Skills selected for execution
+   * @param skillsDetails - Full skill metadata
+   * @returns Python code example showing multi-skill execution
+   */
+  private generateMultiSkillExecutionExample(
+    selectedSkills: string[],
+    _skillsDetails: SkillMetadata[]
+  ): string {
+    const lines: string[] = [
+      '',
+      `# 🔥 MANDATORY: YOU MUST CALL ALL ${selectedSkills.length} SELECTED SKILLS!`,
+      `# Selected skills: ${selectedSkills.join(', ')}`,
+      `# DO NOT skip any skill - call ALL of them in order!`,
+      ''
+    ];
+
+    for (let i = 0; i < selectedSkills.length; i++) {
+      const skillName = selectedSkills[i];
+      const taskParam = this.findTaskParameter(skillName);
+      const resultVar = `result${i + 1}`;
+      const prevResultVar = i > 0 ? `result${i}` : null;
+
+      if (i === 0) {
+        // First skill - use the task description directly
+        lines.push(`# Step 1: Call ${skillName}`);
+        lines.push(`${resultVar} = await execute_with_retry(`);
+        lines.push(`    execute_func=executor.execute,`);
+        lines.push(`    skill_name='${skillName}',  # ← REAL skill name, not placeholder`);
+        lines.push(`    input_data={`);
+        lines.push(`        '${taskParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',`);
+        lines.push(`        # Add other parameters based on skill schema...`);
+        lines.push(`    }`);
+        lines.push(`)`);
+      } else {
+        // Subsequent skills - chain from previous result
+        lines.push('');
+        lines.push(`# Step ${i + 1}: Call ${skillName} (receives output from step ${i})`);
+        lines.push(`if ${prevResultVar}['success']:`);
+        lines.push(`    ${resultVar} = await execute_with_retry(`);
+        lines.push(`        execute_func=executor.execute,`);
+        lines.push(`        skill_name='${skillName}',  # ← REAL skill name`);
+        lines.push(`        input_data={`);
+        lines.push(`        '${taskParam}': ${prevResultVar}['content'],  # Pass previous output`);
+        lines.push(`        # Add other parameters based on skill schema...`);
+        lines.push(`    }`);
+        lines.push(`    )`);
+      }
+    }
+
+    // Add final result handling
+    const finalResult = `result${selectedSkills.length}`;
+    lines.push('');
+    lines.push(`# Output final result`);
+    lines.push(`if ${finalResult}['success']:`);
+    lines.push(`    actual_output = ${finalResult}['content']`);
+
+    return lines.join('\n');
+  }
+
+  /**
    * Step 2: Implementation phase - Generate Python code.
    *
    * @param task - User task description
@@ -462,6 +584,20 @@ Always prioritize available skills over direct computation or common knowledge.`
               const defaultValue = info.default !== undefined ? ` (default: ${info.default})` : '';
               const marker = paramName === taskParam ? ' ← MAIN TASK PARAMETER' : '';
               skillInfo += `\n    - ${paramName}${marker} (${paramType})${required ? ' [REQUIRED]' : ''}${defaultValue}: ${paramDesc}`;
+            }
+          }
+        }
+
+        // Add output schema if available - NEW for multi-skill chaining
+        if (skill.metadata && skill.metadata.output_schema) {
+          const schema = skill.metadata.output_schema;
+          if (schema.properties && Object.keys(schema.properties).length > 0) {
+            skillInfo += '\n  Output Fields:';
+            for (const [fieldName, fieldInfo] of Object.entries(schema.properties)) {
+              const info = fieldInfo as { type?: string; description?: string };
+              const fieldType = info.type || 'any';
+              const fieldDesc = info.description || '';
+              skillInfo += `\n    - ${fieldName} (${fieldType}): ${fieldDesc}`;
             }
           }
         }
@@ -546,6 +682,8 @@ Example:
 ` : ''}<skills>
 ${skillsBlock}
 </skills>
+
+${this.generateSchemaMappingInstructions(selectedSkills, skillsDetails)}
 
 <available_skills>
 ${skillsDetails.map(skill => `- ${skill.name}: ${skill.description}
@@ -745,44 +883,7 @@ ${skillParamExtraction}
 # MANDATORY: You must call execute_with_retry with the selected skill
 # DO NOT write any Python code directly - ONLY call skills!
 
-result = await execute_with_retry(
-    execute_func=executor.execute,
-    skill_name='${selectedSkills[0]}',
-    input_data={
-        '${firstSkillParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',
-        # Add other parameters based on schema:
-        # - REQUIRED: Extract from task
-        # - Optional with defaults: Extract if mentioned, or omit (skill will use default)
-        # - Optional without defaults: Extract if mentioned, or omit
-    }
-)
-
-if result['success']:
-    actual_output = result['content']  # Extract the real output
-    print(f"Success after {result['attempts']} attempts")
-else:
-    error_message = result['content'].get('message', 'Unknown error')
-    print(f"Failed after {result['attempts']} attempts: {error_message}")
-
-# When chaining skills, pass result['content'] (NOT result) to the next skill:
-# IMPORTANT: Check the Task Parameter for each skill in the SKILL PARAMETER MAPPING above
-result1 = await execute_with_retry(
-    execute_func=executor.execute,
-    skill_name='first-skill',
-    input_data={
-        'TASK_PARAM_FOR_FIRST_SKILL': 'COPY ACTUAL TASK FROM <task> SECTION'
-    }
-)
-
-if result1['success']:
-    result2 = await execute_with_retry(
-        execute_func=executor.execute,
-        skill_name='second-skill',
-        input_data={
-            'TASK_PARAM_FOR_SECOND_SKILL': 'process result from first skill',
-            'input_data': result1['content']  # Pass ['content'], not result1
-        }
-    )`;
+${this.generateMultiSkillExecutionExample(selectedSkills, skillsDetails)}`;
       })()
     : `CRITICAL - NO SKILLS SELECTED:
 This is a FALLBACK path - solve the task directly with native Python code.

@@ -36,6 +36,9 @@ export class Agent {
   // Hook manager for agent lifecycle hooks
   protected hookManager: any = null;
 
+  // Track current execution round for PTC code storage
+  protected currentRound: number = 1;
+
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
     this.sessionId = sessionId;
@@ -497,6 +500,13 @@ export class Agent {
           reasoning: ptcResult.reasoning,
         },
       });
+
+      // Save PTC code to database for debugging
+      if (taskId) {
+        this.savePtcCode(taskId, ptcResult, this.currentRound).catch(err => {
+          console.error('[Agent] Failed to save PTC code:', err);
+        });
+      }
 
       // Step 2: Execute in Sandbox with retry logic
       steps.push({
@@ -1267,6 +1277,49 @@ Analyze the task description and categorize it appropriately. Provide confidence
       }
     } catch (error) {
       console.error('[Agent] Failed to save HITL state:', error);
+    }
+  }
+
+  /**
+   * Save PTC code to database for debugging and frontend display
+   */
+  private async savePtcCode(
+    taskId: string,
+    ptcResult: { code: string; selectedSkills: string[]; reasoning?: string },
+    round: number
+  ): Promise<void> {
+    try {
+      // Create PTC code record (inline type, no import needed)
+      const ptcCodeRecord = {
+        round,
+        code: ptcResult.code,
+        selectedSkills: ptcResult.selectedSkills || [],
+        reasoning: ptcResult.reasoning,
+        timestamp: Date.now(),
+      };
+
+      // Get data store
+      const { getDataStore } = await import('../database/data-store.js');
+      const dataStore = getDataStore();
+
+      // Get existing task
+      const task = await dataStore.getTask(taskId);
+      if (!task) {
+        console.warn('[Agent] Task not found, cannot save PTC code:', taskId);
+        return;
+      }
+
+      // Get existing codes and update
+      const existingCodes = task.ptcCodes || [];
+      // Filter out old code for same round and add new one
+      const filteredCodes = existingCodes.filter((c: any) => c.round !== round);
+      filteredCodes.push(ptcCodeRecord);
+
+      // Update task
+      await dataStore.updateTask(taskId, { ptcCodes: filteredCodes });
+      console.log('[Agent] PTC code saved for task:', taskId, 'round:', round);
+    } catch (error) {
+      console.error('[Agent] Failed to save PTC code:', error);
     }
   }
 
