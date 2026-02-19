@@ -502,10 +502,13 @@ export class Agent {
       });
 
       // Save PTC code to database for debugging
+      console.log('[Agent] About to save PTC code', { taskId, currentRound: this.currentRound, hasCode: !!ptcResult?.code });
       if (taskId) {
         this.savePtcCode(taskId, ptcResult, this.currentRound).catch(err => {
           console.error('[Agent] Failed to save PTC code:', err);
         });
+      } else {
+        console.warn('[Agent] No taskId provided, skipping PTC code save');
       }
 
       // Step 2: Execute in Sandbox with retry logic
@@ -1286,18 +1289,9 @@ Analyze the task description and categorize it appropriately. Provide confidence
   private async savePtcCode(
     taskId: string,
     ptcResult: { code: string; selectedSkills: string[]; reasoning?: string },
-    round: number
+    providedRound: number
   ): Promise<void> {
     try {
-      // Create PTC code record (inline type, no import needed)
-      const ptcCodeRecord = {
-        round,
-        code: ptcResult.code,
-        selectedSkills: ptcResult.selectedSkills || [],
-        reasoning: ptcResult.reasoning,
-        timestamp: Date.now(),
-      };
-
       // Get data store
       const { getDataStore } = await import('../database/data-store.js');
       const dataStore = getDataStore();
@@ -1309,9 +1303,28 @@ Analyze the task description and categorize it appropriately. Provide confidence
         return;
       }
 
-      // Get existing codes and update
+      // Calculate round based on existing PTC codes (same logic as output-history-tracker)
       const existingCodes = task.ptcCodes || [];
-      // Filter out old code for same round and add new one
+      const round = existingCodes.length + 1;
+
+      console.log('[Agent] Calculated PTC round', {
+        taskId,
+        providedRound,
+        calculatedRound: round,
+        existingCodesCount: existingCodes.length
+      });
+
+      // Create PTC code record (inline type, no import needed)
+      const ptcCodeRecord = {
+        round,
+        code: ptcResult.code,
+        selectedSkills: ptcResult.selectedSkills || [],
+        reasoning: ptcResult.reasoning,
+        timestamp: Date.now(),
+      };
+
+      // Get existing codes and update
+      // Filter out old code for same round (if retrying) and add new one
       const filteredCodes = existingCodes.filter((c: any) => c.round !== round);
       filteredCodes.push(ptcCodeRecord);
 

@@ -999,7 +999,7 @@ export class PostgresDataStore implements Database {
         ]
       );
 
-      // Update the context's current turn
+      // Get the current context
       const context = await this.getContext(taskId);
       if (!context) {
         throw new Error(`Context not found for task: ${taskId}`);

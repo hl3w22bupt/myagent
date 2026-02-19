@@ -199,7 +199,12 @@ export const handler = async (request: any, { logger }: any) => {
     const hasFailures = results.failed.length > 0;
 
     // Return appropriate status code and message
-    const statusCode = hasFailures && !hasSuccess ? 500 : 200;
+    // - 200: At least one deletion succeeded (partial success is OK for batch operations)
+    // - 404: No tasks found (all failed with "Task not found")
+    // - 400: Invalid parameters (validation error, already handled)
+    const statusCode = !hasSuccess && hasFailures && results.failed.every(f => f.error === 'Task not found')
+      ? 404
+      : 200;
 
     // Build success message
     let message;
@@ -215,7 +220,7 @@ export const handler = async (request: any, { logger }: any) => {
     }
 
     const responseBody = {
-      success: hasFailures && !hasSuccess ? false : true,
+      success: statusCode === 200,
       message,
       type: isBatch ? 'batch' : 'single',
       summary: {
