@@ -19,7 +19,6 @@ declare module 'motia' {
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'execution-traces-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'task-ptc-code-api': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { success: boolean; data: Array<{ round: number; code: string; selectedSkills: Array<string>; reasoning?: string; timestamp: number }> }> | ApiResponse<404, { success: boolean; message: string }> | ApiResponse<500, { success: boolean; message: string; error?: string }>, never>
     'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'stream-history-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -42,6 +41,7 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'task-ptc-code-api': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { success: boolean; data: Array<{ round: number; code: string; selectedSkills: Array<string>; reasoning?: string; timestamp: number }> }> | ApiResponse<404, { success: boolean; message: string }> | ApiResponse<500, { success: boolean; message: string; error?: string }>, never>
   }
     
 }
