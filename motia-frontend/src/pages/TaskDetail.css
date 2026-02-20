@@ -2910,3 +2910,105 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   box-shadow: none !important;
   padding: 0 !important;
 }
+
+/* ==========================================
+   PTC Code Tab Styles
+   ========================================== */
+.ptc-code-tab {
+  padding: 16px;
+}
+
+.round-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.round-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.round-button:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.round-button.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.skill-count {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+.round-button.active .skill-count {
+  background: #bfdbfe;
+}
+
+.code-display {
+  background: #1f2937;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.code-header {
+  padding: 12px 16px;
+  background: #111827;
+  border-bottom: 1px solid #374151;
+  color: #e5e7eb;
+}
+
+.code-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.code-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.code-meta .skills {
+  color: #60a5fa;
+}
+
+.reasoning {
+  padding: 12px 16px;
+  background: #1e3a5f;
+  color: #e5e7eb;
+  font-size: 13px;
+  border-bottom: 1px solid #374151;
+}
+
+.code-content {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.code-content code {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e5e7eb;
+}

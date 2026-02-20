@@ -176,6 +176,7 @@ export class PostgresDataStore implements Database {
           execution_time INTEGER,
           metadata JSONB,
           structured_output JSONB,
+          ptc_codes JSONB,
           retry_count INTEGER DEFAULT 0,
           is_retry BOOLEAN DEFAULT FALSE
         )
@@ -503,6 +504,11 @@ export class PostgresDataStore implements Database {
         fields.push(`structured_output = $${paramIndex++}`);
         // 显式序列化为 JSON 字符串，确保正确存储为 JSONB
         values.push(JSON.stringify(updates.structuredOutput));
+      }
+      if (updates.ptcCodes !== undefined) {
+        fields.push(`ptc_codes = $${paramIndex++}`);
+        // 显式序列化为 JSON 字符串，确保正确存储为 JSONB
+        values.push(JSON.stringify(updates.ptcCodes));
       }
       if (updates.completedAt !== undefined) {
         fields.push(`completed_at = $${paramIndex++}`);
@@ -993,7 +999,7 @@ export class PostgresDataStore implements Database {
         ]
       );
 
-      // Update the context's current turn
+      // Get the current context
       const context = await this.getContext(taskId);
       if (!context) {
         throw new Error(`Context not found for task: ${taskId}`);
@@ -1544,6 +1550,7 @@ export class PostgresDataStore implements Database {
       executionTime: row.execution_time,
       metadata: row.metadata,
       structuredOutput: row.structured_output,
+      ptcCodes: row.ptc_codes,
       retryCount: row.retry_count,
       // Convert integer to boolean (PostgreSQL stores as INTEGER)
       isRetry: row.is_retry === 1,

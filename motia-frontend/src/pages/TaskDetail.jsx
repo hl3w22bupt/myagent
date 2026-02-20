@@ -8,6 +8,7 @@ import AudioPlayer from '../components/AudioPlayer'
 import HtmlRenderer from '../components/HtmlRenderer'
 import ExecutionTracesInline from '../components/ExecutionTracesInline'
 import SandboxLogsTab from '../components/SandboxLogsTab'
+import PtcCodeTab from '../components/PtcCodeTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -2135,6 +2136,21 @@ function TaskDetail() {
             </button>
           )}
           <button
+            className={`tab-button ${activeTab === 'ptc-code' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ptc-code')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+              <rect x="2" y="3" width="6" height="4" rx="1"/>
+              <path d="M5 7v3"/>
+              <polyline points="3.5 9 5 10.5 6.5 9"/>
+              <rect x="9" y="11" width="6" height="4" rx="1"/>
+              <path d="M12 15v3"/>
+              <polyline points="10.5 17 12 18.5 13.5 17"/>
+              <rect x="16" y="19" width="6" height="4" rx="1"/>
+            </svg>
+            PTC CodeGen
+          </button>
+          <button
             className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
             onClick={() => setActiveTab('text')}
           >
@@ -2162,6 +2178,7 @@ function TaskDetail() {
         {/* 内容区域 */}
         <div className="result-content">
           {activeTab === 'visual' && hasVisual && renderVisualContent(result)}
+          {activeTab === 'ptc-code' && <PtcCodeTab taskId={id} />}
           {activeTab === 'text' && <SandboxLogsTab taskId={id} />}
           {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
         </div>
@@ -2916,8 +2933,8 @@ function TaskDetail() {
 
           {/* 右侧结果区 */}
           <div className="task-result-right">
-            {/* 任务结果 */}
-            {(task.output || task.metadata?.outputHistory) && (
+            {/* 任务结果 - 修复：添加 structuredOutput 判断条件 */}
+            {(task.output || task.metadata?.outputHistory || task.structuredOutput) && (
               <div className="info-section">
                 <h2>{(() => {
                   // 优先使用 outputHistory，回退到 output 字段
@@ -2957,6 +2974,14 @@ function TaskDetail() {
                       return renderResult(combinedResult);
                     } else if (typeof resultData === 'string' && hasStructuredOutput) {
                       // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
+                      const combinedResult = {
+                        output: resultData,
+                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                        metadata: task.metadata
+                      };
+                      return renderResult(combinedResult);
+                    } else if (hasStructuredOutput) {
+                      // 修复：只有 structuredOutput 的情况（output 为 null 且没有 outputHistory）
                       const combinedResult = {
                         output: resultData,
                         structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
