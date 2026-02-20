@@ -767,7 +767,8 @@ class LLMClient:
             tools=tools,
             execution_time=execution_time,
             system_prompt=system_prompt,
-            purpose="tool_use_continuation"
+            purpose="tool_use_continuation",
+            messages=messages  # Pass complete messages for debugging
         )
 
         return result
@@ -779,7 +780,8 @@ class LLMClient:
         tools: List[Dict[str, Any]],
         execution_time: float,
         system_prompt: Optional[str] = None,
-        purpose: Optional[str] = None
+        purpose: Optional[str] = None,
+        messages: Optional[List[Dict]] = None
     ):
         """
         Send LLM call trace with tool use info to executionTraces stream (Issue #17).
@@ -791,6 +793,7 @@ class LLMClient:
             execution_time: Execution time in seconds
             system_prompt: System prompt used
             purpose: Purpose description for this LLM call
+            messages: Optional complete message history (for debugging tool use loops)
         """
         import httpx
 
@@ -803,10 +806,14 @@ class LLMClient:
         timestamp_ms = int(time.time() * 1000)
 
         # Build messages array for unified trace format (Issue #17)
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        # If complete messages are provided, use them; otherwise fallback to old format
+        if messages:
+            trace_messages = messages
+        else:
+            trace_messages = []
+            if system_prompt:
+                trace_messages.append({"role": "system", "content": system_prompt})
+            trace_messages.append({"role": "user", "content": prompt})
 
         trace_data = {
             "id": trace_id,
@@ -826,7 +833,7 @@ class LLMClient:
                 "llmProvider": "anthropic",
                 "llmModel": response.model,
                 "llmRequest": {
-                    "messages": messages,
+                    "messages": trace_messages,
                     "tools": tools,
                 },
                 "llmResponse": {
