@@ -701,11 +701,13 @@ class ClaudeSkillHandler:
 
         print(f"[DEBUG TOOL EXEC] ===== {tool_name} =====")
         print(f"[DEBUG TOOL EXEC] input: {tool_input}")
-        print(f"[DEBUG TOOL EXEC] skill_path: {skill_path}")
 
         skill_path = tool_def.get("_skill_path")
+        print(f"[DEBUG TOOL EXEC] skill_path from tool_def: {skill_path}")
         handler_file = tool_def.get("_handler", "handler.py")
         function_name = tool_def.get("_function", "execute")
+
+        print(f"[DEBUG TOOL EXEC] tool_name={tool_name}, skill_path={skill_path}, handler={handler_file}, function={function_name}")
 
         if not skill_path:
             return (f"Error: Tool {tool_name} has no path", [])
@@ -729,7 +731,9 @@ class ClaudeSkillHandler:
 
             # 调用 execute 函数
             execute_func = getattr(module, function_name)
+            print(f"[DEBUG TOOL EXEC] Found function: {function_name} in module {module}")
             result = execute_func(tool_input)
+            print(f"[DEBUG TOOL EXEC] Function returned result type: {type(result)}")
 
             # 提取 output_files (用于追踪写入的文件)
             output_files = result.get('output_files', [])
@@ -899,7 +903,7 @@ class ClaudeSkillHandler:
         # 创建 tool name 到 tool def 的映射
         tools_map = {t["name"]: t for t in tools}
 
-        max_iterations = 5
+        max_iterations = 10
         messages = [{"role": "user", "content": prompt}]
 
         # 收集所有输出文件

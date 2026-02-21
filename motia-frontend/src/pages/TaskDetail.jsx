@@ -9,6 +9,7 @@ import HtmlRenderer from '../components/HtmlRenderer'
 import ExecutionTracesInline from '../components/ExecutionTracesInline'
 import SandboxLogsTab from '../components/SandboxLogsTab'
 import PtcCodeTab from '../components/PtcCodeTab'
+import ArtifactsTab from '../components/ArtifactsTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -2173,6 +2174,15 @@ function TaskDetail() {
             </svg>
             运行追踪
           </button>
+          <button
+            className={`tab-button ${activeTab === 'artifacts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('artifacts')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="tab-icon">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Artifacts
+          </button>
         </div>
 
         {/* 内容区域 */}
@@ -2181,6 +2191,7 @@ function TaskDetail() {
           {activeTab === 'ptc-code' && <PtcCodeTab taskId={id} />}
           {activeTab === 'text' && <SandboxLogsTab taskId={id} />}
           {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
+          {activeTab === 'artifacts' && <ArtifactsTab taskId={id} task={task} />}
         </div>
       </div>
     )

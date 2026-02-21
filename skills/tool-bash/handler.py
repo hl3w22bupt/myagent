@@ -220,6 +220,21 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
         command = direct_command
         args = direct_args if isinstance(direct_args, list) else []
         reasoning = "Direct command execution"
+
+        # Handle case where direct_command is a full command string (e.g., "ls -lh file.txt")
+        # We need to split it into command and args
+        if not args and ' ' in command:
+            # Use shlex to properly split the command (handles quoted strings)
+            import shlex
+            try:
+                parts = shlex.split(command)
+                if len(parts) > 1:
+                    command = parts[0]
+                    args = parts[1:]
+            except Exception as e:
+                # If splitting fails, use the original command as-is
+                # This will be handled by CommandExecutor with shell=True
+                pass
     else:
         # Use LLM to generate command from task
         llm_result = call_llm_for_command(task)
@@ -315,7 +330,7 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
             exit_code = result.get('exit_code', -1)
 
             if OUTPUT_BUILDER_AVAILABLE:
-                from output_builder import ErrorInfo
+                # from output_builder import ErrorInfo
 
                 error_type = "execution"
                 if exit_code == -1:

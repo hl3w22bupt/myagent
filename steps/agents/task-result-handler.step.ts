@@ -23,6 +23,39 @@ import { existsSync } from 'fs';
 const MAX_HISTORY_SIZE = 20;
 
 /**
+ * Normalize artifact path for storage.
+ * - Absolute paths (starting with /): keep as-is for media-serve to handle
+ * - Relative paths: ensure they have the appropriate prefix based on type
+ */
+function normalizeArtifactPath(rawPath: string, artifactType: string): string {
+  if (!rawPath) return rawPath;
+
+  // If it's an absolute path (starts with /), keep it unchanged
+  // media-serve will handle it correctly by trying the absolute path first
+  if (rawPath.startsWith('/')) {
+    return rawPath;
+  }
+
+  // For relative paths, ensure they have the appropriate prefix
+  const typePrefixes: Record<string, string[]> = {
+    video: ['videos/', 'outputs/videos/'],
+    audio: ['audios/', 'outputs/audios/', 'audio/', 'outputs/audio/'],
+    image: ['outputs/infographics/', 'infographics/', 'outputs/images/', 'images/'],
+    code: ['outputs/codes/', 'codes/'],
+  };
+
+  const validPrefixes = typePrefixes[artifactType] || [];
+  const hasValidPrefix = validPrefixes.some(prefix => rawPath.startsWith(prefix));
+
+  if (!hasValidPrefix) {
+    const defaultPrefix = validPrefixes[0] || `${artifactType}s/`;
+    return `${defaultPrefix}${rawPath}`;
+  }
+
+  return rawPath;
+}
+
+/**
  * Simplify history entry to prevent complex nested structures.
  * Reduces memory and prevents wrapObject issues.
  */
@@ -322,20 +355,44 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       const store = getDataStore();
       const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
 
+      // 获取当前对话轮次
+      // 优先使用 result.state.conversationLength（从1开始），转换为从0开始的索引
+      // 如果没有，则从 outputs 表获取最新一轮的 round 值
+      const conversationLength = (normalizedResult as any).state?.conversationLength;
+
+      let currentRound = 0;
+
+      if (conversationLength !== undefined && conversationLength > 0) {
+        // conversationLength 从 1 开始，转换为从 0 开始的索引
+        currentRound = conversationLength - 1;
+      } else {
+        // 降级方案：从 outputs 表获取
+        const existingOutputs = await store.getOutputs(taskId);
+        if (existingOutputs.length > 0) {
+          const latestRound = existingOutputs[existingOutputs.length - 1].round;
+          currentRound = latestRound - 1;
+        }
+      }
+
+      logger.info('Current conversation round', {
+        taskId,
+        currentRound,
+        conversationLength,
+      });
+
+      // Extract skill name from result.metadata.skillNames (populated by PTC generator)
+      // skillNames is an array, take the first one
+      const skillNames = (normalizedResult.metadata as any)?.skillNames as string[] || undefined;
+      const extractedSkillName = skillNames && skillNames.length > 0 ? skillNames[0] : undefined;
+
       // Check if this is a video output and save to artifacts
       if (finalStructuredResult?.result_type === 'video' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         let videoUrl = content.videoUrl || content.url || content.path;
 
         if (videoUrl) {
-          // Normalize the path: ensure it's a relative path without leading slash
-          // and includes videos/ prefix if it's a local file
-          if (videoUrl.startsWith('/')) {
-            videoUrl = videoUrl.substring(1); // Remove leading slash
-          }
-          if (!videoUrl.startsWith('videos/') && !videoUrl.startsWith('outputs/')) {
-            videoUrl = 'videos/' + videoUrl; // Add videos/ prefix
-          }
+          // Normalize path using the common function
+          videoUrl = normalizeArtifactPath(videoUrl, 'video');
 
           await store.addArtifact({
             taskId,
@@ -344,6 +401,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             path: videoUrl,
             // 优先使用 content.description，否则使用完整的 task（不截断）
             description: content.description || `Video generated: ${task}`,
+            metadata: {
+              conversation_round: currentRound,
+              skill_name: extractedSkillName,
+            },
             timestamp: new Date(),
           });
         }
@@ -380,6 +441,9 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 action: 'generated',
                 path: videoPath,
                 description: `Video ${videoNumber}: ${taskDesc}`,
+                metadata: {
+                  conversation_round: currentRound,
+                },
                 timestamp: new Date(),
               });
             } catch (error: any) {
@@ -431,6 +495,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             description: task || content.description || `Generated ${language} code`,
             metadata: {
               // 使用 metadata 存储扩展属性
+              conversation_round: currentRound,
+              skill_name: extractedSkillName,
               language: language,
               codeLength: code.length,
               ...(content.highlight && { highlight: content.highlight }),
@@ -449,14 +515,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         const chartType = content.chart_type;
 
         if (infographicPath) {
-          // Normalize the path: ensure it's a relative path with outputs/ prefix
-          let normalizedPath = infographicPath;
-          if (normalizedPath.startsWith('/')) {
-            normalizedPath = normalizedPath.substring(1); // Remove leading slash
-          }
-          if (!normalizedPath.startsWith('outputs/')) {
-            normalizedPath = 'outputs/' + normalizedPath; // Add outputs/ prefix
-          }
+          // Normalize path using the common function
+          const normalizedPath = normalizeArtifactPath(infographicPath, 'image');
 
           await store.addArtifact({
             taskId,
@@ -467,6 +527,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             // 这样在多轮对话时，description 会准确反映用户的实际请求
             description: task || title || `Infographic: ${template} (${chartType})`,
             metadata: {
+              conversation_round: currentRound,
+              skill_name: extractedSkillName,
               template: template,
               chartType: chartType,
               style: content.style,
@@ -497,6 +559,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           path: artifactPath,
           description: task || title || `Table with ${rowCount} rows`,
           metadata: {
+            conversation_round: currentRound,
+            skill_name: extractedSkillName,
             columnCount: columns.length,
             rowCount,
             columns: columns,
@@ -518,13 +582,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         let audioPath = content.path || content.audioUrl || content.url;
 
         if (audioPath) {
-          // Normalize the path: ensure it's a relative path without leading slash
-          if (audioPath.startsWith('/')) {
-            audioPath = audioPath.substring(1);
-          }
-          if (!audioPath.startsWith('audios/') && !audioPath.startsWith('audio/')) {
-            audioPath = `audios/${audioPath}`;
-          }
+          // Normalize path using the common function
+          audioPath = normalizeArtifactPath(audioPath, 'audio');
 
           await store.addArtifact({
             taskId,
@@ -533,6 +592,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             path: audioPath,
             description: finalStructuredResult.title || task || `Audio generated: ${task}`,
             metadata: {
+              conversation_round: currentRound,
+              skill_name: extractedSkillName,
               mimeType: content.mime_type || content.mimeType || 'audio/wav',
               size: content.size,
               duration: content.duration,

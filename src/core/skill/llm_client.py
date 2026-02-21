@@ -722,6 +722,10 @@ class LLMClient:
         """
         start_time = time.time()
 
+        # print(f"[DEBUG continue_tool_use] Received {len(messages)} messages")
+        # for i, msg in enumerate(messages):
+        #     print(f"[DEBUG continue_tool_use]   msg[{i}]: role={msg.get('role')}, content_type={type(msg.get('content')).__name__}")
+
         api_params = {
             "model": self.model,
             "max_tokens": max_tokens,
@@ -892,8 +896,14 @@ def get_llm_client(
     default_model = os.getenv("DEFAULT_LLM_MODEL", "claude-sonnet-4-5")
     effective_model = model or default_model
 
-    # Create new instance if forced, or if model changed, or if no instance exists
-    if _llm_client_instance is None or effective_model != _llm_client_instance.model or force_new:
+    # Create new instance if forced, or if model changed, or if no instance exists,
+    # or if skill_name changed (important for trace attribution)
+    skill_name_changed = (
+        _llm_client_instance is not None and
+        _llm_client_instance.skill_name != skill_name
+    )
+
+    if _llm_client_instance is None or effective_model != _llm_client_instance.model or force_new or skill_name_changed:
         _llm_client_instance = LLMClient(
             model=effective_model,
             trace_api_url=trace_api_url,
