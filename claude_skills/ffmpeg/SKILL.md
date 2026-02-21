@@ -60,6 +60,28 @@ ffmpeg -i input.mp4 -vn -acodec aac -b:a 192k output.m4a
 ffmpeg -i input.mp4 -vn output.wav
 ```
 
+### Merge Video and Audio (Add/Replace Audio Track)
+
+```bash
+# Replace video's audio with new audio track (IMPORTANT: use -map to select streams)
+ffmpeg -i video.mp4 -i audio.wav -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest output.mp4
+
+# Add audio to video without audio
+ffmpeg -i video.mp4 -i audio.wav -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 output.mp4
+
+# Merge with audio re-encoding (better compatibility)
+ffmpeg -i video.mp4 -i audio.wav -c:v copy -c:a aac -b:a 192k -map 0:v:0 -map 1:a:0 -shortest output.mp4
+
+# Merge and keep original video length (loop audio if shorter)
+ffmpeg -i video.mp4 -i audio.wav -filter_complex "[0:v]copy[v];[1:a]aloop=loop=-1:size=2e+09[a]" -map "[v]" -map "[a]" -shortest output.mp4
+```
+
+**CRITICAL for merging:**
+- **Always use `-map 0:v:0 -map 1:a:0`** when merging to explicitly select video from first input and audio from second input
+- Without `-map`, ffmpeg may keep the original audio track from the video
+- `-shortest` limits output to the shortest input (useful when audio is shorter than video)
+- Remove `-shortest` if you want to keep full video length and loop/pad the audio
+
 ### Convert Audio Formats
 
 ```bash

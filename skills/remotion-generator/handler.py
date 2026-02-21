@@ -244,13 +244,14 @@ class RemotionVideoGenerator:
                 mime_type = mime_type_map.get(output_format, 'video/mp4')
 
                 # Create MediaInfo object
+                # Use absolute path for ffmpeg compatibility
                 media_info = MediaInfo(
-                    path=relative_video_path,
+                    path=str(video_info['video_path']),  # Use absolute path
                     mime_type=mime_type,
                     size=file_size,
                     duration=video_info['actual_duration'],
                     fps=int(video_info['actual_fps']) if video_info['actual_fps'] else None,
-                    thumbnail_path=relative_thumbnail_path
+                    thumbnail_path=str(thumbnail_info['thumbnail_path']) if thumbnail_info else None
                 )
 
                 return OutputBuilder() \

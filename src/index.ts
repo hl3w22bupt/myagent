@@ -44,6 +44,7 @@ dotenv.config();
 
 import { AgentManager } from './core/agent/manager';
 import { resolve } from 'path';
+import { existsSync, readdirSync } from 'fs';
 import type { MasterAgentConfig } from './core/agent/types';
 
 /**
@@ -53,6 +54,35 @@ import type { MasterAgentConfig } from './core/agent/types';
  * The manager is created only once and reused across reloads.
  */
 let _agentManager: AgentManager | null = null;
+
+/**
+ * Discover all subagents in the subagents directory.
+ *
+ * Scans the subagents/ directory for all directories containing an agent.yaml file.
+ * This allows automatic discovery without hardcoding subagent names.
+ */
+function discoverSubagents(): string[] {
+  const subagentsDir = resolve(process.cwd(), 'subagents');
+  if (!existsSync(subagentsDir)) {
+    console.warn('[MasterAgent] Subagents directory not found:', subagentsDir);
+    return [];
+  }
+  const discovered = readdirSync(subagentsDir, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => dirent.name)
+    .filter(name => {
+      const configPath = resolve(subagentsDir, name, 'agent.yaml');
+      return existsSync(configPath);
+    });
+
+  if (discovered.length > 0) {
+    console.log(`[MasterAgent] Discovered ${discovered.length} subagents:`, discovered.join(', '));
+  } else {
+    console.warn('[MasterAgent] No subagents found with agent.yaml configuration');
+  }
+
+  return discovered;
+}
 
 /**
  * Get or create the global AgentManager instance.
@@ -89,7 +119,7 @@ export function getAgentManager(): AgentManager {
         timeout: parseInt(process.env.TASK_TIMEOUT || '60000'),
       },
     },
-    subagents: ['code-reviewer', 'data-analyst', 'security-auditor', 'system-guide'],
+    subagents: discoverSubagents(),
   };
 
   _agentManager = new AgentManager({

@@ -688,9 +688,38 @@ export class Agent {
       // Skills may return Python dict with 'metadata': {'artifact_type': 'video'}
       const artifactType = this.extractArtifactType(sandboxResult);
 
+      // CRITICAL: Check structuredOutput for actual success status
+      // Skills may return business logic failures via unified format (success: false)
+      // even though the process exited cleanly (exitCode=0).
+      // We need to respect the skill's determination of success/failure.
+      let actualSuccess = true;
+      let errorMessage: string | undefined = undefined;
+
+      if (sandboxResult.structuredOutput) {
+        const so = sandboxResult.structuredOutput as any;
+        if (typeof so.success === 'boolean' && !so.success) {
+          actualSuccess = false;
+          // Extract error message from structured output if available
+          if (so.content && typeof so.content === 'object') {
+            errorMessage = so.content.message || so.content.error || so.content.reason || 'Skill execution failed';
+          } else if (so.message) {
+            errorMessage = so.message;
+          } else if (so.error) {
+            errorMessage = so.error;
+          }
+
+          console.log('[Agent] Structured output indicates failure:', {
+            resultType: so.result_type,
+            errorMessage,
+            structuredOutput: JSON.stringify(so).substring(0, 500),
+          });
+        }
+      }
+
       return {
-        success: true,
+        success: actualSuccess,
         output: sandboxResult.output,
+        error: errorMessage,
         steps,
         executionTime,
         sessionId: this.sessionId,

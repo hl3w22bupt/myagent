@@ -120,13 +120,18 @@ export const handler = async (request: any, { logger }: any) => {
 
   logger.info('Media file requested', { path });
 
-  // Normalize path: remove leading slash if present
-  const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-
   // Build possible paths to try
   const possiblePaths: string[] = [];
 
-  // If path already starts with 'outputs/' or 'videos/', try it directly first
+  // If path starts with /, treat it as absolute path and try directly first
+  if (path.startsWith('/')) {
+    possiblePaths.push(path);
+  }
+
+  // For relative paths, normalize by removing leading slash
+  const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+
+  // If path already starts with 'outputs/' or 'videos/', try it relative to cwd
   if (normalizedPath.startsWith('outputs/') || normalizedPath.startsWith('videos/')) {
     possiblePaths.push(join(process.cwd(), normalizedPath));
   }

@@ -699,9 +699,15 @@ class ClaudeSkillHandler:
         import time
         start_time = time.time()
 
+        print(f"[DEBUG TOOL EXEC] ===== {tool_name} =====")
+        print(f"[DEBUG TOOL EXEC] input: {tool_input}")
+
         skill_path = tool_def.get("_skill_path")
+        print(f"[DEBUG TOOL EXEC] skill_path from tool_def: {skill_path}")
         handler_file = tool_def.get("_handler", "handler.py")
         function_name = tool_def.get("_function", "execute")
+
+        print(f"[DEBUG TOOL EXEC] tool_name={tool_name}, skill_path={skill_path}, handler={handler_file}, function={function_name}")
 
         if not skill_path:
             return (f"Error: Tool {tool_name} has no path", [])
@@ -725,7 +731,9 @@ class ClaudeSkillHandler:
 
             # 调用 execute 函数
             execute_func = getattr(module, function_name)
+            print(f"[DEBUG TOOL EXEC] Found function: {function_name} in module {module}")
             result = execute_func(tool_input)
+            print(f"[DEBUG TOOL EXEC] Function returned result type: {type(result)}")
 
             # 提取 output_files (用于追踪写入的文件)
             output_files = result.get('output_files', [])
@@ -742,6 +750,18 @@ class ClaudeSkillHandler:
                 result=result,
                 execution_time=execution_time
             )
+
+            # 调试日志：输出结果摘要
+            print(f"[DEBUG TOOL EXEC] result_success: {result.get('success')}")
+            result_content = result.get('content')
+            if isinstance(result_content, str):
+                print(f"[DEBUG TOOL EXEC] result_length: {len(result_content)}")
+                print(f"[DEBUG TOOL EXEC] result_preview: {result_content[:300]}")
+            elif isinstance(result_content, dict):
+                print(f"[DEBUG TOOL EXEC] result_type: dict")
+                print(f"[DEBUG TOOL EXEC] result_keys: {list(result_content.keys())}")
+            print(f"[DEBUG TOOL EXEC] output_files: {output_files}")
+            print(f"[DEBUG TOOL EXEC] execution_time: {execution_time:.3f}s")
 
             # 转换为字符串返回给 LLM
             if result.get('success'):
@@ -774,6 +794,7 @@ class ClaudeSkillHandler:
                 result={'success': False, 'error': str(e)},
                 execution_time=execution_time
             )
+            print(f"[DEBUG TOOL EXEC] ERROR: {e}")
             return (f"Error executing {tool_name}: {str(e)}", [])
 
     def _format_files_output(self, file_paths: list) -> str:
@@ -882,13 +903,15 @@ class ClaudeSkillHandler:
         # 创建 tool name 到 tool def 的映射
         tools_map = {t["name"]: t for t in tools}
 
-        max_iterations = 5
+        max_iterations = 10
         messages = [{"role": "user", "content": prompt}]
 
         # 收集所有输出文件
         all_output_files = []
 
         for iteration in range(max_iterations):
+            print(f"[DEBUG TOOL USE] ===== Iteration {iteration} =====")
+
             # 第一次调用使用 generate_with_tools，后续使用 continue_tool_use
             if iteration == 0:
                 response = self._llm_client.generate_with_tools(
@@ -898,13 +921,50 @@ class ClaudeSkillHandler:
                     system_prompt=system_prompt,  # 传递 system_prompt
                     purpose=purpose
                 )
+                print(f"[DEBUG TOOL USE] First call:")
+                print(f"  stop_reason: {response.stop_reason}")
+                print(f"  text: {response.text[:100] if response.text else '(empty)'}")
+                print(f"  tool_calls: {[tc.get('name') for tc in response.tool_calls]}")
+                for tc in response.tool_calls:
+                    print(f"    - {tc.get('name')}: {tc.get('input')}")
             else:
+                print(f"[DEBUG TOOL USE] Before continue_tool_use: {len(messages)} messages")
+                # 打印 messages 摘要
+                for i, msg in enumerate(messages):
+                    role = msg.get('role')
+                    content = msg.get('content', [])
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict):
+                                if block.get('type') == 'tool_result':
+                                    result_preview = str(block.get('content', ''))[:200]
+                                    print(f"[DEBUG TOOL USE]   msg[{i}] {role}: tool_result (len={len(result_preview)})")
+                                    if len(result_preview) < 200:
+                                        print(f"[DEBUG TOOL USE]     content: {result_preview}")
+                                elif block.get('type') == 'tool_use':
+                                    print(f"[DEBUG TOOL USE]   msg[{i}] {role}: tool_use - {block.get('name')}")
+                                elif block.get('type') == 'text':
+                                    text_preview = str(block.get('text', ''))[:100]
+                                    print(f"[DEBUG TOOL USE]   msg[{i}] {role}: text (len={len(block.get('text', ''))})")
+                                    print(f"[DEBUG TOOL USE]     content: {text_preview}...")
+                            else:
+                                print(f"[DEBUG TOOL USE]   msg[{i}] {role}: {type(block).__name__}")
+                    else:
+                        content_preview = str(content)[:100]
+                        print(f"[DEBUG TOOL USE]   msg[{i}] {role}: {content_preview}...")
+
                 response = self._llm_client.continue_tool_use(
                     messages=messages,
                     tools=tools,
                     max_tokens=16384,
                     system_prompt=system_prompt  # 传递 system_prompt
                 )
+                print(f"[DEBUG TOOL USE] Continuation call:")
+                print(f"  stop_reason: {response.stop_reason}")
+                print(f"  text: {response.text[:100] if response.text else '(empty)'}")
+                print(f"  tool_calls: {[tc.get('name') for tc in response.tool_calls]}")
+                for tc in response.tool_calls:
+                    print(f"    - {tc.get('name')}: {tc.get('input')}")
 
             # 如果没有工具调用，直接返回
             if response.stop_reason != "tool_use" or not response.tool_calls:

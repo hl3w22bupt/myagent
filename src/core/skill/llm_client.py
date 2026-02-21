@@ -722,6 +722,10 @@ class LLMClient:
         """
         start_time = time.time()
 
+        # print(f"[DEBUG continue_tool_use] Received {len(messages)} messages")
+        # for i, msg in enumerate(messages):
+        #     print(f"[DEBUG continue_tool_use]   msg[{i}]: role={msg.get('role')}, content_type={type(msg.get('content')).__name__}")
+
         api_params = {
             "model": self.model,
             "max_tokens": max_tokens,
@@ -767,7 +771,8 @@ class LLMClient:
             tools=tools,
             execution_time=execution_time,
             system_prompt=system_prompt,
-            purpose="tool_use_continuation"
+            purpose="tool_use_continuation",
+            messages=messages  # Pass complete messages for debugging
         )
 
         return result
@@ -779,7 +784,8 @@ class LLMClient:
         tools: List[Dict[str, Any]],
         execution_time: float,
         system_prompt: Optional[str] = None,
-        purpose: Optional[str] = None
+        purpose: Optional[str] = None,
+        messages: Optional[List[Dict]] = None
     ):
         """
         Send LLM call trace with tool use info to executionTraces stream (Issue #17).
@@ -791,6 +797,7 @@ class LLMClient:
             execution_time: Execution time in seconds
             system_prompt: System prompt used
             purpose: Purpose description for this LLM call
+            messages: Optional complete message history (for debugging tool use loops)
         """
         import httpx
 
@@ -803,10 +810,14 @@ class LLMClient:
         timestamp_ms = int(time.time() * 1000)
 
         # Build messages array for unified trace format (Issue #17)
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        # If complete messages are provided, use them; otherwise fallback to old format
+        if messages:
+            trace_messages = messages
+        else:
+            trace_messages = []
+            if system_prompt:
+                trace_messages.append({"role": "system", "content": system_prompt})
+            trace_messages.append({"role": "user", "content": prompt})
 
         trace_data = {
             "id": trace_id,
@@ -826,7 +837,7 @@ class LLMClient:
                 "llmProvider": "anthropic",
                 "llmModel": response.model,
                 "llmRequest": {
-                    "messages": messages,
+                    "messages": trace_messages,
                     "tools": tools,
                 },
                 "llmResponse": {
@@ -885,8 +896,14 @@ def get_llm_client(
     default_model = os.getenv("DEFAULT_LLM_MODEL", "claude-sonnet-4-5")
     effective_model = model or default_model
 
-    # Create new instance if forced, or if model changed, or if no instance exists
-    if _llm_client_instance is None or effective_model != _llm_client_instance.model or force_new:
+    # Create new instance if forced, or if model changed, or if no instance exists,
+    # or if skill_name changed (important for trace attribution)
+    skill_name_changed = (
+        _llm_client_instance is not None and
+        _llm_client_instance.skill_name != skill_name
+    )
+
+    if _llm_client_instance is None or effective_model != _llm_client_instance.model or force_new or skill_name_changed:
         _llm_client_instance = LLMClient(
             model=effective_model,
             trace_api_url=trace_api_url,

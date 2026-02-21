@@ -132,7 +132,19 @@ class SkillHookExecutor:
             result = await skill_func(enhanced_input)
             print(f"[DEBUG] skill_func returned: {result}")
         except Exception as e:
-            result = {"success": False, "error": str(e)}
+            # Return OutputBuilder format for errors
+            result = {
+                'result_type': 'error',
+                'success': False,
+                'content': {
+                    'type': 'execution',
+                    'message': str(e)
+                },
+                'metadata': {
+                    'execution_time': 0,
+                    'skills_used': []
+                }
+            }
 
         # Post-exec hook
         try:

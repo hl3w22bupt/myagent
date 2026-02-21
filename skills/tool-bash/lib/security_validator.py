@@ -19,6 +19,9 @@ class SecurityValidator:
         # PostgreSQL tools
         'psql', 'pg_dump', 'pg_restore',
 
+        # Media tools
+        'ffmpeg', 'ffprobe',
+
         # System tools
         'ls', 'cat', 'grep', 'awk', 'sed', 'find', 'head', 'tail',
         'wc', 'sort', 'uniq', 'cut', 'tr', 'dirname', 'basename',

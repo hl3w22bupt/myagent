@@ -1095,6 +1095,7 @@ export class PostgresDataStore implements Database {
         path: row.path,
         description: row.description,
         commitHash: row.commit_hash,
+        metadata: row.metadata,
         // PostgreSQL returns bigint as string, need to convert to number then Date
         timestamp: new Date(parseInt(row.timestamp)),
       }));

@@ -152,10 +152,9 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # 构建输出
         if OUTPUT_BUILDER_AVAILABLE:
-            relative_path = get_relative_path(output_path)
-
+            # Use absolute path for ffmpeg compatibility
             media_info = MediaInfo(
-                path=relative_path,
+                path=str(output_path),  # Use absolute path
                 mime_type=mime_type,
                 size=file_size,
                 duration=duration,

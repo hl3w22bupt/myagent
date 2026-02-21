@@ -232,10 +232,14 @@ class SkillExecutor:
                     metadata = {'artifact_type': artifact_type}
                     if 'result_type' in result:
                         # 这是 OutputBuilder 格式，保存完整的 structured_output
-                        metadata['structured_output'] = {
+                        structured_output = {
                             k: v for k, v in result.items()
                             if k not in ['success']  # 排除 success 字段
                         }
+                        # 自动添加 skill_name 到 metadata 中
+                        if 'skill_name' not in structured_output.get('metadata', {}):
+                            structured_output.setdefault('metadata', {})['skill_name'] = skill_name
+                        metadata['structured_output'] = structured_output
 
                     return SkillResult(
                         success=True,
@@ -258,10 +262,14 @@ class SkillExecutor:
                     # 失败时也保留 structured_output（包含错误信息）
                     metadata = {'artifact_type': artifact_type}
                     if 'result_type' in result:
-                        metadata['structured_output'] = {
+                        structured_output = {
                             k: v for k, v in result.items()
                             if k not in ['success']
                         }
+                        # 自动添加 skill_name 到 metadata 中
+                        if 'skill_name' not in structured_output.get('metadata', {}):
+                            structured_output.setdefault('metadata', {})['skill_name'] = skill_name
+                        metadata['structured_output'] = structured_output
 
                     return SkillResult(
                         success=False,
