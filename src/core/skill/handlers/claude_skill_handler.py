@@ -348,7 +348,7 @@ class ClaudeSkillHandler:
             "skillName": self.skill_name,
             "stage": f"llm_call - {purpose}" if purpose else "llm_call",
             "status": "completed",
-            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "durationMs": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "metadata": {
                 "sessionId": session_id,
@@ -433,13 +433,13 @@ class ClaudeSkillHandler:
 
         trace_data = {
             "id": trace_id,
-            "level": "tool-skill",
+            "level": "skill-internal",
             "taskId": task_id,
             "agentId": session_id,
             "skillName": tool_name,
             "stage": "tool_execution",
             "status": "completed" if result.get('success') else "failed",
-            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "durationMs": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "metadata": {
                 "sessionId": session_id,

@@ -327,7 +327,7 @@ class LLMClient:
             "skillName": self.skill_name,
             "stage": f"llm_call - {purpose}" if purpose else "llm_call",
             "status": "completed",
-            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "durationMs": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "isRetry": is_retry,
             "retryAttempt": retry_attempt,
@@ -496,7 +496,7 @@ class LLMClient:
                 "skillName": self.skill_name,
                 "stage": f"llm_call - {purpose}" if purpose else "llm_call",
                 "status": "completed",
-                "executionTime": int(execution_time * 1000),
+                "durationMs": int(execution_time * 1000),
                 "timestamp": datetime.fromtimestamp(int(time.time() * 1000) / 1000).isoformat(),
                 "isRetry": is_retry,
                 "retryAttempt": retry_attempt,
@@ -827,7 +827,7 @@ class LLMClient:
             "skillName": self.skill_name,
             "stage": f"llm_call - {purpose}" if purpose else "llm_call_with_tools",
             "status": "completed",
-            "executionTime": int(execution_time * 1000),  # Convert to ms
+            "durationMs": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "isRetry": False,
             "retryAttempt": 0,

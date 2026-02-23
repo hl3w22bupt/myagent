@@ -80,26 +80,23 @@
   font-size: 12px;
 }
 
-.final-badge {
-  color: #2f9e44;
-  background: #d3f9d8;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+.path-info {
+  margin-top: 8px;
 }
 
-.intermediate-badge {
-  color: #fab005;
-  background: #fff3bf;
-  padding: 2px 8px;
+.path-info code {
+  background: #f1f3f5;
+  padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
+  color: #495057;
+  word-break: break-all;
 }
 
 .artifact-content {
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   min-height: 300px;
 }
 
@@ -141,4 +138,24 @@
 .artifact-placeholder p {
   margin: 0;
   font-size: 16px;
+}
+
+/* 代码加载状态 */
+.content-loading,
+.content-error {
+  padding: 20px;
+  text-align: center;
+  color: #6c757d;
+}
+
+.content-error {
+  color: #e03131;
+  background: #ffe3e3;
+  border-radius: 8px;
+}
+
+/* 确保 CodePlayer 容器正确显示 */
+.artifact-content .code-player-container {
+  width: 100%;
+  max-width: 100%;
 }

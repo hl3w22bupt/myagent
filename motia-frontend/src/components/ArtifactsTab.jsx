@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './ArtifactsTab.css';
 import CodePlayer from './CodePlayer';
 import AudioPlayer from './AudioPlayer';
@@ -6,6 +6,73 @@ import VideoPlayer from './VideoPlayer';
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+/**
+ * 渲染代码内容的组件（支持 HTML 预览）
+ */
+const CodeContentRenderer = ({ path }) => {
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`;
+        console.log('[CodeContentRenderer] Fetching:', url);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+        }
+        const text = await response.text();
+        setContent(text);
+        console.log('[CodeContentRenderer] Content length:', text.length);
+      } catch (err) {
+        console.error('[CodeContentRenderer] Error:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (path) {
+      fetchContent();
+    }
+  }, [path]);
+
+  if (loading) {
+    return <div className="content-loading">加载中...</div>;
+  }
+
+  if (error) {
+    return <div className="content-error">加载失败: {error}</div>;
+  }
+
+  const filename = path.split('/').pop();
+
+  // 检测语言类型
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const langMap = {
+    'html': 'html',
+    'htm': 'html',
+    'css': 'css',
+    'js': 'javascript',
+    'jsx': 'jsx',
+    'ts': 'typescript',
+    'tsx': 'tsx',
+    'py': 'python',
+    'json': 'json',
+    'md': 'markdown',
+    'xml': 'xml',
+    'svg': 'xml',
+  };
+  const language = langMap[ext] || 'text';
+
+  // 使用 CodePlayer 组件，它支持 HTML 预览
+  return <CodePlayer code={content} language={language} filename={filename} />;
+};
 
 const ArtifactsTab = ({ taskId, task }) => {
   const [selectedRound, setSelectedRound] = useState('');
@@ -109,8 +176,10 @@ const ArtifactsTab = ({ taskId, task }) => {
       case 'audio':
         return <AudioPlayer audioPath={path} getBlobUrl={getMediaBlobUrl} filename={path.split('/').pop()} />;
       case 'code':
-        // CodePlayer 需要 code 内容，不是路径
-        return <div className="text-artifact">代码文件: {path}</div>;
+      case 'html':
+      case 'markdown':
+        // 使用 CodeContentRenderer，它会使用 CodePlayer 组件
+        return <CodeContentRenderer path={path} />;
       case 'image':
         // For images, use the media API
         return <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
