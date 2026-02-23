@@ -4,6 +4,9 @@ import CodePlayer from './CodePlayer';
 import AudioPlayer from './AudioPlayer';
 import VideoPlayer from './VideoPlayer';
 
+// 使用与 API 配置相同的基础 URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
 const ArtifactsTab = ({ taskId, task }) => {
   const [selectedRound, setSelectedRound] = useState('');
   const [selectedArtifact, setSelectedArtifact] = useState(null);
@@ -27,7 +30,7 @@ const ArtifactsTab = ({ taskId, task }) => {
     console.log('[ArtifactsTab] Fetching media for:', path);
 
     try {
-      const url = `http://localhost:3001/media?path=${encodeURIComponent(path)}`;
+      const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`;
       console.log('[ArtifactsTab] Fetching:', url);
 
       const response = await fetch(url);
@@ -110,7 +113,7 @@ const ArtifactsTab = ({ taskId, task }) => {
         return <div className="text-artifact">代码文件: {path}</div>;
       case 'image':
         // For images, use the media API
-        return <img src={`http://localhost:3001/media?path=${encodeURIComponent(path)}`}
+        return <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
                      alt={artifact.description}
                      style={{ maxWidth: '100%', borderRadius: '8px' }}
                      onError={(e) => { e.target.style.display = 'none'; console.error('Image load error:', e); }} />;
