@@ -251,6 +251,8 @@ export class MasterAgent extends Agent {
             .map((s) => s.delegateTo as string),
           skillNames: result.metadata.skillNames,
         },
+        structuredOutput: result.structuredOutput,
+        structuredOutputs: (result as any).structuredOutputs,
       };
     } catch (error: any) {
       console.error('[MasterAgent] Task execution failed:', {
@@ -970,7 +972,8 @@ Task: "Add animation highlights to the Pascal Triangle video"
           delegates: [subagentName],
           skillNames: result.metadata?.skillNames,
         },
-        structuredOutput: result.structuredOutput, // ← 添加这个字段
+        structuredOutput: result.structuredOutput,
+        structuredOutputs: (result as any).structuredOutputs, // ← 添加这个字段
       };
     } catch (error: any) {
       console.error('[MasterAgent] Direct delegation failed:', {

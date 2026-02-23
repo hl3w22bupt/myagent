@@ -297,7 +297,19 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         // Completed event: use nested result
         ...input.result,
         structuredOutput: (input.result as any)?.structuredOutput, // Extract structuredOutput
+        structuredOutputs: (input.result as any)?.structuredOutputs, // Extract structuredOutputs
       };
+
+  // 调试：打印原始 input.result 的结构化输出信息
+  if (!isFailedEvent && input.result) {
+    const resultAny = input.result as any;
+    logger.info('[DEBUG] Raw input.result structured outputs', {
+      taskId: input.taskId,
+      'input.result.structuredOutput': !!resultAny?.structuredOutput,
+      'input.result.structuredOutputs': Array.isArray(resultAny?.structuredOutputs) ? resultAny.structuredOutputs.length : 'not array',
+      'input.result.structuredOutputs length': resultAny?.structuredOutputs?.length,
+    });
+  }
 
   const taskId = input.taskId;
   const task = input.task || 'Unknown task';
@@ -316,7 +328,14 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
   // Check structuredOutput first
   const structuredOutput = (normalizedResult as any).structuredOutput;
+  const structuredOutputs = (normalizedResult as any).structuredOutputs || [];
   const structuredResult = parseUnifiedResult(normalizedResult.output);
+
+  logger.info('Structured outputs found', {
+    taskId,
+    structuredOutputsCount: structuredOutputs.length,
+    structuredOutputResultType: structuredOutput?.result_type,
+  });
 
   // IMPORTANT: Also check structuredOutput field (from file)
   // For skills like infographic-generator that write structured output to file
@@ -381,12 +400,213 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       });
 
       // Extract skill name from result.metadata.skillNames (populated by PTC generator)
-      // skillNames is an array, take the first one
+      // skillNames is an array - for multi-skill execution, each skill output should use its corresponding name
       const skillNames = (normalizedResult.metadata as any)?.skillNames as string[] || undefined;
+
+      // ========== 处理所有 structured outputs（多 skill 执行） ==========
+      // 当有多个 skill 在一轮 PTC 代码中执行时，每个 skill 都会产生一个 structured output
+      // 我们需要为每个 skill output 创建对应的 artifact，并使用正确的 skill name
+      if (structuredOutputs && structuredOutputs.length > 0) {
+        logger.info('Processing multiple structured outputs', {
+          taskId,
+          count: structuredOutputs.length,
+          skillNames,
+        });
+
+        // 找出每个 skill 的最后一个 structured output（按 skill_name 分组，取每组最后一个）
+        const skillGroups: Map<string, number[]> = new Map();
+        for (let i = 0; i < structuredOutputs.length; i++) {
+          const structuredResult = structuredOutputs[i];
+          const skillName = structuredResult?.metadata?.skill_name || skillNames?.[i] || skillNames?.[0] || 'unknown';
+          if (!skillGroups.has(skillName)) {
+            skillGroups.set(skillName, []);
+          }
+          skillGroups.get(skillName)!.push(i);
+        }
+
+        // 获取每个 skill 的最后一个 output 索引
+        const lastOutputIndices = new Set<number>();
+        skillGroups.forEach((indices) => {
+          lastOutputIndices.add(indices[indices.length - 1]);
+        });
+
+        // 获取最后一个 skill 的名称（该 skill 的产物是本轮的最终产物）
+        const lastSkillName = skillNames?.[skillNames.length - 1];
+        const lastSkillLastOutputIndices = lastSkillName ? skillGroups.get(lastSkillName) || [] : [];
+        const finalArtifactIndex = lastSkillLastOutputIndices.length > 0
+          ? lastSkillLastOutputIndices[lastSkillLastOutputIndices.length - 1]
+          : -1;
+
+        for (let i = 0; i < structuredOutputs.length; i++) {
+          const structuredResult = structuredOutputs[i];
+          const resultType = structuredResult?.result_type;
+          const content = structuredResult?.content;
+
+          // 优先使用 structured output 自带的 skill_name，否则按索引映射
+          const skillName = structuredResult?.metadata?.skill_name || skillNames?.[i] || skillNames?.[0];
+
+          // 判断是否是本轮的最终产物（skill 调用链中最后一个 skill 的产物）
+          const isFinalArtifact = i === finalArtifactIndex;
+
+          logger.info(`Processing structured output ${i + 1}/${structuredOutputs.length}`, {
+            resultType,
+            skillName,
+            isFinalArtifact,
+          });
+
+          // 处理 video 类型
+          if (resultType === 'video' && content) {
+            let videoUrl = content.videoUrl || content.url || content.path;
+            if (videoUrl) {
+              videoUrl = normalizeArtifactPath(videoUrl, 'video');
+              await store.addArtifact({
+                taskId,
+                artifactType: 'video',
+                action: 'generated',
+                path: videoUrl,
+                description: content.description || `Video generated: ${task}`,
+                metadata: {
+                  conversation_round: currentRound,
+                  skill_name: skillName,
+                  is_final: isFinalArtifact,
+                },
+                timestamp: new Date(),
+              });
+              logger.info('✅ Video artifact added from structured outputs', { videoUrl, skillName });
+            }
+          }
+
+          // 处理 audio 类型
+          if (resultType === 'audio' && content) {
+            let audioPath = content.path || content.audioUrl || content.url;
+            if (audioPath) {
+              audioPath = normalizeArtifactPath(audioPath, 'audio');
+              await store.addArtifact({
+                taskId,
+                artifactType: 'audio',
+                action: 'generated',
+                path: audioPath,
+                description: structuredResult.title || task || `Audio generated: ${task}`,
+                metadata: {
+                  conversation_round: currentRound,
+                  skill_name: skillName,
+                  mimeType: content.mime_type || content.mimeType || 'audio/wav',
+                  size: content.size,
+                  duration: content.duration,
+                  sampleRate: content.sample_rate || content.sampleRate,
+                  channels: content.channels,
+                  ...(content.engine && { engine: content.engine }),
+                  ...(content.voice && { voice: content.voice }),
+                  ...(content.lang && { lang: content.lang }),
+                  ...(content.speed && { speed: content.speed }),
+                },
+                timestamp: new Date(),
+              });
+              logger.info('✅ Audio artifact added from structured outputs', { audioPath, skillName });
+            }
+          }
+
+          // 处理 code 类型
+          if (resultType === 'code' && content) {
+            const code = content.code;
+            const language = content.language || 'text';
+            if (code) {
+              const filename = `code_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${language}`;
+              const artifactPath = `codes/${filename}`;
+              const codesDir = join(process.cwd(), 'outputs', 'codes');
+              if (!existsSync(codesDir)) {
+                await mkdir(codesDir, { recursive: true });
+              }
+              const filePath = join(codesDir, filename);
+              await writeFile(filePath, code, 'utf-8');
+
+              await store.addArtifact({
+                taskId,
+                artifactType: 'code',
+                action: 'generated',
+                path: artifactPath,
+                description: task || content.description || `Generated ${language} code`,
+                metadata: {
+                  conversation_round: currentRound,
+                  skill_name: skillName,
+                  language: language,
+                  codeLength: code.length,
+                  ...(content.highlight && { highlight: content.highlight }),
+                },
+                timestamp: new Date(),
+              });
+              logger.info('✅ Code artifact added from structured outputs', { artifactPath, skillName });
+            }
+          }
+
+          // 处理 image/infographic 类型
+          if (resultType === 'infographic' && content) {
+            const infographicPath = content.path;
+            const title = content.title || structuredResult.title;
+            if (infographicPath) {
+              const normalizedPath = normalizeArtifactPath(infographicPath, 'image');
+              await store.addArtifact({
+                taskId,
+                artifactType: 'image',
+                action: 'generated',
+                path: normalizedPath,
+                description: task || title || `Infographic: ${content.template} (${content.chart_type})`,
+                metadata: {
+                  conversation_round: currentRound,
+                  skill_name: skillName,
+                  template: content.template,
+                  chartType: content.chart_type,
+                  style: content.style,
+                  dimensions: content.dimensions ? `${content.dimensions.width}x${content.dimensions.height}` : undefined,
+                  size: content.size,
+                  mimeType: content.mime_type,
+                },
+                timestamp: new Date(),
+              });
+              logger.info('✅ Image artifact added from structured outputs', { normalizedPath, skillName });
+            }
+          }
+
+          // 处理 table 类型
+          if (resultType === 'table' && content) {
+            const columns = content.columns || content.headers || [];
+            const rows = content.rows || [];
+            const rowCount = rows.length;
+            const artifactPath = `table_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.json`;
+
+            await store.addArtifact({
+              taskId,
+              artifactType: 'table',
+              action: 'generated',
+              path: artifactPath,
+              description: task || content.title || `Table with ${rowCount} rows`,
+              metadata: {
+                conversation_round: currentRound,
+                skill_name: skillName,
+                columnCount: columns.length,
+                rowCount,
+                columns: columns,
+                title: content.title,
+                tableData: { columns, rows, title: content.title },
+              },
+              timestamp: new Date(),
+            });
+            logger.info('✅ Table artifact added from structured outputs', { artifactPath, skillName });
+          }
+        }
+
+        logger.info('✅ All structured outputs processed', {
+          taskId,
+          totalProcessed: structuredOutputs.length,
+        });
+      }
+      // ========== 结束处理所有 structured outputs ==========
+
+      // 向后兼容：如果没有 structuredOutputs 数组，使用旧的逻辑处理 finalStructuredResult
       const extractedSkillName = skillNames && skillNames.length > 0 ? skillNames[0] : undefined;
 
       // Check if this is a video output and save to artifacts
-      if (finalStructuredResult?.result_type === 'video' && finalStructuredResult.content) {
+      if (structuredOutputs.length === 0 && finalStructuredResult?.result_type === 'video' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         let videoUrl = content.videoUrl || content.url || content.path;
 
@@ -413,9 +633,11 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       // Also check if output contains video paths (for skills that don't use unified format)
       // This handles cases where the skill returns plain text with embedded video paths
       // Skip this if we already processed the video from structured result (to avoid duplicates)
+      // Also skip if we have structuredOutputs array (already processed above)
       const hasStructuredVideo = finalStructuredResult?.result_type === 'video' && finalStructuredResult.content;
+      const hasStructuredOutputs = structuredOutputs && structuredOutputs.length > 0;
 
-      if (!hasStructuredVideo && normalizedResult.output && typeof normalizedResult.output === 'string') {
+      if (!hasStructuredVideo && !hasStructuredOutputs && normalizedResult.output && typeof normalizedResult.output === 'string') {
         // Find all unique video paths using regex
         const videoPattern = /videos\/[\w-]+_video_(\d+)\.mp4/g;
         let match;
@@ -458,7 +680,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       }
 
       // 检查是否是 code output 并保存到 artifacts
-      if (finalStructuredResult?.result_type === 'code' && finalStructuredResult.content) {
+      // Skip if we have structuredOutputs array (already processed above)
+      if (!hasStructuredOutputs && finalStructuredResult?.result_type === 'code' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         const code = content.code;
         const language = content.language || 'text';
@@ -507,7 +730,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       }
 
       // Check if this is an infographic output and save to artifacts
-      if (finalStructuredResult?.result_type === 'infographic' && finalStructuredResult.content) {
+      // Skip if we have structuredOutputs array (already processed above)
+      if (!hasStructuredOutputs && finalStructuredResult?.result_type === 'infographic' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         const infographicPath = content.path;
         const title = content.title || finalStructuredResult.title;
@@ -542,7 +766,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       }
 
       // Check if this is a table output and save to artifacts
-      if (finalStructuredResult?.result_type === 'table' && finalStructuredResult.content) {
+      // Skip if we have structuredOutputs array (already processed above)
+      if (!hasStructuredOutputs && finalStructuredResult?.result_type === 'table' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         const title = content.title || finalStructuredResult.title;
         const columns = content.columns || content.headers || [];
@@ -577,7 +802,8 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       }
 
       // Check if this is an audio output and save to artifacts
-      if (finalStructuredResult?.result_type === 'audio' && finalStructuredResult.content) {
+      // Skip if we have structuredOutputs array (already processed above)
+      if (!hasStructuredOutputs && finalStructuredResult?.result_type === 'audio' && finalStructuredResult.content) {
         const content = finalStructuredResult.content as any;
         let audioPath = content.path || content.audioUrl || content.url;
 

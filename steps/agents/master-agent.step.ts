@@ -615,6 +615,14 @@ export const handler = async (
 
     const result = await agent.run(taskContext.task, taskId, taskContext.context);
 
+    // 调试：立即检查 result 的内容
+    console.log('[master-agent] Got result from agent.run():', {
+      taskId,
+      'result keys': Object.keys(result),
+      'result has structuredOutputs': 'structuredOutputs' in result,
+      'result.structuredOutputs': (result as any).structuredOutputs,
+    });
+
     // === HITL Checkpoint: Handle awaiting clarification status ===
     if (result.error === 'AWAITING_CLARIFICATION' && result.clarification) {
       logger.info('Task awaiting clarification', { taskId, question: result.clarification.question });
@@ -708,6 +716,16 @@ export const handler = async (
     });
 
     // Emit completion event
+    // 调试：检查 result.structuredOutputs
+    console.log('[master-agent] About to emit completion event:', {
+      taskId,
+      'result keys': Object.keys(result),
+      'result.structuredOutputs': (result as any).structuredOutputs,
+      'result.structuredOutputs type': Array.isArray((result as any).structuredOutputs) ? 'array' : typeof (result as any).structuredOutputs,
+      'result.structuredOutputs length': (result as any).structuredOutputs?.length,
+      'result has structuredOutputs': 'structuredOutputs' in result,
+    });
+
     await emit({
       topic: 'agent.task.completed',
       data: {
@@ -722,6 +740,7 @@ export const handler = async (
           state: result.state,
           metadata: result.metadata,
           structuredOutput: result.structuredOutput, // Structured output at root level
+          structuredOutputs: (result as any).structuredOutputs, // All structured outputs
         },
       },
     });

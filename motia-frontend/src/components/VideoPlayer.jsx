@@ -1,6 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './VideoPlayer.css'
 
+// 模块级别的 blob URL 缓存（与 AudioPlayer 共享相同的逻辑）
+const blobUrlCache = new Map()
+
+/**
+ * 获取或创建 blob URL（带缓存）
+ */
+async function getOrCreateBlobUrl(path, getBlobUrlFn) {
+  if (blobUrlCache.has(path)) {
+    console.log('[VideoPlayer] Using cached blob URL for:', path)
+    return blobUrlCache.get(path)
+  }
+
+  console.log('[VideoPlayer] Fetching new blob URL for:', path)
+  const blobUrl = await getBlobUrlFn(path)
+  blobUrlCache.set(path, blobUrl)
+  return blobUrl
+}
+
+/**
+ * 清理指定路径的 blob URL 缓存
+ */
+function revokeBlobUrl(path) {
+  if (blobUrlCache.has(path)) {
+    const url = blobUrlCache.get(path)
+    console.log('[VideoPlayer] Revoking blob URL for:', path)
+    URL.revokeObjectURL(url)
+    blobUrlCache.delete(path)
+  }
+}
 
 /**
  * VideoPlayer - 视频播放器组件
@@ -12,33 +41,50 @@ function VideoPlayer({ videoPath, duration, fps, size, getBlobUrl }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [debugInfo, setDebugInfo] = useState('')
+  const currentPathRef = useRef(null)
 
   useEffect(() => {
+    let isMounted = true
+    const previousPath = currentPathRef.current
+
     const loadVideo = async () => {
       setLoading(true)
       setError(false)
       setDebugInfo(`开始加载视频: ${videoPath}`)
 
       try {
-        const url = await getBlobUrl(videoPath)
+        const url = await getOrCreateBlobUrl(videoPath, getBlobUrl)
 
-        if (url) {
+        if (url && isMounted) {
           setVideoUrl(url)
           setDebugInfo(`视频加载成功: ${url.substring(0, 50)}...`)
-        } else {
+        } else if (isMounted) {
           setError(true)
           setDebugInfo('getBlobUrl返回null')
         }
       } catch (err) {
-        console.error('加载视频失败:', err)
-        setError(true)
-        setDebugInfo(`加载失败: ${err.message}`)
+        console.error('[VideoPlayer] 加载视频失败:', err)
+        if (isMounted) {
+          setError(true)
+          setDebugInfo(`加载失败: ${err.message}`)
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     loadVideo()
+    currentPathRef.current = videoPath
+
+    return () => {
+      isMounted = false
+      // 清理之前路径的 blob URL（仅当路径改变时）
+      if (previousPath && previousPath !== videoPath && !previousPath.startsWith('blob:')) {
+        revokeBlobUrl(previousPath)
+      }
+    }
   }, [videoPath, getBlobUrl])
 
   if (loading) {

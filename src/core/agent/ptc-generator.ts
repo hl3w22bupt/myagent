@@ -883,12 +883,19 @@ For each skill, you MUST extract ALL mentioned parameters from the task:
 
 from core.skill.executor import SkillExecutor
 from core.sandbox.retry_utils import execute_with_retry
+from core.skill.adapters.virtual_skill_registry import create_virtual_registry
 import os
 
 # Get notify API URL from environment
 notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
 task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
-executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url)
+
+# Create virtual registry for Claude Skills support
+# This enables discovery and execution of Claude Skills (SKILL.md files)
+virtual_registry = __import__('asyncio').run(create_virtual_registry())
+
+# Create SkillExecutor with virtual registry support (includes Claude Skills)
+executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_registry=virtual_registry)
 
 # CRITICAL - Skill execution with RETRY logic:
 # All skill executions MUST use execute_with_retry() function

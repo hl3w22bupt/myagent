@@ -1149,13 +1149,16 @@ function TaskDetail() {
     const parsedResult = extractParsedResult(result)
     const resultType = getResultType(result)
 
-    // 检查是否有多个视频版本（从 artifacts）
+    // 只显示每轮的最终产物（is_final: true），过滤掉中间产物
     const videoArtifacts = task?.artifacts
       ? task.artifacts
-          .filter(artifact => artifact.type === 'video')
+          .filter(artifact => artifact.type === 'video' && artifact.metadata?.is_final === true)
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
+    // 检查是否有多个不同的对话轮次
+    const uniqueRounds = new Set(videoArtifacts.map(a => a.metadata?.conversation_round));
+    const hasMultipleConversationRounds = uniqueRounds.size > 1;
     const hasMultipleVersions = videoArtifacts.length > 1;
 
     // 如果有多个版本，使用选中的版本
@@ -1191,7 +1194,8 @@ function TaskDetail() {
 
       return (
         <div className="result-visual">
-          {/* 版本选择器 - 始终显示，统一体验 */}
+          {/* 版本选择器 - 只在有多个不同对话轮次时显示 */}
+          {hasMultipleConversationRounds && (
           <div className="video-version-selector">
             <span className="version-label">轮次</span>
             <div className="version-dropdown-wrapper">
@@ -1260,6 +1264,7 @@ function TaskDetail() {
               )}
             </div>
           </div>
+          )}
 
           {/* 视频播放器 */}
           <div className="video-player-wrapper">
@@ -1276,10 +1281,10 @@ function TaskDetail() {
       )
     }
 
-    // 显示 code artifacts
+    // 显示 code artifacts（只显示最终产物）
     const codeArtifacts = task?.artifacts
       ? task.artifacts
-        .filter(artifact => artifact.type === 'code')
+        .filter(artifact => artifact.type === 'code' && artifact.metadata?.is_final === true)
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
@@ -1381,10 +1386,10 @@ function TaskDetail() {
       )
     }
 
-    // 检查是否有多个图片版本（从 artifacts）
+    // 检查是否有多个图片版本（从 artifacts，只显示最终产物）
     const imageArtifacts = task?.artifacts
       ? task.artifacts
-          .filter(artifact => artifact.type === 'image')
+          .filter(artifact => artifact.type === 'image' && artifact.metadata?.is_final === true)
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
@@ -1482,10 +1487,10 @@ function TaskDetail() {
       )
     }
 
-    // 处理 audio artifacts（优先从 artifacts）
+    // 处理 audio artifacts（优先从 artifacts，只显示最终产物）
     const audioArtifacts = task?.artifacts
       ? task.artifacts
-          .filter(artifact => artifact.type === 'audio')
+          .filter(artifact => artifact.type === 'audio' && artifact.metadata?.is_final === true)
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
@@ -1584,10 +1589,10 @@ function TaskDetail() {
       )
     }
 
-    // 处理 TEXT artifacts（纯文本内容）
+    // 处理 TEXT artifacts（纯文本内容，只显示最终产物）
     const textArtifacts = task?.artifacts
       ? task.artifacts
-          .filter(artifact => artifact.type === 'text')
+          .filter(artifact => artifact.type === 'text' && artifact.metadata?.is_final === true)
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 

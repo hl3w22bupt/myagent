@@ -7,6 +7,7 @@ Defines available hooks and their settings.
 from typing import List, Optional
 from src.core.skill.hooks.base import BaseHook
 from src.core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
+from src.core.skill.hooks.system.claude_skill_hook import ClaudeSkillHook
 from src.core.skill.hooks.trace_hook import SkillTraceHook
 
 
@@ -14,11 +15,15 @@ from src.core.skill.hooks.trace_hook import SkillTraceHook
 HOOK_CONFIG = {
     "enabled": [
         "progress_notification",
+        "claude_skill",
         "trace"
     ],
     "settings": {
         "progress_notification": {
             "api_url": "http://localhost:3000/api/notify"
+        },
+        "claude_skill": {
+            "enabled": True
         },
         "trace": {
             "enabled": True,
@@ -61,6 +66,13 @@ def get_default_hooks(
         else:
             print(f"[DEBUG]   notify_hook_api_url is None, skipping ProgressNotificationHook")
 
+    # Claude skill hook
+    if "claude_skill" in enabled_hooks:
+        print(f"[DEBUG]   Claude skill hook is enabled")
+        if HOOK_CONFIG["settings"]["claude_skill"].get("enabled", True):
+            hooks.append(ClaudeSkillHook())
+            print(f"[DEBUG]   Added ClaudeSkillHook")
+
     # Trace hook
     if "trace" in enabled_hooks:
         print(f"[DEBUG]   Trace hook is enabled")
@@ -89,6 +101,8 @@ def get_custom_hooks(hook_names: List[str]) -> List[BaseHook]:
         if hook_name == "progress_notification":
             api_url = HOOK_CONFIG["settings"]["progress_notification"]["api_url"]
             hooks.append(ProgressNotificationHook(api_url))
+        elif hook_name == "claude_skill":
+            hooks.append(ClaudeSkillHook())
         elif hook_name == "trace":
             api_url = HOOK_CONFIG["settings"]["trace"]["api_url"]
             hooks.append(SkillTraceHook(api_url))

@@ -98,6 +98,9 @@ export interface SandboxResult {
 
   /** Structured output from skill execution (new unified format) */
   structuredOutput?: StructuredOutput;
+
+  /** All structured outputs from multiple skill executions in one PTC code */
+  structuredOutputs?: StructuredOutput[];
 }
 
 /**

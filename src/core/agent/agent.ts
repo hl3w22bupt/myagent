@@ -716,6 +716,16 @@ export class Agent {
         }
       }
 
+      // 调试：打印即将返回的结构化输出信息
+      console.log('[Agent] About to return result with structured outputs:', {
+        sessionId: this.sessionId,
+        'sandboxResult keys': Object.keys(sandboxResult),
+        'sandboxResult.structuredOutput': !!sandboxResult.structuredOutput,
+        'sandboxResult.structuredOutputs': Array.isArray((sandboxResult as any).structuredOutputs) ? (sandboxResult as any).structuredOutputs.length : 'not array',
+        'sandboxResult.structuredOutputs value': (sandboxResult as any).structuredOutputs,
+        'sandboxResult.structuredOutputs length': (sandboxResult as any).structuredOutputs?.length,
+      });
+
       return {
         success: actualSuccess,
         output: sandboxResult.output,
@@ -735,6 +745,7 @@ export class Agent {
           ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
         },
         structuredOutput: sandboxResult.structuredOutput, // Structured output at root level
+        structuredOutputs: (sandboxResult as any).structuredOutputs, // All structured outputs
       };
 
     } catch (error: any) {

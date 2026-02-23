@@ -160,38 +160,61 @@ export class LocalSandboxAdapter implements SandboxAdapter {
       const executionTime = Date.now() - startTime;
 
       // ============ 新增：读取结构化输出文件 ============
+      // 支持多个 skill 执行时的多个 structured outputs
       let structuredOutput: any = undefined;
+      const structuredOutputs: any[] = [];
 
       try {
-        // 从 stdout 中提取 [STRUCTURED_OUTPUT] 标记
-        const outputMatch = result.stdout.match(/\[STRUCTURED_OUTPUT\]\s+(.+?)(?:\n|$)/);
+        // 从 stdout 中提取所有 [STRUCTURED_OUTPUT] 标记
+        // 使用贪婪匹配支持带空格的路径，匹配到行尾或下一个 [STRUCTURED_OUTPUT]
+        const outputMatches = result.stdout.matchAll(/\[STRUCTURED_OUTPUT\]\s+(.+)(?:\n|$|\[STRUCTURED_OUTPUT\])/g);
+        const { existsSync } = await import('fs');
+        const { readFile } = await import('fs/promises');
 
-        console.log('[Sandbox] Looking for [STRUCTURED_OUTPUT] marker in stdout...');
-        console.log('[Sandbox] stdout length:', result.stdout?.length);
-        console.log('[Sandbox] stdout preview:', result.stdout?.substring(0, 500));
+        console.log('[Sandbox] Starting to parse [STRUCTURED_OUTPUT] markers from stdout...');
+        let matchCount = 0;
 
-        if (outputMatch && outputMatch[1]) {
-          const outputFile = outputMatch[1].trim();
+        for (const match of outputMatches) {
+          matchCount++;
+          const outputFile = match[1]?.trim();
+          if (!outputFile) {
+            console.log('[Sandbox] Skipping empty marker at position', matchCount);
+            continue;
+          }
+
           console.log('[Sandbox] Found [STRUCTURED_OUTPUT] marker, file:', outputFile);
 
-          // 读取 JSON 文件
-          const { existsSync } = await import('fs');
-          const { readFile } = await import('fs/promises');
-
           if (existsSync(outputFile)) {
-            const jsonContent = await readFile(outputFile, 'utf-8');
-            structuredOutput = JSON.parse(jsonContent);
+            try {
+              const jsonContent = await readFile(outputFile, 'utf-8');
+              const parsed = JSON.parse(jsonContent);
+              structuredOutputs.push(parsed);
 
-            console.log('[Sandbox] ✅ Successfully read structured output file:', {
-              sessionId: options.sessionId,
-              resultType: structuredOutput?.result_type,
-              outputFile
-            });
-            console.log('[Sandbox] structuredOutput data:', JSON.stringify(structuredOutput, null, 2));
+              console.log('[Sandbox] ✅ Successfully read structured output file:', {
+                sessionId: options.sessionId,
+                resultType: parsed?.result_type,
+                outputFile
+              });
+            } catch (e) {
+              console.warn('[Sandbox] ❌ Failed to parse structured output file:', outputFile, e);
+            }
           } else {
             console.warn('[Sandbox] ❌ File does not exist:', outputFile);
           }
+        }
+
+        console.log('[Sandbox] Finished parsing markers, total matches:', matchCount);
+        console.log('[Sandbox] structuredOutputs array length:', structuredOutputs.length);
+
+        // 保持向后兼容：structuredOutput 是最后一个
+        if (structuredOutputs.length > 0) {
+          structuredOutput = structuredOutputs[structuredOutputs.length - 1];
+          console.log('[Sandbox] ✅ Total structured outputs collected:', structuredOutputs.length);
+          console.log('[Sandbox] Last structured output type:', structuredOutput?.result_type);
         } else {
+          console.log('[Sandbox] Looking for [STRUCTURED_OUTPUT] marker in stdout...');
+          console.log('[Sandbox] stdout length:', result.stdout?.length);
+          console.log('[Sandbox] stdout preview:', result.stdout?.substring(0, 500));
           console.warn('[Sandbox] ❌ No [STRUCTURED_OUTPUT] marker found in stdout');
         }
       } catch (error) {
@@ -292,6 +315,15 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         }
       }
 
+      // 调试：打印即将返回的结构化输出信息
+      console.log('[Sandbox] About to return result with structured outputs:', {
+        sessionId: options.sessionId,
+        'structuredOutput': !!structuredOutput,
+        'structuredOutputs': Array.isArray(structuredOutputs) ? structuredOutputs.length : 'not array',
+        'structuredOutputs length': structuredOutputs.length,
+        'structuredOutputs types': structuredOutputs.map((s: any) => s?.result_type),
+      });
+
       return {
         success,
         output: result.stdout,
@@ -305,7 +337,8 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         sessionId,
         stdout: result.stdout,
         stderr: result.stderr,
-        structuredOutput,  // 新增：结构化输出
+        structuredOutput,  // 最后一个 structured output（向后兼容）
+        structuredOutputs,  // 所有 structured outputs（新增）
       };
     } catch (error: any) {
       return {
@@ -399,11 +432,12 @@ export class LocalSandboxAdapter implements SandboxAdapter {
 from core.skill.executor import SkillExecutor
 ` : '';
 
-    // Virtual registry and hooks are only needed when skills are requested (not just SkillExecutor import)
-    // But when code uses SkillExecutor directly (not via skills list), we still need to create executor instance
+    // Virtual registry and hooks are only needed when skills are requested
+    // Priority: hasSkills takes precedence over usesSkillExecutor
     let skillHooksAndRegistry = '';
-    if (hasSkills && !usesSkillExecutor) {
-      // Full setup with virtual registry for skill-based execution
+    if (hasSkills) {
+      // Skills are requested - always include virtual registry for Claude Skills support
+      // This works for both cases: code uses executor.execute() OR code has SkillExecutor
       skillHooksAndRegistry = `
 from core.sandbox.retry_utils import execute_with_retry
 
@@ -423,7 +457,7 @@ virtual_registry = asyncio.run(create_virtual_registry())
 # Create SkillExecutor with virtual registry support
 executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_registry=virtual_registry)
 `;
-    } else if (usesSkillExecutor && !hasSkills) {
+    } else if (usesSkillExecutor) {
       // Code uses SkillExecutor directly (e.g., for testing), create basic instance without virtual registry
       skillHooksAndRegistry = `
 # Get notify API URL for progress notifications

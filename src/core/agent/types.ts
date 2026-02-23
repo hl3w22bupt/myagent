@@ -173,6 +173,9 @@ export interface AgentResult {
   /** Structured output from skill execution (at root level, not in metadata) */
   structuredOutput?: any;
 
+  /** All structured outputs from multiple skill executions */
+  structuredOutputs?: any[];
+
   /** Session ID (optional for backward compatibility) */
   sessionId?: string;
 

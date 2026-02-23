@@ -167,12 +167,17 @@ class SkillHookExecutor:
 
         # 创建结构化输出目录
         import json
+        import uuid
         output_dir = '/tmp/motia-sandbox/structured_outputs'
         os.makedirs(output_dir, exist_ok=True)
 
         # 获取 sessionId
         sessionId = context.metadata.get('sessionId') or session_id or 'unknown'
-        output_file = os.path.join(output_dir, f'output_{sessionId}.json')
+
+        # 为每个 skill 调用生成唯一的文件名，包含 skill 名称和随机 ID
+        # 这样多个 skill 在一轮执行中就不会覆盖彼此的输出
+        unique_id = str(uuid.uuid4())[:8]
+        output_file = os.path.join(output_dir, f'output_{sessionId}_{skill_name}_{unique_id}.json')
 
         # 写入结构化输出到文件
         with open(output_file, 'w', encoding='utf-8') as f:

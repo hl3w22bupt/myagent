@@ -1,6 +1,49 @@
 import { useState, useRef, useEffect } from 'react'
 import './AudioPlayer.css'
 
+// 模块级别的 blob URL 缓存
+// 在组件实例之间共享，避免在 tab 切换时重复获取和撤销
+const blobUrlCache = new Map()
+
+/**
+ * 获取或创建 blob URL（带缓存）
+ */
+async function getOrCreateBlobUrl(path, getBlobUrlFn) {
+  // 如果已有缓存，直接返回
+  if (blobUrlCache.has(path)) {
+    console.log('[AudioPlayer] Using cached blob URL for:', path)
+    return blobUrlCache.get(path)
+  }
+
+  // 否则获取新的 blob URL 并缓存
+  console.log('[AudioPlayer] Fetching new blob URL for:', path)
+  const blobUrl = await getBlobUrlFn(path)
+  blobUrlCache.set(path, blobUrl)
+  return blobUrl
+}
+
+/**
+ * 清理指定路径的 blob URL 缓存
+ */
+function revokeBlobUrl(path) {
+  if (blobUrlCache.has(path)) {
+    const url = blobUrlCache.get(path)
+    console.log('[AudioPlayer] Revoking blob URL for:', path)
+    URL.revokeObjectURL(url)
+    blobUrlCache.delete(path)
+  }
+}
+
+/**
+ * 清理所有 blob URL 缓存（用于页面卸载时）
+ */
+function clearAllBlobUrls() {
+  for (const [path, url] of blobUrlCache.entries()) {
+    URL.revokeObjectURL(url)
+  }
+  blobUrlCache.clear()
+}
+
 /**
  * AudioPlayer - 音频播放器组件
  *
@@ -18,6 +61,7 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
   const audioRef = useRef(null)
   const progressBarRef = useRef(null)
   const volumeSliderRef = useRef(null)
+  const currentPathRef = useRef(null)
 
   // 初始化音量滚动条的背景
   useEffect(() => {
@@ -26,50 +70,65 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
       volumeSliderRef.current.style.background = `linear-gradient(to right, #4a9eff ${percentage}%, rgba(255, 255, 255, 0.15) ${percentage}%)`
     }
   }, [volume])
-  const previousUrlRef = useRef(null)
 
   // 异步构建 audio URL
   useEffect(() => {
     let isMounted = true
 
     const buildUrl = async () => {
-      // 清理旧的 blob URL
-      if (previousUrlRef.current && previousUrlRef.current.startsWith('blob:')) {
-        console.log('[AudioPlayer] Revoking old blob URL:', previousUrlRef.current)
-        URL.revokeObjectURL(previousUrlRef.current)
-        previousUrlRef.current = null
+      // 如果路径发生变化，才重新获取 URL
+      const effectivePath = audioUrl ? audioUrl : audioPath
+
+      // 如果路径没有变化，且已有 URL，则不需要重新获取
+      if (currentPathRef.current === effectivePath && url) {
+        console.log('[AudioPlayer] Reusing existing URL for:', effectivePath)
+        return
       }
+
+      // 清理之前路径的缓存（仅当是 blob URL 且路径不同时）
+      if (currentPathRef.current && currentPathRef.current !== effectivePath) {
+        if (currentPathRef.current.startsWith('blob:')) {
+          // 这是直接传入的 blob URL，由外部管理
+        } else if (audioPath && audioPath !== currentPathRef.current) {
+          // 清理之前的 blob URL 缓存
+          revokeBlobUrl(currentPathRef.current)
+        }
+      }
+
+      currentPathRef.current = effectivePath
 
       if (audioUrl) {
         if (isMounted) {
           setUrl(audioUrl)
-          previousUrlRef.current = audioUrl
         }
         return
       }
+
       if (audioPath) {
-        // 如果是本地路径，尝试使用 getBlobUrl
         if (getBlobUrl && typeof getBlobUrl === 'function') {
-          console.log('[AudioPlayer] Fetching blob URL for:', audioPath)
-          const blobUrl = await getBlobUrl(audioPath)
-          if (isMounted) {
-            console.log('[AudioPlayer] Got blob URL:', blobUrl)
-            setUrl(blobUrl)
-            previousUrlRef.current = blobUrl
+          try {
+            const blobUrl = await getOrCreateBlobUrl(audioPath, getBlobUrl)
+            if (isMounted) {
+              console.log('[AudioPlayer] Got blob URL:', blobUrl)
+              setUrl(blobUrl)
+              setError(null)
+            }
+          } catch (err) {
+            console.error('[AudioPlayer] Failed to fetch blob URL:', err)
+            if (isMounted) {
+              setError('音频加载失败')
+            }
           }
         } else {
-          // 否则直接返回路径
-          console.log('[AudioPlayer] Using direct path:', audioPath)
           if (isMounted) {
             setUrl(audioPath)
-            previousUrlRef.current = audioPath
           }
         }
         return
       }
+
       if (isMounted) {
         setUrl(null)
-        previousUrlRef.current = null
       }
     }
 
@@ -78,9 +137,11 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
     return () => {
       isMounted = false
     }
-  }, [audioPath, audioUrl]) // 移除 getBlobUrl 依赖，避免不必要的重新获取
+  }, [audioPath, audioUrl])
 
+  // 设置 audio 元素的事件监听
   useEffect(() => {
+    let isMounted = true
     const audio = audioRef.current
     if (!audio || !url) return
 
@@ -117,19 +178,47 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
     audio.addEventListener('pause', handlePause)
     audio.addEventListener('ended', handleEnded)
 
-    // 错误处理
     const handleError = (e) => {
-      console.error('Audio error:', e)
-      console.error('Audio src:', audio.src)
-      console.error('Audio error code:', audio.error?.code)
-      console.error('Audio error message:', audio.error?.message)
-      setError('音频加载失败')
-      setIsLoading(false)
-      setIsPlaying(false)
+      console.error('[AudioPlayer] Audio error:', e)
+      console.error('[AudioPlayer] Audio src:', audio.src)
+      console.error('[AudioPlayer] Audio error code:', audio.error?.code)
+      console.error('[AudioPlayer] Audio error message:', audio.error?.message)
+
+      // 如果是 MEDIA_ELEMENT_ERROR: Format error (code 4)，可能是 blob URL 失效
+      // 尝试重新加载
+      if (audio.error?.code === 4 && url.startsWith('blob:')) {
+        console.log('[AudioPlayer] Blob URL may be invalid, attempting to reload...')
+        // 清除缓存并重新加载
+        if (currentPathRef.current && !currentPathRef.current.startsWith('blob:')) {
+          revokeBlobUrl(currentPathRef.current)
+        }
+        // 触发重新获取（添加 isMounted 检查避免竞态条件）
+        if (audioPath && getBlobUrl) {
+          getOrCreateBlobUrl(audioPath, getBlobUrl).then(newUrl => {
+            if (isMounted && newUrl !== url) {
+              setUrl(newUrl)
+              setError(null)
+            }
+          }).catch(() => {
+            if (isMounted) {
+              setError('音频加载失败')
+            }
+          })
+        } else if (isMounted) {
+          setError('音频加载失败')
+        }
+      } else if (isMounted) {
+        setError('音频加载失败')
+      }
+      if (isMounted) {
+        setIsLoading(false)
+        setIsPlaying(false)
+      }
     }
     audio.addEventListener('error', handleError)
 
     return () => {
+      isMounted = false
       audio.removeEventListener('loadeddata', setAudioData)
       audio.removeEventListener('timeupdate', setAudioTime)
       audio.removeEventListener('play', handlePlay)
@@ -137,17 +226,7 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('error', handleError)
     }
-  }, [url])
-
-  // 组件卸载时清理最终的 blob URL
-  useEffect(() => {
-    return () => {
-      if (previousUrlRef.current && previousUrlRef.current.startsWith('blob:')) {
-        console.log('[AudioPlayer] Revoking final blob URL on unmount')
-        URL.revokeObjectURL(previousUrlRef.current)
-      }
-    }
-  }, [])
+  }, [url, audioPath, getBlobUrl])
 
   const togglePlay = async () => {
     const audio = audioRef.current
@@ -158,12 +237,13 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
       setIsPlaying(false)
     } else {
       setIsLoading(true)
+      setError(null)
       try {
         await audio.play()
         setIsPlaying(true)
         setIsLoading(false)
       } catch (error) {
-        console.error('Play error:', error)
+        console.error('[AudioPlayer] Play error:', error)
         setIsPlaying(false)
         setIsLoading(false)
         setError('播放失败')
@@ -189,7 +269,6 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
     audio.volume = newVolume
     setVolume(newVolume)
 
-    // 更新滚动条背景填充效果
     const slider = e.target
     const percentage = (newVolume - e.target.min) / (e.target.max - e.target.min) * 100
     slider.style.background = `linear-gradient(to right, #4a9eff ${percentage}%, rgba(255, 255, 255, 0.15) ${percentage}%)`
@@ -227,7 +306,7 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
             <circle cx="12" cy="12" r="10"/>
             <path d="M12 8v4m0 4h.01"/>
           </svg>
-          <div>音频加载失败</div>
+          <div>{error}</div>
         </div>
       </div>
     )
@@ -329,4 +408,5 @@ const AudioPlayer = ({ audioPath, audioUrl, getBlobUrl, filename = '' }) => {
   )
 }
 
+export { clearAllBlobUrls }
 export default AudioPlayer
