@@ -20,14 +20,15 @@ export const executionTraceSchema = z.object({
   traceId: z.string(),
 
   /**
-   * Trace level: task, agent, skill, agent-internal, skill-internal
+   * Trace level: task, agent, skill, tool-call, agent-internal, skill-internal
    * - task: Task level traces (task execution lifecycle)
    * - agent: Agent level traces (agent execution lifecycle)
    * - skill: Skill level traces (skill execution lifecycle)
+   * - tool-call: Tool call traces (LLM-initiated tool-* skill calls)
    * - agent-internal: Agent internal stages (intent analysis, PTC planning)
    * - skill-internal: Skill internal stages (LLM reasoning, generation)
    */
-  level: z.enum(['task', 'agent', 'skill', 'agent-internal', 'skill-internal']),
+  level: z.enum(['task', 'agent', 'skill', 'tool-call', 'agent-internal', 'skill-internal']),
 
   /**
    * Task ID (root level identifier)

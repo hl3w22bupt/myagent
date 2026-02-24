@@ -228,6 +228,61 @@ function ExecutionTracesInline({ taskId }) {
       }
     })
 
+    // 处理 tool-call traces：按 skillName 分组，创建独立的 tool-call 组
+    const toolCallGroups = new Map()
+    traces.filter(t => t && t.level === 'tool-call').forEach(trace => {
+      const skillName = trace.skillName || 'unknown'
+      if (!toolCallGroups.has(skillName)) {
+        toolCallGroups.set(skillName, {
+          groupKey: `toolcall-${skillName}`,
+          groupId: skillName,
+          displayName: skillName,
+          level: 'tool-call',
+          traces: [],
+          startTime: null,
+          endTime: null,
+          finalStatus: 'pending'
+        })
+      }
+      const group = toolCallGroups.get(skillName)
+      group.traces.push(trace)
+
+      const traceTime = new Date(trace.timestamp || trace.startedAt).getTime()
+      if (!group.startTime || traceTime < group.startTime) {
+        group.startTime = traceTime
+      }
+      if (!group.endTime || traceTime > group.endTime) {
+        group.endTime = traceTime
+      }
+
+      // 更新状态 - tool-call 使用部分成功逻辑
+      if (trace.status === 'failed') {
+        group.finalStatus = 'failed'
+      } else if (trace.status === 'completed') {
+        // 如果之前是 failed，保持 failed；否则设为 completed
+        if (group.finalStatus !== 'failed') {
+          group.finalStatus = 'completed'
+        }
+      } else if (trace.status === 'running' && group.finalStatus === 'pending') {
+        group.finalStatus = 'running'
+      }
+    })
+
+    // 修正 tool-call 组的状态：如果既有成功又有失败，使用 partial
+    toolCallGroups.forEach(group => {
+      const hasFailed = group.traces.some(t => t.status === 'failed')
+      const hasCompleted = group.traces.some(t => t.status === 'completed')
+
+      if (hasFailed && hasCompleted) {
+        group.finalStatus = 'partial'
+      }
+    })
+
+    // 将 tool-call groups 作为独立组添加到主 groups（不添加到父 skill）
+    toolCallGroups.forEach(group => {
+      groups.set(group.groupKey, group)
+    })
+
     return Array.from(groups.values()).sort((a, b) => a.startTime - b.startTime)
   }
 
@@ -251,7 +306,8 @@ function ExecutionTracesInline({ taskId }) {
       failed: { color: '#EF4444', bgColor: '#FEE2E2', label: '失败' },
       running: { color: '#3B82F6', bgColor: '#DBEAFE', label: '运行中' },
       started: { color: '#3B82F6', bgColor: '#DBEAFE', label: '已启动' },
-      pending: { color: '#6B7280', bgColor: '#E5E7EB', label: '等待中' }
+      pending: { color: '#6B7280', bgColor: '#E5E7EB', label: '等待中' },
+      partial: { color: '#F59E0B', bgColor: '#FEF3C7', label: '部分成功' }
     }
     return configs[status] || configs.pending
   }
@@ -262,6 +318,12 @@ function ExecutionTracesInline({ taskId }) {
         return (
           <svg className="level-icon" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
             <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )
+      case 'tool-call':
+        return (
+          <svg className="level-icon" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )
       case 'agent':

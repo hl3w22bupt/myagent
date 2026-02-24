@@ -194,8 +194,8 @@ class RemotionVideoGenerator:
                 # Description-based generation mode
                 if not description:
                     raise ValueError("Description is required. Please provide a description of the video you want to generate.")
-                if duration <= 0 or duration > 300:  # Max 5 minutes
-                    raise ValueError("Duration must be between 1 and 300 seconds")
+                if duration <= 0 or duration > 3600:  # Max 60 minutes (increased from 5 min)
+                    raise ValueError("Duration must be between 1 and 3600 seconds")
 
                 # Generate Remotion code from description
                 if context:

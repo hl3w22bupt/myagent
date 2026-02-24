@@ -41,7 +41,7 @@ const traceSubmitSchema = z.object({
   // Required fields
   id: z.string(),
   taskId: z.string(),
-  level: z.enum(['task', 'agent', 'skill', 'agent-internal', 'skill-internal']),
+  level: z.enum(['task', 'agent', 'skill', 'tool-call', 'agent-internal', 'skill-internal']),
   stage: z.string().optional(),  // Execution stage (e.g., 'pre', 'post', 'skill_execution', etc.)
 
   // Optional identification

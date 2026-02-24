@@ -409,6 +409,10 @@ class ClaudeSkillHandler:
         """
         Send tool skill execution trace to executionTraces stream.
 
+        注意：此方法只用于 LLM tool call 场景（_execute_tool_call 中调用）。
+        显式直接调用 tool-* skill 会通过 executor.execute() 走 hook 链路，
+        由 SkillTraceHook 记录 level="skill" 的 trace。
+
         Args:
             tool_name: Name of the tool skill (e.g., "tool-write", "tool-read")
             tool_input: Input parameters passed to the tool
@@ -421,7 +425,9 @@ class ClaudeSkillHandler:
         task_id = os.getenv('MOTIA_TASK_ID', 'unknown')
         session_id = os.getenv('MOTIA_SESSION_ID', 'unknown')
 
-        trace_id = f"tool-skill-{tool_name}-{task_id}-{int(time.time() * 1000)}"
+        # 此方法仅用于 LLM tool call 场景，使用 "tool-call" level
+        trace_level = "tool-call"
+        trace_id = f"tool-call-{tool_name}-{task_id}-{int(time.time() * 1000)}"
         timestamp_ms = int(time.time() * 1000)
 
         # 构建简短的 result preview (避免 trace 过大)
@@ -433,17 +439,18 @@ class ClaudeSkillHandler:
 
         trace_data = {
             "id": trace_id,
-            "level": "skill-internal",
+            "level": trace_level,
             "taskId": task_id,
             "agentId": session_id,
             "skillName": tool_name,
-            "stage": "tool_execution",
+            "stage": "processing",  # LLM tool call 没有 pre/post，使用 processing
             "status": "completed" if result.get('success') else "failed",
             "durationMs": int(execution_time * 1000),  # Convert to ms
             "timestamp": datetime.fromtimestamp(timestamp_ms / 1000).isoformat(),
             "metadata": {
                 "sessionId": session_id,
                 "parentSkill": self.skill_name,  # 调用此 tool 的父 skill
+                "callType": "llm_tool_call",  # 标识为 LLM tool call
                 "toolInput": tool_input,
                 "toolResult": {
                     "success": result.get('success', False),
@@ -464,7 +471,7 @@ class ClaudeSkillHandler:
             with httpx.Client(timeout=2) as client:
                 response = client.post(self.trace_api_url, json=trace_data)
                 response.raise_for_status()
-                print(f"[ClaudeSkillHandler] ✓ Tool skill trace sent: {tool_name} - {trace_data.get('status')}")
+                print(f"[ClaudeSkillHandler] ✓ Tool skill trace sent: {tool_name} - level={trace_level} - {trace_data.get('status')}")
         except Exception as e:
             print(f"[ClaudeSkillHandler] ✗ Failed to send tool skill trace: {e}")
 

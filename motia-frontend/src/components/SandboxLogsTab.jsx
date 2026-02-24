@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useMotiaStream } from '@motiadev/stream-client-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -7,6 +8,9 @@ export default function SandboxLogsTab({ taskId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const { stream } = useMotiaStream();
+
+  // 初始获取
   useEffect(() => {
     if (!taskId) return;
 
@@ -33,6 +37,43 @@ export default function SandboxLogsTab({ taskId }) {
 
     fetchOutputs();
   }, [taskId]);
+
+  // 订阅任务执行状态更新
+  useEffect(() => {
+    if (!stream || !taskId) return;
+
+    let subscription = null;
+
+    try {
+      // 订阅 taskExecution stream
+      subscription = stream.subscribeGroup('taskExecution', taskId);
+
+      subscription.addChangeListener((data) => {
+        console.log('[SandboxLogsTab] Received task execution update:', data);
+
+        // 重新获取 outputs
+        fetch(`${API_BASE_URL}/api/contexts/${taskId}/outputs`)
+          .then(res => res.json())
+          .then(result => {
+            if (result.success) {
+              setOutputs(result.data || []);
+            }
+          })
+          .catch(err => console.error('[SandboxLogsTab] Failed to refresh outputs:', err));
+      });
+
+      console.log('[SandboxLogsTab] Subscribed to task execution updates');
+    } catch (error) {
+      console.error('[SandboxLogsTab] Failed to subscribe:', error);
+    }
+
+    return () => {
+      if (subscription) {
+        subscription.close();
+        console.log('[SandboxLogsTab] Unsubscribed from task execution updates');
+      }
+    };
+  }, [stream, taskId]);
 
   // 加载状态
   if (loading) {

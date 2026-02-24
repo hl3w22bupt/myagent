@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useMotiaStream } from '@motiadev/stream-client-react';
 
 /**
  * PTC Code Tab Component
@@ -14,6 +15,9 @@ export default function PtcCodeTab({ taskId }) {
   const [selectedRound, setSelectedRound] = useState(null);
   const [error, setError] = useState(null);
 
+  const { stream } = useMotiaStream();
+
+  // 初始获取
   useEffect(() => {
     const fetchPtcCodes = async () => {
       try {
@@ -43,6 +47,46 @@ export default function PtcCodeTab({ taskId }) {
 
     fetchPtcCodes();
   }, [taskId]);
+
+  // 订阅 PTC 代码更新
+  useEffect(() => {
+    if (!stream || !taskId) return;
+
+    let subscription = null;
+
+    try {
+      // 订阅 taskExecution stream
+      subscription = stream.subscribeGroup('taskExecution', taskId);
+
+      subscription.addChangeListener((data) => {
+        console.log('[PtcCodeTab] Received task execution update:', data);
+
+        // 重新获取完整的 PTC codes
+        fetch(`/api/tasks/${taskId}/ptc-code`)
+          .then(res => res.json())
+          .then(result => {
+            if (result.success) {
+              setPtcCodes(result.data || []);
+              if (result.data && result.data.length > 0) {
+                setSelectedRound(result.data[result.data.length - 1].round);
+              }
+            }
+          })
+          .catch(err => console.error('[PtcCodeTab] Failed to refresh PTC codes:', err));
+      });
+
+      console.log('[PtcCodeTab] Subscribed to task execution updates');
+    } catch (error) {
+      console.error('[PtcCodeTab] Failed to subscribe:', error);
+    }
+
+    return () => {
+      if (subscription) {
+        subscription.close();
+        console.log('[PtcCodeTab] Unsubscribed from task execution updates');
+      }
+    };
+  }, [stream, taskId]);
 
   if (loading) {
     return (

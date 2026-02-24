@@ -166,6 +166,8 @@ function ExecutionTraces({ taskId }) {
         return '#3B82F6'
       case 'skill':
         return '#10B981'
+      case 'tool-call':
+        return '#F59E0B'
       default:
         return '#64748B'
     }
@@ -179,6 +181,8 @@ function ExecutionTraces({ taskId }) {
         return 'Agent'
       case 'skill':
         return 'Skill'
+      case 'tool-call':
+        return 'Tool Call'
       default:
         return level
     }
@@ -254,7 +258,7 @@ function ExecutionTraces({ taskId }) {
 
           <div className="trace-info">
             <span className="trace-name">
-              {trace.level === 'skill' && trace.skillName ? trace.skillName : trace.id}
+              {(trace.level === 'skill' || trace.level === 'tool-call') && trace.skillName ? trace.skillName : trace.id}
             </span>
             <span className="trace-stage">
               {trace.stage}
@@ -264,11 +268,14 @@ function ExecutionTraces({ taskId }) {
             {trace.executionTime && (
               <span className="trace-duration">{formatDuration(trace.executionTime)}</span>
             )}
+            {trace.durationMs && (
+              <span className="trace-duration">{formatDuration(trace.durationMs)}</span>
+            )}
           </div>
 
           <div className="trace-timestamp">{formatTimestamp(trace.timestamp)}</div>
 
-          {(trace.inputData || trace.outputData || trace.error) && (
+          {(trace.inputData || trace.outputData || trace.error || (trace.metadata && (trace.metadata.toolInput || trace.metadata.toolResult || trace.metadata.error))) && (
             <div className="trace-expand-icon">
               {isExpanded ? '▼' : '▶'}
             </div>
@@ -391,6 +398,78 @@ function ExecutionTraces({ taskId }) {
               </div>
             )}
 
+            {/* Tool-call specific details */}
+            {trace.level === 'tool-call' && trace.metadata && (
+              <>
+                {trace.metadata.toolInput && (
+                  <div className="trace-detail-section">
+                    <div className="trace-detail-title">
+                      Tool Input:
+                      <button
+                        className={`copy-button ${copiedField === 'Tool Input' ? 'copied' : ''}`}
+                        onClick={() => copyToClipboard(JSON.stringify(trace.metadata.toolInput, null, 2), 'Tool Input')}
+                        title="复制工具输入"
+                      >
+                        {copiedField === 'Tool Input' ? (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2">
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span className="copy-feedback">已复制</span>
+                          </>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <pre className="trace-detail-content">
+                      {JSON.stringify(trace.metadata.toolInput, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {trace.metadata.toolResult && (
+                  <div className="trace-detail-section">
+                    <div className="trace-detail-title">
+                      Tool Result:
+                      <button
+                        className={`copy-button ${copiedField === 'Tool Result' ? 'copied' : ''}`}
+                        onClick={() => copyToClipboard(JSON.stringify(trace.metadata.toolResult, null, 2), 'Tool Result')}
+                        title="复制工具结果"
+                      >
+                        {copiedField === 'Tool Result' ? (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2">
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span className="copy-feedback">已复制</span>
+                          </>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <pre className="trace-detail-content">
+                      {JSON.stringify(trace.metadata.toolResult, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {trace.metadata.parentSkill && (
+                  <div className="trace-detail-section">
+                    <div className="trace-detail-title">Called By:</div>
+                    <div className="trace-detail-content">{trace.metadata.parentSkill}</div>
+                  </div>
+                )}
+              </>
+            )}
+
             {trace.metadata && (
               <div className="trace-detail-section">
                 <div className="trace-detail-title">
@@ -481,6 +560,7 @@ function ExecutionTraces({ taskId }) {
             <option value="task">Task</option>
             <option value="agent">Agent</option>
             <option value="skill">Skill</option>
+            <option value="tool-call">Tool Call</option>
           </select>
 
           <select

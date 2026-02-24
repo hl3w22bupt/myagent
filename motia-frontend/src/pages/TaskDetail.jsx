@@ -1209,12 +1209,7 @@ function TaskDetail() {
           .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       : [];
 
-    // 检查是否有多个不同的对话轮次
-    const uniqueRounds = new Set(videoArtifacts.map(a => a.metadata?.conversation_round));
-    const hasMultipleConversationRounds = uniqueRounds.size > 1;
-    const hasMultipleVersions = videoArtifacts.length > 1;
-
-    // 如果有多个版本，使用选中的版本
+    // 优先使用选中的版本
     let currentVideoPath = parsedResult?.content?.path;
     let currentVideoMetadata = parsedResult?.content;
 
@@ -1247,8 +1242,7 @@ function TaskDetail() {
 
       return (
         <div className="result-visual">
-          {/* 版本选择器 - 只在有多个不同对话轮次时显示 */}
-          {hasMultipleConversationRounds && (
+          {/* 版本选择器 - 始终显示，统一体验 */}
           <div className="video-version-selector">
             <span className="version-label">轮次</span>
             <div className="version-dropdown-wrapper">
@@ -1317,7 +1311,6 @@ function TaskDetail() {
               )}
             </div>
           </div>
-          )}
 
           {/* 视频播放器 */}
           <div className="video-player-wrapper">
