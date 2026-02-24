@@ -1,10 +1,46 @@
-.video-player {
+/* 视频包装器 - 确保视频容器自适应内容 */
+.video-wrapper {
+  width: 100%;
   max-width: 100%;
-  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  overflow: visible;
+}
+
+/* 视频容器包装器 - 用于保持宽高比 */
+.video-wrapper-inner {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  /* 不设置固定高度，让视频自然撑开 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+  /* 确保容器不被裁剪 */
+  min-height: 0;
+}
+
+.video-player {
+  /* 关键：宽度填满容器，高度按比例自动计算 */
+  width: 100%;
+  max-width: 100%;
+  /* 设置最大高度，确保不会超出视口，为控制条留出空间 */
+  max-height: 55vh;
+  /* 确保视频等比例适配，不会被拉伸或压缩 */
+  object-fit: contain;
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   pointer-events: auto !important;
   cursor: pointer;
+  display: block;
+  /* 确保视频保持其固有宽高比 */
+  height: auto;
+  /* 确保控制条不被其他元素遮挡 */
+  position: relative;
+  z-index: 1;
 }
 
 .video-player:disabled {

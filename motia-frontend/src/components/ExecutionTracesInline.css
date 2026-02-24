@@ -7,9 +7,12 @@
 .traces-container {
   width: 100%;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
   background: #F8FAFC;
   border-radius: 12px;
-  overflow: hidden;
+  /* 让内容自然增长，由外层 wrapper 处理滚动 */
+  min-height: 0;
 }
 
 /* ===== 统计卡片 ===== */
@@ -20,6 +23,9 @@
   padding: 10px 16px;
   margin-bottom: 12px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+  /* 确保统计卡片不会被压缩 */
+  flex: 0 0 auto;
 }
 
 .stats-header {
@@ -115,6 +121,27 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* 让列表可以超出，由外层容器滚动 */
+  flex: 0 1 auto;
+}
+
+/* 滚动条样式 */
+.traces-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.traces-list::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 3px;
+}
+
+.traces-list::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+.traces-list::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 /* ===== 追踪卡片 ===== */
@@ -269,8 +296,41 @@
 }
 
 .trace-card-body.visible {
-  max-height: 2000px;
+  /* 使用一个合理的高度限制，并允许内容滚动 */
+  max-height: 500px;
   border-top: 1px solid #F1F5F9;
+  overflow-y: auto;
+  /* 默认隐藏滚动条，hover时显示 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+/* 卡片内容区域的滚动条样式 - 默认透明，hover显示 */
+.trace-card-body.visible::-webkit-scrollbar {
+  width: 6px;
+}
+
+.trace-card-body.visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.trace-card-body.visible::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+/* hover时显示滚动条 */
+.trace-card-body.visible:hover::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+.trace-card-body.visible:hover::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+
+.trace-card-body.visible:hover::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 /* ===== 时间线 ===== */

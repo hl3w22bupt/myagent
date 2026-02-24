@@ -181,11 +181,23 @@ const ArtifactsTab = ({ taskId, task }) => {
         // 使用 CodeContentRenderer，它会使用 CodePlayer 组件
         return <CodeContentRenderer path={path} />;
       case 'image':
-        // For images, use the media API
-        return <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
-                     alt={artifact.description}
-                     style={{ maxWidth: '100%', borderRadius: '8px' }}
-                     onError={(e) => { e.target.style.display = 'none'; console.error('Image load error:', e); }} />;
+        // For images, use the media API, get blob URL for better control
+        return (
+          <div className="image-wrapper">
+            <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
+                 alt={artifact.description}
+                 className="artifact-image"
+                 onLoad={(e) => {
+                   console.log('[ArtifactsTab] Image loaded, natural size:', e.target.naturalWidth, 'x', e.target.naturalHeight);
+                 }}
+                 onError={(e) => {
+                   console.error('[ArtifactsTab] Image load error:', e);
+                   e.target.style.display = 'none';
+                 }}
+                 style={{ width: '100%', maxWidth: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain' }}
+            />
+          </div>
+        );
       default:
         return <div className="text-artifact">{artifact.description || path}</div>;
     }

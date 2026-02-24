@@ -108,24 +108,26 @@ function VideoPlayer({ videoPath, duration, fps, size, getBlobUrl }) {
   }
 
   return (
-    <>
-      <video
-        controls
-        className="video-player"
-        preload="metadata"
-        controlsList="nodownload"
-        onLoadedMetadata={(e) => {
-          console.log('视频元数据加载完成:', e.target.duration)
-        }}
-        onError={(e) => {
-          console.error('视频加载错误:', e)
-          setError(true)
-          setDebugInfo(`视频元素错误: ${e.target.error?.message || '未知错误'}`)
-        }}
-      >
-        <source src={videoUrl} type="video/mp4" />
-        您的浏览器不支持视频标签。
-      </video>
+    <div className="video-wrapper">
+      <div className="video-wrapper-inner">
+        <video
+          controls
+          className="video-player"
+          preload="metadata"
+          controlsList="nodownload"
+          onLoadedMetadata={(e) => {
+            console.log('视频元数据加载完成:', e.target.duration)
+          }}
+          onError={(e) => {
+            console.error('视频加载错误:', e)
+            setError(true)
+            setDebugInfo(`视频元素错误: ${e.target.error?.message || '未知错误'}`)
+          }}
+        >
+          <source src={videoUrl} type="video/mp4" />
+          您的浏览器不支持视频标签。
+        </video>
+      </div>
       {duration && (
         <div className="media-metadata">
           <p>时长: {duration}秒</p>
@@ -133,7 +135,7 @@ function VideoPlayer({ videoPath, duration, fps, size, getBlobUrl }) {
           {size && <p>大小: {(size / 1024 / 1024).toFixed(2)} MB</p>}
         </div>
       )}
-    </>
+    </div>
   )
 }
 

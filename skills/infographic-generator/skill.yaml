@@ -67,6 +67,10 @@ input_schema:
         - svg
         - both
       description: Output format(s) to generate
+    use_llm_refinement:
+      type: boolean
+      default: true
+      description: "Use LLM to refine and optimize content for better visualization (recommended)"
   required:
     - content
 

@@ -2249,7 +2249,7 @@ function TaskDetail() {
         </div>
 
         {/* 内容区域 - 所有 Tab 始终渲染，通过 CSS 控制显示隐藏 */}
-        <div className="result-content">
+        <div className={`result-content ${activeTab === 'artifacts' ? 'artifacts-result-content' : ''}`}>
           <div className={`tab-panel ${activeTab === 'visual' ? 'active' : ''}`}>
             {renderVisualContent(result)}
           </div>
@@ -2257,12 +2257,16 @@ function TaskDetail() {
             <PtcCodeTab taskId={id} />
           </div>
           <div className={`tab-panel ${activeTab === 'text' ? 'active' : ''}`}>
-            <SandboxLogsTab taskId={id} />
+            <div className="sandbox-logs-tab">
+              <SandboxLogsTab taskId={id} />
+            </div>
           </div>
           <div className={`tab-panel ${activeTab === 'traces' ? 'active' : ''}`}>
-            <ExecutionTracesInline taskId={id} />
+            <div className="execution-traces-inline">
+              <ExecutionTracesInline taskId={id} />
+            </div>
           </div>
-          <div className={`tab-panel ${activeTab === 'artifacts' ? 'active' : ''}`}>
+          <div className={`tab-panel ${activeTab === 'artifacts' ? 'active artifacts-tab-panel' : ''}`}>
             <ArtifactsTab taskId={id} task={task} />
           </div>
         </div>

@@ -504,6 +504,14 @@ python_modules_paths = glob.glob(os.path.join(skill_path if skill_path else '.',
 for python_modules in python_modules_paths:
     if os.path.exists(python_modules) and python_modules not in sys.path:
         sys.path.insert(0, python_modules)
+
+# Also add all skill subdirectories to path for sub-imports (e.g., generators.content_refiner)
+skills_dir = os.path.join(skill_path if skill_path else '.', 'skills')
+if os.path.exists(skills_dir):
+    for skill_subdir in os.listdir(skills_dir):
+        skill_full_path = os.path.join(skills_dir, skill_subdir)
+        if os.path.isdir(skill_full_path) and skill_subdir != '__pycache__':
+            sys.path.insert(0, skill_full_path)
 ${skillExecutorImports}${skillHooksAndRegistry}
 async def main():
     try:

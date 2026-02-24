@@ -195,6 +195,38 @@ def parse_list_items(content: str) -> list:
         if items and len(items) > 1:
             return items
 
+    # Try semicolon-separated pattern (e.g., "Item1; Item2; Item3" or "Item1；Item2；Item3")
+    # This handles AI-generated inline lists with semicolons
+    # Pattern: "Stage1: desc; Stage2: desc; Stage3: desc"
+    semicolon_pattern = r'([^;；]+?)(?:[:：]\s*[^;；]+)?(?=[;；](?:\s*\d+\.?\s*|\s*[a-zA-Z]|$)|[;；]\s*$|$)'
+    semicolon_matches = re.findall(semicolon_pattern, content)
+
+    if semicolon_matches and len(semicolon_matches) > 1:
+        items = []
+        for match in semicolon_matches:
+            match = match.strip()
+            # Remove description after colon/colon for cleaner labels
+            if ':' in match:
+                label = match.split(':')[0].strip()
+            elif '：' in match:
+                label = match.split('：')[0].strip()
+            else:
+                label = match
+            # Keep percentage data if present
+            items.append(label)
+        # Filter and validate
+        items = [item for item in items if 2 <= len(item) <= 60]
+        if items and len(items) > 1:
+            return items
+
+    # Filter out common phrases that aren't actual items
+    if comma_matches and len(comma_matches) > 1:
+        items = [match.strip() for match in comma_matches if match.strip()]
+        # Remove items that are too short (likely noise) or too long (likely sentences)
+        items = [item for item in items if 2 <= len(item) <= 50]
+        if items and len(items) > 1:
+            return items
+
     # Fallback: split by newlines and clean up
     if "\n" in content:
         items = [line.strip() for line in content.split("\n") if line.strip()]

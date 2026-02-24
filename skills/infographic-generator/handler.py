@@ -37,6 +37,28 @@ from utils import (
 )
 from aspect_ratio import recommend_dimensions, get_dimension_variants
 
+# Import content refiner for LLM-powered content optimization
+# Ensure this skill's directory is in sys.path for sub-imports
+import sys
+from pathlib import Path
+_skill_dir = Path(__file__).parent
+if str(_skill_dir) not in sys.path:
+    sys.path.insert(0, str(_skill_dir))
+
+try:
+    # Try relative import first (when running from skill directory)
+    from generators.content_refiner import get_content_refiner
+    CONTENT_REFINER_AVAILABLE = True
+except ImportError:
+    try:
+        # Try absolute import (when running from project root)
+        from skills.infographic_generator.generators.content_refiner import get_content_refiner
+        CONTENT_REFINER_AVAILABLE = True
+    except ImportError:
+        CONTENT_REFINER_AVAILABLE = False
+        get_content_refiner = None
+        print("[Infographic] Warning: Content refiner not available, using rule-based extraction", file=sys.stderr)
+
 
 class InfographicRenderer:
     """Renders infographic HTML using Puppeteer."""
@@ -208,16 +230,130 @@ class InfographicGenerator:
             style = input_data.get("style", "auto")
             export_format = input_data.get("export_format", "both")
 
-            content_type = identify_content_type(content)
+            # ============================================================
+            # NEW: LLM-powered content refinement
+            # ============================================================
+            use_llm_refinement = input_data.get("use_llm_refinement", True)  # Default enabled
 
-            # Parse items first to get meaningful title and count
-            items = parse_list_items(content)
-            item_count = len(items)
+            # Get task_id early for tracing
+            current_task_id = (
+                input_data.get('task_id') or
+                os.getenv('MOTIA_TASK_ID') or
+                input_data.get('metadata', {}).get('taskId') or
+                input_data.get('sessionId') or
+                f"task_{int(time.time())}"
+            )
+
+            if use_llm_refinement and CONTENT_REFINER_AVAILABLE:
+                print("[Infographic] 🔧 Using LLM to refine content for better visualization...", file=sys.stderr)
+
+                refiner = get_content_refiner(task_id=current_task_id)
+                refined_content = await refiner.refine(
+                    content=content,
+                    preferred_template=preferred_template,
+                    theme_hint=theme_input,
+                    language=language
+                )
+
+                # Use refined content
+                title = refined_content.get("title", extract_title(content))
+                desc = refined_content.get("description", "")
+                content_type = refined_content.get("content_type", "list")
+
+                # Validate template - LLM might recommend templates that don't exist
+                suggested_template = refined_content.get("recommended_template", preferred_template)
+                if CONTENT_REFINER_AVAILABLE:
+                    # Import template validation
+                    from generators.content_refiner import validate_template
+                    template = validate_template(suggested_template, content_type)
+                else:
+                    template = suggested_template or preferred_template or "list-column-vertical-icon-arrow"
+
+                # Use LLM-suggested theme if user didn't specify
+                if theme_input == "auto":
+                    suggested_theme = refined_content.get("suggested_theme", "business")
+                else:
+                    suggested_theme = theme_input
+
+                # Use LLM-suggested style if user didn't specify
+                if style == "auto":
+                    visual_style = refined_content.get("suggested_style", "rough")
+                else:
+                    visual_style = style
+
+                # Items from LLM refinement (already optimized)
+                items_with_data = []
+                for item in refined_content.get("items", []):
+                    items_with_data.append({
+                        "label": item.get("label", "Item"),
+                        "desc": item.get("desc") or item.get("description", ""),
+                        "icon": item.get("icon", "mdi/star"),
+                        "value": item.get("value")
+                    })
+
+                # Log refinement results
+                metadata = refined_content.get("metadata", {})
+                print(f"[Infographic] ✨ Refined: '{title}' ({content_type}, {len(items_with_data)} items, confidence={metadata.get('confidence', 0):.2f})", file=sys.stderr)
+
+            else:
+                # ============================================================
+                # FALLBACK: Rule-based extraction (original behavior)
+                # ============================================================
+                print("[Infographic] Using rule-based extraction", file=sys.stderr)
+
+                content_type = identify_content_type(content)
+
+                # Parse items first to get meaningful title and count
+                items = parse_list_items(content)
+                item_count = len(items)
+
+                # Generate title from first item or extract from content
+                if len(items) > 0 and len(items[0]) <= 30:
+                    title = items[0]
+                    desc = None
+                else:
+                    title = extract_title(content)
+                    desc = None
+
+                if preferred_template:
+                    template = preferred_template
+                else:
+                    template = recommend_template(content_type, content)
+
+                if theme_input == "auto":
+                    from palettes import recommend_palette
+                    suggested_theme = theme_input  # Will trigger palette recommendation below
+                else:
+                    suggested_theme = theme_input
+
+                if style == "auto":
+                    visual_style = "rough"
+                else:
+                    visual_style = style
+
+                items_with_data = []
+                for item in items:
+                    item_dict = {"label": item}
+                    item_dict["icon"] = suggest_icon_for_context(item)
+                    items_with_data.append(item_dict)
+            # ============================================================
+            # END: LLM content refinement
+            # ============================================================
+
+            # Handle theme/palette
+            if suggested_theme == "auto" or not suggested_theme:
+                from palettes import recommend_palette
+                palette = recommend_palette(content)
+            elif suggested_theme in PALETTES:
+                palette = PALETTES[suggested_theme]
+            else:
+                palette = PALETTES["cool"]
 
             # Smart dimension recommendation
             user_width = input_data.get("width")
             user_height = input_data.get("height")
             platform = input_data.get("platform", "default")
+            item_count = len(items_with_data)
 
             # Only use smart recommendation if user didn't specify both dimensions
             if user_width is None or user_height is None:
@@ -231,48 +367,14 @@ class InfographicGenerator:
                 )
 
                 # Log the recommendation for debugging
-                import sys
                 print(f"[Infographic] 使用推荐尺寸: {width}x{height} ({dimension_desc})", file=sys.stderr)
             else:
                 width = user_width if user_width else 1920
                 height = user_height if user_height else 1080
                 print(f"[Infographic] 使用用户自定义尺寸: {width}x{height}", file=sys.stderr)
 
-            if preferred_template:
-                template = preferred_template
-            else:
-                template = recommend_template(content_type, content)
-
-            if theme_input == "auto":
-                from palettes import recommend_palette
-
-                palette = recommend_palette(content)
-            elif theme_input in PALETTES:
-                palette = PALETTES[theme_input]
-            else:
-                palette = PALETTES["cool"]
-
-            if style == "auto":
-                style = "rough"
-
-            # Generate title from first item or extract from content
-            # Note: items already parsed above for dimension calculation
-            if len(items) > 0 and len(items[0]) <= 30:
-                # Use first item as title if it's short enough
-                title = items[0]
-                desc = None  # Don't set desc to avoid duplication
-            else:
-                title = extract_title(content)
-                desc = None  # Don't set desc to avoid duplication
-
-            items_with_data = []
-            for item in items:
-                item_dict = {"label": item}
-                item_dict["icon"] = suggest_icon_for_context(item)
-                items_with_data.append(item_dict)
-
             config = self._generate_config_json(
-                template, title, desc, items_with_data, palette, style,
+                template, title, desc, items_with_data, palette, visual_style,
                 auto_scale=True  # Enable auto-scaling
             )
             html_content = self._generate_html(title, config, width, height)
@@ -482,38 +584,42 @@ class InfographicGenerator:
 
         body {{
             margin: 0;
-            padding: 20px;
+            padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             background-color: #f0f2f5;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            overflow: hidden;  /* Prevent body scroll */
+            overflow: auto;  /* Allow scroll when content is too large */
         }}
 
         #wrapper {{
             position: relative;
             width: 100vw;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
+            padding: 20px;
+            box-sizing: border-box;
+        }}
+
+        #scaler {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
         }}
 
         #container {{
             background-color: white;
             box-shadow: 0 8px 24px rgba(0,0,0,0.12);
             border-radius: 12px;
-            padding: 40px 60px;
             transform-origin: center center;
-            transition: transform 0.3s ease;
-            max-width: 100%;
-            max-height: 100%;
         }}
 
-        /* Auto-scaling container */
+        /* Fixed size container for infographic content */
         #container.auto-scale {{
             width: {width}px;
             height: {height}px;
@@ -539,9 +645,11 @@ class InfographicGenerator:
 </head>
 <body>
     <div id="wrapper">
-        <div id="container" class="auto-scale"></div>
+        <div id="scaler">
+            <div id="container" class="auto-scale"></div>
+        </div>
         <div id="overflow-warning" class="overflow-warning">
-            ⚠️ 内容较长，已自动缩放以适应屏幕
+            ⚠️ 内容已缩放以适应屏幕
         </div>
     </div>
     <script>
@@ -551,6 +659,7 @@ class InfographicGenerator:
 
         const container = document.getElementById('container');
         const wrapper = document.getElementById('wrapper');
+        const scaler = document.getElementById('scaler');
 
         const infographic = new Infographic({{
             container: container,
@@ -570,10 +679,15 @@ class InfographicGenerator:
             console.log('✅ Infographic rendered successfully');
             window.renderComplete = true;
 
-            // Auto-scale to fit viewport
+            // Auto-scale to fit viewport with longer delay for layout to settle
             setTimeout(() => {{
                 autoScaleContent();
-            }}, 100);
+            }}, 300);
+
+            // Second adjustment for more precision
+            setTimeout(() => {{
+                autoScaleContent();
+            }}, 800);
         }});
 
         // Listen for errors
@@ -583,46 +697,48 @@ class InfographicGenerator:
         }});
 
         function autoScaleContent() {{
-            const wrapperWidth = wrapper.clientWidth - 40;  // 40px padding
-            const wrapperHeight = wrapper.clientHeight - 40;
+            // Get available space (minus padding)
+            const availableWidth = window.innerWidth - 60;  // More padding
+            const availableHeight = window.innerHeight - 60;
+
             const contentWidth = {width};
             const contentHeight = {height};
 
             // Calculate scale ratios
-            const widthRatio = wrapperWidth / contentWidth;
-            const heightRatio = wrapperHeight / contentHeight;
+            const widthRatio = availableWidth / contentWidth;
+            const heightRatio = availableHeight / contentHeight;
 
-            // Use the smaller ratio to ensure content fits
-            let scale = Math.min(widthRatio, heightRatio, 1.0);
+            // Use the smaller ratio to ensure content fits with some margin
+            let scale = Math.min(widthRatio, heightRatio) * 0.95;  // 5% margin
 
-            // Only scale down, never scale up
-            if (scale >= 0.95) {{
+            // Don't scale up, only scale down
+            if (scale > 1.0) {{
                 scale = 1.0;
-            }} else if (scale < 0.5) {{
-                // Don't scale too much
-                scale = 0.5;
+            }} else if (scale < 0.25) {{
+                // Don't scale too much - content becomes unreadable
+                scale = 0.25;
             }}
 
-            // Apply scale if needed
-            if (scale < 1.0) {{
-                container.style.transform = `scale(${{scale}})`;
+            // Apply scale to the scaler element (not container directly)
+            scaler.style.transform = `scale(${{scale}})`;
 
-                // Show warning if significantly scaled
-                const warning = document.getElementById('overflow-warning');
-                if (scale < 0.8) {{
-                    warning.style.display = 'block';
-                    setTimeout(() => {{
-                        warning.style.display = 'none';
-                    }}, 3000);
-                }}
+            // Log for debugging
+            const scaledWidth = contentWidth * scale;
+            const scaledHeight = contentHeight * scale;
+            console.log(`[Auto-scale] Content: ${{contentWidth}}x${{contentHeight}}, Available: ${{availableWidth}}x${{availableHeight}}, Scale: ${{scale.toFixed(3)}} (${{(scale*100).toFixed(1)}}%), Result: ${{scaledWidth.toFixed(0)}}x${{scaledHeight.toFixed(0)}}`);
 
-                console.log(`[Auto-scale] Scaled to ${{(scale * 100).toFixed(1)}}% to fit viewport`);
-            }} else {{
-                container.style.transform = 'scale(1.0)';
+            // Show warning if significantly scaled
+            const warning = document.getElementById('overflow-warning');
+            if (scale < 0.7) {{
+                warning.textContent = `⚠️ 内容已缩放至 ${{(scale*100).toFixed(0)}}% 以适应屏幕`;
+                warning.style.display = 'block';
+                setTimeout(() => {{
+                    warning.style.display = 'none';
+                }}, 4000);
             }}
         }}
 
-        // Re-scale on window resize
+        // Re-scale on window resize with debounce
         let resizeTimeout;
         window.addEventListener('resize', () => {{
             clearTimeout(resizeTimeout);
@@ -630,7 +746,7 @@ class InfographicGenerator:
                 if (window.renderComplete) {{
                     autoScaleContent();
                 }}
-            }}, 250);
+            }}, 200);
         }});
     </script>
 </body>

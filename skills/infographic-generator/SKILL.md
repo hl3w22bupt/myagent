@@ -2,6 +2,15 @@
 
 Generate beautiful infographics using AntV Infographic from natural language descriptions.
 
+## Features
+
+- 🎨 **Multiple Templates**: 60+ templates for different content types
+- 🌈 **Smart Themes**: Automatic color palette selection based on content
+- 🤖 **LLM-Powered Refinement**: Intelligent content optimization for better visualization
+- 📊 **Auto Layout**: Smart dimension recommendation based on content
+- 🎯 **Icon Suggestions**: Automatic icon selection from Material Design Icons
+- 📐 **Responsive Design**: Auto-scaling for different screen sizes
+
 ## Usage
 
 ### Basic Example
@@ -27,11 +36,21 @@ result = await generate_infographic({
 })
 ```
 
+### Disable LLM Refinement
+
+```python
+result = await generate_infographic({
+    "content": "简单的列表展示",
+    "use_llm_refinement": False  # Use rule-based extraction only
+})
+```
+
 ## Input Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|-------|----------|----------|-------------|
 | `content` | string | ✅ | - | Natural language description of the infographic |
+| `description` | string | ❌ | - | Alias for `content` parameter |
 | `language` | string | ❌ | `auto` | Content language (auto, zh, en) |
 | `preferred_template` | string | ❌ | - | Specific template to use |
 | `theme` | string | ❌ | `auto` | Color palette theme |
@@ -39,6 +58,20 @@ result = await generate_infographic({
 | `width` | number | ❌ | `1920` | Canvas width in pixels |
 | `height` | number | ❌ | `1080` | Canvas height in pixels |
 | `export_format` | string | ❌ | `both` | Output format (html, svg, both) |
+| `use_llm_refinement` | boolean | ❌ | `true` | Use LLM to optimize content for visualization |
+
+### LLM Refinement
+
+When `use_llm_refinement` is enabled (default), the skill:
+
+1. **Analyzes Content Structure**: Identifies whether content is a sequence, list, comparison, chart, etc.
+2. **Optimizes Title**: Removes filler words and creates concise, descriptive titles
+3. **Structures Items**: Breaks down content into clear, scannable items with proper hierarchy
+4. **Suggests Icons**: Selects appropriate Material Design Icons for each item
+5. **Recommends Template**: Chooses the best template based on content type and item count
+6. **Selects Theme**: Suggests color themes matching the content mood
+
+If the LLM is not available (`ANTHROPIC_API_KEY` not set), the skill automatically falls back to rule-based extraction.
 
 ## Output
 

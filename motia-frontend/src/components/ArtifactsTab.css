@@ -1,36 +1,42 @@
 .artifacts-tab {
-  padding: 20px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  /* 移除固定高度，让内容自适应 */
+  overflow: visible;
 }
 
 .artifacts-controls {
   display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-  padding: 16px 20px;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
   background: #f8f9fa;
   border-radius: 8px;
   border: 1px solid #e9ecef;
+  flex-shrink: 0;
 }
 
 .control-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .control-group label {
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 12px;
   color: #495057;
   white-space: nowrap;
 }
 
 .control-group select {
-  padding: 10px 16px;
+  padding: 6px 10px;
   border: 1px solid #ced4da;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 12px;
   background: white;
-  min-width: 280px;
+  min-width: 200px;
   cursor: pointer;
   transition: border-color 0.2s;
 }
@@ -50,18 +56,41 @@
   border-radius: 12px;
   padding: 24px;
   background: white;
-  min-height: 400px;
+  /* 设置固定最大高度，超出时滚动 */
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 滚动条样式 */
+.artifact-preview::-webkit-scrollbar {
+  width: 6px;
+}
+
+.artifact-preview::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 3px;
+}
+
+.artifact-preview::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+.artifact-preview::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 .artifact-info {
   margin-bottom: 20px;
   padding-bottom: 20px;
   border-bottom: 1px solid #e9ecef;
+  flex-shrink: 0;
 }
 
 .artifact-info h3 {
   margin: 0 0 12px 0;
-  font-size: 18px;
+  font-size: 14px;
   color: #212529;
 }
 
@@ -69,7 +98,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px 16px;
-  font-size: 14px;
+  font-size: 12px;
   color: #6c757d;
 }
 
@@ -82,33 +111,89 @@
 
 .path-info {
   margin-top: 8px;
+  font-size: 12px;
+  color: #6c757d;
 }
 
 .path-info code {
   background: #f1f3f5;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   color: #495057;
   word-break: break-all;
 }
 
+/* 产物内容容器 - 不限制高度，让内容自适应 */
 .artifact-content {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 300px;
+  /* 移除最大高度限制，让内容自适应 */
+  min-height: 200px;
+  /* 允许内容溢出可见 */
+  overflow: visible;
+  padding: 1rem 0;
 }
 
-.artifact-content video,
+/* 视频容器包装器 - 控制视频尺寸但保持完整显示 */
+.artifact-content .video-wrapper {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.artifact-content .video-wrapper-inner {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.artifact-content video {
+  /* 关键：宽度填满容器，高度按比例自动计算 */
+  width: 100%;
+  max-width: 100%;
+  /* 设置最大高度，确保不会超出视口，为控制条留出空间 */
+  max-height: 55vh;
+  /* 确保等比例适配 */
+  object-fit: contain;
+  /* 确保视频保持其固有宽高比 */
+  height: auto;
+  display: block;
+}
+
 .artifact-content audio {
-  max-width: 100%;
+  width: 100%;
+  max-width: 600px;
 }
 
-.artifact-content img {
+.artifact-content img,
+.artifact-image {
+  /* 关键：宽度填满容器，高度按比例自动计算 */
+  width: 100%;
   max-width: 100%;
+  /* 设置最大高度，确保不会超出视口 */
+  max-height: 60vh;
+  /* 确保等比例适配 */
+  object-fit: contain;
+  /* 确保图片保持其固有宽高比 */
+  height: auto;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
+/* 图片包装器 */
+.image-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .text-artifact {

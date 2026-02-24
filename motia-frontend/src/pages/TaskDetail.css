@@ -397,8 +397,8 @@
   flex-direction: column;
   border: 1px solid #E2E8F0;
   /* 固定高度，与右侧对齐 */
-  height: calc(100vh - 200px); /* 视口高度减去头部和边距 */
-  max-height: calc(100vh - 200px);
+  height: calc(100dvh - 200px); /* 视口高度减去头部和边距 */
+  max-height: calc(100dvh - 200px);
 }
 
 .progress-stream-content {
@@ -693,6 +693,8 @@
   gap: 0.5rem;
   margin-bottom: 1rem;
   border-bottom: 2px solid #E2E8F0;
+  /* 确保标签栏不会被压缩 */
+  flex-shrink: 0;
 }
 
 .tab-button {
@@ -870,9 +872,7 @@
   gap: 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
   border: 1px solid #e5e7eb;
-  /* 固定高度，防止出现滚动条 */
-  max-height: calc(100vh - 280px);
-  overflow: hidden;
+  /* 不使用固定高度，让内容自适应 */
   position: relative;
 }
 
@@ -931,12 +931,15 @@
 }
 
 .video-player {
+  width: auto;
   max-width: 100%;
-  max-height: 600px;
+  max-height: 60vh;
+  height: auto;
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   pointer-events: auto !important;
   cursor: pointer;
+  object-fit: contain;
 }
 
 .video-player:disabled {
@@ -1002,12 +1005,15 @@
 }
 
 .image-result {
+  width: auto;
   max-width: 100%;
-  max-height: 600px;
+  max-height: 60vh;
+  height: auto;
   border-radius: 0.5rem;
   cursor: pointer;
   transition: transform 0.2s ease;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  object-fit: contain;
 }
 
 .image-result:hover {
@@ -1706,31 +1712,167 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  /* 与左侧相同的高度，确保底部对齐 */
-  height: calc(100vh - 200px);
-  max-height: calc(100vh - 200px);
-  overflow-y: auto; /* 允许右侧内容滚动 */
+  /* 使用 dvh (dynamic viewport height) 以更好地处理各种设备 */
+  height: calc(100dvh - 200px);
+  max-height: calc(100dvh - 200px);
+  /* 移除 overflow-y: auto，让内部内容滚动 */
+  overflow: hidden;
   padding-right: 0.5rem;
-  /* 自定义滚动条样式 */
-  scrollbar-width: thin;
-  scrollbar-color: #CBD5E1 #F1F5F9;
 }
 
-.task-result-right::-webkit-scrollbar {
-  width: 6px;
+/* 右侧结果区内的 info-section 填满整个容器 */
+.task-result-right > .info-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  /* 确保最大高度不超过父容器 */
+  max-height: 100%;
 }
 
-.task-result-right::-webkit-scrollbar-track {
-  background: #F1F5F9;
-  border-radius: 3px;
+/* 右侧结果区内的 info-section h2 不占据 flex 空间 */
+.task-result-right > .info-section > h2 {
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
 }
 
-.task-result-right::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 3px;
+/* 右侧结果区内的 task-result 填满剩余空间 */
+.task-result-right > .info-section > .task-result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  /* 确保有明确的高度约束 */
+  max-height: 100%;
 }
 
-.task-result-right::-webkit-scrollbar-thumb:hover {
+/* 右侧结果区内的 result-container 填满剩余空间 */
+.task-result-right .result-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* 确保溢出隐藏 */
+  overflow: hidden;
+  min-height: 0;
+  /* 确保容器有明确的高度约束 */
+  max-height: 100%;
+}
+
+/* 右侧结果区内的 result-content 填满剩余空间 */
+.task-result-right .result-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* 关键：添加 overflow: hidden 以限制高度 */
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Artifacts tab 时的 result-content 特殊处理：允许内容可见 */
+.task-result-right:has(.artifacts-tab) .result-content,
+.task-result-right .result-content.artifacts-result-content {
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* 右侧结果区内的 tab-panel - 非active保持隐藏 */
+.task-result-right .tab-panel {
+  display: none;
+}
+
+/* 右侧结果区内的 active tab-panel - 显示为flex并填满空间 */
+.task-result-right .tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* 关键：添加 overflow: hidden 以限制 tab-panel 的高度 */
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Artifacts tab 面板特殊处理：允许内容溢出可见 */
+.task-result-right .tab-panel.active:has(.artifacts-tab) {
+  overflow: visible;
+  /* 让 artifacts-tab 可以撑开容器 */
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* 或者使用更通用的选择器（不支持 :has 的浏览器） */
+.task-result-right .tab-panel.active.artifacts-tab-panel {
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* 给各个 Tab 的根容器添加滚动支持（除了 result-visual，它自己处理滚动） */
+.task-result-right .execution-traces-inline,
+.task-result-right .sandbox-logs-tab {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  /* 确保容器有明确的高度 */
+  height: 100%;
+  /* 确保滚动条始终可见（当内容溢出时） */
+  scrollbar-gutter: stable;
+}
+
+/* ptc-code-tab 在自己的 CSS 中定义了 overflow，这里只需要确保它填满空间 */
+.task-result-right .ptc-code-tab {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ExecutionTracesInline 的 traces-container 让它随内容自然增长，由外层滚动 */
+.task-result-right .execution-traces-inline .traces-container {
+  /* 让内容自然增长，由外层的 execution-traces-inline 处理滚动 */
+  min-height: 0;
+  /* 不设置 flex，让内容自然增长 */
+}
+
+/* Artifacts tab 不需要滚动，让它自适应高度 */
+.task-result-right .artifacts-tab {
+  flex: 0 1 auto;
+  overflow: visible;
+  /* 确保内容可以完整显示，不被裁剪 */
+  min-height: 0;
+}
+
+/* Artifacts tab 中的预览区让它在自己的 CSS 中处理滚动 */
+.task-result-right .artifacts-tab .artifact-preview {
+  /* 移除 overflow 设置，让 ArtifactsTab.css 控制滚动 */
+  min-height: 0;
+}
+
+/* Artifacts tab 中的内容区确保不裁剪 */
+.task-result-right .artifacts-tab .artifact-content {
+  /* 移除所有高度限制 */
+  min-height: 0;
+}
+
+/* 自定义滚动条样式 - 更细更淡 */
+.task-result-right ::-webkit-scrollbar {
+  width: 4px;
+}
+
+.task-result-right ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-result-right ::-webkit-scrollbar-thumb {
+  background: #E2E8F0;
+  border-radius: 2px;
+}
+
+.task-result-right ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
 
@@ -2143,11 +2285,8 @@
 .video-player-wrapper {
   position: relative;
   border-radius: 0.5rem;
-  overflow: hidden;
   background: #000;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  /* 限制视频播放器高度，防止超出容器 */
-  max-height: calc(100vh - 360px);
   width: 100%;
   display: flex;
   align-items: center;
@@ -2155,10 +2294,12 @@
 }
 
 .video-player-wrapper video {
-  max-width: 100%;
-  max-height: calc(100vh - 360px);
   width: auto;
+  max-width: 100%;
+  max-height: 55vh;
   height: auto;
+  border-radius: 0.5rem;
+  object-fit: contain;
 }
 
 /* Code Artifact Styles */
@@ -2424,25 +2565,6 @@
   box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
 }
 
-/* 视频播放器包装器优化 */
-.video-player-wrapper {
-  position: relative;
-  width: 100%;
-  background: #000000;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-}
-
-.video-player-wrapper::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, transparent 30%);
-  pointer-events: none;
-  z-index: 1;
-}
-
 /* 图片播放器优化 */
 .image-player-container {
   position: relative;
@@ -2451,11 +2573,17 @@
   overflow: hidden;
   background: #f8fafc;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .image-player-container img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
+  max-height: calc(100vh - 200px);
+  object-fit: contain;
   display: block;
   transition: transform 0.3s ease;
 }
@@ -2562,7 +2690,8 @@
   line-height: 1.7;
   color: #334155;
   font-size: 0.9375rem;
-  max-height: calc(100vh - 280px);
+  /* 移除固定高度，让内容自适应 */
+  max-height: 100%;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2991,6 +3120,7 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   box-shadow: none !important;
   padding: 0 !important;
   gap: 0.5rem;
+  height: 100%;
 }
 
 .text-viewer-wrapper {
@@ -2998,6 +3128,8 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  height: 100%;
+  overflow: hidden;
 }
 
 .text-description {
@@ -3007,6 +3139,7 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   background: #f8fafc;
   border-radius: 0.5rem;
   border: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .text-artifact-content {
@@ -3022,8 +3155,9 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   border-radius: 0.5rem;
   border: 1px solid #e2e8f0;
   overflow-x: auto;
-  max-height: 500px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .result-visual-text {
@@ -3040,6 +3174,10 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
    ========================================== */
 .ptc-code-tab {
   padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .round-selector {
@@ -3047,6 +3185,7 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   gap: 8px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .round-button {
@@ -3089,6 +3228,11 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   background: #1f2937;
   border-radius: 8px;
   overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .code-header {
@@ -3096,6 +3240,7 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   background: #111827;
   border-bottom: 1px solid #374151;
   color: #e5e7eb;
+  flex-shrink: 0;
 }
 
 .code-header h3 {
@@ -3120,14 +3265,16 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   color: #e5e7eb;
   font-size: 13px;
   border-bottom: 1px solid #374151;
+  flex-shrink: 0;
 }
 
 .code-content {
   margin: 0;
   padding: 16px;
   overflow-x: auto;
-  max-height: 600px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .code-content code {
