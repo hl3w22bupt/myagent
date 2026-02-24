@@ -1025,6 +1025,11 @@ function TaskDetail() {
 
   // 从output字符串中提取URL和统一结果
   const extractParsedResult = (result) => {
+    // 处理 null 或 undefined
+    if (!result) {
+      return null
+    }
+
     // 优先：从顶层 structuredOutput 获取（新格式）
     if (typeof result === 'object' && result.structuredOutput) {
       return result.structuredOutput
@@ -1146,6 +1151,54 @@ function TaskDetail() {
 
   // 渲染可视化内容（视频、图片等）
   const renderVisualContent = (result) => {
+    // 处理 null 或 undefined result
+    if (!result) {
+      const isTaskRunning = task?.status === 'running' || task?.status === 'pending' || task?.status === 'started'
+      const hasArtifacts = task?.artifacts && task.artifacts.length > 0
+
+      // 如果任务正在运行且还没有产物，显示加载动画
+      if (isTaskRunning && !hasArtifacts) {
+        return (
+          <div className="visual-loading">
+            <div className="visual-loading-spinner"></div>
+            <div className="visual-loading-text">
+              <span className="visual-loading-title">
+                正在努力生成中
+                <div className="loading-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </span>
+              <span className="visual-loading-subtitle">请稍候，结果即将呈现</span>
+            </div>
+          </div>
+        )
+      }
+
+      // 任务失败
+      if (task?.status === 'failed') {
+        return (
+          <div className="visual-loading">
+            <div className="visual-loading-text">
+              <span className="visual-loading-title" style={{ color: '#ef4444' }}>执行失败</span>
+              <span className="visual-loading-subtitle">请查看运行追踪了解详情</span>
+            </div>
+          </div>
+        )
+      }
+
+      // 其他情况显示暂无结果
+      return (
+        <div className="visual-loading">
+          <div className="visual-loading-text">
+            <span className="visual-loading-title">暂无可视化结果</span>
+            <span className="visual-loading-subtitle">请切换到其他标签页查看</span>
+          </div>
+        </div>
+      )
+    }
+
     const parsedResult = extractParsedResult(result)
     const resultType = getResultType(result)
 
@@ -1162,8 +1215,8 @@ function TaskDetail() {
     const hasMultipleVersions = videoArtifacts.length > 1;
 
     // 如果有多个版本，使用选中的版本
-    let currentVideoPath = parsedResult.content?.path;
-    let currentVideoMetadata = parsedResult.content;
+    let currentVideoPath = parsedResult?.content?.path;
+    let currentVideoMetadata = parsedResult?.content;
 
     // 优先使用 artifacts 中的视频（如果有）
     if (videoArtifacts.length > 0) {
@@ -2015,7 +2068,15 @@ function TaskDetail() {
       )
     }
 
-    return <div className="no-visual">此结果类型不支持可视化预览</div>
+    // 兜底：没有匹配的类型
+    return (
+      <div className="visual-loading">
+        <div className="visual-loading-text">
+          <span className="visual-loading-title">暂无可视化结果</span>
+          <span className="visual-loading-subtitle">请切换到其他标签页查看</span>
+        </div>
+      </div>
+    )
   }
 
   // 获取 Tab 的配置信息（icon 和 label）
@@ -2114,33 +2175,37 @@ function TaskDetail() {
     }
 
     // 返回对应类型的配置，如果没有匹配则返回默认配置
-    return tabConfigs[tabName]?.[resultType] || tabConfigs[tabName]?.video || { icon: null, label: '内容' }
+    const defaultConfig = {
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+          <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+          <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+        </svg>
+      ),
+      label: '展示区'
+    }
+    return tabConfigs[tabName]?.[resultType] || tabConfigs[tabName]?.video || defaultConfig
   }
 
   const renderResult = (result) => {
-    if (!result) {
-      return <div className="no-result">暂无结果</div>
-    }
-
-    const resultType = getResultType(result)
-    const hasVisual = ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json', 'text'].includes(resultType)
+    const resultType = result ? getResultType(result) : 'unknown'
+    const hasVisual = result && ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json', 'text'].includes(resultType)
 
     // 获取 visual tab 的配置
     const visualTabConfig = getTabConfig('visual', resultType)
 
+    // visual tab 始终显示（即使没有结果也可以显示加载状态）
     return (
       <div className="result-container">
         {/* Tab切换 */}
         <div className="result-tabs">
-          {hasVisual && (
-            <button
-              className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
-              onClick={() => setActiveTab('visual')}
-            >
-              {visualTabConfig.icon}
-              {visualTabConfig.label}
-            </button>
-          )}
+          <button
+            className={`tab-button ${activeTab === 'visual' ? 'active' : ''}`}
+            onClick={() => setActiveTab('visual')}
+          >
+            {visualTabConfig.icon}
+            {visualTabConfig.label}
+          </button>
           <button
             className={`tab-button ${activeTab === 'ptc-code' ? 'active' : ''}`}
             onClick={() => setActiveTab('ptc-code')}
@@ -2190,13 +2255,23 @@ function TaskDetail() {
           </button>
         </div>
 
-        {/* 内容区域 */}
+        {/* 内容区域 - 所有 Tab 始终渲染，通过 CSS 控制显示隐藏 */}
         <div className="result-content">
-          {activeTab === 'visual' && hasVisual && renderVisualContent(result)}
-          {activeTab === 'ptc-code' && <PtcCodeTab taskId={id} />}
-          {activeTab === 'text' && <SandboxLogsTab taskId={id} />}
-          {activeTab === 'traces' && <ExecutionTracesInline taskId={id} />}
-          {activeTab === 'artifacts' && <ArtifactsTab taskId={id} task={task} />}
+          <div className={`tab-panel ${activeTab === 'visual' ? 'active' : ''}`}>
+            {renderVisualContent(result)}
+          </div>
+          <div className={`tab-panel ${activeTab === 'ptc-code' ? 'active' : ''}`}>
+            <PtcCodeTab taskId={id} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'text' ? 'active' : ''}`}>
+            <SandboxLogsTab taskId={id} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'traces' ? 'active' : ''}`}>
+            <ExecutionTracesInline taskId={id} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'artifacts' ? 'active' : ''}`}>
+            <ArtifactsTab taskId={id} task={task} />
+          </div>
         </div>
       </div>
     )
@@ -2949,67 +3024,65 @@ function TaskDetail() {
 
           {/* 右侧结果区 */}
           <div className="task-result-right">
-            {/* 任务结果 - 修复：添加 structuredOutput 判断条件 */}
-            {(task.output || task.metadata?.outputHistory || task.structuredOutput) && (
-              <div className="info-section">
-                <h2>{(() => {
+            {/* 任务结果 - 始终显示，没有结果时显示加载状态 */}
+            <div className="info-section">
+              <h2>{(() => {
+                // 优先使用 outputHistory，回退到 output 字段
+                const hasOutputHistory = task.metadata?.outputHistory && task.metadata.outputHistory.length > 0;
+                const resultData = hasOutputHistory
+                  ? task.metadata.outputHistory[task.metadata.outputHistory.length - 1].output
+                  : task.output;
+                // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
+                const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
+                if (typeof resultData === 'string' && hasStructuredOutput) {
+                  const combinedResult = {
+                    output: resultData,
+                    outputHistory: task.metadata?.outputHistory,
+                    structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                    metadata: task.metadata
+                  };
+                  return getResultTypeLabel(combinedResult);
+                }
+                return getResultTypeLabel(resultData);
+              })()}</h2>
+              <div className="task-result">
+                {(() => {
                   // 优先使用 outputHistory，回退到 output 字段
                   const hasOutputHistory = task.metadata?.outputHistory && task.metadata.outputHistory.length > 0;
                   const resultData = hasOutputHistory
-                    ? task.metadata.outputHistory[task.metadata.outputHistory.length - 1].output
+                    ? { outputHistory: task.metadata.outputHistory }
                     : task.output;
                   // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
                   const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
-                  if (typeof resultData === 'string' && hasStructuredOutput) {
+                  if (hasOutputHistory && hasStructuredOutput) {
+                    // 如果有 outputHistory 和 structuredOutput，创建包含所有数据的对象
                     const combinedResult = {
-                      output: resultData,
-                      outputHistory: task.metadata?.outputHistory,
+                      outputHistory: task.metadata.outputHistory,
                       structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
                       metadata: task.metadata
                     };
-                    return getResultTypeLabel(combinedResult);
+                    return renderResult(combinedResult);
+                  } else if (typeof resultData === 'string' && hasStructuredOutput) {
+                    // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
+                    const combinedResult = {
+                      output: resultData,
+                      structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                      metadata: task.metadata
+                    };
+                    return renderResult(combinedResult);
+                  } else if (hasStructuredOutput) {
+                    // 修复：只有 structuredOutput 的情况（output 为 null 且没有 outputHistory）
+                    const combinedResult = {
+                      output: resultData,
+                      structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
+                      metadata: task.metadata
+                    };
+                    return renderResult(combinedResult);
                   }
-                  return getResultTypeLabel(resultData);
-                })()}</h2>
-                <div className="task-result">
-                  {(() => {
-                    // 优先使用 outputHistory，回退到 output 字段
-                    const hasOutputHistory = task.metadata?.outputHistory && task.metadata.outputHistory.length > 0;
-                    const resultData = hasOutputHistory
-                      ? { outputHistory: task.metadata.outputHistory }
-                      : task.output;
-                    // 优先使用新位置 (task.structuredOutput)，兼容旧位置 (task.metadata?.structuredOutput)
-                    const hasStructuredOutput = task.structuredOutput || task.metadata?.structuredOutput;
-                    if (hasOutputHistory && hasStructuredOutput) {
-                      // 如果有 outputHistory 和 structuredOutput，创建包含所有数据的对象
-                      const combinedResult = {
-                        outputHistory: task.metadata.outputHistory,
-                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                        metadata: task.metadata
-                      };
-                      return renderResult(combinedResult);
-                    } else if (typeof resultData === 'string' && hasStructuredOutput) {
-                      // 如果 output 是字符串但有 structuredOutput，创建包含两者的对象
-                      const combinedResult = {
-                        output: resultData,
-                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                        metadata: task.metadata
-                      };
-                      return renderResult(combinedResult);
-                    } else if (hasStructuredOutput) {
-                      // 修复：只有 structuredOutput 的情况（output 为 null 且没有 outputHistory）
-                      const combinedResult = {
-                        output: resultData,
-                        structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                        metadata: task.metadata
-                      };
-                      return renderResult(combinedResult);
-                    }
-                    return renderResult(resultData);
-                  })()}
-                </div>
+                  return renderResult(resultData);
+                })()}
               </div>
-            )}
+            </div>
 
             {/* 错误信息 */}
             {task.error && (

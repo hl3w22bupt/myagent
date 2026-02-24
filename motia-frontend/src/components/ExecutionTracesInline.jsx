@@ -196,20 +196,35 @@ function ExecutionTracesInline({ taskId }) {
         group.endTime = traceTime
       }
 
-      // 优先使用 post hook 的状态（最终状态）
-      // post hook 的 stage 是 'post' 或 id 以 '-post' 结尾
-      const isPostHook = trace.stage === 'post' || trace.id?.endsWith('-post')
+      // 判断 stage 类型
+      const isPostStage = trace.stage === 'post' || trace.id?.endsWith('-post')
+      const isPreStage = trace.stage === 'pre' || trace.id?.endsWith('-pre')
 
-      if (isPostHook) {
-        // post hook 的状态优先级最高
+      // 检查这个 group 是否有任何 pre stage trace
+      const groupHasPreStage = group.traces.some(t => t.stage === 'pre' || t.id?.endsWith('-pre'))
+
+      if (isPostStage) {
+        // post stage 的状态优先级最高
         if (trace.status === 'failed') {
           group.finalStatus = 'failed'
         } else if (trace.status === 'completed') {
           group.finalStatus = 'completed'
         }
-      } else if (group.finalStatus === 'pending' || group.finalStatus === 'started') {
-        // 如果还没有 post hook，使用 pre hook 的状态
-        group.finalStatus = trace.status
+      } else if (isPreStage) {
+        // pre stage 的情况：先标记为 running，等 post stage 来决定最终状态
+        if (trace.status === 'completed' || trace.status === 'started') {
+          group.finalStatus = 'running'
+        } else {
+          group.finalStatus = trace.status
+        }
+      } else {
+        // 既不是 pre 也不是 post 的 trace
+        // 如果这个 group 有 pre stage，则忽略（等待 post stage）
+        // 如果没有 pre stage，则直接使用其状态（如 tool-* skill）
+        if (!groupHasPreStage) {
+          group.finalStatus = trace.status
+        }
+        // 如果有 pre stage，保持当前状态不变（running 或 pending）
       }
     })
 
