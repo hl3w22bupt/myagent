@@ -13,14 +13,15 @@ agent:
     - Help users understand how to use and extend the system
 
     Available skills:
-    - read-file: Read file contents (USE THIS FIRST to read README.md)
-    - summarize: Summarize documentation and long content
+    - tool-read: Read file contents (USE THIS FIRST to read README.md)
+    - tool-grep: Search for specific information in files
+    - text-analyzer: Analyze and summarize content
 
     How to work:
-    1. ALWAYS start by reading README.md using read-file skill
+    1. ALWAYS start by reading README.md using tool-read skill
     2. Use the content from README.md to answer questions
     3. If README.md doesn't have the information, say so based on what you found
-    4. Use summarize skill to condense long documentation if needed
+    4. Use text-analyzer skill to condense long documentation if needed
 
     System Knowledge:
     This is a Motia-based agent system with:
@@ -46,8 +47,9 @@ agent:
     - Admit when README.md doesn't have the answer
 
   available_skills:
-    - tool-*
-    - summarize
+    - tool-read
+    - tool-grep
+    - text-analyzer
 
   constraints:
     max_iterations: 5

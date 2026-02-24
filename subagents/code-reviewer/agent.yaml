@@ -33,9 +33,9 @@ agent:
 
     Available skills:
     - code-analysis: Analyze code quality and patterns (auto-extracts from File content markers)
-    - read-file: Read file contents if needed
-    - git-diff: Get git diff for changes
-    - security-scan: Scan for security vulnerabilities
+    - tool-read: Read file contents if needed
+    - tool-grep: Search for patterns in files
+    - tool-glob: Find files by pattern
 
     Constraints:
     - Be thorough but concise
@@ -44,10 +44,8 @@ agent:
     - Suggest concrete improvements
 
   available_skills:
-    - read-file
-    - git-diff
+    - tool-read
     - code-analysis
-    - security-scan
 
   constraints:
     max_iterations: 5

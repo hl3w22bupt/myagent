@@ -188,8 +188,9 @@ export class MasterAgent extends Agent {
       });
 
       // Step 2: Check if plan has delegation steps
-      const delegationSteps = plan.steps.filter((s) => s.delegateTo);
-      const directExecutionSteps = plan.steps.filter((s) => !s.delegateTo);
+      // CRITICAL: Only delegate when confidence >= 70
+      const delegationSteps = plan.steps.filter((s) => s.delegateTo && (s.confidence ?? 0) >= 70);
+      const directExecutionSteps = plan.steps.filter((s) => !s.delegateTo || (s.confidence ?? 0) < 70);
 
       if (delegationSteps.length > 0) {
         // Has delegation - execute with the first delegated subagent
@@ -557,25 +558,31 @@ Task: "Analyze the user_behavior.csv dataset and create visualizations"
 
 Example 3 - Low Confidence - Handle Directly (confidence 25):
 Task: "Create an iPhone 18 product promotional webpage"
-→ Handle directly
+→ Handle directly (no delegateTo field)
 → Confidence: 25
 → Reason: "Creative web development task, not code analysis. No subagent specializes in web page creation."
+JSON Example:
+{
+  "task": "Create an iPhone 18 product promotional webpage",
+  "confidence": 25,
+  "reason": "Creative web development task, not code analysis. No subagent specializes in web page creation."
+}
 
 Example 4 - Vague Task (confidence 0):
 Task: "Review the code"
-→ Handle directly
+→ Handle directly (no delegateTo field)
 → Confidence: 0
 → Reason: "No specific file or domain mentioned - insufficient context for delegation"
 
 Example 5 - Creative Task (confidence 15):
 Task: "Generate a landing page for our product"
-→ Handle directly
+→ Handle directly (no delegateTo field)
 → Confidence: 15
 → Reason: "Frontend development requires creative design, not code review or analysis. No relevant subagent."
 
 Example 6 - Video Task (confidence 0):
 Task: "Add animation highlights to the Pascal Triangle video"
-→ Handle directly
+→ Handle directly (no delegateTo field)
 → Confidence: 0
 → Reason: "Video enhancement task - use remotion-generator skill directly"
 
@@ -583,6 +590,7 @@ Task: "Add animation highlights to the Pascal Triangle video"
 - Output ONLY valid JSON inside <plan> tags
 - Include "confidence" field (0-100) for every step
 - Delegate ONLY when confidence >= 70 AND there's a clear domain match
+- **CRITICAL**: When confidence < 70, you MUST omit the "delegateTo" field entirely - DO NOT include it even with a low confidence value
 - Omit "delegateTo" field if handling directly
 - **CRITICAL**: Use EXACTLY the subagent name from the list above (lowercase with hyphens, e.g., "code-reviewer", "security-auditor"). Do NOT transform the name format.
 - **CRITICAL**: CREATIVE tasks (web pages, content generation, new features) should ALWAYS be handled directly, NOT delegated

@@ -2,8 +2,13 @@
 Lite TTS Skill - 文本转语音处理器
 
 使用系统内置的 TTS 引擎（pyttsx3）将文本转换为音频文件。
+
+增强功能：使用 LLM 智能理解用户意图
+- 如果输入是生成指令（如"解释傅里叶变换"），LLM 会先生成内容再转换
+- 如果输入是直接文本（如"你好"），直接进行语音转换
 """
 
+import asyncio
 import os
 import sys
 import time
@@ -24,9 +29,12 @@ try:
         get_wav_info,
         get_mime_type
     )
+    from text_interpreter import TextInterpreter, InterpretResult
     AUDIO_UTILS_AVAILABLE = True
+    TEXT_INTERPRETER_AVAILABLE = True
 except ImportError as e:
     AUDIO_UTILS_AVAILABLE = False
+    TEXT_INTERPRETER_AVAILABLE = False
     IMPORT_ERROR = str(e)
 
 # 添加父 lib 目录以使用 OutputBuilder
@@ -62,7 +70,7 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return build_dependency_error(IMPORT_ERROR)
 
     # 智能提取文本内容 - 支持多种字段名
-    text = (
+    raw_text = (
         input_data.get('text') or
         input_data.get('task') or
         input_data.get('content') or
@@ -71,14 +79,13 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
         ''
     ).strip()
 
-    if not text:
+    if not raw_text:
         return build_validation_error(
             "文本内容不能为空",
             "请提供 text、task、content、message 或 description 参数"
         )
 
-    # 提取参数
-    # 优先级：直接传入 > 环境变量 > metadata.taskId > sessionId > 时间戳
+    # 提取 task_id（需要在解释逻辑之前）
     task_id = (
         input_data.get('task_id') or
         os.getenv('MOTIA_TASK_ID') or  # Sandbox 设置的环境变量
@@ -87,6 +94,49 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
         input_data.get('sessionId') or
         f"task_{int(time.time())}"
     )
+
+    # 使用 LLM 解释文本意图（智能模式）
+    # 检查是否启用智能模式（默认启用）
+    enable_smart_interpretation = input_data.get('smart_interpretation', True)
+    disable_smart = input_data.get('disable_smart', False)
+
+    # 初始化 logger
+    logger = None
+    try:
+        from logging import getLogger
+        logger = getLogger(__name__)
+    except:
+        pass
+
+    if enable_smart_interpretation and not disable_smart and TEXT_INTERPRETER_AVAILABLE:
+        try:
+            interpreter = TextInterpreter(skill_name="lite-tts")
+            interpretation = interpreter.interpret(raw_text, task_id=task_id)
+
+            # 记录解释结果
+            if logger:
+                logger.info(f"Text interpretation: intent={interpretation.intent}, was_generated={interpretation.was_generated}")
+
+            # 使用解释后的文本
+            text = interpretation.text
+
+            # 保存解释信息到 metadata
+            interpretation_info = {
+                "intent": interpretation.intent,
+                "was_generated": interpretation.was_generated,
+                "original_input": raw_text[:100] if len(raw_text) > 100 else raw_text
+            }
+        except Exception as e:
+            # 解释失败，使用原文本
+            text = raw_text
+            interpretation_info = {"error": str(e)}
+            if logger:
+                logger.warning(f"Text interpretation failed: {e}, using original text")
+    else:
+        # 智能模式禁用或不可用，直接使用原文本
+        text = raw_text
+        interpretation_info = {"smart_mode": "disabled"}
+
     voice = input_data.get('voice')
     lang = input_data.get('lang')
     speed = float(input_data.get('speed', 1.0))
@@ -172,6 +222,7 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 .add_standard_metadata("engine", "pyttsx3") \
                 .add_standard_metadata("channels", wav_info.get('channels')) \
                 .add_standard_metadata("sample_rate", wav_info.get('frame_rate')) \
+                .add_standard_metadata("interpretation", interpretation_info) \
                 .add_tag("tts") \
                 .add_tag("audio") \
                 .build()
@@ -192,7 +243,8 @@ def execute_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "speed": speed,
                     "volume": volume,
                     "text_length": len(text),
-                    "engine": "pyttsx3"
+                    "engine": "pyttsx3",
+                    "interpretation": interpretation_info
                 }
             }
 

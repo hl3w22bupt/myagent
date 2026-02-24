@@ -1,7 +1,7 @@
 name: lite-tts
-version: 1.0.0
-description: "轻量级文本转语音（Text-to-Speech）技能，使用系统 TTS 引擎将文本转换为音频文件"
-tags: [tts, audio, speech, synthesis, voice, lite]
+version: 2.0.0
+description: "智能文本转语音（Text-to-Speech）技能，使用 LLM 理解意图并生成内容，再通过系统 TTS 引擎转换为音频"
+tags: [tts, audio, speech, synthesis, voice, lite, llm, ai]
 
 type: pure-script
 
@@ -12,7 +12,7 @@ input_schema:
   properties:
     text:
       type: string
-      description: "要转换的文本内容"
+      description: "要转换的文本内容，或生成内容的指令"
     voice:
       type: string
       description: "声音名称或ID（可选，默认使用系统默认声音）"
@@ -35,14 +35,29 @@ input_schema:
       maximum: 1.0
       default: 1.0
       description: "音量（0.0 = 静音，1.0 = 最大音量）"
+    smart_interpretation:
+      type: boolean
+      default: true
+      description: "是否启用智能模式（LLM 理解意图并生成内容）"
+    disable_smart:
+      type: boolean
+      default: false
+      description: "禁用智能模式，直接转换原文本"
   description: |
-    将文本转换为语音音频文件。使用系统内置的 TTS 引擎（pyttsx3），
-    支持 177 种系统声音（macOS），包括中文、英文等多种语言。
+    将文本转换为语音音频文件，支持智能内容生成。
+
+    **智能模式（默认启用）**:
+    - LLM 自动判断输入意图
+    - 如果是生成指令（如"解释傅里叶变换"），先生成内容再转换
+    - 如果是直接文本（如"你好"），直接进行语音转换
 
     示例:
-    - 基础使用: {"text": "Hello, world!"}
+    - 直接文本: {"text": "Hello, world!"}  → 直接转换
+    - 生成指令: {"text": "Generate audio explaining Fourier Transform"}  → LLM 生成内容后转换
+    - 中文生成: {"text": "解释量子力学的基本原理"}  → LLM 生成内容后转换
     - 指定语言: {"text": "你好", "lang": "zh"}
     - 调整语速: {"text": "Fast speech", "speed": 1.5}
+    - 禁用智能: {"text": "任何文本", "disable_smart": true}
     - 保存文件: {"text": "Test", "output_file": "custom/path/test.wav"}
 
 output_schema:

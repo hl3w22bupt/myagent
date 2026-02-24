@@ -21,11 +21,15 @@ agent:
 
     Example:
     ```python
-    result = analyze({
-        "code": """<paste the code here>""",
-        "language": "typescript",  # or "python", "javascript", etc.
-        "checks": ["security", "quality"]
-    })
+    result = await execute_with_retry(
+        execute_func=executor.execute,
+        skill_name='code-analysis',
+        input_data={
+            "code": """<paste the code here>""",
+            "language": "typescript",  # or "python", "javascript", etc.
+            "checks": ["security", "quality"]
+        }
+    )
 
     # Focus on security issues:
     # - SQL injection, XSS, CSRF vulnerabilities
@@ -35,10 +39,10 @@ agent:
     ```
 
     Available skills:
-    - security-scan: Scan for security issues
-    - dependency-check: Check for vulnerable dependencies
     - code-analysis: Analyze code for security patterns
-    - secret-scanner: Scan for exposed secrets
+    - tool-read: Read source code files
+    - tool-grep: Search for sensitive patterns in code (passwords, tokens, etc.)
+    - tool-glob: Find files by pattern
 
     Constraints:
     - Follow responsible disclosure
@@ -47,10 +51,10 @@ agent:
     - Consider security trade-offs
 
   available_skills:
-    - security-scan
-    - dependency-check
     - code-analysis
-    - secret-scanner
+    - tool-read
+    - tool-grep
+    - tool-glob
 
   constraints:
     max_iterations: 5

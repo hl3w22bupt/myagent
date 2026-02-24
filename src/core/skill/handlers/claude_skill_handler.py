@@ -635,9 +635,45 @@ class ClaudeSkillHandler:
         return text.startswith('{') or text.startswith('[')
 
     def _is_markdown(self, text: str) -> bool:
-        """检测是否是 Markdown"""
+        """
+        检测是否是 Markdown
+
+        更智能的检测，避免误判：
+        - 不是简单检测开头是否为 #
+        - 检查是否包含典型的 markdown 结构（多个标题、代码块等）
+        - 排除看起来像是命令执行说明的文本
+        """
+        if not text:
+            return False
+
+        text_stripped = text.strip()
+
+        # 快速检测：如果文本很短且只有一个 # 开头的行，可能是说明而非真正的 markdown
+        lines = text_stripped.split('\n')
+
+        # 如果文本只有 1-2 行且以 # 开头，可能是简单的说明文字
+        if len(lines) <= 2 and text_stripped.startswith('#'):
+            # 检查是否包含命令执行模式的关键词（ffmpeg、output、file 等）
+            command_keywords = ['ffmpeg', 'output file', 'created', 'generated', 'render']
+            if any(keyword in text_stripped.lower() for keyword in command_keywords):
+                return False  # 这是命令执行说明，不是真正的 markdown
+
+        # 检测 markdown 特征
         markdown_indicators = ['#', '```', '*', '-', '>']
-        return any(text.strip().startswith(indicator) for indicator in markdown_indicators)
+
+        # 计算有多少行以 markdown 符号开头
+        markdown_line_count = 0
+        for line in lines[:10]:  # 只检查前 10 行
+            line_stripped = line.strip()
+            for indicator in markdown_indicators:
+                if line_stripped.startswith(indicator):
+                    markdown_line_count += 1
+                    break
+
+        # 如果至少有 2 行看起来像 markdown，才认为是 markdown
+        return markdown_line_count >= 2 or (
+            markdown_line_count >= 1 and len(lines) > 3
+        )
 
     # ============ Tool Use Support =============
 

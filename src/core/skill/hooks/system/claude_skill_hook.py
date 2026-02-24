@@ -241,8 +241,9 @@ class ClaudeSkillHook(BaseHook):
         """
         result_type = result.get("result_type")
 
-        # 只处理 text 和 code 类型（其他类型已经有明确的产物）
-        if result_type not in ("text", "code"):
+        # 处理 text、code 和 markdown 类型
+        # markdown 类型可能是误判，需要用 LLM 重新推断实际产物
+        if result_type not in ("text", "code", "markdown"):
             return None
 
         print(f"[ClaudeSkillHook] Inferring artifacts for skill: {context.skill_name}, result_type: {result_type}")

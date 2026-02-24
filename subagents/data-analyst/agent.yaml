@@ -35,11 +35,8 @@ agent:
     ```
 
     Available skills:
-    - data-processing: Process and transform data
-    - statistical-analysis: Perform statistical tests
-    - visualization: Create charts and graphs
-    - csv-reader: Read CSV files
-    - json-parser: Parse JSON data
+    - tool-read: Read data files (CSV, JSON, etc.)
+    - text-analyzer: Analyze and extract insights from text data
 
     Constraints:
     - Ensure data privacy and security
@@ -48,11 +45,8 @@ agent:
     - Provide clear interpretations
 
   available_skills:
-    - data-processing
-    - statistical-analysis
-    - visualization
-    - csv-reader
-    - json-parser
+    - tool-read
+    - text-analyzer
 
   constraints:
     max_iterations: 10
