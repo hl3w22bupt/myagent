@@ -899,12 +899,12 @@
 /* 代码区域的 result-visual 变体：移除装饰性样式，内容居中 */
 .result-visual-with-code {
   align-items: center !important;
-  overflow: visible !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
   gap: 0.5rem;
+  /* 不要设置 overflow: visible，让外层 tab-panel 控制滚动 */
 }
 
 .result-visual-with-code .code-player-container {
@@ -1789,9 +1789,12 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  /* 关键：添加 overflow: hidden 以限制 tab-panel 的高度 */
-  overflow: hidden;
+  /* 关键：添加 overflow-y: auto 以支持滚动 */
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  /* 确保滚动条始终可见（当内容溢出时） */
+  scrollbar-gutter: stable;
 }
 
 /* Artifacts tab 面板特殊处理：允许内容溢出可见 */
@@ -1811,17 +1814,11 @@
   max-height: none;
 }
 
-/* 给各个 Tab 的根容器添加滚动支持（除了 result-visual，它自己处理滚动） */
+/* 各个 Tab 的根容器填满空间，滚动由外层 tab-panel 处理 */
 .task-result-right .execution-traces-inline,
 .task-result-right .sandbox-logs-tab {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
   min-height: 0;
-  /* 确保容器有明确的高度 */
-  height: 100%;
-  /* 确保滚动条始终可见（当内容溢出时） */
-  scrollbar-gutter: stable;
 }
 
 /* ptc-code-tab 在自己的 CSS 中定义了 overflow，这里只需要确保它填满空间 */
@@ -3114,13 +3111,12 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
 /* TEXT Artifact Styles */
 .result-visual-with-text {
   align-items: flex-start !important;
-  overflow: visible !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
   gap: 0.5rem;
-  height: 100%;
+  /* 不设置固定高度和 overflow，让内容自然增长，由外层 tab-panel 控制滚动 */
 }
 
 .text-viewer-wrapper {
@@ -3128,8 +3124,7 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  height: 100%;
-  overflow: hidden;
+  /* 不设置固定高度和 overflow，让内容自然增长 */
 }
 
 .text-description {
@@ -3155,18 +3150,16 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   border-radius: 0.5rem;
   border: 1px solid #e2e8f0;
   overflow-x: auto;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+  /* 不设置 overflow-y，让外层 tab-panel 控制垂直滚动 */
 }
 
 .result-visual-text {
   align-items: flex-start !important;
-  overflow: visible !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
+  /* 不要设置 overflow: visible，让外层 tab-panel 控制滚动 */
 }
 
 /* ==========================================
