@@ -2584,21 +2584,17 @@ function TaskDetail() {
 
     // 确认删除
     if (!window.confirm(`确定要删除任务 ${task.taskId} 吗?此操作不可恢复。`)) {
-      // 用户取消删除，恢复轮询
-      setPolling(true)
-      pollIntervalRef.current = setInterval(async () => {
+      // 用户取消删除，恢复轮询（只需获取一次数据，不需要持续轮询）
+      const fetchOnce = async () => {
         try {
           const task = await tasksAPI.getTaskDetails(id)
           setTask(task)
-          setPolling(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
         } catch (err) {
-          console.error('轮询失败:', err)
+          console.error('获取任务详情失败:', err)
+          setError('获取任务详情失败')
         }
-      }, 1000)
+      }
+      fetchOnce()
       return
     }
 
@@ -2646,21 +2642,18 @@ function TaskDetail() {
 
       alert(`删除任务失败: ${errorMessage}\n请查看浏览器控制台获取详细信息`)
 
-      // 删除失败，恢复轮询
-      setPolling(true)
-      pollIntervalRef.current = setInterval(async () => {
+      // 删除失败，只需获取一次最新数据，不需要启动新的轮询
+      // useEffect 中的轮询会自动继续（因为组件没有卸载）
+      const fetchOnce = async () => {
         try {
           const task = await tasksAPI.getTaskDetails(id)
           setTask(task)
-          setPolling(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
         } catch (err) {
-          console.error('轮询失败:', err)
+          console.error('获取任务详情失败:', err)
+          setError('获取任务详情失败')
         }
-      }, 1000)
+      }
+      fetchOnce()
     }
   }
 
@@ -2671,6 +2664,12 @@ function TaskDetail() {
       return
     }
 
+    // ⭐ 重要：清理任何现有的轮询，防止多个轮询同时运行
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+
     setRetrying(true)
     try {
       await tasksAPI.retryTask(task.taskId)
@@ -2678,41 +2677,66 @@ function TaskDetail() {
       // 重试成功，显示提示并保持当前页面状态
       alert('任务重试已启动，页面将自动更新')
 
-      // 重新开始轮询任务状态
-      setLoading(true)
-      setPolling(true)
+      // ⭐ 关键修复：不要设置 polling=true，因为这会隐藏整个页面内容
+      // polling 状态会导致组件渲染"任务执行中"的加载状态，而不是正常内容
+      // 我们只需要在后台轮询更新任务状态，不需要改变页面显示状态
       setRetrying(false)
 
-      // 使用现有的轮询逻辑，不再手动 reload
-      // useEffect 会自动处理轮询
-      const fetchTaskDetails = async () => {
-        try {
-          const task = await tasksAPI.getTaskDetails(id)
-          setTask(task)
-          setError('')
+      // 立即获取一次最新状态并更新页面
+      const updatedTask = await tasksAPI.getTaskDetails(id)
+      setTask(updatedTask)
+      setError('')
 
-          // 如果任务正在运行或等待中，继续轮询
-          if (task.status === 'running' || task.status === 'pending' || task.status === 'started') {
-            setTimeout(fetchTaskDetails, 1000)
-          } else {
-            // 任务完成或失败，停止轮询
-            setLoading(false)
-            setPolling(false)
+      // 如果任务还在运行，启动后台轮询（但不设置 polling 状态）
+      if (updatedTask.status === 'running' || updatedTask.status === 'pending' || updatedTask.status === 'started') {
+        const maxPollTime = 5 * 60 * 1000 // 5 分钟
+        const maxPolls = 300 // 最多轮询 300 次
+        const pollStartTime = Date.now()
+        let pollCount = 0
+
+        const fetchTaskDetails = async () => {
+          pollCount++
+
+          // 检查是否超时
+          if (Date.now() - pollStartTime > maxPollTime || pollCount > maxPolls) {
+            console.error('[重试轮询] 轮询超时，停止轮询')
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            return
           }
-        } catch (error) {
-          console.error('Error fetching task details:', error)
-          if (error.response?.status === 404) {
-            // 404 表示任务还在执行中，继续轮询
-            setTimeout(fetchTaskDetails, 1000)
-          } else {
-            setError('获取任务详情失败')
-            setLoading(false)
-            setPolling(false)
+
+          try {
+            const task = await tasksAPI.getTaskDetails(id)
+            setTask(task)
+            setError('')
+
+            console.log('[重试轮询] 任务状态:', task.status, 'pollCount:', pollCount)
+
+            // 如果任务完成或失败，停止轮询
+            if (task.status !== 'running' && task.status !== 'pending' && task.status !== 'started') {
+              console.log('[重试轮询] 任务结束，停止轮询', task.status)
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+            }
+          } catch (error) {
+            console.error('[重试轮询] Error fetching task details:', error)
+            if (error.response?.status !== 404) {
+              // 非 404 错误，停止轮询
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+            }
           }
         }
-      }
 
-      fetchTaskDetails()
+        // 启动后台轮询
+        pollIntervalRef.current = setInterval(fetchTaskDetails, 1000)
+      }
     } catch (error) {
       console.error('重试失败:', error)
       const errorMessage = error.response?.data?.message || '重试失败，请稍后重试'

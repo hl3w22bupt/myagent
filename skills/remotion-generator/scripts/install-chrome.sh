@@ -266,7 +266,15 @@ main() {
     fi
 
     # 安装模式
-    install_chrome
+    # 先检查是否已安装
+    if verify_installation "$platform"; then
+        log_info "Chrome 已安装，跳过安装步骤"
+        chrome_binary="$INSTALL_DIR/$(get_chrome_subdir "$platform")/chrome-headless-shell"
+        log_info "当前版本: $("$(readlink -f "$chrome_binary")" --version 2>&1)"
+    else
+        log_info "Chrome 未安装，开始安装..."
+        install_chrome
+    fi
 
     # 验证安装
     log_info "验证安装..."
