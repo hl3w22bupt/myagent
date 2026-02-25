@@ -41,9 +41,13 @@ logging.basicConfig(
 # IMPORTANT: Add skill directory to sys.path for relative imports to work
 # This is needed when the module is imported via importlib (e.g., by Motia agent system)
 SKILL_DIR = Path(__file__).parent
-if str(SKILL_DIR) not in sys.path:
-    sys.path.insert(0, str(SKILL_DIR))
-    logging.info(f"Added {SKILL_DIR} to sys.path for imports")
+
+# Ensure SKILL_DIR is in sys.path for generators imports
+# Remove existing entries first to avoid duplicates, then add at front
+while str(SKILL_DIR) in sys.path:
+    sys.path.remove(str(SKILL_DIR))
+sys.path.insert(0, str(SKILL_DIR))
+logging.info(f"✅ Added {SKILL_DIR} to sys.path for imports")
 
 # Import LLM-based generators
 # Version control via environment variables
@@ -67,9 +71,12 @@ try:
 
     from generators.validator import CodeValidator
     GENERATORS_AVAILABLE = True
+    logging.info(f"✅ All LLM generators imported successfully")
 except ImportError as e:
     GENERATORS_AVAILABLE = False
+    import traceback
     logging.warning(f"LLM generators not available: {str(e)}. Using template-based generation only.")
+    logging.warning(f"Import error traceback:\n{traceback.format_exc()}")
 
 class RemotionVideoGenerator:
     """Specialized Remotion video generator."""
