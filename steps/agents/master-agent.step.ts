@@ -23,6 +23,7 @@ import {
   UserAllowTaskHook,
   MetricsCollectorTaskHook,
   TaskTraceHook,
+  UserProfileAccumulatorHook,
   TaskContext,
 } from '../../src/core/task/hooks/index';
 import { ContextManager } from '../../src/core/context/manager';
@@ -84,6 +85,24 @@ export const inputSchema = _z.object({
    * Optional: Whether this is a retry of a previous task.
    */
   isRetry: _z.boolean().optional(),
+
+  /**
+   * Optional: User ID for MyEcho integration.
+   * Used for user profile accumulation and personalization.
+   */
+  userId: _z.string().optional(),
+
+  /**
+   * Optional: User context for MyEcho integration.
+   * Configuration bundle for AI girlfriend personality and user preferences.
+   */
+  userContext: _z.record(_z.string(), _z.any()).optional(),
+
+  /**
+   * Optional: Direct subagent selection for MyEcho.
+   * When specified, uses this subagent directly.
+   */
+  subagent: _z.string().optional(),
 });
 
 /**
@@ -377,6 +396,7 @@ export const handler = async (
   taskHookExecutor.registerHook(new UserAllowTaskHook());
   taskHookExecutor.registerHook(new MetricsCollectorTaskHook());
   taskHookExecutor.registerHook(new TaskTraceHook());
+  taskHookExecutor.registerHook(new UserProfileAccumulatorHook()); // MyEcho: 用户画像累积
 
   // Build TaskContext
   const taskContext: TaskContext = {
@@ -392,6 +412,9 @@ export const handler = async (
       llmCalls: 0,
       skillCalls: 0,
       totalTokens: 0,
+      userId: input.userId, // MyEcho: Pass userId for profile accumulation
+      userContext: input.userContext, // MyEcho: Pass userContext
+      subagent: input.subagent, // MyEcho: Pass subagent selection
     },
     services: {
       streams: _streams,
@@ -460,7 +483,7 @@ export const handler = async (
       await emit({
         topic: 'agent.task.failed',
         data: { taskId, sessionId, error: preResult.reason },
-      });
+      } as any);
       return {
         success: false,
         taskId,

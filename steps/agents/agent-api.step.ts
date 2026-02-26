@@ -58,6 +58,24 @@ export const bodySchema = z.object({
    * This is more efficient than useDelegation+subagents which uses LLM planning.
    */
   delegateTo: z.array(z.string()).optional().describe('Explicit subagent delegation (bypasses LLM planning)'),
+
+  /**
+   * Optional: User ID for MyEcho integration (e.g., echo-abc123 for AI girlfriend).
+   * Used for user profile accumulation and personalization.
+   */
+  userId: z.string().optional().describe('User ID (e.g., echo-abc123 for AI girlfriend)'),
+
+  /**
+   * Optional: User context for MyEcho integration.
+   * Configuration bundle for AI girlfriend personality, relationship, and user preferences.
+   */
+  userContext: z.record(z.string(), z.any()).optional().describe('AI girlfriend configuration bundle'),
+
+  /**
+   * Optional: Directly specify a subagent to use.
+   * When specified, the task will be executed directly by this subagent.
+   */
+  subagent: z.string().optional().describe('Specific subagent to use'),
 });
 
 /**
@@ -110,7 +128,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo } =
+  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -127,6 +145,9 @@ export const handler = async (request: any, { emit, logger }: any) => {
     useDelegation,
     subagents,
     delegateTo,
+    userId,
+    hasUserContext: !!userContext,
+    subagent,
   });
 
   // Log if no skills provided - PTCGenerator will handle selection
@@ -162,8 +183,11 @@ export const handler = async (request: any, { emit, logger }: any) => {
       useDelegation,
       subagents,
       delegateTo, // Pass explicit delegation to MasterAgent
+      userId, // MyEcho: User ID for profile accumulation
+      userContext, // MyEcho: User configuration bundle
+      subagent, // MyEcho: Direct subagent selection
     },
-  });
+  } as any);
 
   // Return immediate response
   return {
@@ -178,6 +202,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
       sessionId: finalSessionId,
       useDelegation,
       availableSkills,
+      userId,
+      subagent,
     },
   };
 };

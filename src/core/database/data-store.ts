@@ -85,6 +85,59 @@ import type {
 } from './context-types';
 
 /**
+ * UserProfile - 用户画像
+ * 跨会话累积的用户行为特征和偏好
+ */
+export interface UserProfile {
+  userId: string;
+
+  // 行为模式（跨所有 session 累积）
+  behavior: {
+    totalSessions: number;
+    activeHours: number[];
+    avgSessionLength: number;
+    firstInteraction: Date;
+  };
+
+  // 回复风格（自动学习）
+  responseStyle: {
+    emotionDistribution: {
+      happy: number;
+      caring: number;
+      playful: number;
+      gentle: number;
+    };
+    avgResponseLength: number;
+    commonPhrases: string[];
+  };
+
+  // 场景记忆（对话累积）
+  responsePatterns: {
+    [scenario: string]: {
+      typicalEmotion: string;
+      commonPhrases: string[];
+      effectiveness: number;
+    };
+  };
+
+  metadata: {
+    lastUpdated: Date;
+    version: number;
+  };
+}
+
+/**
+ * User - 用户记录
+ */
+export interface User {
+  userId: string;
+  profile: UserProfile;
+  createdAt: Date;
+  updatedAt: Date;
+  lastSessionId?: string;
+}
+
+/**
  * 会话信息
  */
 export interface Session {
@@ -170,6 +223,29 @@ export class DataStore {
     console.log('[DataStore] Running database migrations...');
 
     try {
+      // Migration 0: Add users table (MyEcho integration)
+      const tables = this.db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = tables[0]?.values?.flatMap((v: any[]) => v) || [];
+      const hasUsersTable = tableNames.includes('users');
+
+      if (!hasUsersTable) {
+        console.log('[DataStore] Migration: Adding users table');
+        this.db.run(`
+          CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            profile TEXT NOT NULL DEFAULT '{}',
+            created_at BIGINT NOT NULL,
+            updated_at BIGINT NOT NULL,
+            last_session_id TEXT
+          )
+        `);
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_last_session ON users(last_session_id)`);
+        this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC)`);
+        console.log('[DataStore] Migration: users table added successfully');
+      } else {
+        console.log('[DataStore] Migration: users table already exists');
+      }
+
       // Migration 1: Add ptc_codes column to tasks table
       const tableInfo = this.db.exec('PRAGMA table_info(tasks)');
       const hasPtcCodes = tableInfo[0]?.values?.some((row: any[]) => row[1] === 'ptc_codes');
@@ -224,6 +300,21 @@ export class DataStore {
     if (!this.db) return;
 
     console.log('[DataStore] Initializing database schema...');
+
+    // 0. 用户表 (MyEcho 集成)
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        profile TEXT NOT NULL DEFAULT '{}'::jsonb,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        last_session_id TEXT
+      )
+    `);
+
+    // 索引
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_last_session ON users(last_session_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC)`);
 
     // 1. 任务表 (核心表)
     this.db.run(`
@@ -1275,6 +1366,195 @@ export class DataStore {
   }
 
   // ============================================================================
+  // 用户管理 (MyEcho 集成)
+  // ============================================================================
+
+  /**
+   * 创建新用户
+   */
+  async createUser(userId: string): Promise<User> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = Date.now();
+
+    // 检查用户是否已存在
+    const existing = await this.getUser(userId);
+    if (existing) {
+      return existing;
+    }
+
+    // 创建默认用户画像
+    const defaultProfile: UserProfile = {
+      userId,
+      behavior: {
+        totalSessions: 0,
+        activeHours: [],
+        avgSessionLength: 0,
+        firstInteraction: new Date(now),
+      },
+      responseStyle: {
+        emotionDistribution: {
+          happy: 0,
+          caring: 0,
+          playful: 0,
+          gentle: 0,
+        },
+        avgResponseLength: 0,
+        commonPhrases: [],
+      },
+      responsePatterns: {},
+      metadata: {
+        lastUpdated: new Date(now),
+        version: 1,
+      },
+    };
+
+    this.db.run(
+      `INSERT INTO users (user_id, profile, created_at, updated_at, last_session_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        userId,
+        JSON.stringify(defaultProfile),
+        now,
+        now,
+        null,
+      ]
+    );
+
+    await this.save();
+
+    return {
+      userId,
+      profile: defaultProfile,
+      createdAt: new Date(now),
+      updatedAt: new Date(now),
+    };
+  }
+
+  /**
+   * 获取用户
+   */
+  async getUser(userId: string): Promise<User | null> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM users WHERE user_id = ?');
+    stmt.bind([userId]);
+
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+
+    const row = stmt.getAsObject() as any;
+    stmt.free();
+
+    return this.mapDbUserToUser(row);
+  }
+
+  /**
+   * 更新用户画像
+   */
+  async updateUserProfile(userId: string, profile: Partial<UserProfile>): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existing = await this.getUser(userId);
+    if (!existing) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    // 合并画像数据
+    const updatedProfile: UserProfile = {
+      ...existing.profile,
+      ...profile,
+      metadata: {
+        ...existing.profile.metadata,
+        ...profile.metadata,
+        lastUpdated: new Date(),
+        version: (existing.profile.metadata.version || 0) + 1,
+      },
+    };
+
+    this.db.run(
+      `UPDATE users SET profile = ?, updated_at = ? WHERE user_id = ?`,
+      [JSON.stringify(updatedProfile), Date.now(), userId]
+    );
+
+    await this.save();
+  }
+
+  /**
+   * 更新用户的最后会话ID
+   */
+  async updateUserLastSession(userId: string, sessionId: string): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    this.db.run(
+      `UPDATE users SET last_session_id = ?, updated_at = ? WHERE user_id = ?`,
+      [sessionId, Date.now(), userId]
+    );
+
+    await this.save();
+  }
+
+  /**
+   * 获取用户的所有会话
+   */
+  async getUserSessions(userId: string): Promise<Session[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 获取用户信息
+    const user = await this.getUser(userId);
+    if (!user) {
+      return [];
+    }
+
+    // 查询该用户相关的所有任务，按 sessionId 分组
+    const stmt = this.db.prepare('SELECT DISTINCT session_id FROM tasks WHERE session_id IN (SELECT session_id FROM tasks WHERE id IN (SELECT task_id FROM task_contexts WHERE task_id IN (SELECT id FROM tasks ORDER BY created_at DESC)))');
+    stmt.bind([]);
+
+    // 简化：直接查询所有会话，然后根据用户画像中的会话信息过滤
+    const sessionsStmt = this.db.prepare(
+      `SELECT s.* FROM sessions s
+       WHERE s.session_id IN (
+         SELECT DISTINCT session_id FROM tasks
+         ORDER BY created_at DESC
+       )
+       ORDER BY s.last_active_at DESC
+       LIMIT 100`
+    );
+
+    const sessions: Session[] = [];
+    while (sessionsStmt.step()) {
+      const row = sessionsStmt.getAsObject() as any;
+      sessions.push({
+        sessionId: row.session_id,
+        createdAt: new Date(row.created_at),
+        lastActiveAt: new Date(row.last_active_at),
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      });
+    }
+    sessionsStmt.free();
+
+    return sessions;
+  }
+
+  /**
+   * 获取或创建用户
+   */
+  async getOrCreateUser(userId: string): Promise<User> {
+    const existing = await this.getUser(userId);
+    if (existing) {
+      return existing;
+    }
+    return await this.createUser(userId);
+  }
+
+  // ============================================================================
   // 数据清理
   // ============================================================================
 
@@ -1298,6 +1578,16 @@ export class DataStore {
   // ============================================================================
   // 辅助方法
   // ============================================================================
+
+  private mapDbUserToUser(row: any): User {
+    return {
+      userId: row.user_id,
+      profile: row.profile ? JSON.parse(row.profile) : undefined,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      lastSessionId: row.last_session_id || undefined,
+    };
+  }
 
   private mapDbTaskToTask(row: any): Task {
     return {
