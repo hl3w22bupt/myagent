@@ -139,7 +139,7 @@ const getStatusText = (status, executionTime) => {
   if (status === 'failed') return '失败'
   if (status === 'pending') return '等待中'
   if (status === 'started') return '已开始'
-  if (status === 'awaiting_clarification') return '需要澄清'
+  if (status === 'awaiting_clarification') return '等待澄清'
   // 兼容旧逻辑：如果没有 status 字段，回退到使用 executionTime 判断
   if (executionTime === null) return '执行中'
   return status || '未知'
@@ -225,8 +225,8 @@ const getStatusConfig = (status) => {
     case 'awaiting_clarification':
       return {
         label: '等待澄清',
-        color: '#F59E0B',
-        bgColor: '#FEF3C7',
+        color: '#B45309', // 深橙色文字
+        bgColor: '#FEF3C7', // 浅橙黄色背景
         icon: (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="status-icon spinning">
             <circle cx="12" cy="12" r="10"/>
@@ -1648,9 +1648,8 @@ function TaskDetail() {
         : textArtifacts.length - 1; // 默认最后一轮
 
       const selectedArtifact = textArtifacts[currentIndex];
-      let textPath = selectedArtifact.path;
-      // 移除前导的/outputs/如果存在
-      textPath = textPath.replace(/^\/?outputs\//, '');
+      // 文本内容直接从 metadata.textContent 获取，不需要从文件加载
+      const textContent = selectedArtifact.metadata?.textContent || '';
 
       return (
         <div className="result-visual result-visual-with-text">
@@ -1725,10 +1724,9 @@ function TaskDetail() {
             </div>
           </div>
 
-          {/* 文本内容查看器 */}
+          {/* 文本内容查看器 - 直接传递内容，不通过 API */}
           <TextViewer
-            textPath={textPath}
-            getBlobUrl={getMediaBlobUrl}
+            textContent={textContent}
             description={selectedArtifact.description}
           />
         </div>
@@ -3290,50 +3288,24 @@ function CodeViewer({ codePath, getBlobUrl, language }) {
 }
 
 // Text Viewer Component - 用于显示 TEXT 类型的 artifact
-function TextViewer({ textPath, getBlobUrl, description }) {
-  const [text, setText] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+// 直接接收文本内容，显示完整的 JSON 格式
+function TextViewer({ textContent, description }) {
+  const [displayText, setDisplayText] = useState('')
 
   useEffect(() => {
-    const loadText = async () => {
-      setLoading(true)
-      setError(false)
-      try {
-        const url = await getBlobUrl(textPath)
-        if (url) {
-          const response = await fetch(url)
-          if (response.ok) {
-            const textContent = await response.text()
-            setText(textContent)
-          } else {
-            setError(true)
-          }
-        } else {
-          setError(true)
-        }
-      } catch (err) {
-        console.error('Failed to load text:', err)
-        setError(true)
-      }
-      setLoading(false)
+    if (textContent) {
+      setDisplayText(textContent)
     }
+  }, [textContent])
 
-    loadText()
-  }, [textPath, getBlobUrl])
-
-  if (loading) {
-    return <div className="media-loading">加载文本内容...</div>
-  }
-
-  if (error || !text) {
-    return <div className="media-error">文本加载失败</div>
+  if (!displayText) {
+    return <div className="media-error">暂无文本内容</div>
   }
 
   return (
     <div className="text-viewer-wrapper">
       {description && <div className="text-description">{description}</div>}
-      <pre className="text-artifact-content">{text}</pre>
+      <pre className="text-artifact-content">{displayText}</pre>
     </div>
   )
 }

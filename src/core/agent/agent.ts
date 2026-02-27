@@ -39,6 +39,9 @@ export class Agent {
   // Track current execution round for PTC code storage
   protected currentRound: number = 1;
 
+  // HITL clarification flag (default: true)
+  protected enableClarification: boolean = true;
+
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
     this.sessionId = sessionId;
@@ -92,6 +95,11 @@ export class Agent {
     // Initialize agent name from config if provided
     this.agentName = (config as any).name || '';
 
+    // Initialize clarification flag from config (default: true)
+    // Use underscore naming to match YAML convention (enable_clarification)
+    this.enableClarification = config.constraints?.enable_clarification !== false;
+    console.log(`[Agent ${sessionId}] HITL clarification:`, this.enableClarification ? 'enabled' : 'disabled');
+
     // Debug: Log config.availableSkills
     console.log(`[Agent ${sessionId}] Constructor config.availableSkills:`, config.availableSkills);
 
@@ -99,12 +107,15 @@ export class Agent {
     // This ensures we can filter skills synchronously in constructor
     Agent.initializeSkillsRegistry().then(() => {
       // Filter skills based on config.availableSkills
-      const filteredSkills = config.availableSkills
+      // - undefined = use all skills
+      // - empty array [] = use NO skills (for conversational agents)
+      // - array with values = filter to those skills
+      const filteredSkills = (config.availableSkills !== undefined)
         ? Agent.skillsRegistry.filter(s => config.availableSkills!.includes(s.name))
         : Agent.skillsRegistry;
 
       console.log(`[Agent ${sessionId}] Filtered to ${filteredSkills.length}/${Agent.skillsRegistry.length} skills:`,
-        config.availableSkills || ['all']);
+        config.availableSkills !== undefined ? config.availableSkills : ['all']);
 
       // Initialize PTC Generator with filtered skills
       this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills);
@@ -126,7 +137,10 @@ export class Agent {
   private initializeSkillsRegistryAsync(): void {
     Agent.initializeSkillsRegistry().then(() => {
       // Filter skills based on config.availableSkills
-      const filteredSkills = this.config.availableSkills
+      // - undefined = use all skills
+      // - empty array [] = use NO skills (for conversational agents)
+      // - array with values = filter to those skills
+      const filteredSkills = (this.config.availableSkills !== undefined)
         ? Agent.skillsRegistry.filter(s => this.config.availableSkills!.includes(s.name))
         : Agent.skillsRegistry;
 
@@ -247,14 +261,16 @@ export class Agent {
     await Agent.initializeSkillsRegistry();
 
     // Filter skills based on config.availableSkills
-    // Note: Empty array means no filtering (use all skills)
-    const filteredSkills = (this.config.availableSkills && this.config.availableSkills.length > 0)
+    // - undefined = use all skills
+    // - empty array [] = use NO skills (for conversational agents)
+    // - array with values = filter to those skills
+    const filteredSkills = (this.config.availableSkills !== undefined)
       ? Agent.skillsRegistry.filter(s => this.config.availableSkills!.includes(s.name))
       : Agent.skillsRegistry;
 
     // Update PTCGenerator with filtered skills
     // This ensures the PTCGenerator only sees the allowed skills
-    this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills);
+    this.ptcGenerator = new PTCGenerator(this.llm, filteredSkills, this.config.systemPrompt);
     console.log(`[Agent ${this.sessionId}] PTCGenerator ready with ${filteredSkills.length}/${Agent.skillsRegistry.length} skills`,
       this.config.availableSkills || ['all']);
 
@@ -384,6 +400,47 @@ export class Agent {
       }
 
       // === HITL Checkpoint passed, continue normal flow ===
+
+      // ⭐ NEW: Check if this is a conversational agent with no skills
+      // For AI girlfriend and other pure conversational agents, bypass PTC generation
+      if (this.config.availableSkills !== undefined && this.config.availableSkills.length === 0) {
+        console.log('[Agent] Conversational agent detected (no skills), using direct LLM response');
+        steps.push({
+          type: 'planning',
+          content: 'Conversational mode - generating direct response',
+          timestamp: Date.now(),
+          metadata: { task },
+        });
+
+        // Build conversation messages for LLM
+        const messages: any[] = [
+          { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
+          ...this.state.conversationHistory,
+          { role: 'user', content: task }
+        ];
+
+        // Generate direct LLM response
+        const llmResponse = await this.llm.messagesCreate(messages);
+
+        console.log('[Agent] Direct LLM response generated:', {
+          responseLength: llmResponse.content.length,
+          responsePreview: llmResponse.content.substring(0, 100)
+        });
+
+        const executionTime = Date.now() - startTime;
+
+        return {
+          success: true,
+          output: llmResponse.content,
+          steps: [...steps, {
+            type: 'execution',
+            content: 'Direct LLM response generated',
+            timestamp: Date.now(),
+          }],
+          executionTime,
+          metadata: { skillNames: [] },
+        };
+      }
 
       // Step 1: Generate PTC code with retry logic
       steps.push({
@@ -1213,8 +1270,11 @@ Analyze the task description and categorize it appropriately. Provide confidence
     _taskId: string,
     context: any
   ): Promise<{ needs: boolean; question?: string; options?: string[] }> {
-    // Skip HITL in test environment or if explicitly disabled
-    if (process.env.NODE_ENV === 'test' || context?.skipHITL) {
+    // Skip HITL if:
+    // 1. Test environment
+    // 2. Explicitly disabled via context.skipHITL
+    // 3. Disabled in agent config (this.enableClarification = false)
+    if (process.env.NODE_ENV === 'test' || context?.skipHITL || !this.enableClarification) {
       return { needs: false };
     }
 

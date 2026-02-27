@@ -516,7 +516,7 @@ function Tasks() {
                     </Link>
                     <div className="task-status-actions">
                       <span className={`status status-${task.status || 'pending'}`}>
-                        {task.status === 'running' ? '执行中' : task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : task.status === 'pending' ? '待执行' : task.status === 'resolved' ? '已解决' : task.status || '待执行'}
+                        {task.status === 'running' ? '执行中' : task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : task.status === 'pending' ? '待执行' : task.status === 'resolved' ? '已解决' : task.status === 'awaiting_clarification' ? '等待澄清' : task.status === 'started' ? '已开始' : task.status || '待执行'}
                       </span>
                       {task.status === 'failed' && (
                         <button

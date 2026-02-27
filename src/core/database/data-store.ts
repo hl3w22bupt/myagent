@@ -51,6 +51,8 @@ export interface Task {
   error?: string;
   executionTime?: number;
   metadata?: {
+    /** Subagent used for this task */
+    subagent?: string;
     retries?: {
       attempts: number;
       totalDelay: number;
@@ -85,44 +87,63 @@ import type {
 } from './context-types';
 
 /**
- * UserProfile - 用户画像
- * 跨会话累积的用户行为特征和偏好
+ * UserProfile - 通用用户画像
+ *
+ * 跨会话累积的用户数据，使用通用字段结构。
+ * myagent 负责维护通用的用户数据（偏好、习惯、标签），
+ * 应用特定的业务逻辑应由应用层（如 MyEcho）处理。
+ *
+ * 数据流：
+ * - myagent: 维护 preferences/habits/tags 通用字段
+ * - MyEcho: 通过 userContext 传入业务特定数据
+ * - data 字段: 预留扩展空间，应用可存储自定义数据
  */
 export interface UserProfile {
   userId: string;
 
-  // 行为模式（跨所有 session 累积）
-  behavior: {
-    totalSessions: number;
-    activeHours: number[];
-    avgSessionLength: number;
-    firstInteraction: Date;
-  };
+  /**
+   * 通用用户偏好（应用无关）
+   * 例如：["喜欢简洁回复", "喜欢使用 emoji", "偏好中文"]
+   *
+   * 由 myagent 根据会话特征自动累积
+   */
+  preferences?: string[];
 
-  // 回复风格（自动学习）
-  responseStyle: {
-    emotionDistribution: {
-      happy: number;
-      caring: number;
-      playful: number;
-      gentle: number;
-    };
-    avgResponseLength: number;
-    commonPhrases: string[];
-  };
+  /**
+   * 通用用户习惯（应用无关）
+   * 例如：["夜间活跃", "喜欢问问题", "频繁会话"]
+   *
+   * 由 myagent 根据会话模式自动累积
+   */
+  habits?: string[];
 
-  // 场景记忆（对话累积）
-  responsePatterns: {
-    [scenario: string]: {
-      typicalEmotion: string;
-      commonPhrases: string[];
-      effectiveness: number;
-    };
-  };
+  /**
+   * 通用标签（应用无关）
+   * 例如：["新用户", "高活跃", "付费用户"]
+   *
+   * 由 myagent 根据统计数据自动添加
+   */
+  tags?: string[];
 
+  /**
+   * 应用扩展数据（预留）
+   * 应用方可存储特定数据，myagent 不解释
+   *
+   * 向后兼容：保持旧的 data 字段以支持现有数据
+   * 例如：
+   * - behavior: { totalSessions, activeHours, ... }
+   * - custom: { any: "application specific data" }
+   */
+  data?: Record<string, any>;
+
+  /**
+   * 元数据
+   */
   metadata: {
     lastUpdated: Date;
     version: number;
+    // 应用类型标识（可选）
+    appType?: string;
   };
 }
 
@@ -1384,26 +1405,13 @@ export class DataStore {
       return existing;
     }
 
-    // 创建默认用户画像
+    // 创建默认用户画像（通用结构）
     const defaultProfile: UserProfile = {
       userId,
-      behavior: {
-        totalSessions: 0,
-        activeHours: [],
-        avgSessionLength: 0,
-        firstInteraction: new Date(now),
-      },
-      responseStyle: {
-        emotionDistribution: {
-          happy: 0,
-          caring: 0,
-          playful: 0,
-          gentle: 0,
-        },
-        avgResponseLength: 0,
-        commonPhrases: [],
-      },
-      responsePatterns: {},
+      preferences: [],
+      habits: [],
+      tags: [],
+      data: {}, // 应用扩展数据（预留）
       metadata: {
         lastUpdated: new Date(now),
         version: 1,
@@ -1467,8 +1475,15 @@ export class DataStore {
 
     // 合并画像数据
     const updatedProfile: UserProfile = {
-      ...existing.profile,
-      ...profile,
+      userId: existing.profile.userId,
+      preferences: profile.preferences ?? existing.profile.preferences,
+      habits: profile.habits ?? existing.profile.habits,
+      tags: profile.tags ?? existing.profile.tags,
+      // 深度合并 data 字段（向后兼容）
+      data: {
+        ...(existing.profile.data || {}),
+        ...(profile.data || {}),
+      },
       metadata: {
         ...existing.profile.metadata,
         ...profile.metadata,

@@ -28,10 +28,12 @@ interface SkillMetadata {
 export class PTCGenerator {
   private llm: LLMClient;
   private skills: Map<string, SkillMetadata>;
+  private systemPrompt?: string;
 
-  constructor(llm: LLMClient, skills: SkillMetadata[]) {
+  constructor(llm: LLMClient, skills: SkillMetadata[], systemPrompt?: string) {
     this.llm = llm;
     this.skills = new Map();
+    this.systemPrompt = systemPrompt;
     for (const skill of skills) {
       this.skills.set(skill.name, skill);
     }
@@ -40,9 +42,9 @@ export class PTCGenerator {
   /**
    * Static factory method to create PTCGenerator with agent's LLM configuration
    */
-  static createWithAgentConfig(skills: SkillMetadata[], agentConfig: { llm?: any }): PTCGenerator {
+  static createWithAgentConfig(skills: SkillMetadata[], agentConfig: { llm?: any; systemPrompt?: string }): PTCGenerator {
     const llm = LLMClientFactory.createForAgent(agentConfig);
-    return new PTCGenerator(llm, skills);
+    return new PTCGenerator(llm, skills, agentConfig?.systemPrompt);
   }
 
   /**
@@ -250,18 +252,29 @@ CRITICAL - SKILL NAME VALIDATION:
 
 IMPORTANT GUIDELINES:
 1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
-2. PRIORITIZE using available skills over direct computation or common knowledge
-3. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
-4. For calculations, you can compute directly, but if uncertain, use appropriate skills
-5. NEVER return an empty selected_skills array - at least use web-search for factual queries
+2. ONLY select skills when there is a CLEAR, DIRECT match with the task requirements
+3. For simple conversational messages, greetings, or casual chat - return EMPTY selected_skills
+4. For factual questions (locations, definitions, facts), use web-search skill
+5. DO NOT force skill usage when the task doesn't clearly require it
 6. ${explicitlyRequestedSkills.length > 0 ?
    'CRITICAL: User explicitly requested skills - YOU MUST include them in selected_skills' :
    'If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills'}
 
 SKILL SELECTION STRATEGY:
-- Analyze the task description and match with skill descriptions/tags
-- Prioritize skills that are specifically designed for the task type
-- If multiple skills could work, choose the most specific one
+- First, determine if this is a CONVERSATIONAL task (chat, greeting, casual message) → NO skills needed
+- Second, check if task explicitly requires a specific capability (search, generate, analyze) → select matching skills
+- If unsure or the match is weak, prefer NO skills over using the wrong skill
+
+CONVERSATIONAL TASK EXAMPLES (use NO skills):
+- "今天天气真好" (casual chat)
+- "我想去公园玩" (personal statement)
+- "你好" (greeting)
+- "在吗？" (casual check-in)
+
+SKILL TASK EXAMPLES (use skills):
+- "搜索一下北京天气" (requires web-search)
+- "帮我生成一个视频" (requires video-generation)
+- "分析这段文本的情感" (requires text-analyzer)
 - Review the skill's input schema to ensure it can handle the task requirements
 - CRITICAL: You MUST use exact skill names from the available skills list (see list below).
 - DO NOT transform skill names (e.g., do not convert 'web-search' to 'web_search').
@@ -275,7 +288,7 @@ CRITICAL: Output MUST be valid JSON with proper quoting.
 - The "reasoning" value MUST be a string in double quotes
 - All string values MUST be enclosed in double quotes
 - Do NOT use unquoted strings
-- selected_skills MUST NOT be an empty array
+- selected_skills CAN be an empty array for conversational tasks
 
 Output format (JSON):
 <plan>
@@ -359,6 +372,13 @@ Always prioritize available skills over direct computation or common knowledge.`
       console.error('[PTC Generator] Missing or invalid selected_skills field:', plan);
       throw new Error(`Plan missing valid 'selected_skills' or 'selected' array`);
     }
+
+    // 📢 Log selected skills for debugging
+    console.info('[PTC Generator] LLM selected skills:', {
+      skills: skillsArray,
+      count: skillsArray.length,
+      reasoning: plan.reasoning || 'No reasoning provided'
+    });
 
     // ✅ 新增：验证技能名称
     const availableSkillNames = new Set(this.skills.keys());
@@ -721,7 +741,27 @@ CRITICAL - YOU MUST FIX THIS ERROR:
       console.log('[PTC Generator] Including previous error in prompt:', previousError.substring(0, 100));
     }
 
-    const prompt = `<context>
+    // IMPORTANT: Add agent system prompt section at the beginning
+    // This ensures subagent's personality and behavior guidelines are passed to code generation
+    let agentSystemPromptSection = '';
+    if (this.systemPrompt && this.systemPrompt.trim()) {
+      agentSystemPromptSection = `<agent_system_prompt>
+${this.systemPrompt}
+</agent_system_prompt>
+
+CRITICAL - AGENT BEHAVIOR GUIDELINES:
+The <agent_system_prompt> above contains YOUR AGENT'S PERSONALITY AND BEHAVIOR RULES.
+You MUST follow these guidelines when generating code:
+1. Match the tone and personality described in the system prompt
+2. Follow any specific behavioral instructions
+3. Use the designated response format if specified
+4. Apply any constraints mentioned in the system prompt
+
+`;
+      console.log('[PTC Generator] Using agent systemPrompt in code generation');
+    }
+
+    const prompt = `${agentSystemPromptSection}<context>
 ${contextSection}
 </context>
 
@@ -1187,7 +1227,7 @@ Generate production-ready code with proper error handling and async patterns.`;
     }
 
     const schema = skill.metadata.input_schema;
-    const standardParams = ['task', 'description', 'content', 'query'];
+    const standardParams = ['task', 'text', 'description', 'content', 'query'];
 
     // Priority 1: Check required list for standard parameters
     if (schema.required && schema.required.length > 0) {
@@ -1203,17 +1243,22 @@ Generate production-ready code with proper error handling and async patterns.`;
       return 'task';
     }
 
-    // Priority 3: 'description' parameter
+    // Priority 3: 'text' parameter (for TTS skills)
+    if (schema.properties?.text) {
+      return 'text';
+    }
+
+    // Priority 4: 'description' parameter
     if (schema.properties?.description) {
       return 'description';
     }
 
-    // Priority 4: 'content' parameter
+    // Priority 5: 'content' parameter
     if (schema.properties?.content) {
       return 'content';
     }
 
-    // Priority 5: 'query' parameter
+    // Priority 6: 'query' parameter
     if (schema.properties?.query) {
       return 'query';
     }

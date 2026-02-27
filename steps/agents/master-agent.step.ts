@@ -351,6 +351,16 @@ export const handler = async (
     }
   }
 
+  // ===  如果指定了 subagent，转换为 delegateTo 以直接执行 ===
+  // 这样可以绕过 LLM 规划，直接使用指定的 subagent
+  if (input.subagent && (!input.delegateTo || input.delegateTo.length === 0)) {
+    input.delegateTo = [input.subagent];
+    logger.info('[MyEcho] Converted subagent to delegateTo for direct execution', {
+      subagent: input.subagent,
+      delegateTo: input.delegateTo,
+    });
+  }
+
   // === 处理正常任务执行（现有代码） ===
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
@@ -426,21 +436,33 @@ export const handler = async (
   // Initialize data store and create task record
   const store = getDataStore();
 
-  // 检查任务是否已存在（可能因为 BullMQ 重试）
+  // 检查任务是否已存在（可能因为 BullMQ 重试或多轮对话）
   const existingTask = await store.getTask(taskId).catch(() => null);
   if (existingTask) {
     logger.info('Task already exists in database, skipping creation', {
       taskId,
       existingStatus: existingTask.status,
     });
+    // 如果任务已存在且没有提供 subagent，从 metadata 中恢复 subagent
+    // 这确保多轮对话使用相同的 subagent
+    if (!input.subagent && existingTask.metadata?.subagent) {
+      input.subagent = existingTask.metadata.subagent as string;
+      logger.info('Master Agent: Restored subagent from task metadata', {
+        taskId,
+        subagent: input.subagent,
+      });
+    }
   } else {
     await store.createTask({
       id: taskId,
       task: input.task,
       sessionId: sessionId,
       status: TaskStatus.PENDING,
+      metadata: {
+        subagent: input.subagent, // 保存 subagent 信息用于后续多轮对话
+      },
     });
-    logger.info('Task record created in database', { taskId, status: 'PENDING' });
+    logger.info('Task record created in database', { taskId, status: 'PENDING', subagent: input.subagent });
   }
 
   // Helper function to update stream
@@ -595,14 +617,22 @@ export const handler = async (
     await updateStream('running', { currentStep: 'Executing task' });
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
 
-    // Update task status to RUNNING (only if not already completed)
-    // This prevents resetting status for multi-turn conversations
+    // Update task status to RUNNING
+    // For multi-turn conversations (input.continue), allow resetting from completed to running
     const currentTask = await store.getTask(taskId);
+    const isContinuation = input.continue === true;
+
     if (currentTask && currentTask.status !== 'completed') {
       await store.updateTask(taskId, { status: TaskStatus.RUNNING });
       logger.info('Task status updated to RUNNING', { taskId });
     } else if (currentTask && currentTask.status === 'completed') {
-      logger.warn('Task already completed, not resetting status to RUNNING', { taskId });
+      if (isContinuation) {
+        // Allow continuing from completed status for multi-turn conversations
+        await store.updateTask(taskId, { status: TaskStatus.RUNNING });
+        logger.info('Task status reset to RUNNING for continuation', { taskId });
+      } else {
+        logger.warn('Task already completed, not resetting status to RUNNING', { taskId });
+      }
     }
 
     // === 获取历史上下文 ===

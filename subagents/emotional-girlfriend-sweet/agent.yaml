@@ -56,10 +56,9 @@ agent:
     根据以上信息，以符合你性格和关系的方式回复用户。
 
   available_skills:
-    - tool-read
-    - tool-grep
-    - text-analyzer
+    - volcano-tts  # 语音合成，用于回复语音消息
 
   constraints:
     max_iterations: 5
     timeout: 60000
+    enable_clarification: false  # 情感陪伴角色不需要澄清机制

@@ -33,8 +33,18 @@ export const config: ApiRouteConfig = {
  */
 export const handler = async (request: any, { logger }: any) => {
   try {
-    // 验证路径参数
-    const { userId } = paramsSchema.parse(request.params);
+    // 获取路径参数 (支持 pathParams 和 params 两种方式)
+    const userId = request.pathParams?.userId || request.params?.userId;
+
+    if (!userId) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: 'User ID is required',
+        },
+      };
+    }
 
     logger.info('Get User API: Fetching user', { userId });
 

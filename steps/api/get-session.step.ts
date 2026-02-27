@@ -33,8 +33,18 @@ export const config: ApiRouteConfig = {
  */
 export const handler = async (request: any, { logger }: any) => {
   try {
-    // 验证路径参数
-    const { sessionId } = paramsSchema.parse(request.params);
+    // 获取路径参数
+    const sessionId = request.pathParams?.sessionId || request.params?.sessionId;
+
+    if (!sessionId) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: 'Session ID is required',
+        },
+      };
+    }
 
     logger.info('Get Session API: Fetching session', { sessionId });
 

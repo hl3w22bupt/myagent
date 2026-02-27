@@ -819,6 +819,7 @@ Task: "Add animation highlights to the Pascal Triangle video"
         availableSkills: config?.availableSkills || [],
         llm: this.config.llm,
         sandbox: this.config.sandbox,
+        constraints: config?.constraints, // 传递 constraints 包含 enableClarification
       },
       subagentSessionId
     );
@@ -971,6 +972,24 @@ Task: "Add animation highlights to the Pascal Triangle video"
 
       const executionTime = Date.now() - startTime;
 
+      // 如果 subagent 执行失败，返回失败状态
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Subagent execution failed',
+          output: result.output,
+          steps,
+          executionTime,
+          metadata: {
+            delegates: [subagentName],
+            skillNames: result.metadata?.skillNames,
+          },
+          structuredOutput: result.structuredOutput,
+          structuredOutputs: (result as any).structuredOutputs,
+          clarification: result.clarification, // 传递澄清信息
+        };
+      }
+
       return {
         success: true,
         output: result.output,
@@ -981,7 +1000,7 @@ Task: "Add animation highlights to the Pascal Triangle video"
           skillNames: result.metadata?.skillNames,
         },
         structuredOutput: result.structuredOutput,
-        structuredOutputs: (result as any).structuredOutputs, // ← 添加这个字段
+        structuredOutputs: (result as any).structuredOutputs,
       };
     } catch (error: any) {
       console.error('[MasterAgent] Direct delegation failed:', {

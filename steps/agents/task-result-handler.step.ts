@@ -372,23 +372,34 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   if (taskId) {
     try {
       const store = getDataStore();
-      const finalStatus = normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
+
+      // Check if task is awaiting clarification (HITL checkpoint)
+      const isAwaitingClarification = normalizedResult.error === 'AWAITING_CLARIFICATION' ||
+                                     (normalizedResult.metadata as any)?.hitl === true;
+
+      const finalStatus = isAwaitingClarification
+        ? TaskStatus.AWAITING_CLARIFICATION
+        : (normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED);
 
       // 获取当前对话轮次
-      // 优先使用 result.state.conversationLength（从1开始），转换为从0开始的索引
-      // 如果没有，则从 outputs 表获取最新一轮的 round 值
+      // conversationLength 是消息总数（每轮有2条消息：用户+助手）
+      // 所以 round = conversationLength / 2 - 1（从0开始索引）
+      // 优先使用 result.state.conversationLength，否则从 outputs 表获取
       const conversationLength = (normalizedResult as any).state?.conversationLength;
 
       let currentRound = 0;
 
       if (conversationLength !== undefined && conversationLength > 0) {
-        // conversationLength 从 1 开始，转换为从 0 开始的索引
-        currentRound = conversationLength - 1;
+        // conversationLength 是消息总数，每轮2条消息
+        // Round 1: 2条消息 -> round 0
+        // Round 2: 4条消息 -> round 1
+        currentRound = Math.floor(conversationLength / 2) - 1;
       } else {
-        // 降级方案：从 outputs 表获取
+        // 降级方案：从 outputs 表获取（round 从 1 开始，需要转换为 0 开始的索引）
         const existingOutputs = await store.getOutputs(taskId);
         if (existingOutputs.length > 0) {
           const latestRound = existingOutputs[existingOutputs.length - 1].round;
+          // round 从 1 开始，转换为 0 开始的索引用于 artifact metadata
           currentRound = latestRound - 1;
         }
       }
@@ -592,6 +603,86 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               timestamp: new Date(),
             });
             logger.info('✅ Table artifact added from structured outputs', { artifactPath, skillName });
+          }
+
+          // 处理 text 类型
+          if (resultType === 'text' && content) {
+            const textContent = typeof content === 'string' ? content : content.text || content.message || content.content || '';
+
+            if (textContent.trim()) {
+              const artifactId = `text_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+              // Extract preview from text content for description (first 100 chars)
+              let preview = textContent;
+              try {
+                const parsed = JSON.parse(textContent);
+                if (parsed.message) {
+                  preview = parsed.message;
+                } else if (parsed.output) {
+                  preview = parsed.output;
+                }
+              } catch {
+                // Not JSON, use raw text
+              }
+              const description = preview.length > 100 ? preview.substring(0, 100) + '...' : preview;
+
+              await store.addArtifact({
+                taskId,
+                artifactType: 'text',
+                action: 'generated',
+                path: artifactId,
+                description: description,
+                metadata: {
+                  conversation_round: currentRound,
+                  skill_name: skillName,
+                  is_final: isFinalArtifact,
+                  originalTask: task,
+                  textContent: textContent,
+                  contentLength: textContent.length,
+                  mimeType: 'text/plain',
+                },
+                timestamp: new Date(),
+              });
+              logger.info('✅ Text artifact added from structured outputs', { artifactId, skillName });
+            }
+          }
+
+          // 处理没有 result_type 的情况（纯文本输出）
+          if (!resultType && content && typeof content === 'string' && content.trim()) {
+            const artifactId = `text_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+            // Extract preview from text content for description (first 100 chars)
+            let preview = content;
+            try {
+              const parsed = JSON.parse(content);
+              if (parsed.message) {
+                preview = parsed.message;
+              } else if (parsed.output) {
+                preview = parsed.output;
+              }
+            } catch {
+              // Not JSON, use raw text
+            }
+            const description = preview.length > 100 ? preview.substring(0, 100) + '...' : preview;
+
+            await store.addArtifact({
+              taskId,
+              artifactType: 'text',
+              action: 'generated',
+              path: artifactId,
+              description: description,
+              metadata: {
+                conversation_round: currentRound,
+                skill_name: skillName,
+                is_final: isFinalArtifact,
+                originalTask: task,
+                textContent: content,
+                contentLength: content.length,
+                mimeType: 'text/plain',
+              },
+              timestamp: new Date(),
+            });
+            logger.info('✅ Text artifact added from structured outputs (implicit type)', { artifactId, skillName });
           }
         }
 
@@ -835,18 +926,79 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         }
       }
 
+      // Check if this is a text output and save to artifacts
+      // This enables multi-round text results to be viewed in dropdown (similar to video artifacts)
+      // Skip if we have structuredOutputs array (already processed above)
+      if (!hasStructuredOutputs && normalizedResult.output && typeof normalizedResult.output === 'string') {
+        // Check if this is a pure text output (no specific result_type or result_type is 'text')
+        const resultType = finalStructuredResult?.result_type;
+        const isTextOutput = !resultType || resultType === 'text';
+
+        if (isTextOutput) {
+          // Generate a unique artifact ID for the text output
+          const artifactId = `text_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          const textContent = normalizedResult.output;
+
+          // Only save if the output is not empty and not just a placeholder
+          if (textContent.trim() && textContent !== 'AI is thinking...' && textContent.length > 0) {
+            // Extract preview from text content for description
+            // Try to parse JSON and extract the message field, otherwise use first 100 chars
+            let preview = textContent;
+            try {
+              const parsed = JSON.parse(textContent);
+              if (parsed.message) {
+                preview = parsed.message;
+              } else if (parsed.output) {
+                preview = parsed.output;
+              }
+            } catch {
+              // Not JSON, use raw text
+            }
+            // Truncate preview to 100 characters for description
+            const description = preview.length > 100 ? preview.substring(0, 100) + '...' : preview;
+
+            await store.addArtifact({
+              taskId,
+              artifactType: 'text',
+              action: 'generated',
+              path: artifactId, // Use artifactId as path (text is stored inline in metadata)
+              description: description,
+              metadata: {
+                conversation_round: currentRound,
+                skill_name: extractedSkillName,
+                is_final: true, // Mark as final artifact for display in UI
+                // Store the original task in metadata for reference
+                originalTask: task,
+                // Store text content inline in metadata for easy access
+                textContent: textContent,
+                contentLength: textContent.length,
+                mimeType: 'text/plain',
+              },
+              timestamp: new Date(),
+            });
+            logger.info('✅ Text artifact added', {
+              taskId,
+              artifactId,
+              currentRound,
+              contentLength: textContent.length,
+            });
+          }
+        }
+      }
+
       // Check if this is a multi-turn continuation (task already completed)
       const currentTask = await store.getTask(taskId);
       const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;
 
       if (isMultiTurnContinuation) {
-        // Multi-turn continuation: don't overwrite output field
-        // This preserves the first round's text output while adding video artifacts
+        // Multi-turn continuation: update output field to latest response
+        // This ensures myecho-backend can get the latest round's result
         await store.updateTask(taskId, {
           // CRITICAL: Always set status to completed after successful execution
           // This ensures the task status is correct even in multi-turn conversations
           status: finalStatus,
-          // Don't update output - preserve first round's output
+          // Update output to latest response (this is what myecho-backend reads)
+          output: normalizedResult.output,
           executionTime: (currentTask.executionTime || 0) + (normalizedResult.executionTime || 0),
           // Merge metadata to preserve outputHistory from output-history-tracker
           // Use currentTask metadata which may have been updated by other steps
@@ -860,6 +1012,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                            (normalizedResult.metadata as any)?.structuredOutput ||
                            currentTask.structuredOutput,
           completedAt: new Date(),
+        });
+        logger.info('Task updated for multi-turn continuation', {
+          taskId,
+          outputLength: normalizedResult.output?.length || 0,
         });
       } else {
         // First round or new task: update normally

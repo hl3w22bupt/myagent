@@ -45,11 +45,21 @@ export const config: ApiRouteConfig = {
  */
 export const handler = async (request: any, { logger }: any) => {
   try {
-    // 验证路径参数
-    const { userId } = paramsSchema.parse(request.params);
+    // 获取路径参数
+    const userId = request.pathParams?.userId || request.params?.userId;
+
+    if (!userId) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: 'User ID is required',
+        },
+      };
+    }
 
     // 验证查询参数
-    const { limit, offset } = queryParamsSchema.parse(request.queryParams);
+    const { limit, offset } = queryParamsSchema.safeParse(request.queryParams).data || { limit: 50, offset: 0 };
 
     logger.info('Get User Sessions API: Fetching sessions', { userId, limit, offset });
 

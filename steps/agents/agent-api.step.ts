@@ -167,8 +167,11 @@ export const handler = async (request: any, { emit, logger }: any) => {
     task: task,
     sessionId: finalSessionId,
     status: TaskStatus.PENDING,
+    metadata: {
+      subagent, // 保存 subagent 信息用于后续多轮对话
+    },
   });
-  logger.info('Task record created in database', { taskId, status: 'PENDING' });
+  logger.info('Task record created in database', { taskId, status: 'PENDING', subagent });
 
   // Emit agent task execution event
   // This will be picked up by the master-agent step

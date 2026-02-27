@@ -1,11 +1,16 @@
 /**
- * UserProfileAccumulatorHook - 用户画像累积 Hook
+ * UserProfileAccumulatorHook - 通用用户画像累积 Hook
  *
  * 职责:
  * 1. preExec: 从 users 表加载 userId 的 userProfile，注入到 workingMemory
- * 2. postExec: 提取本次会话特征，累积到 userId 的画像，保存到 users 表
+ * 2. postExec: 提取本次会话特征，累积通用字段到用户画像
  *
- * 用于 MyEcho 集成，支持 AI 女友用户画像的跨会话累积。
+ * 通用逻辑:
+ * - preferences: 根据会话特征累积用户偏好
+ * - habits: 根据会话模式累积用户习惯
+ * - tags: 根据统计数据添加用户标签
+ *
+ * 注意: MyEcho 特定逻辑（情绪分析、回复风格等）应由 MyEcho 后端处理。
  */
 
 import { BaseTaskHook } from './base';
@@ -13,20 +18,19 @@ import type { TaskContext } from './types';
 import { getDataStore, type UserProfile } from '../../database/data-store';
 
 /**
- * 会话特征提取结果
+ * 会话特征提取结果（通用）
  */
-interface SessionFeatures {
+interface GenericSessionFeatures {
   duration: number;
   task: string;
   status: string;
   timestamp: Date;
   responseLength: number;
-  emotion?: string;
-  memoryExtract?: any;
+  totalSessions: number; // 从 data.behavior.totalSessions 读取（向后兼容）
 }
 
 /**
- * 用户画像累积 Hook
+ * 通用用户画像累积 Hook
  */
 export class UserProfileAccumulatorHook extends BaseTaskHook {
   constructor() {
@@ -83,7 +87,9 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
       console.log('[UserProfileAccumulatorHook] Loaded user profile', {
         userId,
         profileVersion: user.profile.metadata.version,
-        totalSessions: user.profile.behavior.totalSessions,
+        preferences: user.profile.preferences?.length || 0,
+        habits: user.profile.habits?.length || 0,
+        tags: user.profile.tags?.length || 0,
       });
     } catch (error: any) {
       console.error('[UserProfileAccumulatorHook] Failed to load user profile', {
@@ -95,7 +101,7 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
   }
 
   /**
-   * 任务执行后：提取会话特征并累积到用户画像
+   * 任务执行后：提取会话特征并累积通用字段到用户画像
    */
   async postExec(context: TaskContext, result: any): Promise<void> {
     const { metadata, context: taskContext } = context;
@@ -111,11 +117,11 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
       const store = getDataStore();
 
       // 1. 提取本次会话特征
-      const sessionFeatures = this.extractSessionFeatures(context, result);
+      const sessionFeatures = this.extractGenericFeatures(context, result);
 
-      // 2. 累积到用户画像
+      // 2. 累积通用字段到用户画像
       const existingProfile = taskContext.workingMemory.userProfile as UserProfile;
-      const updatedProfile = this.accumulateProfile(existingProfile, sessionFeatures);
+      const updatedProfile = this.accumulateGenericProfile(existingProfile, sessionFeatures);
 
       // 3. 保存到数据库
       await store.updateUserProfile(userId, updatedProfile);
@@ -126,8 +132,9 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
       console.log('[UserProfileAccumulatorHook] Updated user profile', {
         userId,
         newVersion: updatedProfile.metadata.version,
-        totalSessions: updatedProfile.behavior.totalSessions,
-        avgSessionLength: updatedProfile.behavior.avgSessionLength,
+        preferences: updatedProfile.preferences?.length || 0,
+        habits: updatedProfile.habits?.length || 0,
+        tags: updatedProfile.tags?.length || 0,
       });
     } catch (error: any) {
       console.error('[UserProfileAccumulatorHook] Failed to update user profile', {
@@ -139,29 +146,19 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
   }
 
   /**
-   * 提取本次会话的特征
+   * 提取本次会话的通用特征
    */
-  private extractSessionFeatures(context: TaskContext, result: any): SessionFeatures {
+  private extractGenericFeatures(context: TaskContext, result: any): GenericSessionFeatures {
     const { context: taskContext, status, task } = context;
     const startTime = taskContext?.workingMemory?._sessionStartTime || Date.now();
     const duration = Date.now() - startTime;
 
-    // 从结构化输出中提取情绪
-    let emotion: string | undefined;
-    let memoryExtract: any;
-
-    if (result?.structuredOutput) {
-      const structured = result.structuredOutput;
-      emotion = structured.emotion || structured.emotion_type;
-      memoryExtract = structured.memory_extract || structured.memoryExtract;
-    } else if (result?.metadata?.structuredOutput) {
-      const structured = result.metadata.structuredOutput;
-      emotion = structured.emotion || structured.emotion_type;
-      memoryExtract = structured.memory_extract || structured.memoryExtract;
-    }
-
     // 计算回复长度
     const responseLength = result?.output?.length || result?.response?.length || 0;
+
+    // 获取总会话数（从旧 data 字段读取，向后兼容）
+    const existingProfile = taskContext?.workingMemory?.userProfile as UserProfile;
+    const totalSessions = (existingProfile?.data?.behavior?.totalSessions || 0) + 1;
 
     return {
       duration,
@@ -169,82 +166,76 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
       status: status || 'unknown',
       timestamp: new Date(),
       responseLength,
-      emotion,
-      memoryExtract,
+      totalSessions,
     };
   }
 
   /**
-   * 累积用户画像数据
+   * 累积通用用户画像字段
    */
-  private accumulateProfile(
-    existing: UserProfile,
-    features: SessionFeatures
+  private accumulateGenericProfile(
+    profile: UserProfile,
+    features: GenericSessionFeatures
   ): UserProfile {
-    // 更新行为统计
-    existing.behavior.totalSessions += 1;
+    // 初始化数组（如果不存在）
+    profile.preferences = profile.preferences || [];
+    profile.habits = profile.habits || [];
+    profile.tags = profile.tags || [];
+    profile.data = profile.data || {};
 
-    // 更新平均会话长度
-    const totalSessions = existing.behavior.totalSessions;
-    const prevAvgLength = existing.behavior.avgSessionLength || 0;
-    existing.behavior.avgSessionLength =
-      (prevAvgLength * (totalSessions - 1) + features.duration) / totalSessions;
+    // === 通用偏好累积 ===
 
-    // 更新活跃小时
-    const currentHour = features.timestamp.getHours();
-    if (!existing.behavior.activeHours.includes(currentHour)) {
-      existing.behavior.activeHours.push(currentHour);
+    // 根据回复长度添加偏好
+    if (features.responseLength < 50) {
+      this.addUnique(profile.preferences, '喜欢简洁回复');
+    } else if (features.responseLength > 500) {
+      this.addUnique(profile.preferences, '喜欢详细回复');
     }
 
-    // 更新情绪分布
-    if (features.emotion) {
-      const emotionLower = features.emotion.toLowerCase();
-      if (emotionLower.includes('开心') || emotionLower.includes('happy')) {
-        existing.responseStyle.emotionDistribution.happy += 1;
-      } else if (emotionLower.includes('关心') || emotionLower.includes('caring')) {
-        existing.responseStyle.emotionDistribution.caring += 1;
-      } else if (emotionLower.includes('活泼') || emotionLower.includes('调皮') || emotionLower.includes('playful')) {
-        existing.responseStyle.emotionDistribution.playful += 1;
-      } else if (emotionLower.includes('温柔') || emotionLower.includes('gentle')) {
-        existing.responseStyle.emotionDistribution.gentle += 1;
-      }
+    // === 通用习惯累积 ===
+
+    // 根据会话时间添加习惯
+    const hour = features.timestamp.getHours();
+    if (hour >= 22 || hour <= 6) {
+      this.addUnique(profile.habits, '夜间活跃');
+    } else if (hour >= 9 && hour <= 17) {
+      this.addUnique(profile.habits, '日间活跃');
     }
 
-    // 更新平均回复长度
-    const prevAvgResponseLength = existing.responseStyle.avgResponseLength || 0;
-    existing.responseStyle.avgResponseLength =
-      (prevAvgResponseLength * (totalSessions - 1) + features.responseLength) / totalSessions;
+    // 根据会话持续时间添加习惯
+    if (features.duration > 300000) { // 超过5分钟
+      this.addUnique(profile.habits, '长时间会话');
+    }
 
-    // 从 memoryExtract 中提取常用短语
-    if (features.memoryExtract) {
-      if (features.memoryExtract.preference) {
-        const phrases = existing.responseStyle.commonPhrases || [];
-        const prefStr = String(features.memoryExtract.preference);
-        if (!phrases.includes(prefStr)) {
-          phrases.push(prefStr);
-          existing.responseStyle.commonPhrases = phrases.slice(-20); // 保留最近20个
-        }
-      }
+    // === 通用标签累积 ===
 
-      // 更新场景记忆
-      if (features.memoryExtract.event) {
-        const scenario = features.memoryExtract.event.substring(0, 50); // 简化场景名
-        if (!existing.responsePatterns[scenario]) {
-          existing.responsePatterns[scenario] = {
-            typicalEmotion: features.emotion || 'neutral',
-            commonPhrases: [],
-            effectiveness: 1,
-          };
-        } else {
-          existing.responsePatterns[scenario].effectiveness += 1;
-        }
-      }
+    // 根据会话次数添加标签
+    if (features.totalSessions >= 10) {
+      this.addUnique(profile.tags, '高活跃');
+    } else if (features.totalSessions >= 5) {
+      this.addUnique(profile.tags, '活跃用户');
+    } else if (features.totalSessions === 1) {
+      this.addUnique(profile.tags, '新用户');
+    }
+
+    // 向后兼容：更新旧的 data.behavior 字段
+    if (profile.data.behavior) {
+      profile.data.behavior.totalSessions = features.totalSessions;
     }
 
     // 更新元数据
-    existing.metadata.lastUpdated = new Date();
-    existing.metadata.version += 1;
+    profile.metadata.lastUpdated = new Date();
+    profile.metadata.version += 1;
 
-    return existing;
+    return profile;
+  }
+
+  /**
+   * 添加唯一项到数组
+   */
+  private addUnique(arr: string[], item: string): void {
+    if (!arr.includes(item)) {
+      arr.push(item);
+    }
   }
 }
