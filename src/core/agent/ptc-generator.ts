@@ -29,11 +29,13 @@ export class PTCGenerator {
   private llm: LLMClient;
   private skills: Map<string, SkillMetadata>;
   private systemPrompt?: string;
+  private confidenceThreshold: number;
 
-  constructor(llm: LLMClient, skills: SkillMetadata[], systemPrompt?: string) {
+  constructor(llm: LLMClient, skills: SkillMetadata[], systemPrompt?: string, confidenceThreshold: number = 0.6) {
     this.llm = llm;
     this.skills = new Map();
     this.systemPrompt = systemPrompt;
+    this.confidenceThreshold = confidenceThreshold;
     for (const skill of skills) {
       this.skills.set(skill.name, skill);
     }
@@ -266,27 +268,42 @@ SKILL SELECTION STRATEGY:
 - Second, check if task explicitly requires a specific capability (search, generate, analyze) → select matching skills
 - If unsure or the match is weak, prefer NO skills over using the wrong skill
 
-CONVERSATIONAL TASK EXAMPLES (use NO skills):
+CONFIDENCE EVALUATION:
+- You MUST provide a "confidence" score (0.0 to 1.0) for your skill selection
+- confidence = 1.0: Task perfectly matches the skill's purpose
+- confidence = 0.8: Task clearly requires the skill, but not a perfect match
+- confidence = 0.6: Task might use the skill, but alternative approaches exist
+- confidence < 0.6: Weak or uncertain match - prefer NO skills
+- For conversational tasks with no clear skill requirement: confidence = 0.0, selected_skills = []
+
+CONFIDENCE EXAMPLES:
+- "用 volcano-tts 把这段文字转成语音" → confidence: 1.0, selected_skills: ["volcano-tts"]
+- "帮我搜索北京天气" → confidence: 0.9, selected_skills: ["web-search"]
+- "今天天气真好" → confidence: 0.0, selected_skills: []
+- "买，买，再买根金链子" → confidence: 0.0, selected_skills: [] (conversational, no clear TTS intent)
+
+CONVERSATIONAL TASK EXAMPLES (use NO skills, confidence 0.0):
 - "今天天气真好" (casual chat)
 - "我想去公园玩" (personal statement)
 - "你好" (greeting)
 - "在吗？" (casual check-in)
+- "牛啊" (casual praise)
+- "买，买，再买根金链子" (casual talk)
 
-SKILL TASK EXAMPLES (use skills):
-- "搜索一下北京天气" (requires web-search)
-- "帮我生成一个视频" (requires video-generation)
-- "分析这段文本的情感" (requires text-analyzer)
-- Review the skill's input schema to ensure it can handle the task requirements
-- CRITICAL: You MUST use exact skill names from the available skills list (see list below).
-- DO NOT transform skill names (e.g., do not convert 'web-search' to 'web_search').
-- DO NOT use placeholders like 'first-skill', 'second-skill' - always use the actual skill name.
+SKILL TASK EXAMPLES (use skills with confidence > 0.6):
+- "搜索一下北京天气" → confidence: 0.9, selected_skills: ["web-search"]
+- "帮我生成一个视频" → confidence: 0.8, selected_skills: ["video-generation"]
+- "分析这段文本的情感" → confidence: 0.8, selected_skills: ["text-analyzer"]
+- "用 volcano-tts 读这段话" → confidence: 1.0, selected_skills: ["volcano-tts"]
 
 Please output:
 1. Which skills to use (in order)
 2. Brief reasoning for each skill selection
+3. Confidence score (0.0 to 1.0) for this selection
 
 CRITICAL: Output MUST be valid JSON with proper quoting.
 - The "reasoning" value MUST be a string in double quotes
+- The "confidence" value MUST be a number between 0.0 and 1.0
 - All string values MUST be enclosed in double quotes
 - Do NOT use unquoted strings
 - selected_skills CAN be an empty array for conversational tasks
@@ -295,7 +312,8 @@ Output format (JSON):
 <plan>
 {
   "selected_skills": ["skill1", "skill2"],
-  "reasoning": "First use skill1 to ..., then skill2 to ..."
+  "reasoning": "First use skill1 to ..., then skill2 to ...",
+  "confidence": 0.8
 }
 </plan>`;
 
@@ -419,10 +437,34 @@ Always prioritize available skills over direct computation or common knowledge.`
       selectedSkills: skillsArray
     });
 
+    // Extract and evaluate confidence score
+    const confidence = plan.confidence !== undefined ? Number(plan.confidence) : 0.5; // Default to 0.5 if not provided
+    console.info('[PTC Generator] Confidence evaluation:', {
+      confidence,
+      threshold: this.confidenceThreshold,
+      meetsThreshold: confidence >= this.confidenceThreshold,
+    });
+
+    // If confidence is below threshold, return empty skills
+    if (confidence < this.confidenceThreshold) {
+      console.warn('[PTC Generator] Confidence below threshold - treating as no suitable skills', {
+        confidence,
+        threshold: this.confidenceThreshold,
+        originalSelection: skillsArray,
+        reasoning: plan.reasoning || 'No reasoning provided',
+      });
+      return {
+        code: '',
+        selectedSkills: [], // Empty array - no suitable skills found
+        reasoning: `Low confidence (${confidence.toFixed(2)} < ${this.confidenceThreshold}): ${plan.reasoning || 'No reasoning provided'}`,
+      };
+    }
+
     return {
       code: '', // Will be generated in step 2
       selectedSkills: skillsArray,
       reasoning: plan.reasoning || 'No reasoning provided',
+      confidence, // Include confidence in result
     };
   }
 

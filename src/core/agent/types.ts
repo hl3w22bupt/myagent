@@ -245,6 +245,9 @@ export interface PTCResult {
 
   /** Reasoning for skill selection */
   reasoning?: string;
+
+  /** Confidence score for skill selection (0.0 to 1.0) */
+  confidence?: number;
 }
 
 /**
