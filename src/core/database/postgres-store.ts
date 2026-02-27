@@ -12,6 +12,8 @@ import type {
   TaskStatus,
   Session,
   CreateTaskData,
+  User,
+  UserProfile,
 } from './data-store';
 import type {
   TaskContext,
@@ -289,6 +291,20 @@ export class PostgresDataStore implements Database {
       `);
 
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
+
+      // Users table
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS users (
+          user_id TEXT PRIMARY KEY,
+          profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL,
+          last_session_id TEXT
+        )
+      `);
+
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_users_last_session ON users(last_session_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC)');
 
       // 自动迁移：为 artifacts 表添加 metadata 列（如果不存在）
       await safeQuery(`
@@ -1555,6 +1571,186 @@ export class PostgresDataStore implements Database {
       retryCount: row.retry_count,
       // Convert integer to boolean (PostgreSQL stores as INTEGER)
       isRetry: row.is_retry === 1,
+    };
+  }
+
+  // ============================================================================
+  // User Operations
+  // ============================================================================
+
+  /**
+   * 创建新用户
+   */
+  async createUser(userId: string): Promise<User> {
+    const client = await this.pool.connect();
+
+    try {
+      // 检查用户是否已存在
+      const existing = await this.getUser(userId);
+      if (existing) {
+        return existing;
+      }
+
+      const now = Date.now();
+
+      // 创建默认用户画像（通用空结构）
+      const defaultProfile: UserProfile = {
+        userId,
+        data: {}, // 通用 key-value 结构，由应用方定义具体内容
+        metadata: {
+          lastUpdated: new Date(now),
+          version: 1,
+        },
+      };
+
+      const result = await client.query(
+        `INSERT INTO users (user_id, profile, created_at, updated_at, last_session_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [
+          userId,
+          JSON.stringify(defaultProfile),
+          now,
+          now,
+          null,
+        ]
+      );
+
+      return this.mapDbUserToUser(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取用户
+   */
+  async getUser(userId: string): Promise<User | null> {
+    const client = await this.pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM users WHERE user_id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return this.mapDbUserToUser(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 更新用户画像
+   */
+  async updateUserProfile(userId: string, profile: Partial<UserProfile>): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const existing = await this.getUser(userId);
+      if (!existing) {
+        throw new Error(`User not found: ${userId}`);
+      }
+
+      // 合并画像数据 - 深度合并 data 字段
+      const updatedProfile: UserProfile = {
+        userId: existing.profile.userId,
+        data: {
+          ...existing.profile.data,
+          ...profile.data,
+        },
+        metadata: {
+          ...existing.profile.metadata,
+          ...profile.metadata,
+          lastUpdated: new Date(),
+          version: (existing.profile.metadata.version || 0) + 1,
+        },
+      };
+
+      await client.query(
+        `UPDATE users SET profile = $1, updated_at = $2 WHERE user_id = $3`,
+        [JSON.stringify(updatedProfile), Date.now(), userId]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 更新用户的最后会话ID
+   */
+  async updateUserLastSession(userId: string, sessionId: string): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query(
+        `UPDATE users SET last_session_id = $1, updated_at = $2 WHERE user_id = $3`,
+        [sessionId, Date.now(), userId]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取用户的所有会话
+   */
+  async getUserSessions(userId: string): Promise<Session[]> {
+    const client = await this.pool.connect();
+
+    try {
+      // 获取用户信息
+      const user = await this.getUser(userId);
+      if (!user) {
+        return [];
+      }
+
+      // 查询所有会话并按最后活跃时间倒序排列
+      const result = await client.query(
+        `SELECT s.* FROM sessions s
+         WHERE s.session_id IN (
+           SELECT DISTINCT session_id FROM tasks
+         )
+         ORDER BY s.last_active_at DESC
+         LIMIT 100`
+      );
+
+      return result.rows.map(row => ({
+        sessionId: row.session_id,
+        createdAt: new Date(parseInt(row.created_at)),
+        lastActiveAt: new Date(parseInt(row.last_active_at)),
+        metadata: row.metadata,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取或创建用户
+   */
+  async getOrCreateUser(userId: string): Promise<User> {
+    const existing = await this.getUser(userId);
+    if (existing) {
+      return existing;
+    }
+    return await this.createUser(userId);
+  }
+
+  /**
+   * 映射数据库行到 User 对象
+   */
+  private mapDbUserToUser(row: any): User {
+    return {
+      userId: row.user_id,
+      profile: row.profile,
+      createdAt: new Date(parseInt(row.created_at)),
+      updatedAt: new Date(parseInt(row.updated_at)),
+      lastSessionId: row.last_session_id || undefined,
     };
   }
 }

@@ -304,4 +304,76 @@ ${messages}
       .map(m => `[${m.role}]: ${m.content}`)
       .join('\n\n');
   }
+
+  /**
+   * 格式化 UserProfile 为 LLM 友好的文本
+   *
+   * 将通用用户画像（preferences, habits, tags）格式化为 prompt 片段
+   *
+   * @param userProfile - 用户画像对象
+   * @returns 格式化后的文本
+   */
+  formatUserProfile(userProfile: any | null): string {
+    if (!userProfile) return '';
+
+    const parts: string[] = [];
+
+    if (userProfile.preferences?.length) {
+      parts.push(`**偏好**: ${userProfile.preferences.join('、')}`);
+    }
+    if (userProfile.habits?.length) {
+      parts.push(`**习惯**: ${userProfile.habits.join('、')}`);
+    }
+    if (userProfile.tags?.length) {
+      parts.push(`**标签**: ${userProfile.tags.join('、')}`);
+    }
+
+    return parts.length ? `## 用户画像\n${parts.join('\n')}` : '';
+  }
+
+  /**
+   * 格式化 userContext 为 LLM 友好的文本
+   *
+   * 将应用层传入的 userContext 格式化为 prompt 片段
+   * 支持 UserContext 推荐结构，也兼容任意 Record<string, any>
+   *
+   * @param userContext - 用户上下文对象
+   * @returns 格式化后的文本
+   */
+  formatUserContext(userContext: Record<string, any> | null): string {
+    if (!userContext || Object.keys(userContext).length === 0) return '';
+
+    const parts: string[] = [];
+
+    // AI 身份信息
+    if (userContext.name || userContext.personality) {
+      parts.push('### AI 角色信息');
+      if (userContext.name) parts.push(`- 名字: ${userContext.name}`);
+      if (userContext.personality) parts.push(`- 性格: ${userContext.personality}`);
+      if (userContext.age) parts.push(`- 年龄: ${userContext.age}`);
+    }
+
+    // 用户信息
+    if (userContext.user_mood || userContext.user_needs || userContext.user_style) {
+      parts.push('### 用户信息');
+      if (userContext.user_mood) parts.push(`- 当前状态: ${userContext.user_mood}`);
+      if (userContext.user_needs) parts.push(`- 情感需求: ${userContext.user_needs}`);
+      if (userContext.user_style) parts.push(`- 沟通风格: ${userContext.user_style}`);
+    }
+
+    // 关系信息
+    if (userContext.intimacy_level || userContext.chat_days || userContext.nickname) {
+      parts.push('### 关系信息');
+      if (userContext.intimacy_level) parts.push(`- 亲密度: ${userContext.intimacy_level}/10`);
+      if (userContext.chat_days) parts.push(`- 相处天数: ${userContext.chat_days} 天`);
+      if (userContext.nickname) parts.push(`- 昵称: ${userContext.nickname}`);
+    }
+
+    // 自定义提示
+    if (userContext.custom_hint) {
+      parts.push(`### 特别提示\n${userContext.custom_hint}`);
+    }
+
+    return parts.length ? `## 用户上下文\n${parts.join('\n')}` : '';
+  }
 }

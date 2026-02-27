@@ -28,10 +28,12 @@ interface SkillMetadata {
 export class PTCGenerator {
   private llm: LLMClient;
   private skills: Map<string, SkillMetadata>;
+  private systemPrompt?: string;
 
-  constructor(llm: LLMClient, skills: SkillMetadata[]) {
+  constructor(llm: LLMClient, skills: SkillMetadata[], systemPrompt?: string) {
     this.llm = llm;
     this.skills = new Map();
+    this.systemPrompt = systemPrompt;
     for (const skill of skills) {
       this.skills.set(skill.name, skill);
     }
@@ -40,9 +42,9 @@ export class PTCGenerator {
   /**
    * Static factory method to create PTCGenerator with agent's LLM configuration
    */
-  static createWithAgentConfig(skills: SkillMetadata[], agentConfig: { llm?: any }): PTCGenerator {
+  static createWithAgentConfig(skills: SkillMetadata[], agentConfig: { llm?: any; systemPrompt?: string }): PTCGenerator {
     const llm = LLMClientFactory.createForAgent(agentConfig);
-    return new PTCGenerator(llm, skills);
+    return new PTCGenerator(llm, skills, agentConfig?.systemPrompt);
   }
 
   /**
@@ -139,8 +141,9 @@ export class PTCGenerator {
 
   /**
    * Step 1: Planning phase - Select appropriate skills.
+   * Made public for Agent to call as a gatekeeper before PTC generation.
    */
-  private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
+  public async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
     // 🔥 CRITICAL: If no skills are available, directly return FALLBACK mode
     // This avoids the LLM trying to select skills from an empty list,
     // which causes confusion with the "NEVER return empty selected_skills" instruction.
@@ -250,18 +253,29 @@ CRITICAL - SKILL NAME VALIDATION:
 
 IMPORTANT GUIDELINES:
 1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
-2. PRIORITIZE using available skills over direct computation or common knowledge
-3. For factual questions (locations, definitions, facts), ALWAYS use web-search skill
-4. For calculations, you can compute directly, but if uncertain, use appropriate skills
-5. NEVER return an empty selected_skills array - at least use web-search for factual queries
+2. ONLY select skills when there is a CLEAR, DIRECT match with the task requirements
+3. For simple conversational messages, greetings, or casual chat - return EMPTY selected_skills
+4. For factual questions (locations, definitions, facts), use web-search skill
+5. DO NOT force skill usage when the task doesn't clearly require it
 6. ${explicitlyRequestedSkills.length > 0 ?
    'CRITICAL: User explicitly requested skills - YOU MUST include them in selected_skills' :
    'If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills'}
 
 SKILL SELECTION STRATEGY:
-- Analyze the task description and match with skill descriptions/tags
-- Prioritize skills that are specifically designed for the task type
-- If multiple skills could work, choose the most specific one
+- First, determine if this is a CONVERSATIONAL task (chat, greeting, casual message) → NO skills needed
+- Second, check if task explicitly requires a specific capability (search, generate, analyze) → select matching skills
+- If unsure or the match is weak, prefer NO skills over using the wrong skill
+
+CONVERSATIONAL TASK EXAMPLES (use NO skills):
+- "今天天气真好" (casual chat)
+- "我想去公园玩" (personal statement)
+- "你好" (greeting)
+- "在吗？" (casual check-in)
+
+SKILL TASK EXAMPLES (use skills):
+- "搜索一下北京天气" (requires web-search)
+- "帮我生成一个视频" (requires video-generation)
+- "分析这段文本的情感" (requires text-analyzer)
 - Review the skill's input schema to ensure it can handle the task requirements
 - CRITICAL: You MUST use exact skill names from the available skills list (see list below).
 - DO NOT transform skill names (e.g., do not convert 'web-search' to 'web_search').
@@ -275,7 +289,7 @@ CRITICAL: Output MUST be valid JSON with proper quoting.
 - The "reasoning" value MUST be a string in double quotes
 - All string values MUST be enclosed in double quotes
 - Do NOT use unquoted strings
-- selected_skills MUST NOT be an empty array
+- selected_skills CAN be an empty array for conversational tasks
 
 Output format (JSON):
 <plan>
@@ -359,6 +373,13 @@ Always prioritize available skills over direct computation or common knowledge.`
       console.error('[PTC Generator] Missing or invalid selected_skills field:', plan);
       throw new Error(`Plan missing valid 'selected_skills' or 'selected' array`);
     }
+
+    // 📢 Log selected skills for debugging
+    console.info('[PTC Generator] LLM selected skills:', {
+      skills: skillsArray,
+      count: skillsArray.length,
+      reasoning: plan.reasoning || 'No reasoning provided'
+    });
 
     // ✅ 新增：验证技能名称
     const availableSkillNames = new Set(this.skills.keys());
@@ -593,13 +614,14 @@ Always prioritize available skills over direct computation or common knowledge.`
 
   /**
    * Step 2: Implementation phase - Generate Python code.
+   * Made public for Agent to call directly after skill selection.
    *
    * @param task - User task description
    * @param selectedSkills - Skills to use in the code
    * @param options - Generation options (including context)
    * @param previousError - Optional: previous error message from retry attempt
    */
-  private async generateCode(
+  public async generateCode(
     task: string,
     selectedSkills: string[],
     options?: PTCGenerationOptions,
@@ -721,7 +743,33 @@ CRITICAL - YOU MUST FIX THIS ERROR:
       console.log('[PTC Generator] Including previous error in prompt:', previousError.substring(0, 100));
     }
 
-    const prompt = `<context>
+    // IMPORTANT: Add agent system prompt section at the beginning
+    // This ensures subagent's personality and behavior guidelines are passed to code generation
+    let agentSystemPromptSection = '';
+    if (this.systemPrompt && this.systemPrompt.trim()) {
+      agentSystemPromptSection = `<agent_system_prompt>
+${this.systemPrompt}
+</agent_system_prompt>
+
+CRITICAL - AGENT BEHAVIOR GUIDELINES:
+The <agent_system_prompt> above contains YOUR AGENT'S PERSONALITY AND BEHAVIOR RULES.
+You MUST follow these guidelines when generating code:
+1. Match the tone and personality described in the system prompt
+2. Follow any specific behavioral instructions
+3. Use the designated response format if specified
+4. Apply any constraints mentioned in the system prompt
+
+`;
+      console.log('[PTC Generator] Using agent systemPrompt in code generation');
+    }
+
+    // Define firstSkillParam for use in the prompt template below
+    // This is the parameter name for the main input of the first selected skill
+    const firstSkillParam = selectedSkills.length > 0
+      ? this.findTaskParameter(selectedSkills[0])
+      : 'task';  // fallback for no skills case
+
+    const prompt = `${agentSystemPromptSection}<context>
 ${contextSection}
 </context>
 
@@ -747,6 +795,40 @@ Example:
 ${skillsBlock}
 </skills>
 
+${(() => {
+  // Generate EXACT code templates for each selected skill
+  if (selectedSkills.length > 0) {
+    return `<exact_code_templates>
+FOR EACH SELECTED SKILL, USE THIS EXACT CODE TEMPLATE:
+
+${selectedSkills.map(skill => {
+  const param = this.findTaskParameter(skill);
+  return `# === ${skill} ===
+# REQUIRED PARAMETER NAME: '${param}'
+# DO NOT use 'task' - use '${param}' instead!
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='${skill}',
+    input_data={
+        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!
+        # Add other optional parameters if mentioned in task
+    }
+)
+
+if result['success']:
+    print(result['content'])
+else:
+    error = result['content'].get('message', 'Unknown error') if isinstance(result['content'], dict) else str(result['content'])
+    print(f"Error: {error}")
+
+`;
+}).join('')}
+</exact_code_templates>
+
+`;
+  }
+  return '';
+})()}
 ${this.generateSchemaMappingInstructions(selectedSkills, skillsDetails)}
 
 <available_skills>
@@ -785,7 +867,7 @@ ${
 # - EXTRACT ALL PARAMETERS from the task description (e.g., duration, fps, resolution)`;
         }).join('\n\n');
 
-        const firstSkillParam = this.findTaskParameter(selectedSkills[0]);
+        // firstSkillParam is already defined outside (line ~768)
 
         // Build skill-specific parameter extraction instructions
         // Generic approach: LLM extracts parameters based on schema
@@ -872,7 +954,14 @@ ${skillsNeedingDetailedContent.map(skill =>
 You have selected skills: ${selectedSkills.join(', ')}
 You MUST use these skills - DO NOT write native Python code!
 
-${skillParamInstructions}
+${selectedSkills.includes('volcano-tts') ? `
+⚠️⚠️⚠️ URGENT WARNING FOR volcano-tts: ⚠️⚠️⚠️
+volcano-tts REQUIRES the 'text' parameter - NOT 'task'!
+WRONG:   input_data={'task': '我是最棒的'}     ← This will FAIL with "文本内容不能为空"
+CORRECT: input_data={'text': '我是最棒的'}     ← Use 'text' parameter!
+Memorize this: volcano-tts = 'text' parameter
+
+` : ''}${skillParamInstructions}
 
 CRITICAL - PARAMETER EXTRACTION REQUIREMENTS:
 For each skill, you MUST extract ALL mentioned parameters from the task:
@@ -920,6 +1009,18 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_regist
 #       'metadata': dict,
 #       'attempts': int  # Number of attempts made
 #   }
+
+# 🔥 CRITICAL - PARAMETER NAME MAPPING FOR SELECTED SKILLS:
+# EACH skill uses a DIFFERENT parameter name for the main input!
+# You MUST use the EXACT parameter name shown below:
+${selectedSkills.map((skill, i) => {
+  const param = this.findTaskParameter(skill);
+  return `#   ${i + 1}. ${skill}: use '${param}' parameter (NOT 'task' unless specified)`;
+}).join('\n')}
+#
+# ⚠️ DO NOT assume all skills use 'task' parameter!
+# ⚠️ ALWAYS check the parameter name for each skill before writing code!
+#
 ${skillContentPrep}
 ${skillParamExtraction}
 # CRITICAL - HOW TO PASS USER TASK TO SKILLS:
@@ -933,21 +1034,26 @@ ${skillParamExtraction}
 # - Optional with defaults: Extract if mentioned, otherwise use default
 # - Optional without defaults: Extract if mentioned, otherwise omit
 #
-# Example 1 (WRONG - required parameter not extracted):
-#   input_data={'task': '创建视频，时长 15s'}  # ❌ duration not extracted!
+# CRITICAL: The MAIN PARAMETER NAME varies by skill!
+# - Check "Task Parameter" above to find the correct name (task, text, query, content, etc.)
+# - For volcano-tts: use 'text' parameter
+# - For web-search: use 'query' parameter
+# - For video-generation: use 'task' parameter
 #
-# Example 2 (CORRECT - all parameters extracted):
+# Example 1 (WRONG - using wrong parameter name):
+#   input_data={'task': '我是最棒的'}  # ❌ volcano-tts needs 'text', not 'task'!
+#
+# Example 2 (CORRECT - using correct parameter name 'text' for volcano-tts):
 #   input_data={
-#       'task': '创建一个教学视频，时长 15s',
-#       'duration': 15,  # ✅ Extracted from "15s"
-#       'fps': 30       # ✅ Default from schema (optional, can omit if not in task)
+#       'text': '我是最棒的',  # ✅ Correct parameter for volcano-tts!
+#       'voice_type': 'BV001_streaming',  # Optional: extracted if mentioned
+#       'speed': 1.3  # Optional: uses default if not specified
 #   }
 #
-# Example 3 (CORRECT - optional param not mentioned, omit it):
+# Example 3 (CORRECT - only required parameter, use defaults):
 #   input_data={
-#       'task': '创建一个教学视频'  # No duration/fps mentioned
-#       # Only required param (task) is included
-#       # Optional params with defaults will be handled by the skill
+#       '${firstSkillParam}': '我是最棒的'  # Use the correct parameter name for THIS skill
+#       # Optional params with defaults will use their defaults
 #   }
 #
 # MANDATORY: You must call execute_with_retry with the selected skill
@@ -963,11 +1069,18 @@ DO NOT try to call executor.execute() - no skills are available.
 Even if the task seems simple, you MUST wrap your code in the loop structure.
 MAX_ITERATIONS is available (default: 5).
 
+⚠️ CRITICAL: NEVER use undefined variables!
+⚠️ The 'task' variable is NOT automatically available.
+⚠️ You MUST define it yourself using: task = '''...'''
+
 REQUIRED LOOP PATTERN:
+
+# ⚠️ CRITICAL: task variable must be defined before use
+task = """Paste the actual task from <task> section here"""
 
 # Context accumulates information across iterations
 context = {
-    "task": task,
+    "task": task,  # ✅ task is now defined
     "iteration": 0,
     "findings": [],
     "intermediate_results": {}
@@ -1033,11 +1146,12 @@ CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 # - [REQUIRED]: Must extract from task
 # - Optional with default: Extract if mentioned, or omit (skill uses default)
 # - Optional without default: Extract if mentioned, or omit
+# CRITICAL: Use the ACTUAL parameter name from the skill schema above!
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='skill-name',
     input_data={
-        'task_parameter': 'Copy actual task from <task> section',
+        '${firstSkillParam}': 'Copy actual task from <task> section',  # ← Use the CORRECT parameter name!
         # 'param1': 'value1',  # Extract if mentioned in task
         # 'param2': 'value2'   # Or omit - skill will use default if available
     }
@@ -1051,12 +1165,14 @@ else:
 \`\`\`
 
 # EXAMPLE: Execute skill with simple task (no extra parameters)
+# ⚠️ CRITICAL: Use the CORRECT parameter name for the skill!
+# Check "Task Parameter" in the skill details above - it might be 'task', 'text', 'query', etc.
 \`\`\`python
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='skill-name',  # Use exact skill name from selection
     input_data={
-        'task': 'Copy exact task from <task> section'  # Use EXACT task from <task> section!
+        '${firstSkillParam}': 'Copy exact task from <task> section'  # ← Use the CORRECT parameter name!
     }
 )
 
@@ -1095,6 +1211,13 @@ Generate the code now:`;
     const codegenSystemPrompt = `You are a Python code generator. Your role is to generate clean, efficient Python code that uses the provided skills correctly.
 Always follow the skill execution patterns and parameter requirements specified in the task.
 Generate production-ready code with proper error handling and async patterns.`;
+
+    // Debug log: log firstSkillParam for each selected skill
+    console.log('[PTC Generator] Generating code with parameters:');
+    for (const skill of selectedSkills) {
+      const param = this.findTaskParameter(skill);
+      console.log(`[PTC Generator]   - ${skill}: ${param}`);
+    }
 
     const response = await this.llm.messagesCreate([
       { role: 'system', content: codegenSystemPrompt },
@@ -1187,7 +1310,7 @@ Generate production-ready code with proper error handling and async patterns.`;
     }
 
     const schema = skill.metadata.input_schema;
-    const standardParams = ['task', 'description', 'content', 'query'];
+    const standardParams = ['task', 'text', 'description', 'content', 'query'];
 
     // Priority 1: Check required list for standard parameters
     if (schema.required && schema.required.length > 0) {
@@ -1203,17 +1326,22 @@ Generate production-ready code with proper error handling and async patterns.`;
       return 'task';
     }
 
-    // Priority 3: 'description' parameter
+    // Priority 3: 'text' parameter (for TTS skills)
+    if (schema.properties?.text) {
+      return 'text';
+    }
+
+    // Priority 4: 'description' parameter
     if (schema.properties?.description) {
       return 'description';
     }
 
-    // Priority 4: 'content' parameter
+    // Priority 5: 'content' parameter
     if (schema.properties?.content) {
       return 'content';
     }
 
-    // Priority 5: 'query' parameter
+    // Priority 6: 'query' parameter
     if (schema.properties?.query) {
       return 'query';
     }

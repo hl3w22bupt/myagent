@@ -26,6 +26,9 @@ declare module 'motia' {
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'master-delegation-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'get-user': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'get-user-sessions': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'get-session': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

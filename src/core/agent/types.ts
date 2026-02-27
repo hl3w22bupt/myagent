@@ -43,6 +43,8 @@ export interface AgentConfig {
   constraints?: {
     maxIterations?: number;
     timeout?: number;
+    /** Whether to enable HITL clarification mechanism (default: true) */
+    enable_clarification?: boolean;
     /** Retry configuration for failed operations */
     retry?: {
       /** Maximum number of retry attempts (default: 3) */
@@ -285,4 +287,38 @@ export interface SubagentConfig {
     maxIterations?: number;
     timeout?: number;
   };
+}
+
+/**
+ * UserContext - 用户上下文（应用层传入的运行时配置）
+ *
+ * 这是推荐结构，保持向后兼容，仍接受 Record<string, any>
+ *
+ * 使用场景：
+ * - MyEcho: 传入 AI 角色信息、用户状态、关系数据
+ * - 其他应用: 可传入任意应用特定字段
+ *
+ * 数据流：
+ * - 应用层通过 userContext 传入业务特定数据
+ * - myagent 通过 UserProfile 维护通用数据（preferences, habits, tags）
+ * - ContextManager 将两者格式化进 prompt
+ */
+export interface UserContext {
+  // ========== AI 角色信息（应用特定）==========
+  name?: string;              // AI 名字
+  personality?: string;       // AI 性格描述
+  age?: number;              // AI 年龄
+
+  // ========== 用户信息（通用）==========
+  user_mood?: string;        // 用户当前情绪
+  user_needs?: string;       // 用户情感需求
+  user_style?: string;       // 用户沟通风格
+
+  // ========== 关系信息（应用特定）==========
+  intimacy_level?: number;   // 亲密度 (0-10)
+  chat_days?: number;        // 相处天数
+  nickname?: string;         // 昵称
+
+  // ========== 扩展字段 ==========
+  [key: string]: any;
 }

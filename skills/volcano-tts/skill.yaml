@@ -1,0 +1,121 @@
+name: volcano-tts
+version: 1.0.0
+description: "火山引擎语音合成（Text-to-Speech）技能，支持多种情感和声音风格"
+tags: [tts, audio, speech, volcano, chinese, voice]
+
+type: pure-script
+
+input_schema:
+  type: object
+  required:
+    - text
+  properties:
+    text:
+      type: string
+      description: "要转换的文本内容"
+    voice_type:
+      type: string
+      enum: [BV001_streaming, BV002_streaming, BV003_streaming, BV004_streaming]
+      default: BV001_streaming
+      description: "声音类型 (BV001:流畅女声✅, BV002:流畅男声⚠️音质一般, BV003:可爱女声❌不可用, BV004:浑厚男声⚠️音质一般)"
+    emotion:
+      type: string
+      enum: [neutral, happy, sad, angry, fear, surprise, joyful, tender, excited]
+      default: neutral
+      description: "情感风格 (部分音色可能不支持所有情感)"
+    speed:
+      type: number
+      minimum: 0.5
+      maximum: 2.0
+      default: 1.3
+      description: "语速倍率 (1.3-1.5 更自然)"
+    volume:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      default: 1.0
+      description: "音量"
+    pitch:
+      type: number
+      minimum: 0.5
+      maximum: 2.0
+      default: 1.0
+      description: "音调倍率 (1.0-1.3 更有活力，0.8-1.0 更温柔)"
+    output_format:
+      type: string
+      enum: [wav]
+      default: wav
+      description: "输出音频格式 (API 返回 PCM，自动转换为 WAV)"
+  description: |
+    使用火山引擎 API 将文本转换为语音音频。
+
+    支持的声音类型:
+    - BV001_streaming: 流畅女声
+    - BV002_streaming: 流畅男声
+    - BV003_streaming: 可爱女声
+    - BV004_streaming: 浑厚男声
+
+    示例:
+    - 基础: {"text": "你好，世界！"}
+    - 指定声音: {"text": "今天天气真好", "voice_type": "BV001_streaming"}
+    - 调整语速: {"text": "快速说话", "speed": 1.5}
+
+    参数优先级: 直接指定 > 环境变量 > 默认值
+
+output_schema:
+  type: object
+  required:
+    - result_type
+    - success
+    - content
+  properties:
+    result_type:
+      type: string
+      enum: [audio, error]
+    success:
+      type: boolean
+    content:
+      oneOf:
+        - type: object
+          required: [path, url, mime_type]
+          properties:
+            path:
+              type: string
+              description: "本地音频文件路径"
+            url:
+              type: string
+              description: "音频 URL"
+            mime_type:
+              type: string
+              description: "音频 MIME 类型"
+            duration:
+              type: number
+              description: "音频时长（秒）"
+            size:
+              type: integer
+              description: "文件大小（字节）"
+        - type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+            message:
+              type: string
+            details:
+              type: string
+    metadata:
+      type: object
+      properties:
+        execution_time:
+          type: integer
+        voice_type:
+          type: string
+        emotion:
+          type: string
+        text_length:
+          type: integer
+
+execution:
+  handler: handler.py
+  function: execute_volcano_tts
+  timeout: 30000

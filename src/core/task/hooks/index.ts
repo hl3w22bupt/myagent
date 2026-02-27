@@ -8,6 +8,7 @@ export { ContextManagerTaskHook } from './context-manager';
 export { UserAllowTaskHook } from './user-allow';
 export { MetricsCollectorTaskHook } from './metrics';
 export { TaskTraceHook } from './trace-hook';
+export { UserProfileAccumulatorHook } from './user-profile-accumulator';
 
 // Types
 export * from './types';

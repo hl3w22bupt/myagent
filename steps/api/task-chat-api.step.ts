@@ -168,37 +168,39 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
       };
     }
 
-    // 获取或生成 sessionId
+    // 获取或生成 sessionId，并从数据库获取任务信息（包括 subagent）
     let sessionId = request.body?.sessionId;
     let taskStatus: string | undefined;
+    let subagent: string | undefined; // 保存 subagent 用于后续委派
 
-    // 如果前端没有提供 sessionId，从数据库中获取任务信息
-    if (!sessionId) {
-      try {
-        const dataStore = getDataStore();
-        await dataStore.initialize(); // 确保 DataStore 已初始化
-        const taskResult = await dataStore.getTask(taskId);
+    // 从数据库中获取任务信息（无论前端是否提供 sessionId）
+    // 因为需要获取 subagent 信息用于多轮对话委派
+    try {
+      const dataStore = getDataStore();
+      await dataStore.initialize(); // 确保 DataStore 已初始化
+      const taskResult = await dataStore.getTask(taskId);
 
-        if (taskResult && taskResult.sessionId) {
+      if (taskResult) {
+        // 如果前端没有提供 sessionId，使用数据库中的
+        if (!sessionId) {
           sessionId = taskResult.sessionId;
-          taskStatus = taskResult.status;
-          logger.info('Task Chat API: Retrieved sessionId from database', {
-            taskId,
-            sessionId,
-            status: taskStatus
-          });
-        } else {
-          logger.warn('Task Chat API: No sessionId found in database', {
-            taskId,
-            hasResult: !!taskResult
-          });
         }
-      } catch (dbError: any) {
-        logger.error('Task Chat API: Failed to retrieve sessionId from database', {
+        taskStatus = taskResult.status;
+        subagent = taskResult.metadata?.subagent as string; // 获取 subagent
+        logger.info('Task Chat API: Retrieved task info from database', {
           taskId,
-          error: dbError.message
+          sessionId,
+          status: taskStatus,
+          subagent
         });
+      } else {
+        logger.warn('Task Chat API: Task not found in database', { taskId });
       }
+    } catch (dbError: any) {
+      logger.error('Task Chat API: Failed to retrieve task info from database', {
+        taskId,
+        error: dbError.message
+      });
     }
 
     // === HITL Checkpoint: Handle clarification response ===
@@ -254,6 +256,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
             sessionId: sessionId || '',
             taskId, // Same taskId to continue from checkpoint
             isClarificationResponse: true, // Flag to indicate this is a clarification response
+            subagent, // 传递 subagent 用于委派
           },
         });
 
@@ -339,7 +342,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
       };
     }
 
-    logger.info('Task Chat API: Message processing complete', { taskId, message, sessionId });
+    logger.info('Task Chat API: Message processing complete', { taskId, message, sessionId, subagent });
 
     // CRITICAL: Trigger new task execution round
     // This ensures the conversation continues and output is updated
@@ -350,6 +353,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         sessionId: sessionId || '',
         taskId, // Use same taskId to update the same task record
         continue: true, // Indicate this is a continuation
+        subagent, // 传递 subagent 用于委派，保持多轮对话使用同一 subagent
       },
     });
 
