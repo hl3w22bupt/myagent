@@ -11,7 +11,7 @@
 
 import { LLMClient } from './client';
 import { LLMClientFactory } from './factory';
-import type { Message, StructuredSummary, FileModification, Decision, ErrorAndSolution } from '../database/context-types';
+import type { Message, StructuredSummary } from '../database/context-types';
 
 export interface LLMSummarizerConfig {
   apiKey?: string;

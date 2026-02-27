@@ -12,7 +12,7 @@ import { getDataStore } from '../../src/core/database/data-store';
 /**
  * 请求参数验证
  */
-const paramsSchema = z.object({
+export const paramsSchema = z.object({
   sessionId: z.string().min(1, 'Session ID is required'),
 });
 

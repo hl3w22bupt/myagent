@@ -141,8 +141,9 @@ export class PTCGenerator {
 
   /**
    * Step 1: Planning phase - Select appropriate skills.
+   * Made public for Agent to call as a gatekeeper before PTC generation.
    */
-  private async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
+  public async planSkills(task: string, options?: PTCGenerationOptions): Promise<PTCResult> {
     // 🔥 CRITICAL: If no skills are available, directly return FALLBACK mode
     // This avoids the LLM trying to select skills from an empty list,
     // which causes confusion with the "NEVER return empty selected_skills" instruction.
@@ -613,13 +614,14 @@ Always prioritize available skills over direct computation or common knowledge.`
 
   /**
    * Step 2: Implementation phase - Generate Python code.
+   * Made public for Agent to call directly after skill selection.
    *
    * @param task - User task description
    * @param selectedSkills - Skills to use in the code
    * @param options - Generation options (including context)
    * @param previousError - Optional: previous error message from retry attempt
    */
-  private async generateCode(
+  public async generateCode(
     task: string,
     selectedSkills: string[],
     options?: PTCGenerationOptions,
@@ -1003,11 +1005,18 @@ DO NOT try to call executor.execute() - no skills are available.
 Even if the task seems simple, you MUST wrap your code in the loop structure.
 MAX_ITERATIONS is available (default: 5).
 
+⚠️ CRITICAL: NEVER use undefined variables!
+⚠️ The 'task' variable is NOT automatically available.
+⚠️ You MUST define it yourself using: task = '''...'''
+
 REQUIRED LOOP PATTERN:
+
+# ⚠️ CRITICAL: task variable must be defined before use
+task = """Paste the actual task from <task> section here"""
 
 # Context accumulates information across iterations
 context = {
-    "task": task,
+    "task": task,  # ✅ task is now defined
     "iteration": 0,
     "findings": [],
     "intermediate_results": {}

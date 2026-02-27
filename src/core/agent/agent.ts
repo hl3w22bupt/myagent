@@ -442,6 +442,67 @@ export class Agent {
         };
       }
 
+      // ⭐ NEW: Skill Selection Gate (PTC CodeGen 门控)
+      // 前置门控：先进行 Skill Selection，根据结果决定是走 PTC CodeGen 还是直接 LLM 响应
+      console.log('[Agent] Running Skill Selection gate...');
+
+      const skillPlan = await this.ptcGenerator.planSkills(task, {
+        history: this.state.conversationHistory,
+        variables: Object.fromEntries(this.state.variables),
+      });
+
+      console.log('[Agent] Skill Selection result:', {
+        selectedSkills: skillPlan.selectedSkills,
+        reasoning: skillPlan.reasoning,
+        hasSkills: skillPlan.selectedSkills.length > 0
+      });
+
+      // 无技能命中 → 直接 LLM 响应
+      if (skillPlan.selectedSkills.length === 0) {
+        console.log('[Agent] No skills selected, using direct LLM response');
+
+        steps.push({
+          type: 'planning',
+          content: 'No skills selected - using direct LLM response',
+          timestamp: Date.now(),
+          metadata: {
+            task,
+            skillSelectionReasoning: skillPlan.reasoning
+          },
+        });
+
+        // Build conversation messages for LLM
+        const messages: any[] = [
+          { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
+          ...this.state.conversationHistory,
+          { role: 'user', content: task }
+        ];
+
+        const llmResponse = await this.llm.messagesCreate(messages);
+
+        console.log('[Agent] Direct LLM response generated:', {
+          responseLength: llmResponse.content.length,
+          responsePreview: llmResponse.content.substring(0, 100)
+        });
+
+        const executionTime = Date.now() - startTime;
+
+        return {
+          success: true,
+          output: llmResponse.content,
+          steps: [...steps, {
+            type: 'execution',
+            content: 'Direct LLM response (no skills selected)',
+            timestamp: Date.now(),
+          }],
+          executionTime,
+          metadata: { skillNames: [] },
+        };
+      }
+
+      // 有技能命中 → 继续 PTC CodeGen（原有逻辑）
+      console.log('[Agent] Skills selected, proceeding with PTC CodeGen:', skillPlan.selectedSkills);
+
       // Step 1: Generate PTC code with retry logic
       steps.push({
         type: 'planning',
@@ -458,7 +519,9 @@ export class Agent {
       };
 
       // Generate PTC code with retry (max 3 attempts)
-      console.log('[Agent] Calling ptcGenerator.generateWithResult() with retry');
+      // Note: Skill Selection already done via planSkills() above
+      // Now we only need to generate code using the selected skills
+      console.log('[Agent] Calling ptcGenerator.generateCode() with pre-selected skills');
 
       const ptcResult = await (async () => {
         const maxPtcRetries = 3; // Hardcoded to 3 attempts for PTC generation
@@ -469,7 +532,8 @@ export class Agent {
         for (let attempt = 1; attempt <= maxPtcRetries; attempt++) {
           try {
             console.log(`[Agent] PTC generation attempt ${attempt}/${maxPtcRetries}`, {
-              hasPreviousError: !!lastErrorMessage
+              hasPreviousError: !!lastErrorMessage,
+              selectedSkills: skillPlan.selectedSkills
             });
 
             // Build options for PTC generator
@@ -484,12 +548,21 @@ export class Agent {
               ptcOptions.originalTask = context.originalTask;
             }
 
-            // Pass previous error if this is a retry attempt
-            const result = await this.ptcGenerator.generateWithResult(
+            // Generate code directly with pre-selected skills
+            // (skip planSkills() since we already did that)
+            const code = await this.ptcGenerator.generateCode(
               task,
+              skillPlan.selectedSkills,
               ptcOptions,
               lastErrorMessage || undefined // 传递上一次的错误信息
             );
+
+            // Construct ptcResult with code and pre-selected skill info
+            const result = {
+              code,
+              selectedSkills: skillPlan.selectedSkills,
+              reasoning: skillPlan.reasoning
+            };
 
             console.log('[Agent] PTC code generated', {
               codeLength: result.code.length,
