@@ -85,6 +85,12 @@ export class MasterAgent extends Agent {
     // Check if request rewriting is enabled (default: true)
     const shouldRewriteRequest = context?.rewriteRequest !== false;
 
+    console.log('[MasterAgent] Request rewrite check:', {
+      'context?.rewriteRequest': context?.rewriteRequest,
+      shouldRewriteRequest,
+      'will skip rewrite': !shouldRewriteRequest,
+    });
+
     if (shouldRewriteRequest) {
       try {
         // Get conversation history from context manager
@@ -150,7 +156,9 @@ export class MasterAgent extends Agent {
         // Continue with original task if rewrite fails
       }
     } else {
-      console.log('[MasterAgent] Request rewriting disabled, using original task as-is');
+      console.log('[MasterAgent] Request rewriting DISABLED, using original task as-is', {
+        'context.rewriteRequest': context?.rewriteRequest,
+      });
     }
 
     try {

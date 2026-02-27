@@ -605,6 +605,11 @@ export const handler = async (
     (taskContext.context as any).agent = agent;
     (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
 
+    logger.info('[master-agent.step] rewriteRequest setting:', {
+      'input.rewriteRequest': input.rewriteRequest,
+      'context.rewriteRequest': (taskContext.context as any).rewriteRequest,
+    });
+
     await updateStream('running', {
       currentStep: `${agentTypeName} acquired, starting execution`,
     });
