@@ -763,6 +763,12 @@ You MUST follow these guidelines when generating code:
       console.log('[PTC Generator] Using agent systemPrompt in code generation');
     }
 
+    // Define firstSkillParam for use in the prompt template below
+    // This is the parameter name for the main input of the first selected skill
+    const firstSkillParam = selectedSkills.length > 0
+      ? this.findTaskParameter(selectedSkills[0])
+      : 'task';  // fallback for no skills case
+
     const prompt = `${agentSystemPromptSection}<context>
 ${contextSection}
 </context>
@@ -789,6 +795,40 @@ Example:
 ${skillsBlock}
 </skills>
 
+${(() => {
+  // Generate EXACT code templates for each selected skill
+  if (selectedSkills.length > 0) {
+    return `<exact_code_templates>
+FOR EACH SELECTED SKILL, USE THIS EXACT CODE TEMPLATE:
+
+${selectedSkills.map(skill => {
+  const param = this.findTaskParameter(skill);
+  return `# === ${skill} ===
+# REQUIRED PARAMETER NAME: '${param}'
+# DO NOT use 'task' - use '${param}' instead!
+result = await execute_with_retry(
+    execute_func=executor.execute,
+    skill_name='${skill}',
+    input_data={
+        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!
+        # Add other optional parameters if mentioned in task
+    }
+)
+
+if result['success']:
+    print(result['content'])
+else:
+    error = result['content'].get('message', 'Unknown error') if isinstance(result['content'], dict) else str(result['content'])
+    print(f"Error: {error}")
+
+`;
+}).join('')}
+</exact_code_templates>
+
+`;
+  }
+  return '';
+})()}
 ${this.generateSchemaMappingInstructions(selectedSkills, skillsDetails)}
 
 <available_skills>
@@ -827,7 +867,7 @@ ${
 # - EXTRACT ALL PARAMETERS from the task description (e.g., duration, fps, resolution)`;
         }).join('\n\n');
 
-        const firstSkillParam = this.findTaskParameter(selectedSkills[0]);
+        // firstSkillParam is already defined outside (line ~768)
 
         // Build skill-specific parameter extraction instructions
         // Generic approach: LLM extracts parameters based on schema
@@ -914,7 +954,14 @@ ${skillsNeedingDetailedContent.map(skill =>
 You have selected skills: ${selectedSkills.join(', ')}
 You MUST use these skills - DO NOT write native Python code!
 
-${skillParamInstructions}
+${selectedSkills.includes('volcano-tts') ? `
+⚠️⚠️⚠️ URGENT WARNING FOR volcano-tts: ⚠️⚠️⚠️
+volcano-tts REQUIRES the 'text' parameter - NOT 'task'!
+WRONG:   input_data={'task': '我是最棒的'}     ← This will FAIL with "文本内容不能为空"
+CORRECT: input_data={'text': '我是最棒的'}     ← Use 'text' parameter!
+Memorize this: volcano-tts = 'text' parameter
+
+` : ''}${skillParamInstructions}
 
 CRITICAL - PARAMETER EXTRACTION REQUIREMENTS:
 For each skill, you MUST extract ALL mentioned parameters from the task:
@@ -962,6 +1009,18 @@ executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_regist
 #       'metadata': dict,
 #       'attempts': int  # Number of attempts made
 #   }
+
+# 🔥 CRITICAL - PARAMETER NAME MAPPING FOR SELECTED SKILLS:
+# EACH skill uses a DIFFERENT parameter name for the main input!
+# You MUST use the EXACT parameter name shown below:
+${selectedSkills.map((skill, i) => {
+  const param = this.findTaskParameter(skill);
+  return `#   ${i + 1}. ${skill}: use '${param}' parameter (NOT 'task' unless specified)`;
+}).join('\n')}
+#
+# ⚠️ DO NOT assume all skills use 'task' parameter!
+# ⚠️ ALWAYS check the parameter name for each skill before writing code!
+#
 ${skillContentPrep}
 ${skillParamExtraction}
 # CRITICAL - HOW TO PASS USER TASK TO SKILLS:
@@ -975,21 +1034,26 @@ ${skillParamExtraction}
 # - Optional with defaults: Extract if mentioned, otherwise use default
 # - Optional without defaults: Extract if mentioned, otherwise omit
 #
-# Example 1 (WRONG - required parameter not extracted):
-#   input_data={'task': '创建视频，时长 15s'}  # ❌ duration not extracted!
+# CRITICAL: The MAIN PARAMETER NAME varies by skill!
+# - Check "Task Parameter" above to find the correct name (task, text, query, content, etc.)
+# - For volcano-tts: use 'text' parameter
+# - For web-search: use 'query' parameter
+# - For video-generation: use 'task' parameter
 #
-# Example 2 (CORRECT - all parameters extracted):
+# Example 1 (WRONG - using wrong parameter name):
+#   input_data={'task': '我是最棒的'}  # ❌ volcano-tts needs 'text', not 'task'!
+#
+# Example 2 (CORRECT - using correct parameter name 'text' for volcano-tts):
 #   input_data={
-#       'task': '创建一个教学视频，时长 15s',
-#       'duration': 15,  # ✅ Extracted from "15s"
-#       'fps': 30       # ✅ Default from schema (optional, can omit if not in task)
+#       'text': '我是最棒的',  # ✅ Correct parameter for volcano-tts!
+#       'voice_type': 'BV001_streaming',  # Optional: extracted if mentioned
+#       'speed': 1.3  # Optional: uses default if not specified
 #   }
 #
-# Example 3 (CORRECT - optional param not mentioned, omit it):
+# Example 3 (CORRECT - only required parameter, use defaults):
 #   input_data={
-#       'task': '创建一个教学视频'  # No duration/fps mentioned
-#       # Only required param (task) is included
-#       # Optional params with defaults will be handled by the skill
+#       '${firstSkillParam}': '我是最棒的'  # Use the correct parameter name for THIS skill
+#       # Optional params with defaults will use their defaults
 #   }
 #
 # MANDATORY: You must call execute_with_retry with the selected skill
@@ -1082,11 +1146,12 @@ CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
 # - [REQUIRED]: Must extract from task
 # - Optional with default: Extract if mentioned, or omit (skill uses default)
 # - Optional without default: Extract if mentioned, or omit
+# CRITICAL: Use the ACTUAL parameter name from the skill schema above!
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='skill-name',
     input_data={
-        'task_parameter': 'Copy actual task from <task> section',
+        '${firstSkillParam}': 'Copy actual task from <task> section',  # ← Use the CORRECT parameter name!
         # 'param1': 'value1',  # Extract if mentioned in task
         # 'param2': 'value2'   # Or omit - skill will use default if available
     }
@@ -1100,12 +1165,14 @@ else:
 \`\`\`
 
 # EXAMPLE: Execute skill with simple task (no extra parameters)
+# ⚠️ CRITICAL: Use the CORRECT parameter name for the skill!
+# Check "Task Parameter" in the skill details above - it might be 'task', 'text', 'query', etc.
 \`\`\`python
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='skill-name',  # Use exact skill name from selection
     input_data={
-        'task': 'Copy exact task from <task> section'  # Use EXACT task from <task> section!
+        '${firstSkillParam}': 'Copy exact task from <task> section'  # ← Use the CORRECT parameter name!
     }
 )
 
@@ -1144,6 +1211,13 @@ Generate the code now:`;
     const codegenSystemPrompt = `You are a Python code generator. Your role is to generate clean, efficient Python code that uses the provided skills correctly.
 Always follow the skill execution patterns and parameter requirements specified in the task.
 Generate production-ready code with proper error handling and async patterns.`;
+
+    // Debug log: log firstSkillParam for each selected skill
+    console.log('[PTC Generator] Generating code with parameters:');
+    for (const skill of selectedSkills) {
+      const param = this.findTaskParameter(skill);
+      console.log(`[PTC Generator]   - ${skill}: ${param}`);
+    }
 
     const response = await this.llm.messagesCreate([
       { role: 'system', content: codegenSystemPrompt },

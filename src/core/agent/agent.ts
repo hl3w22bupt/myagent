@@ -429,9 +429,12 @@ export class Agent {
 
         const executionTime = Date.now() - startTime;
 
+        // Clean markdown code blocks from LLM response
+        const cleanOutput = this.extractCleanContent(llmResponse.content);
+
         return {
           success: true,
-          output: llmResponse.content,
+          output: cleanOutput,
           steps: [...steps, {
             type: 'execution',
             content: 'Direct LLM response generated',
@@ -487,9 +490,12 @@ export class Agent {
 
         const executionTime = Date.now() - startTime;
 
+        // Clean markdown code blocks from LLM response
+        const cleanOutput = this.extractCleanContent(llmResponse.content);
+
         return {
           success: true,
-          output: llmResponse.content,
+          output: cleanOutput,
           steps: [...steps, {
             type: 'execution',
             content: 'Direct LLM response (no skills selected)',
@@ -909,6 +915,22 @@ export class Agent {
         metadata: {},
       };
     }
+  }
+
+  /**
+   * Extract clean content from LLM response.
+   * Removes markdown code block markers (```json, ```python, ``` etc.)
+   * Returns the original JSON or plain text content.
+   */
+  private extractCleanContent(response: string): string {
+    if (!response) return response;
+
+    // Try to extract content from markdown code blocks
+    const jsonMatch = response.match(/```json\n([\s\S]+?)\n```/) ||
+                     response.match(/```python\n([\s\S]+?)\n```/) ||
+                     response.match(/```\n([\s\S]+?)\n```/);
+
+    return jsonMatch ? jsonMatch[1].trim() : response.trim();
   }
 
   /**
