@@ -63,8 +63,11 @@ export class MasterAgent extends Agent {
 
   /**
    * Run task with possible delegation to subagents.
+   * @param task - Task description
+   * @param _taskId - Optional task ID
+   * @param context - Optional context object (may include rewriteRequest flag)
    */
-  async run(task: string, _taskId?: string): Promise<AgentResult> {
+  async run(task: string, _taskId?: string, context?: any): Promise<AgentResult> {
     const startTime = Date.now();
     const steps: any[] = [];
 
@@ -79,68 +82,75 @@ export class MasterAgent extends Agent {
     // === Step 0: Request Rewriting (Multi-turn conversation enhancement) ===
     const effectiveTaskId = _taskId || `task-${Date.now()}`;
 
-    try {
-      // Get conversation history from context manager
-      const taskContext = await this.contextManager.getContext(effectiveTaskId);
-      const conversationHistory = taskContext?.messages || [];
+    // Check if request rewriting is enabled (default: true)
+    const shouldRewriteRequest = context?.rewriteRequest !== false;
 
-      console.log('[MasterAgent] Conversation history for rewrite:', {
-        historyLength: conversationHistory.length,
-        taskId: effectiveTaskId,
-      });
+    if (shouldRewriteRequest) {
+      try {
+        // Get conversation history from context manager
+        const taskContext = await this.contextManager.getContext(effectiveTaskId);
+        const conversationHistory = taskContext?.messages || [];
 
-      // ⭐ Configure trace for request rewriter's LLM calls
-      // This ensures request rewriting is visible in execution traces
-      const streams = getAgentStreams();
-      if (streams?.executionTraces) {
-        this.requestRewriter.setTraceConfig({
-          streams: { executionTraces: streams.executionTraces },
-          traceContext: {
-            taskId: effectiveTaskId,
-            agentId: this.sessionId,
-          },
+        console.log('[MasterAgent] Conversation history for rewrite:', {
+          historyLength: conversationHistory.length,
+          taskId: effectiveTaskId,
         });
-        console.log('[MasterAgent] RequestRewriter trace config set');
-      }
 
-      // Rewrite request based on conversation history
-      const rewrittenTask = await this.requestRewriter.rewriteRequest(
-        task,
-        conversationHistory,
-        {
-          maxHistoryMessages: 10,
-          contextSummary: taskContext?.summary ? {
-            currentTask: taskContext.summary.currentTask || task,
-            completedSteps: taskContext.summary.completedSteps || [],
-            artifactIndex: taskContext.artifactIndex || [],
-          } : undefined,
+        // ⭐ Configure trace for request rewriter's LLM calls
+        // This ensures request rewriting is visible in execution traces
+        const streams = getAgentStreams();
+        if (streams?.executionTraces) {
+          this.requestRewriter.setTraceConfig({
+            streams: { executionTraces: streams.executionTraces },
+            traceContext: {
+              taskId: effectiveTaskId,
+              agentId: this.sessionId,
+            },
+          });
+          console.log('[MasterAgent] RequestRewriter trace config set');
         }
-      );
 
-      // Use rewritten task for all subsequent processing
-      if (rewrittenTask !== task) {
-        console.log('[MasterAgent] Task rewritten:', {
-          original: task,
-          rewritten: rewrittenTask,
-        });
+        // Rewrite request based on conversation history
+        const rewrittenTask = await this.requestRewriter.rewriteRequest(
+          task,
+          conversationHistory,
+          {
+            maxHistoryMessages: 10,
+            contextSummary: taskContext?.summary ? {
+              currentTask: taskContext.summary.currentTask || task,
+              completedSteps: taskContext.summary.completedSteps || [],
+              artifactIndex: taskContext.artifactIndex || [],
+            } : undefined,
+          }
+        );
 
-        steps.push({
-          type: 'request_rewrite',
-          content: 'Request rewritten with conversation context',
-          timestamp: Date.now(),
-          metadata: {
-            originalTask: task,
-            rewrittenTask: rewrittenTask,
-            historyLength: conversationHistory.length,
-          },
-        });
+        // Use rewritten task for all subsequent processing
+        if (rewrittenTask !== task) {
+          console.log('[MasterAgent] Task rewritten:', {
+            original: task,
+            rewritten: rewrittenTask,
+          });
 
-        // Replace task with rewritten version
-        task = rewrittenTask;
+          steps.push({
+            type: 'request_rewrite',
+            content: 'Request rewritten with conversation context',
+            timestamp: Date.now(),
+            metadata: {
+              originalTask: task,
+              rewrittenTask: rewrittenTask,
+              historyLength: conversationHistory.length,
+            },
+          });
+
+          // Replace task with rewritten version
+          task = rewrittenTask;
+        }
+      } catch (error) {
+        console.error('[MasterAgent] Request rewriting failed, using original task:', error);
+        // Continue with original task if rewrite fails
       }
-    } catch (error) {
-      console.error('[MasterAgent] Request rewriting failed, using original task:', error);
-      // Continue with original task if rewrite fails
+    } else {
+      console.log('[MasterAgent] Request rewriting disabled, using original task as-is');
     }
 
     try {
