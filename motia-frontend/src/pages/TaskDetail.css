@@ -3140,6 +3140,37 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   /* 不设置固定高度和 overflow，让内容自然增长 */
 }
 
+.text-viewer-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #f1f5f9;
+  border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid #e2e8f0;
+  border-bottom: none;
+  flex-shrink: 0;
+}
+
+.text-original-task {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.text-original-task::before {
+  content: "任务";
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
 .text-description {
   font-size: 0.875rem;
   color: #64748b;
@@ -3148,6 +3179,15 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   border-radius: 0.5rem;
   border: 1px solid #e2e8f0;
   flex-shrink: 0;
+}
+
+/* 当有 header 时，description 的样式调整 */
+.text-viewer-header + .text-description {
+  border-radius: 0;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  background: #f8fafc;
+  margin: -0.5rem 0 0 0;
 }
 
 .text-artifact-content {
@@ -3164,6 +3204,14 @@ div[style*="backdrop-filter: blur"]::-webkit-scrollbar-thumb:hover {
   border: 1px solid #e2e8f0;
   overflow-x: auto;
   /* 不设置 overflow-y，让外层 tab-panel 控制垂直滚动 */
+}
+
+/* 当有 header 时，content 样式调整 */
+.text-viewer-header ~ .text-artifact-content {
+  border-radius: 0 0 0.5rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  margin: 0;
 }
 
 .result-visual-text {

@@ -382,32 +382,16 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         : (normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED);
 
       // 获取当前对话轮次
-      // conversationLength 是消息总数（每轮有2条消息：用户+助手）
-      // 所以 round = conversationLength / 2 - 1（从0开始索引）
-      // 优先使用 result.state.conversationLength，否则从 outputs 表获取
-      const conversationLength = (normalizedResult as any).state?.conversationLength;
-
-      let currentRound = 0;
-
-      if (conversationLength !== undefined && conversationLength > 0) {
-        // conversationLength 是消息总数，每轮2条消息
-        // Round 1: 2条消息 -> round 0
-        // Round 2: 4条消息 -> round 1
-        currentRound = Math.floor(conversationLength / 2) - 1;
-      } else {
-        // 降级方案：从 outputs 表获取（round 从 1 开始，需要转换为 0 开始的索引）
-        const existingOutputs = await store.getOutputs(taskId);
-        if (existingOutputs.length > 0) {
-          const latestRound = existingOutputs[existingOutputs.length - 1].round;
-          // round 从 1 开始，转换为 0 开始的索引用于 artifact metadata
-          currentRound = latestRound - 1;
-        }
-      }
+      // 使用现有 artifacts 数量来确定轮次（最可靠的方式）
+      // 每个 round 产生一个 text artifact，所以 artifacts 数量 = 当前轮次 + 1
+      const existingArtifacts = await store.getArtifacts(taskId);
+      const currentRound = existingArtifacts.length;
 
       logger.info('Current conversation round', {
         taskId,
         currentRound,
-        conversationLength,
+        existingArtifactsCount: existingArtifacts.length,
+        stateConversationLength: (normalizedResult as any).state?.conversationLength,
       });
 
       // Extract skill name from result.metadata.skillNames (populated by PTC generator)

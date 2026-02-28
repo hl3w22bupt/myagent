@@ -76,6 +76,13 @@ export const bodySchema = z.object({
    * When specified, the task will be executed directly by this subagent.
    */
   subagent: z.string().optional().describe('Specific subagent to use'),
+
+  /**
+   * Optional: Whether to rewrite the request using conversation history (default: true).
+   * When false, the original request will be used as-is without context enhancement.
+   * This is useful for integrations (e.g., MyEcho) that manage their own conversation context.
+   */
+  rewriteRequest: z.boolean().optional().describe('Enable request rewriting with conversation history (default: true)'),
 });
 
 /**
@@ -128,7 +135,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent } =
+  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -148,6 +155,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     userId,
     hasUserContext: !!userContext,
     subagent,
+    rewriteRequest, // Log request rewriting setting
   });
 
   // Log if no skills provided - PTCGenerator will handle selection
@@ -189,6 +197,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       userId, // MyEcho: User ID for profile accumulation
       userContext, // MyEcho: User configuration bundle
       subagent, // MyEcho: Direct subagent selection
+      rewriteRequest, // Request rewriting control (default: true)
     },
   } as any);
 
@@ -207,6 +216,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       availableSkills,
       userId,
       subagent,
+      rewriteRequest, // Include in response for confirmation
     },
   };
 };

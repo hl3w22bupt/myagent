@@ -51,6 +51,22 @@ export const inputSchema = _z.object({
    * The message content to send.
    */
   message: _z.string().min(1),
+
+  /**
+   * Optional: Session ID for conversation context.
+   */
+  sessionId: _z.string().optional(),
+
+  /**
+   * Optional: Whether to rewrite the request using conversation history (default: true).
+   * When false, the original request will be used as-is without context enhancement.
+   */
+  rewriteRequest: _z.boolean().optional(),
+
+  /**
+   * Optional: User ID for MyEcho integration.
+   */
+  userId: _z.string().optional(),
 });
 
 /**
@@ -125,10 +141,14 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
 
     // Validate input with detailed error handling
     let message: string;
+    let rewriteRequest = true; // Default to true
+    let requestUserId: string | undefined;
     try {
       const parsedBody = inputSchema.parse(body);
       message = parsedBody.message;
-      logger.info('Task Chat API: Message validated successfully', { taskId, message });
+      rewriteRequest = parsedBody.rewriteRequest !== undefined ? parsedBody.rewriteRequest : true;
+      requestUserId = parsedBody.userId;
+      logger.info('Task Chat API: Message validated successfully', { taskId, message, rewriteRequest });
     } catch (validationError: any) {
       logger.error('Task Chat API: Input validation failed', {
         error: validationError.message,
@@ -257,6 +277,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
             taskId, // Same taskId to continue from checkpoint
             isClarificationResponse: true, // Flag to indicate this is a clarification response
             subagent, // 传递 subagent 用于委派
+            rewriteRequest, // Pass through rewriteRequest flag
           },
         });
 
@@ -354,6 +375,8 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         taskId, // Use same taskId to update the same task record
         continue: true, // Indicate this is a continuation
         subagent, // 传递 subagent 用于委派，保持多轮对话使用同一 subagent
+        userId: requestUserId, // Pass userId for MyEcho
+        rewriteRequest, // Pass through rewriteRequest flag
       },
     });
 

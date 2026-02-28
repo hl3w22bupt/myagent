@@ -1650,6 +1650,8 @@ function TaskDetail() {
       const selectedArtifact = textArtifacts[currentIndex];
       // 文本内容直接从 metadata.textContent 获取，不需要从文件加载
       const textContent = selectedArtifact.metadata?.textContent || '';
+      // 获取原始任务
+      const originalTask = selectedArtifact.metadata?.originalTask || '';
 
       return (
         <div className="result-visual result-visual-with-text">
@@ -1728,6 +1730,7 @@ function TaskDetail() {
           <TextViewer
             textContent={textContent}
             description={selectedArtifact.description}
+            originalTask={originalTask}
           />
         </div>
       )
@@ -3289,7 +3292,7 @@ function CodeViewer({ codePath, getBlobUrl, language }) {
 
 // Text Viewer Component - 用于显示 TEXT 类型的 artifact
 // 直接接收文本内容，显示完整的 JSON 格式
-function TextViewer({ textContent, description }) {
+function TextViewer({ textContent, description, originalTask }) {
   const [displayText, setDisplayText] = useState('')
 
   useEffect(() => {
@@ -3302,9 +3305,16 @@ function TextViewer({ textContent, description }) {
     return <div className="media-error">暂无文本内容</div>
   }
 
+  const hasHeader = originalTask || description
+
   return (
     <div className="text-viewer-wrapper">
-      {description && <div className="text-description">{description}</div>}
+      {hasHeader && (
+        <div className="text-viewer-header">
+          {originalTask && <div className="text-original-task">{originalTask}</div>}
+          {description && <div className="text-description">{description}</div>}
+        </div>
+      )}
       <pre className="text-artifact-content">{displayText}</pre>
     </div>
   )

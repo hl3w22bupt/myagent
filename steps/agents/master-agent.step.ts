@@ -103,6 +103,12 @@ export const inputSchema = _z.object({
    * When specified, uses this subagent directly.
    */
   subagent: _z.string().optional(),
+
+  /**
+   * Optional: Whether to rewrite the request using conversation history (default: true).
+   * When false, the original request will be used as-is without context enhancement.
+   */
+  rewriteRequest: _z.boolean().optional(),
 });
 
 /**
@@ -425,6 +431,7 @@ export const handler = async (
       userId: input.userId, // MyEcho: Pass userId for profile accumulation
       userContext: input.userContext, // MyEcho: Pass userContext
       subagent: input.subagent, // MyEcho: Pass subagent selection
+      rewriteRequest: input.rewriteRequest !== undefined ? input.rewriteRequest : true, // Request rewriting control (default: true)
     },
     services: {
       streams: _streams,
@@ -596,6 +603,12 @@ export const handler = async (
     }
     (taskContext.context as any).agentType = agentTypeName;
     (taskContext.context as any).agent = agent;
+    (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
+
+    logger.info('[master-agent.step] rewriteRequest setting:', {
+      'input.rewriteRequest': input.rewriteRequest,
+      'context.rewriteRequest': (taskContext.context as any).rewriteRequest,
+    });
 
     await updateStream('running', {
       currentStep: `${agentTypeName} acquired, starting execution`,
