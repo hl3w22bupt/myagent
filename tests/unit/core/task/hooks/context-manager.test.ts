@@ -11,6 +11,7 @@ jest.mock('@/core/database/data-store', () => ({
       taskId: 'test-1',
       sessionId: 'session-1',
       currentTurn: 1,
+      conversationRounds: [],  // 新格式：扁平的对话轮次
       messages: [],
       summary: {},
       artifactIndex: [],
@@ -109,6 +110,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -151,6 +153,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -187,6 +190,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -221,6 +225,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [],
         summary: {
           sessionIntent: 'test',

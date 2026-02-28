@@ -57,6 +57,7 @@ describe('ContextManagerTaskHook Integration', () => {
         taskId: 'test-task-2',
         sessionId: 'test-session-2',
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [],
         summary: {
           sessionIntent: '',

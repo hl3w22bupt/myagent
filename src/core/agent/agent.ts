@@ -246,7 +246,14 @@ export class Agent {
    * @returns Execution result
    */
   async run(task: string, taskId?: string, context?: any): Promise<AgentResult> {
-    console.log('[Agent] agent.run() called', { sessionId: this.sessionId, task, taskId });
+    console.log('[Agent] agent.run() called', {
+      sessionId: this.sessionId,
+      task,
+      taskId,
+      hasConversationHistory: !!context?.conversationHistory,
+      conversationHistoryLength: context?.conversationHistory?.length || 0,
+      contextKeys: context ? Object.keys(context) : 'no context',
+    });
 
     // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
     const effectiveTaskId = taskId || context?.taskId;
@@ -284,24 +291,25 @@ export class Agent {
       timestamp: Date.now(),
     });
 
-    // If context is provided, use it for LLM calls
-    if (context && context.messages && context.messages.length > 0) {
-      console.log('[Agent] Using database context', {
-        totalMessages: context.messages.length,
-        currentTurn: context.currentTurn,
-        summary: context.summary
+    // ⭐ 新增：如果 context.conversationHistory 存在，使用它（来自 TaskHook）
+    if (context && context.conversationHistory && context.conversationHistory.length > 0) {
+      console.log('[Agent] Using conversationHistory from TaskHook', {
+        totalHistory: context.conversationHistory.length,
       });
 
-      // Override conversationHistory with database context
-      // This provides persistent, compressed context
-      this.state.conversationHistory = context.messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.metadata?.timestamp || Date.now()
-      }));
+      // 使用 TaskHook 提供的对话历史（包含之前的轮次）
+      // 然后添加当前的用户消息
+      this.state.conversationHistory = [
+        ...context.conversationHistory,
+        {
+          role: 'user',
+          content: task,
+          timestamp: Date.now(),
+        },
+      ];
 
-      console.log('[Agent] Updated conversationHistory with database context', {
-        historyLength: this.state.conversationHistory.length
+      console.log('[Agent] Updated conversationHistory with TaskHook data', {
+        historyLength: this.state.conversationHistory.length,
       });
     }
 
@@ -412,11 +420,22 @@ export class Agent {
           metadata: { task },
         });
 
-        // Build conversation messages for LLM
+        // 简化：在对话模式下，使用 conversationHistory 构建对话上下文
+        const userContent = this.buildConversationPrompt(context, task);
+
+        // DEBUG: Log conversationHistory usage
+        console.log('[DEBUG] Agent using conversationHistory:', {
+          hasConversationHistory: !!context?.conversationHistory,
+          conversationHistoryLength: context?.conversationHistory?.length || 0,
+          conversationHistoryPreview: context?.conversationHistory
+            ?.map((h: any) => `${h.role}: ${h.content.substring(0, 30)}`)
+            .join('\n') || 'none',
+        });
+
+        // Build conversation messages for LLM (简化为 system + user)
         const messages: any[] = [
           { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
-          ...this.state.conversationHistory,
-          { role: 'user', content: task }
+          { role: 'user', content: userContent }
         ];
 
         // Generate direct LLM response
@@ -474,11 +493,23 @@ export class Agent {
           },
         });
 
-        // Build conversation messages for LLM
+        // ⭐ 使用 conversationHistory 构建对话上下文
+        const userContent = this.buildConversationPrompt(context, task);
+
+        // DEBUG: Log conversationHistory (no skills selected)
+        console.log('[DEBUG] Agent (no skills) using conversationHistory:', {
+          hasConversationHistory: !!context?.conversationHistory,
+          conversationHistoryLength: context?.conversationHistory?.length || 0,
+          conversationHistoryPreview: context?.conversationHistory
+            ?.map((h: any) => `${h.role}: ${h.content.substring(0, 50)}`)
+            .join('\n') || 'none',
+          userContentPreview: userContent.substring(0, 500),
+        });
+
+        // Build conversation messages for LLM (简化为 system + user)
         const messages: any[] = [
           { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
-          ...this.state.conversationHistory,
-          { role: 'user', content: task }
+          { role: 'user', content: userContent }
         ];
 
         const llmResponse = await this.llm.messagesCreate(messages);
@@ -915,6 +946,48 @@ export class Agent {
         metadata: {},
       };
     }
+  }
+
+  /**
+   * 构建对话提示词（用于对话模式）
+   * 将 conversationHistory 转换为 LLM 可以理解的 XML 格式
+   */
+  private buildConversationPrompt(context: any, currentTask: string): string {
+    // 如果 context 中包含 combinedTask（来自 MasterAgent），直接使用
+    // combinedTask 已经包含 <reasoning>, <steps>, <original_request> 格式
+    if (context?.combinedTask) {
+      return context.combinedTask;
+    }
+
+    // 提取 reasoning（从 delegationPlan 或 combinedTask）
+    const reasoning = context?.delegationPlan?.reasoning || context?.reasoning || '直接响应';
+
+    // 构建对话历史部分
+    let historySection = '';
+    if (context?.conversationHistory && context.conversationHistory.length > 0) {
+      const historyLines: string[] = [];
+      for (const msg of context.conversationHistory) {
+        if (msg.role === 'user') {
+          historyLines.push(`User: ${msg.content}`);
+        } else if (msg.role === 'assistant') {
+          historyLines.push(`Assistant: ${msg.content}`);
+        }
+      }
+      historySection = `<conversation_history>
+${historyLines.join('\n')}
+</conversation_history>
+
+`;
+    }
+
+    // 返回 XML 格式
+    return `<reasoning>
+${reasoning}
+</reasoning>
+
+${historySection}<current_request>
+${currentTask}
+</current_request>`;
   }
 
   /**

@@ -1,3 +1,5 @@
+import { ConversationHistoryEntry } from '../../database/context-types';
+
 /**
  * Task execution context passed to all TaskHooks
  */
@@ -17,6 +19,7 @@ export interface TaskContext {
     taskId: string;
     sessionId: string;
     currentTurn: number;
+    conversationRounds: any[];  // 新格式：扁平的对话轮次
     messages: any[];
     summary: any;
     artifactIndex: any[];
@@ -24,6 +27,7 @@ export interface TaskContext {
     metadata: {
       lastCompressedAt?: Date;
     };
+    conversationHistory?: ConversationHistoryEntry[];  // ⭐ 对话历史（由 TaskHook 预加载）
   } | null;
 
   // Execution metadata

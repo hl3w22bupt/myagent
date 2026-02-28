@@ -13,6 +13,8 @@ import { z } from 'zod';
 import { EventConfig } from 'motia';
 import { stateLockManager } from '../../src/utils/state-lock';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { ContextManager } from '../../src/core/context/manager';
+import type { ConversationRound, ArtifactInfo, ArtifactIndex } from '../../src/core/database/context-types';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -381,15 +383,15 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         ? TaskStatus.AWAITING_CLARIFICATION
         : (normalizedResult.success ? TaskStatus.COMPLETED : TaskStatus.FAILED);
 
-      // 获取当前对话轮次
+      // 获取当前对话轮次（用于 artifacts 的 conversation_round metadata）
       // 使用现有 artifacts 数量来确定轮次（最可靠的方式）
       // 每个 round 产生一个 text artifact，所以 artifacts 数量 = 当前轮次 + 1
       const existingArtifacts = await store.getArtifacts(taskId);
-      const currentRound = existingArtifacts.length;
+      const artifactRound = existingArtifacts.length;
 
       logger.info('Current conversation round', {
         taskId,
-        currentRound,
+        artifactRound,
         existingArtifactsCount: existingArtifacts.length,
         stateConversationLength: (normalizedResult as any).state?.conversationLength,
       });
@@ -461,7 +463,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: videoUrl,
                 description: content.description || `Video generated: ${task}`,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                   skill_name: skillName,
                   is_final: isFinalArtifact,
                 },
@@ -483,7 +485,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: audioPath,
                 description: structuredResult.title || task || `Audio generated: ${task}`,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                   skill_name: skillName,
                   mimeType: content.mime_type || content.mimeType || 'audio/wav',
                   size: content.size,
@@ -522,7 +524,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: artifactPath,
                 description: task || content.description || `Generated ${language} code`,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                   skill_name: skillName,
                   language: language,
                   codeLength: code.length,
@@ -547,7 +549,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: normalizedPath,
                 description: task || title || `Infographic: ${content.template} (${content.chart_type})`,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                   skill_name: skillName,
                   template: content.template,
                   chartType: content.chart_type,
@@ -576,7 +578,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               path: artifactPath,
               description: task || content.title || `Table with ${rowCount} rows`,
               metadata: {
-                conversation_round: currentRound,
+                conversation_round: artifactRound,
                 skill_name: skillName,
                 columnCount: columns.length,
                 rowCount,
@@ -617,7 +619,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: artifactId,
                 description: description,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                   skill_name: skillName,
                   is_final: isFinalArtifact,
                   originalTask: task,
@@ -656,7 +658,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               path: artifactId,
               description: description,
               metadata: {
-                conversation_round: currentRound,
+                conversation_round: artifactRound,
                 skill_name: skillName,
                 is_final: isFinalArtifact,
                 originalTask: task,
@@ -697,7 +699,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             // 优先使用 content.description，否则使用完整的 task（不截断）
             description: content.description || `Video generated: ${task}`,
             metadata: {
-              conversation_round: currentRound,
+              conversation_round: artifactRound,
               skill_name: extractedSkillName,
             },
             timestamp: new Date(),
@@ -739,7 +741,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 path: videoPath,
                 description: `Video ${videoNumber}: ${taskDesc}`,
                 metadata: {
-                  conversation_round: currentRound,
+                  conversation_round: artifactRound,
                 },
                 timestamp: new Date(),
               });
@@ -793,7 +795,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             description: task || content.description || `Generated ${language} code`,
             metadata: {
               // 使用 metadata 存储扩展属性
-              conversation_round: currentRound,
+              conversation_round: artifactRound,
               skill_name: extractedSkillName,
               language: language,
               codeLength: code.length,
@@ -826,7 +828,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             // 这样在多轮对话时，description 会准确反映用户的实际请求
             description: task || title || `Infographic: ${template} (${chartType})`,
             metadata: {
-              conversation_round: currentRound,
+              conversation_round: artifactRound,
               skill_name: extractedSkillName,
               template: template,
               chartType: chartType,
@@ -859,7 +861,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           path: artifactPath,
           description: task || title || `Table with ${rowCount} rows`,
           metadata: {
-            conversation_round: currentRound,
+            conversation_round: artifactRound,
             skill_name: extractedSkillName,
             columnCount: columns.length,
             rowCount,
@@ -893,7 +895,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             path: audioPath,
             description: finalStructuredResult.title || task || `Audio generated: ${task}`,
             metadata: {
-              conversation_round: currentRound,
+              conversation_round: artifactRound,
               skill_name: extractedSkillName,
               mimeType: content.mime_type || content.mimeType || 'audio/wav',
               size: content.size,
@@ -948,7 +950,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               path: artifactId, // Use artifactId as path (text is stored inline in metadata)
               description: description,
               metadata: {
-                conversation_round: currentRound,
+                conversation_round: artifactRound,
                 skill_name: extractedSkillName,
                 is_final: true, // Mark as final artifact for display in UI
                 // Store the original task in metadata for reference
@@ -963,7 +965,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
             logger.info('✅ Text artifact added', {
               taskId,
               artifactId,
-              currentRound,
+              artifactRound,
               contentLength: textContent.length,
             });
           }
@@ -973,6 +975,11 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       // Check if this is a multi-turn continuation (task already completed)
       const currentTask = await store.getTask(taskId);
       const isMultiTurnContinuation = currentTask?.status === TaskStatus.COMPLETED;
+
+      // ==================== 保存对话轮次 ====================
+      // ⭐ 注意：ConversationRound 现在由 ContextManagerTaskHook.postExec 保存
+      // 这里不再重复保存，避免数据不一致
+      // ==================== 结束保存对话轮次 ====================
 
       if (isMultiTurnContinuation) {
         // Multi-turn continuation: update output field to latest response

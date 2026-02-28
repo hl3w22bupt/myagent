@@ -4,7 +4,7 @@
  * 提供任务上下文的创建、更新、查询和压缩功能
  */
 
-import type { TaskContext, Message } from '../database/context-types';
+import type { TaskContext, Message, ConversationRound, ArtifactInfo, ConversationHistoryEntry } from '../database/context-types';
 import { DataStore, getDataStore } from '../database/data-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';
@@ -27,29 +27,45 @@ export class ContextManager {
   /**
    * 创建任务上下文
    *
-   * 如果该 session 已有历史任务，则继承其上下文（messages, summary等）
+   * 如果该 session 已有历史任务，则继承其上下文（conversationRounds, summary等）
    */
   async createTaskContext(taskId: string, sessionId: string, input: string): Promise<TaskContext> {
-    // 1. 尝试获取该 session 最近的任务上下文
+    // 1. 尝试获取该 taskId 的现有上下文（用于多轮对话）
+    const existingContext = await this.getContext(taskId);
+
+    // 2. 如果已有上下文，直接返回（多轮对话场景）
+    if (existingContext && existingContext.conversationRounds.length > 0) {
+      console.log('[ContextManager] Found existing context for taskId, reusing it', {
+        taskId,
+        conversationRoundsCount: existingContext.conversationRounds.length,
+        currentTurn: existingContext.currentTurn
+      });
+      return existingContext;
+    }
+
+    // 3. 尝试获取该 session 最近的任务上下文（用于继承）
     const previousContext = await this.getMostRecentSessionContext(sessionId);
 
-    // 2. 创建新上下文
+    // 4. 创建新上下文
     const context = await this.store.createTaskContext(taskId, sessionId, input);
 
-    // 3. 如果有历史上下文，继承其 messages 和 summary
+    // 5. 如果有历史上下文，继承其 conversationRounds 和 summary
     if (previousContext) {
       console.log('[ContextManager] Found previous context for session', {
         sessionId,
         previousTaskId: previousContext.taskId,
+        roundsCount: previousContext.conversationRounds?.length || 0,
         messagesCount: previousContext.messages.length,
         currentTurn: previousContext.currentTurn
       });
 
-      // 继承 messages 和 summary，但使用新的 taskId
+      // 继承 conversationRounds 和 summary，但使用新的 taskId
+      context.conversationRounds = [...(previousContext.conversationRounds || [])];
+      // 继承 messages（向后兼容）
       context.messages = [...previousContext.messages];
-      // ✅ 修复：基于消息数量计算 currentTurn，而不是直接继承
+      // ✅ 修复：基于轮次数量计算 currentTurn，而不是直接继承
       // 这样每次创建新 context 时，currentTurn 会正确递增
-      context.currentTurn = previousContext.messages.length + 1;
+      context.currentTurn = (previousContext.conversationRounds?.length || previousContext.messages.length) + 1;
       context.summary = { ...previousContext.summary };
       context.summary.currentTask = input; // 更新当前任务
       context.artifactIndex = [...previousContext.artifactIndex];
@@ -61,6 +77,7 @@ export class ContextManager {
 
       console.log('[ContextManager] Inherited context from previous task', {
         taskId,
+        inheritedRounds: context.conversationRounds.length,
         inheritedMessages: context.messages.length,
         inheritedTurn: context.currentTurn
       });
@@ -68,6 +85,7 @@ export class ContextManager {
       // ⚠️ 修复：当找不到 previous context 时，从头开始创建新的 context
       // 避免访问 null 的 messages 属性导致错误 "Cannot read properties of null"
       console.warn('[ContextManager] No previous context found, starting fresh context');
+      context.conversationRounds = [];
       context.messages = [];
       context.currentTurn = 1; // 第一轮从 turn 1 开始
       context.summary = {
@@ -89,6 +107,7 @@ export class ContextManager {
       await this.store.saveContext(context);
       console.log('[ContextManager] Started fresh context', {
         taskId,
+        roundsCount: context.conversationRounds.length,
         messagesCount: context.messages.length,
         currentTurn: context.currentTurn
       });
@@ -131,16 +150,18 @@ export class ContextManager {
         console.log('[ContextManager] Found context for task:', {
           taskId: task.id,
           messagesCount: context.messages.length,
+          conversationRoundsCount: context.conversationRounds.length,
           currentTurn: context.currentTurn
         });
-        if (context.messages.length > 0) {
+        // ⭐ 修复：改为检查 conversationRounds 而不是 messages
+        if (context.conversationRounds.length > 0) {
           console.log('[ContextManager] Using this context as previous context');
           return context;
         }
       }
     }
 
-    console.log('[ContextManager] No task with messages found in session');
+    console.log('[ContextManager] No task with conversationRounds found in session');
     return null;
   }
 
@@ -238,9 +259,10 @@ export class ContextManager {
   }
 
   /**
-   * 获取上下文用于LLM
+   * 获取上下文用于LLM (Legacy - 用于向后兼容)
+   * @deprecated 使用 getContextForLLM(taskId, currentMessage) 代替
    */
-  async getContextForLLM(taskId: string): Promise<string> {
+  async getContextForLLMLegacy(taskId: string): Promise<string> {
     const context = await this.getContext(taskId);
     if (!context) {
       return '';
@@ -250,7 +272,8 @@ export class ContextManager {
   }
 
   /**
-   * 格式化上下文为LLM输入
+   * 格式化上下文为LLM输入 (Legacy)
+   * @deprecated 使用 formatConversationHistory 代替
    */
   private formatContextForLLM(context: TaskContext): string {
     const summary = this.formatSummary(context.summary);
@@ -375,5 +398,43 @@ ${messages}
     }
 
     return parts.length ? `## 用户上下文\n${parts.join('\n')}` : '';
+  }
+
+  /**
+   * 添加对话轮次到上下文
+   *
+   * @param taskId - 任务ID
+   * @param round - 对话轮次数据
+   * @returns 更新后的上下文
+   */
+  async addConversationRound(taskId: string, round: ConversationRound): Promise<TaskContext> {
+    return await this.store.addConversationRound(taskId, round);
+  }
+
+  /**
+   * 获取对话历史供 Agent 使用
+   * 将 conversationRounds 转换为 Agent 需要的格式
+   *
+   * @param context - 任务上下文
+   * @returns 对话历史条目数组
+   */
+  getConversationHistoryForAgent(context: TaskContext): ConversationHistoryEntry[] {
+    if (!context.conversationRounds || context.conversationRounds.length === 0) {
+      return [];
+    }
+
+    return context.conversationRounds.flatMap(round => {
+      const timestamp = round.timestamp instanceof Date ? round.timestamp.getTime() : round.timestamp;
+      const entries: ConversationHistoryEntry[] = [
+        { role: 'user', content: round.userMessage, timestamp },
+      ];
+
+      const reply = round.assistantOutput || round.assistantReply;
+      if (reply) {
+        entries.push({ role: 'assistant', content: reply, timestamp });
+      }
+
+      return entries;
+    });
   }
 }

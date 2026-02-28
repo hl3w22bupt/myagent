@@ -233,28 +233,15 @@ These skills take priority over all other considerations.
 `;
     }
 
-    const prompt = `You are an agent that plans task execution by selecting skills.
-
-${contextSection}
-<available_skills>
-${skillsList}
-</available_skills>
-
-<task>
-${task}
-</task>
-
-${skillRequirement}
-
-CRITICAL - SKILL NAME VALIDATION:
-1. You MUST ONLY use skill names from the EXACT list above
+    const prompt = `CRITICAL - SKILL NAME VALIDATION:
+1. You MUST ONLY use skill names from the EXACT list below
 2. DO NOT create, invent, or combine skill names
 3. DO NOT make assumptions about skill names - use them EXACTLY as shown
-4. The skill list above is the ONLY source of truth for valid skill names
+4. The skill list below is the ONLY source of truth for valid skill names
 5. NEVER try to guess or infer a skill name - always use exact match from the list
 
 IMPORTANT GUIDELINES:
-1. You MUST ONLY select skills from the available list above (${this.skills.size} skills provided)
+1. You MUST ONLY select skills from the available list below (${this.skills.size} skills provided)
 2. ONLY select skills when there is a CLEAR, DIRECT match with the task requirements
 3. For simple conversational messages, greetings, or casual chat - return EMPTY selected_skills
 4. For factual questions (locations, definitions, facts), use web-search skill
@@ -295,6 +282,17 @@ SKILL TASK EXAMPLES (use skills with confidence > 0.6):
 - "帮我生成一个视频" → confidence: 0.8, selected_skills: ["video-generation"]
 - "分析这段文本的情感" → confidence: 0.8, selected_skills: ["text-analyzer"]
 - "用 volcano-tts 读这段话" → confidence: 1.0, selected_skills: ["volcano-tts"]
+
+<available_skills>
+${skillsList}
+</available_skills>
+
+${skillRequirement}
+
+${contextSection}
+<task>
+${task}
+</task>
 
 Please output:
 1. Which skills to use (in order)
@@ -811,29 +809,25 @@ You MUST follow these guidelines when generating code:
       ? this.findTaskParameter(selectedSkills[0])
       : 'task';  // fallback for no skills case
 
-    const prompt = `${agentSystemPromptSection}<context>
-${contextSection}
-</context>
+    const prompt = `CRITICAL LANGUAGE REQUIREMENT:
+- You MUST generate Python code ONLY
+- Even if the task mentions TypeScript, JavaScript, or other languages
+- This is a Python-only execution environment
+- If the task asks for TypeScript/JavaScript code, you should:
+  1. Generate Python equivalent code
+  2. Add comments explaining the Python implementation
+  3. Focus on logic/algorithm rather than language-specific syntax
 
-${errorSection}<task>
-${task}
-</task>
+Generate Python code to accomplish the task.
 
-${originalTask ? `IMPORTANT INSTRUCTION:
-The <original_task> in the <context> section above contains the USER'S ACTUAL REQUEST.
-The <task> section is MasterAgent's execution plan.
+IMPORTANT - Code structure requirements:
+- The code will be wrapped in an async main() function automatically
+- DO NOT include 'async def main()' or 'if __name__ == "__main__"'
+- DO NOT include 'asyncio.run()' - it will be called automatically
+- DO NOT import asyncio
+- Just write the logic code that goes inside the async function
 
-YOU MUST:
-1. Follow MasterAgent's execution plan (the <task> section)
-2. But use the <original_task> to understand the TRUE INTENT and SPECIFIC REQUIREMENTS
-3. If there's a conflict, prioritize the original_task's specific requirements over general plan steps
-
-Example:
-- If original_task says "Add animation highlights to emphasize number relationships"
-- And task says "Step 1: Add animation highlights (Execute directly)"
-- You MUST generate code that ADDS ANIMATIONS, not a generic Pascal Triangle video
-
-` : ''}<skills>
+${agentSystemPromptSection}<skills>
 ${skillsBlock}
 </skills>
 
@@ -1247,7 +1241,30 @@ TIPS FOR FILE/VIDEO GENERATION:
   - MOTIA_SESSION_ID: Current session ID for multi-turn conversations
   - MOTIA_TRACE_ID: Trace ID for debugging
 
-Generate the code now:`;
+=== TASK CONTEXT ===
+<context>
+${contextSection}
+</context>
+
+${errorSection}<task>
+${task}
+</task>
+
+${originalTask ? `IMPORTANT INSTRUCTION:
+The <original_task> in the <context> section above contains the USER'S ACTUAL REQUEST.
+The <task> section below is MasterAgent's execution plan.
+
+YOU MUST:
+1. Follow MasterAgent's execution plan (the <task> section)
+2. But use the <original_task> to understand the TRUE INTENT and SPECIFIC REQUIREMENTS
+3. If there's a conflict, prioritize the original_task's specific requirements over general plan steps
+
+Example:
+- If original_task says "Add animation highlights to emphasize number relationships"
+- And task says "Step 1: Add animation highlights (Execute directly)"
+- You MUST generate code that ADDS ANIMATIONS, not a generic Pascal Triangle video
+
+` : ''}Generate the code now:`;
 
     // Build system prompt for code generation
     const codegenSystemPrompt = `You are a Python code generator. Your role is to generate clean, efficient Python code that uses the provided skills correctly.
