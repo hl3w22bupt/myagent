@@ -6,23 +6,160 @@ import './ContextTab.css'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 /**
- * Context Tab - 优化后的 UI/UX 设计
- * 使用 SVG 图标、更好的交互反馈、专业的视觉层次
+ * Context Tab - 带子 Tab 的上下文视图
+ * - Task Context: 任务上下文
+ * - Session Context: 会话上下文
+ * - User Context: 用户画像
  */
-export default function ContextTab({ taskId }) {
-  const [context, setContext] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [expandedCards, setExpandedCards] = useState(new Set(['summary', 'conversation']))
+export default function ContextTab({ taskId, sessionId: propSessionId }) {
+  // 子 Tab 状态
+  const [activeSubTab, setActiveSubTab] = useState('task')
+  const [sessionContext, setSessionContext] = useState(null)
+  const [userContext, setUserContext] = useState(null)
+  const [taskContext, setTaskContext] = useState(null)
+  const [loading, setLoading] = useState({
+    task: true,
+    session: true,
+    user: true,
+  })
 
+  // sessionId 从任务上下文获取，忽略 propSessionId（聊天用的 UUID）
+  const [sessionId, setSessionId] = useState('')
+
+  // 获取任务上下文（当切换到 task tab 时刷新）
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/contexts/${taskId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setContext(data.data)
-      })
-      .catch(err => console.error('Failed to load context:', err))
-      .finally(() => setLoading(false))
-  }, [taskId])
+    if (activeSubTab !== 'task') return
+
+    const fetchTaskContext = async () => {
+      setLoading(prev => ({ ...prev, task: true }))
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/contexts/${taskId}`)
+        const data = await res.json()
+        if (data.success) {
+          setTaskContext(data.data)
+          // 从任务中获取真实的 sessionId（非聊天 UUID）
+          if (data.data.sessionId) {
+            setSessionId(data.data.sessionId)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load task context:', err)
+      } finally {
+        setLoading(prev => ({ ...prev, task: false }))
+      }
+    }
+
+    fetchTaskContext()
+  }, [taskId, activeSubTab])
+
+  // 当 sessionId 变化时获取会话上下文
+  useEffect(() => {
+    if (!sessionId || activeSubTab !== 'session') return
+
+    const fetchSessionContext = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`)
+        const data = await res.json()
+        if (data.success) {
+          setSessionContext(data.data)
+          // 如果会话中包含 userId，自动加载用户上下文
+          if (data.data.userId) {
+            fetchUserContext(data.data.userId)
+          } else {
+            // 没有 userId，不需要加载用户上下文
+            setLoading(prev => ({ ...prev, user: false }))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load session context:', err)
+      } finally {
+        setLoading(prev => ({ ...prev, session: false }))
+      }
+    }
+
+    fetchSessionContext()
+  }, [sessionId, activeSubTab])
+
+  // 获取用户上下文
+  const fetchUserContext = async (userId) => {
+    if (!userId) return
+    setLoading(prev => ({ ...prev, user: true }))
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}`)
+      const data = await res.json()
+      if (data.success) {
+        setUserContext(data.data)
+      }
+    } catch (err) {
+      console.error('Failed to load user context:', err)
+    } finally {
+      setLoading(prev => ({ ...prev, user: false }))
+    }
+  }
+
+  // 加载状态
+  const isLoading = loading.task || loading.session || loading.user
+
+  return (
+    <div className="ctx-container">
+      {/* 子 Tab 导航 */}
+      <div className="ctx-subtabs">
+        <button
+          className={`ctx-subtab ${activeSubTab === 'task' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('task')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          任务上下文
+        </button>
+        <button
+          className={`ctx-subtab ${activeSubTab === 'session' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('session')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          会话上下文
+        </button>
+        <button
+          className={`ctx-subtab ${activeSubTab === 'user' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('user')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          用户画像
+        </button>
+      </div>
+
+      {/* 内容区域 */}
+      {activeSubTab === 'task' && (
+        <TaskContextContent context={taskContext} loading={loading.task} />
+      )}
+
+      {activeSubTab === 'session' && (
+        <SessionContextContent context={sessionContext} loading={loading.session} />
+      )}
+
+      {activeSubTab === 'user' && (
+        <UserContextContent
+          context={userContext}
+          loading={loading.user}
+        />
+      )}
+    </div>
+  )
+}
+
+// ============== 任务上下文内容 ==============
+
+function TaskContextContent({ context, loading }) {
+  const [expandedCards, setExpandedCards] = useState(new Set(['summary', 'conversation']))
 
   const toggleCard = (cardId) => {
     setExpandedCards(prev => {
@@ -38,24 +175,20 @@ export default function ContextTab({ taskId }) {
 
   if (loading) {
     return (
-      <div className="ctx-container">
-        <div className="ctx-loading-state">
-          <div className="ctx-loading-spinner"></div>
-          <span style={{ fontSize: '14px', fontWeight: '500' }}>加载上下文数据...</span>
-        </div>
+      <div className="ctx-loading-state">
+        <div className="ctx-loading-spinner"></div>
+        <span style={{ fontSize: '14px', fontWeight: '500' }}>加载任务上下文...</span>
       </div>
     )
   }
 
   if (!context) {
     return (
-      <div className="ctx-container">
-        <div className="ctx-empty-state">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span style={{ fontSize: '14px', fontWeight: '500' }}>暂无上下文数据</span>
-        </div>
+      <div className="ctx-empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span style={{ fontSize: '14px', fontWeight: '500' }}>暂无任务上下文</span>
       </div>
     )
   }
@@ -68,12 +201,12 @@ export default function ContextTab({ taskId }) {
   }
 
   return (
-    <div className="ctx-container">
+    <div className="ctx-content">
       {/* 统计卡片 */}
       <div className="ctx-stats-card">
         <div className="ctx-stats-header">
-          <h3 className="ctx-stats-title">上下文信息</h3>
-          <span className="ctx-stat-badge">Context</span>
+          <h3 className="ctx-stats-title">任务上下文</h3>
+          <span className="ctx-stat-badge">Task</span>
           <span className="ctx-stat-divider">•</span>
           <div className="ctx-stat-item">
             <span className="ctx-stat-label">状态</span>
@@ -96,7 +229,6 @@ export default function ContextTab({ taskId }) {
 
       {/* 卡片列表 */}
       <div className="ctx-cards-list">
-        {/* 摘要卡片 */}
         {stats.hasSummary && (
           <ContextCard
             title="摘要信息"
@@ -108,7 +240,6 @@ export default function ContextTab({ taskId }) {
           </ContextCard>
         )}
 
-        {/* 对话历史卡片 */}
         {context.conversationRounds?.length > 0 && (
           <ContextCard
             title="对话历史"
@@ -121,7 +252,6 @@ export default function ContextTab({ taskId }) {
           </ContextCard>
         )}
 
-        {/* 产物卡片 */}
         {context.artifactIndex?.length > 0 && (
           <ContextCard
             title="产物"
@@ -134,7 +264,6 @@ export default function ContextTab({ taskId }) {
           </ContextCard>
         )}
 
-        {/* 工作记忆卡片 */}
         {context.workingMemory && Object.keys(context.workingMemory).length > 0 && (
           <ContextCard
             title="工作记忆"
@@ -150,7 +279,308 @@ export default function ContextTab({ taskId }) {
   )
 }
 
-// ============== 子组件 ==============
+// ============== 会话上下文内容 ==============
+
+function SessionContextContent({ context, loading }) {
+  const [expandedCards, setExpandedCards] = useState(new Set(['summary', 'conversation']))
+
+  const toggleCard = (cardId) => {
+    setExpandedCards(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(cardId)) {
+        newSet.delete(cardId)
+      } else {
+        newSet.add(cardId)
+      }
+      return newSet
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="ctx-loading-state">
+        <div className="ctx-loading-spinner"></div>
+        <span style={{ fontSize: '14px', fontWeight: '500' }}>加载会话上下文...</span>
+      </div>
+    )
+  }
+
+  if (!context) {
+    return (
+      <div className="ctx-empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span style={{ fontSize: '14px', fontWeight: '500' }}>暂无会话上下文</span>
+      </div>
+    )
+  }
+
+  const stats = {
+    rounds: context.context?.conversationRounds?.length || 0,
+    artifacts: context.artifacts?.length || 0,
+    tasks: context.tasks?.length || 0,
+    hasSummary: context.context?.summary && Object.keys(context.context.summary).length > 0,
+  }
+
+  return (
+    <div className="ctx-content">
+      {/* 统计卡片 */}
+      <div className="ctx-stats-card">
+        <div className="ctx-stats-header">
+          <h3 className="ctx-stats-title">会话上下文</h3>
+          <span className="ctx-stat-badge">Session</span>
+          <span className="ctx-stat-divider">•</span>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">任务</span>
+            <span className="ctx-stat-value">{stats.tasks}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">轮次</span>
+            <span className="ctx-stat-value">{stats.rounds}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">产物</span>
+            <span className="ctx-stat-value">{stats.artifacts}</span>
+          </div>
+        </div>
+        <div className="ctx-stats-meta">
+          <span className="ctx-meta-label">Session ID:</span>
+          <span className="ctx-meta-value">{context.sessionId}</span>
+        </div>
+      </div>
+
+      {/* 任务列表 */}
+      {context.tasks?.length > 0 && (
+        <div className="ctx-section">
+          <h4 className="ctx-section-title">会话中的任务</h4>
+          <div className="ctx-task-list">
+            {context.tasks.map((task, i) => (
+              <div key={i} className="ctx-task-item">
+                <span className={`ctx-task-status ${task.status}`}></span>
+                <span className="ctx-task-name">{task.task}</span>
+                <span className="ctx-task-id">{task.taskId}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 卡片列表 */}
+      <div className="ctx-cards-list">
+        {stats.hasSummary && (
+          <ContextCard
+            title="摘要信息"
+            iconType="summary"
+            expanded={expandedCards.has('summary')}
+            onToggle={() => toggleCard('summary')}
+          >
+            <SummaryContent summary={context.context?.summary} />
+          </ContextCard>
+        )}
+
+        {context.context?.conversationRounds?.length > 0 && (
+          <ContextCard
+            title="对话历史"
+            iconType="conversation"
+            count={context.context.conversationRounds.length}
+            expanded={expandedCards.has('conversation')}
+            onToggle={() => toggleCard('conversation')}
+          >
+            <ConversationContent rounds={context.context.conversationRounds} />
+          </ContextCard>
+        )}
+
+        {context.artifacts?.length > 0 && (
+          <ContextCard
+            title="产物"
+            iconType="artifact"
+            count={context.artifacts.length}
+            expanded={expandedCards.has('artifacts')}
+            onToggle={() => toggleCard('artifacts')}
+          >
+            <ArtifactsContent items={context.artifacts} />
+          </ContextCard>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============== 用户画像内容 ==============
+
+function UserContextContent({ context, loading }) {
+  const [expandedCards, setExpandedCards] = useState(new Set(['profile', 'sessions']))
+
+  const toggleCard = (cardId) => {
+    setExpandedCards(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(cardId)) {
+        newSet.delete(cardId)
+      } else {
+        newSet.add(cardId)
+      }
+      return newSet
+    })
+  }
+
+  if (!context) {
+    return (
+    <div className="ctx-content">
+      {loading ? (
+        <div className="ctx-loading-state">
+          <div className="ctx-loading-spinner"></div>
+          <span style={{ fontSize: '14px', fontWeight: '500' }}>加载用户画像...</span>
+        </div>
+      ) : (
+        <div className="ctx-empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span style={{ fontSize: '14px', fontWeight: '500' }}>该会话暂无关联的用户画像</span>
+          <p style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+            用户画像会通过会话自动关联
+          </p>
+        </div>
+      )}
+    </div>
+  )
+  }
+
+  const profile = context.profile || {}
+
+  return (
+    <div className="ctx-content">
+      {/* 统计卡片 */}
+      <div className="ctx-stats-card">
+        <div className="ctx-stats-header">
+          <h3 className="ctx-stats-title">用户画像</h3>
+          <span className="ctx-stat-badge">User</span>
+          <span className="ctx-stat-divider">•</span>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">偏好</span>
+            <span className="ctx-stat-value">{profile.preferences?.length || 0}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">习惯</span>
+            <span className="ctx-stat-value">{profile.habits?.length || 0}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">标签</span>
+            <span className="ctx-stat-value">{profile.tags?.length || 0}</span>
+          </div>
+        </div>
+        <div className="ctx-stats-meta">
+          <span className="ctx-meta-label">User ID:</span>
+          <span className="ctx-meta-value">{context.userId}</span>
+          <span className="ctx-stat-divider">•</span>
+          <span className="ctx-meta-label">Version:</span>
+          <span className="ctx-meta-value">{profile.metadata?.version || 1}</span>
+        </div>
+      </div>
+
+      {/* 卡片列表 */}
+      <div className="ctx-cards-list">
+        {/* 用户偏好 */}
+        <ContextCard
+          title="用户偏好"
+          iconType="summary"
+          expanded={expandedCards.has('profile')}
+          onToggle={() => toggleCard('profile')}
+        >
+          <div className="ctx-user-profile">
+            {profile.preferences && profile.preferences.length > 0 ? (
+              <ul className="ctx-checklist">
+                {profile.preferences.map((pref, i) => (
+                  <li key={i}>
+                    <span className="ctx-pref-icon">✓</span>
+                    {pref}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="ctx-empty-list">暂无偏好数据</div>
+            )}
+          </div>
+        </ContextCard>
+
+        {/* 用户习惯 */}
+        {profile.habits && profile.habits.length > 0 && (
+          <ContextCard
+            title="用户习惯"
+            iconType="conversation"
+            count={profile.habits.length}
+            expanded={expandedCards.has('habits')}
+            onToggle={() => toggleCard('habits')}
+          >
+            <ul className="ctx-checklist">
+              {profile.habits.map((habit, i) => (
+                <li key={i}>
+                  <span className="ctx-habit-icon">◷</span>
+                  {habit}
+                </li>
+              ))}
+            </ul>
+          </ContextCard>
+        )}
+
+        {/* 用户标签 */}
+        {profile.tags && profile.tags.length > 0 && (
+          <ContextCard
+            title="用户标签"
+            iconType="artifact"
+            count={profile.tags.length}
+            expanded={expandedCards.has('tags')}
+            onToggle={() => toggleCard('tags')}
+          >
+            <div className="ctx-tag-list">
+              {profile.tags.map((tag, i) => (
+                <span key={i} className="ctx-tag">{tag}</span>
+              ))}
+            </div>
+          </ContextCard>
+        )}
+
+        {/* 关联会话列表 */}
+        {context.sessions && context.sessions.length > 0 && (
+          <ContextCard
+            title="关联会话"
+            iconType="memory"
+            count={context.sessions.length}
+            expanded={expandedCards.has('sessions')}
+            onToggle={() => toggleCard('sessions')}
+          >
+            <div className="ctx-session-list">
+              {context.sessions.map((sessionId, i) => (
+                <div key={i} className="ctx-session-item">
+                  <span className="ctx-session-id">{sessionId}</span>
+                </div>
+              ))}
+            </div>
+          </ContextCard>
+        )}
+
+        {/* 行为数据（保留向后兼容） */}
+        {profile.data?.behavior && (
+          <ContextCard
+            title="行为数据"
+            iconType="memory"
+            expanded={expandedCards.has('behavior')}
+            onToggle={() => toggleCard('behavior')}
+          >
+            <MemoryContent data={profile.data} />
+          </ContextCard>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============== 共享组件 ==============
 
 function ContextCard({ title, iconType, count, expanded, onToggle, children }) {
   const icons = {
@@ -220,7 +650,6 @@ function SummaryContent({ summary }) {
 
   return (
     <div className="ctx-summary">
-      {/* 状态 */}
       {summary.currentStatus && (
         <div className="ctx-summary-row">
           <span className="ctx-summary-label">当前状态</span>
@@ -230,7 +659,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 会话意图 */}
       {summary.sessionIntent && (
         <div className="ctx-summary-row">
           <span className="ctx-summary-label">会话意图</span>
@@ -238,7 +666,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 当前任务 */}
       {summary.currentTask && (
         <div className="ctx-summary-row">
           <span className="ctx-summary-label">当前任务</span>
@@ -246,7 +673,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 已完成步骤 */}
       {summary.completedSteps?.length > 0 && (
         <div className="ctx-summary-block">
           <div className="ctx-block-header">
@@ -264,7 +690,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 下一步 */}
       {summary.nextSteps?.length > 0 && (
         <div className="ctx-summary-block">
           <div className="ctx-block-header">
@@ -277,7 +702,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 文件修改 */}
       {summary.filesModified?.length > 0 && (
         <div className="ctx-summary-block">
           <div className="ctx-block-header">
@@ -305,7 +729,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 关键决策 */}
       {summary.decisionsMade?.length > 0 && (
         <div className="ctx-summary-block">
           <div className="ctx-block-header">
@@ -323,7 +746,6 @@ function SummaryContent({ summary }) {
         </div>
       )}
 
-      {/* 问题解决 */}
       {summary.errorsAndSolutions?.length > 0 && (
         <div className="ctx-summary-block">
           <div className="ctx-block-header">

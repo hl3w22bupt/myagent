@@ -475,7 +475,12 @@ export class PostgresDataStore implements Database {
         ]
       );
 
-      return this.mapDbTaskToTask(result.rows[0]);
+      const task = this.mapDbTaskToTask(result.rows[0]);
+
+      // 创建或更新会话记录
+      await this.upsertSession(data.sessionId);
+
+      return task;
     } finally {
       client.release();
     }
@@ -1689,9 +1694,23 @@ export class PostgresDataStore implements Database {
         throw new Error(`User not found: ${userId}`);
       }
 
-      // 合并画像数据 - 深度合并 data 字段
+      // 合并数组字段（去重）
+      const mergeArrays = (existing: string[] = [], updates: string[] = []) => {
+        const merged = [...existing];
+        for (const item of updates) {
+          if (!merged.includes(item)) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      };
+
+      // 合并画像数据
       const updatedProfile: UserProfile = {
         userId: existing.profile.userId,
+        preferences: mergeArrays(existing.profile.preferences, profile.preferences),
+        habits: mergeArrays(existing.profile.habits, profile.habits),
+        tags: mergeArrays(existing.profile.tags, profile.tags),
         data: {
           ...existing.profile.data,
           ...profile.data,
