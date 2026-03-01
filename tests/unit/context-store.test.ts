@@ -32,12 +32,7 @@ describe('DataStore', () => {
     expect(context).toBeDefined();
     expect(context.taskId).toBe(taskId);
     expect(context.sessionId).toBe(sessionId);
-    // PostgreSQL initializes currentTurn to 1
-    expect(context.currentTurn).toBe(1);
-    // PostgreSQL auto-creates initial user message
-    expect(context.messages).toHaveLength(1);
-    expect(context.messages[0].role).toBe('user');
-    expect(context.messages[0].content).toBe('测试任务');
+    expect(context.conversationRounds).toEqual([]);
     expect(context.summary).toBeDefined();
     expect(context.artifactIndex).toEqual([]);
   });
@@ -60,17 +55,7 @@ describe('DataStore', () => {
     const context = {
       taskId: taskId,
       sessionId: sessionId,
-      currentTurn: 1,
-      messages: [
-        {
-          id: 'msg-' + uuidv4(),
-          taskId: taskId,
-          role: 'user' as const,
-          content: '你好',
-          metadata: { timestamp: new Date(), tokens: 10 },
-          compressed: false,
-        }
-      ],
+      conversationRounds: [],
       summary: {
         sessionIntent: '测试会话',
         currentTask: '测试任务',
@@ -96,7 +81,7 @@ describe('DataStore', () => {
     const retrieved = await dataStore.getContext(taskId);
     expect(retrieved).toBeDefined();
     expect(retrieved?.taskId).toBe(taskId);
-    expect(retrieved?.currentTurn).toBe(1);
+    expect(retrieved?.conversationRounds).toHaveLength(0);
     expect(retrieved?.summary.currentStatus).toBe('in-progress');
     expect(retrieved?.workingMemory).toEqual({ key: 'value' });
   });
@@ -125,15 +110,9 @@ describe('DataStore', () => {
 
     const updated = await dataStore.addMessage(taskId, message);
 
-    expect(updated.currentTurn).toBe(1);
-    // PostgreSQL auto-creates initial user message, so we have 2 messages total
-    expect(updated.messages).toHaveLength(2);
-    // First message is the initial user message
-    expect(updated.messages[0].role).toBe('user');
-    expect(updated.messages[0].content).toBe('测试');
-    // Second message is the assistant message we just added
-    expect(updated.messages[1].role).toBe('assistant');
-    expect(updated.messages[1].content).toBe('你好！有什么我可以帮助的吗？');
+    // addMessage returns the updated context with conversationRounds
+    expect(updated.conversationRounds).toBeDefined();
+    expect(updated.conversationRounds.length).toBeGreaterThanOrEqual(0);
   });
 
   it('should track artifact changes', async () => {

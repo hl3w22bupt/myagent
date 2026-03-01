@@ -18,16 +18,14 @@ export interface TaskContext {
   context: {
     taskId: string;
     sessionId: string;
-    currentTurn: number;
-    conversationRounds: any[];  // 新格式：扁平的对话轮次
-    messages: any[];
+    conversationRounds: any[];
     summary: any;
     artifactIndex: any[];
     workingMemory: Record<string, any>;
     metadata: {
       lastCompressedAt?: Date;
     };
-    conversationHistory?: ConversationHistoryEntry[];  // ⭐ 对话历史（由 TaskHook 预加载）
+    conversationHistory?: ConversationHistoryEntry[];
   } | null;
 
   // Execution metadata

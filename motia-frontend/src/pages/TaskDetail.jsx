@@ -10,6 +10,7 @@ import ExecutionTracesInline from '../components/ExecutionTracesInline'
 import SandboxLogsTab from '../components/SandboxLogsTab'
 import PtcCodeTab from '../components/PtcCodeTab'
 import ArtifactsTab from '../components/ArtifactsTab'
+import ContextTab from '../components/ContextTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -2247,6 +2248,15 @@ function TaskDetail() {
             </svg>
             Artifacts
           </button>
+          <button
+            className={`tab-button ${activeTab === 'context' ? 'active' : ''}`}
+            onClick={() => setActiveTab('context')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+              <path d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+            </svg>
+            Context
+          </button>
         </div>
 
         {/* 内容区域 - 所有 Tab 始终渲染，通过 CSS 控制显示隐藏 */}
@@ -2269,6 +2279,9 @@ function TaskDetail() {
           </div>
           <div className={`tab-panel ${activeTab === 'artifacts' ? 'active artifacts-tab-panel' : ''}`}>
             <ArtifactsTab taskId={id} task={task} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'context' ? 'active' : ''}`}>
+            <ContextTab taskId={id} />
           </div>
         </div>
       </div>

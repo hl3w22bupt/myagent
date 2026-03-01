@@ -526,6 +526,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                   skill_name: skillName,
                   language: language,
                   codeLength: code.length,
+                  is_final: true, // Mark as final artifact for display in UI
                   ...(content.highlight && { highlight: content.highlight }),
                 },
                 timestamp: new Date(),
@@ -555,6 +556,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                   dimensions: content.dimensions ? `${content.dimensions.width}x${content.dimensions.height}` : undefined,
                   size: content.size,
                   mimeType: content.mime_type,
+                  is_final: true, // Mark as final artifact for display in UI
                 },
                 timestamp: new Date(),
               });
@@ -797,6 +799,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               skill_name: extractedSkillName,
               language: language,
               codeLength: code.length,
+              is_final: true, // Mark as final artifact for display in UI
               ...(content.highlight && { highlight: content.highlight }),
             },
             timestamp: new Date(),
@@ -834,6 +837,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               dimensions: content.dimensions ? `${content.dimensions.width}x${content.dimensions.height}` : undefined,
               size: content.size,
               mimeType: content.mime_type,
+              is_final: true, // Mark as final artifact for display in UI
             },
             timestamp: new Date(),
           });

@@ -195,9 +195,7 @@ export const handler = async (
       const taskContext = context || {
         taskId,
         sessionId,
-        currentTurn: 1,
         conversationRounds: [],
-        messages: [],
         summary: {
           sessionIntent: '',
           currentTask: message,
@@ -610,8 +608,6 @@ export const handler = async (
       taskContext.context = {
         taskId: '',
         sessionId: '',
-        currentTurn: 0,
-        messages: [],
         conversationRounds: [],
         summary: null,
         artifactIndex: [],

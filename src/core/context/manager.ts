@@ -4,7 +4,7 @@
  * 提供任务上下文的创建、更新、查询和压缩功能
  */
 
-import type { TaskContext, Message, ConversationRound, ConversationHistoryEntry } from '../database/context-types';
+import type { TaskContext, ConversationRound, ConversationHistoryEntry } from '../database/context-types';
 import { DataStore, getDataStore } from '../database/data-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';
@@ -38,7 +38,6 @@ export class ContextManager {
       console.log('[ContextManager] Found existing context for taskId, reusing it', {
         taskId,
         conversationRoundsCount: existingContext.conversationRounds.length,
-        currentTurn: existingContext.currentTurn
       });
       return existingContext;
     }
@@ -55,17 +54,10 @@ export class ContextManager {
         sessionId,
         previousTaskId: previousContext.taskId,
         roundsCount: previousContext.conversationRounds?.length || 0,
-        messagesCount: previousContext.messages.length,
-        currentTurn: previousContext.currentTurn
       });
 
       // 继承 conversationRounds 和 summary，但使用新的 taskId
       context.conversationRounds = [...(previousContext.conversationRounds || [])];
-      // 继承 messages（向后兼容）
-      context.messages = [...previousContext.messages];
-      // ✅ 修复：基于轮次数量计算 currentTurn，而不是直接继承
-      // 这样每次创建新 context 时，currentTurn 会正确递增
-      context.currentTurn = (previousContext.conversationRounds?.length || previousContext.messages.length) + 1;
       context.summary = { ...previousContext.summary };
       context.summary.currentTask = input; // 更新当前任务
       context.artifactIndex = [...previousContext.artifactIndex];
@@ -78,16 +70,11 @@ export class ContextManager {
       console.log('[ContextManager] Inherited context from previous task', {
         taskId,
         inheritedRounds: context.conversationRounds.length,
-        inheritedMessages: context.messages.length,
-        inheritedTurn: context.currentTurn
       });
     } else {
       // ⚠️ 修复：当找不到 previous context 时，从头开始创建新的 context
-      // 避免访问 null 的 messages 属性导致错误 "Cannot read properties of null"
       console.warn('[ContextManager] No previous context found, starting fresh context');
       context.conversationRounds = [];
-      context.messages = [];
-      context.currentTurn = 1; // 第一轮从 turn 1 开始
       context.summary = {
         sessionIntent: '',
         currentTask: input,
@@ -108,8 +95,6 @@ export class ContextManager {
       console.log('[ContextManager] Started fresh context', {
         taskId,
         roundsCount: context.conversationRounds.length,
-        messagesCount: context.messages.length,
-        currentTurn: context.currentTurn
       });
 
       return context;
@@ -149,9 +134,7 @@ export class ContextManager {
       if (context) {
         console.log('[ContextManager] Found context for task:', {
           taskId: task.id,
-          messagesCount: context.messages.length,
           conversationRoundsCount: context.conversationRounds.length,
-          currentTurn: context.currentTurn
         });
         // ⭐ 修复：改为检查 conversationRounds 而不是 messages
         if (context.conversationRounds.length > 0) {
@@ -174,8 +157,9 @@ export class ContextManager {
 
   /**
    * 添加消息到上下文
+   * @deprecated 使用 addConversationRound 代替
    */
-  async addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext> {
+  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any }): Promise<TaskContext> {
     // 1. 获取当前上下文，如果不存在则创建一个新的
     let context = await this.store.getContext(taskId);
     if (!context) {
@@ -203,15 +187,15 @@ export class ContextManager {
 
     // 4. 压缩逻辑由 compressor 内部处理
     // compressor.compress() 方法内部会自动判断是否需要压缩
-    const compressed = await this.compressor.compress(updatedContext, async (messages: Message[]) => {
+    const compressed = await this.compressor.compress(updatedContext, async (rounds: ConversationRound[]) => {
       if (this.summarizer) {
-        return await this.summarizer.summarizeContext(messages);
+        return await this.summarizer.summarizeFromRounds(rounds);
       } else {
         // Fallback: 简单摘要
         return {
           sessionIntent: '会话意图',
           currentTask: context.summary.currentTask,
-          completedSteps: messages.map(m => m.content).slice(0, 5),
+          completedSteps: rounds.map(r => r.userMessage).slice(0, 5),
           filesModified: [],
           decisionsMade: [],
           currentStatus: 'compressed',
@@ -222,33 +206,7 @@ export class ContextManager {
       }
     });
 
-    // 如果返回的是压缩后的上下文（消息数量减少），则保存压缩历史
-    if (compressed.messages.length < updatedContext.messages.length) {
-      // Calculate token counts from messages
-      const originalTokenCount = updatedContext.messages
-        .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
-      const compressedTokenCount = compressed.messages
-        .reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
-
-      // 保存压缩历史
-      await this.store.saveCompressionHistory({
-        id: `comp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        taskId,
-        compressedAt: new Date(),
-        originalTokenCount,
-        compressedTokenCount,
-        compressionRatio: compressedTokenCount / originalTokenCount,
-        summary: compressed.summary,
-        truncatedMessageIds: updatedContext.messages
-          .slice(0, -20)
-          .map(m => m.id),
-      });
-
-      // 保存压缩后的上下文
-      await this.store.saveContext(compressed);
-    }
-
-    return compressed.messages.length < updatedContext.messages.length ? compressed : updatedContext;
+    return compressed;
   }
 
   /**
@@ -278,7 +236,7 @@ export class ContextManager {
   private formatContextForLLM(context: TaskContext): string {
     const summary = this.formatSummary(context.summary);
     const artifacts = this.formatArtifacts(context.artifactIndex);
-    const messages = this.formatMessages(context.messages);
+    const rounds = this.formatRounds(context.conversationRounds);
 
     return `
 ## Summary
@@ -287,8 +245,8 @@ ${summary}
 ## Artifacts
 ${artifacts}
 
-## Recent Messages
-${messages}
+## Recent Conversation
+${rounds}
 `.trim();
   }
 
@@ -320,11 +278,11 @@ ${messages}
   }
 
   /**
-   * 格式化消息
+   * 格式化对话轮次
    */
-  private formatMessages(messages: Message[]): string {
-    return messages
-      .map(m => `[${m.role}]: ${m.content}`)
+  private formatRounds(rounds: ConversationRound[]): string {
+    return rounds
+      .map(r => `[User]: ${r.userMessage}\n${r.assistantOutput ? `[Assistant]: ${r.assistantOutput}` : ''}`)
       .join('\n\n');
   }
 

@@ -4,7 +4,7 @@
  * 使用Anchored Iterative Summarization算法压缩上下文
  */
 
-import type { TaskContext, StructuredSummary, Message } from '../database/context-types';
+import type { TaskContext, StructuredSummary, ConversationRound } from '../database/context-types';
 
 export class ContextCompressor {
   private maxTokens: number;
@@ -25,27 +25,12 @@ export class ContextCompressor {
    * 检查是否需要压缩（智能触发）
    */
   shouldCompress(context: TaskContext): boolean {
-    const { lastCompressedAt } = context.metadata;
-
-    // Calculate total tokens from messages
-    const totalTokens = context.messages.reduce((sum, m) => sum + (m.metadata.tokens || 0), 0);
-
-    // 条件1: Token数超过阈值
-    if (totalTokens > this.maxTokens * this.threshold) {
+    // 条件1: 对话轮次超过阈值
+    if (context.conversationRounds.length > this.messagesToKeep * 2) {
       return true;
     }
 
-    // 条件2: 最近一次压缩后超过50条新消息
-    if (lastCompressedAt && context.messages.length > 50) {
-      const messagesSinceCompression = context.messages.filter(
-        m => new Date(m.metadata.timestamp) > new Date(lastCompressedAt)
-      );
-      if (messagesSinceCompression.length > 50) {
-        return true;
-      }
-    }
-
-    // 条件3: 任务状态为completed或failed时
+    // 条件2: 任务状态为completed或failed时
     if (context.summary.currentStatus === 'completed' ||
         context.summary.currentStatus === 'failed') {
       return true;
@@ -59,31 +44,27 @@ export class ContextCompressor {
    */
   async compress(
     context: TaskContext,
-    llmSummarize: (messages: Message[]) => Promise<StructuredSummary>
+    llmSummarize: (rounds: ConversationRound[]) => Promise<StructuredSummary>
   ): Promise<TaskContext> {
-    // 1. 分离要压缩的消息和要保留的消息
-    const messagesToCompress = context.messages.slice(0, -this.messagesToKeep);
-    const messagesToKeep = context.messages.slice(-this.messagesToKeep);
+    // 1. 分离要压缩的轮次和要保留的轮次
+    const roundsToCompress = context.conversationRounds.slice(0, -this.messagesToKeep);
+    const roundsToKeep = context.conversationRounds.slice(-this.messagesToKeep);
 
-    if (messagesToCompress.length === 0) {
+    if (roundsToCompress.length === 0) {
       return context;
     }
 
     // 2. 生成新的结构化摘要
-    const newSummary = await llmSummarize(messagesToCompress);
+    const newSummary = await llmSummarize(roundsToCompress);
 
     // 3. 合并摘要
     const mergedSummary = this.mergeSummaries(context.summary, newSummary);
 
-    // 4. 更新Artifact索引
-    const updatedArtifacts = this.extractArtifactsFromMessages(messagesToCompress);
-
-    // 5. 创建压缩后的上下文
+    // 4. 创建压缩后的上下文
     const compressedContext: TaskContext = {
       ...context,
-      messages: messagesToKeep,
+      conversationRounds: roundsToKeep,
       summary: mergedSummary,
-      artifactIndex: [...context.artifactIndex, ...updatedArtifacts],
       metadata: {
         ...context.metadata,
         lastCompressedAt: new Date(),
@@ -127,36 +108,13 @@ export class ContextCompressor {
   }
 
   /**
-   * 从消息中提取Artifacts
-   */
-  private extractArtifactsFromMessages(messages: Message[]): any[] {
-    // 简化版本：实际应该使用ArtifactExtractor
-    const artifacts: any[] = [];
-
-    for (const message of messages) {
-      if (message.metadata.skillCalls) {
-        for (const skill of message.metadata.skillCalls) {
-          artifacts.push({
-            artifactType: 'function',
-            action: 'read',
-            path: skill,
-            timestamp: message.metadata.timestamp,
-          });
-        }
-      }
-    }
-
-    return artifacts;
-  }
-
-  /**
    * 估算压缩后的token数
    */
-  private estimateCompressedTokens(messages: Message[], _summary: StructuredSummary): number {
-    // 简单估算：每条消息平均1000 tokens，摘要5000 tokens
-    const messageTokens = messages.length * 1000;
+  private estimateCompressedTokens(rounds: ConversationRound[], _summary: StructuredSummary): number {
+    // 简单估算：每轮对话平均2000 tokens，摘要5000 tokens
+    const roundTokens = rounds.length * 2000;
     const summaryTokens = 5000;
 
-    return messageTokens + summaryTokens;
+    return roundTokens + summaryTokens;
   }
 }

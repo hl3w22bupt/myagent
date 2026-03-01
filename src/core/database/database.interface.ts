@@ -6,7 +6,7 @@
  */
 
 import type { TaskStatus, Task, CreateTaskData, Session } from './data-store';
-import type { TaskContext, Message, ArtifactIndex, CompressionHistory, OutputIndex } from './context-types';
+import type { TaskContext, ArtifactIndex, CompressionHistory, OutputIndex } from './context-types';
 
 export interface Database {
   /**
@@ -41,7 +41,7 @@ export interface Database {
   createTaskContext(taskId: string, sessionId: string, input: string): Promise<TaskContext>;
   getContext(taskId: string): Promise<TaskContext | null>;
   saveContext(context: TaskContext): Promise<void>;
-  addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext>;
+  addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext>;
 
   /**
    * Artifact operations

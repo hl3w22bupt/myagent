@@ -17,7 +17,6 @@ import type {
 } from './data-store';
 import type {
   TaskContext,
-  Message,
   ArtifactIndex,
   CompressionHistory,
   OutputIndex,
@@ -874,20 +873,7 @@ export class PostgresDataStore implements Database {
       return {
         taskId,
         sessionId,
-        currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
-        messages: [
-          {
-            id: messageId,
-            taskId,
-            role: 'user',
-            content: input,
-            metadata: {
-              timestamp: new Date(),
-              tokens: 0,
-            },
-          },
-        ],
+        conversationRounds: [],
         summary: {
           sessionIntent: '',
           currentTask: input,
@@ -927,28 +913,6 @@ export class PostgresDataStore implements Database {
 
       const contextRow = contextResult.rows[0];
 
-      // Get messages
-      const messagesResult = await client.query(
-        'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
-        [taskId]
-      );
-
-      const messages: Message[] = messagesResult.rows.map(row => ({
-        id: row.id,
-        taskId: row.task_id,
-        role: row.role,
-        content: row.content,
-        metadata: row.metadata,
-        compressed: row.compressed,
-      }));
-
-      // DEBUG: Log messages count
-      console.log('[DEBUG] getContext:', {
-        taskId,
-        messagesCount: messages.length,
-        conversationRoundsCount: (contextRow.conversation_rounds || []).length,
-      });
-
       // Get artifacts
       const artifactsResult = await client.query(
         'SELECT * FROM artifacts WHERE task_id = $1',
@@ -971,9 +935,7 @@ export class PostgresDataStore implements Database {
       return {
         taskId: contextRow.task_id,
         sessionId: contextRow.session_id,
-        currentTurn: contextRow.current_turn,
-        conversationRounds: contextRow.conversation_rounds || [],  // 新格式：扁平的对话轮次
-        messages,
+        conversationRounds: contextRow.conversation_rounds || [],
         summary: contextRow.summary,
         artifactIndex: artifacts,
         workingMemory: contextRow.working_memory,
@@ -992,10 +954,6 @@ export class PostgresDataStore implements Database {
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (updates.currentTurn !== undefined) {
-        fields.push(`current_turn = $${paramIndex++}`);
-        values.push(updates.currentTurn);
-      }
       if (updates.summary !== undefined) {
         fields.push(`summary = $${paramIndex++}`);
         values.push(JSON.stringify(updates.summary));
@@ -1029,7 +987,7 @@ export class PostgresDataStore implements Database {
     await this.updateContext(context.taskId, context);
   }
 
-  async addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext> {
+  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext> {
     const client = await this.pool.connect();
 
     try {
@@ -1094,63 +1052,6 @@ export class PostgresDataStore implements Database {
       );
 
       console.log('[DEBUG] Database updated successfully', { taskId, roundsCount: rounds.length });
-
-      // Also update messages for backward compatibility
-      // Build messages array from conversationRounds
-      const updatedMessages: Message[] = [];
-      for (const r of rounds) {
-        // Parse timestamp (might be string from JSON or Date object)
-        const timestamp = r.timestamp instanceof Date ? r.timestamp : new Date(r.timestamp);
-
-        // Add user message
-        updatedMessages.push({
-          id: `msg-round-${r.round}-user`,
-          taskId,
-          role: 'user',
-          content: r.userMessage,
-          metadata: { timestamp },
-        });
-        // Add assistant message if exists
-        if (r.assistantReply) {
-          updatedMessages.push({
-            id: `msg-round-${r.round}-assistant`,
-            taskId,
-            role: 'assistant',
-            content: r.assistantReply,
-            metadata: { timestamp },
-          });
-        }
-        // Add error message if exists (instead of assistant)
-        if (r.error) {
-          updatedMessages.push({
-            id: `msg-round-${r.round}-error`,
-            taskId,
-            role: 'system',
-            content: `Error: ${r.error}`,
-            metadata: { timestamp },
-          });
-        }
-      }
-
-      // Insert new messages (delete old ones first for simplicity)
-      await client.query('DELETE FROM messages WHERE task_id = $1', [taskId]);
-      for (const msg of updatedMessages) {
-        const ts = msg.metadata.timestamp instanceof Date
-          ? msg.metadata.timestamp.getTime()
-          : new Date(msg.metadata.timestamp).getTime();
-        await client.query(
-          `INSERT INTO messages (id, task_id, role, content, metadata, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            msg.id,
-            taskId,
-            msg.role,
-            msg.content,
-            msg.metadata,
-            ts,
-          ]
-        );
-      }
 
       // Return updated context
       return await this.getContext(taskId) as TaskContext;

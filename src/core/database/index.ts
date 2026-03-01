@@ -33,7 +33,6 @@ export type {
 
 export type {
   TaskContext,
-  Message,
   ArtifactIndex,
   CompressionHistory,
 } from './context-types';

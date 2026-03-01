@@ -70,13 +70,13 @@ export const handler = async (request: any, { logger }: any) => {
 
     // 获取第一个任务的上下文（假设一个 session 对应一个主要上下文）
     let context = null;
-    let messages = [];
+    let conversationRounds = [];
     let artifacts = [];
 
     if (tasks.length > 0) {
       const firstTaskId = tasks[0].id;
       context = await store.getContext(firstTaskId);
-      messages = context?.messages || [];
+      conversationRounds = context?.conversationRounds || [];
       artifacts = await store.getArtifacts(firstTaskId);
     }
 
@@ -98,16 +98,24 @@ export const handler = async (request: any, { logger }: any) => {
             output: t.output,
           })),
           context: context ? {
-            currentTurn: context.currentTurn,
             summary: context.summary,
             workingMemory: context.workingMemory,
+            conversationRounds: context.conversationRounds,
           } : null,
-          messages: messages.map((m: any) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            timestamp: m.metadata?.timestamp || new Date().toISOString(),
-          })),
+          messages: conversationRounds.flatMap((r: any) => [
+            {
+              id: `msg-${r.round}-user`,
+              role: 'user',
+              content: r.userMessage,
+              timestamp: r.timestamp,
+            },
+            ...(r.assistantOutput ? [{
+              id: `msg-${r.round}-assistant`,
+              role: 'assistant',
+              content: r.assistantOutput,
+              timestamp: r.timestamp,
+            }] : []),
+          ]),
           artifacts: artifacts.map((a: any) => ({
             id: a.id,
             type: a.artifactType,

@@ -10,9 +10,7 @@ jest.mock('@/core/database/data-store', () => ({
     createTaskContext: jest.fn().mockResolvedValue({
       taskId: 'test-1',
       sessionId: 'session-1',
-      currentTurn: 1,
-      conversationRounds: [],  // 新格式：扁平的对话轮次
-      messages: [],
+      conversationRounds: [],
       summary: {},
       artifactIndex: [],
       workingMemory: {},
@@ -72,8 +70,7 @@ describe('ContextManagerTaskHook', () => {
       expect(mockContext.context).toMatchObject({
         taskId: 'test-1',
         sessionId: 'session-1',
-        currentTurn: 0,
-        messages: [],
+        conversationRounds: [],
         artifactIndex: [],
         workingMemory: {},
         metadata: {
@@ -106,13 +103,33 @@ describe('ContextManagerTaskHook', () => {
 
   describe('postExec', () => {
     it('should log context save with correct metadata', async () => {
+      const mockUpdatedContext = {
+        taskId: 'test-1',
+        sessionId: 'session-1',
+        conversationRounds: [],
+        summary: {
+          sessionIntent: 'test',
+          currentTask: 'test task',
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'pending',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {
+          lastCompressedAt: new Date(),
+        },
+      };
+
       mockContext.context = {
         taskId: 'test-1',
         sessionId: 'session-1',
-        currentTurn: 1,
-        conversationRounds: [],
-        messages: [],
-        summary: {
+                conversationRounds: [],
+                summary: {
           sessionIntent: 'test',
           currentTask: 'test task',
           completedSteps: [],
@@ -135,7 +152,7 @@ describe('ContextManagerTaskHook', () => {
         getContext: jest.fn().mockResolvedValue({
           conversationRounds: [],
         }),
-        addConversationRound: jest.fn().mockResolvedValue(undefined),
+        addConversationRound: jest.fn().mockResolvedValue(mockUpdatedContext),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
@@ -146,20 +163,37 @@ describe('ContextManagerTaskHook', () => {
         'Task context saved',
         expect.objectContaining({
           taskId: 'test-1',
-          currentTurn: 1,
-          hasCompression: true,
+                    hasCompression: true,
         })
       );
     });
 
     it('should update summary status on success', async () => {
+      const mockUpdatedContext = {
+        taskId: 'test-1',
+        sessionId: 'session-1',
+        conversationRounds: [],
+        summary: {
+          sessionIntent: 'test',
+          currentTask: 'test task',
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'completed', // Updated by the hook
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {},
+      };
+
       mockContext.context = {
         taskId: 'test-1',
         sessionId: 'session-1',
-        currentTurn: 1,
-        conversationRounds: [],
-        messages: [],
-        summary: {
+                conversationRounds: [],
+                summary: {
           sessionIntent: 'test',
           currentTask: 'test task',
           completedSteps: [],
@@ -183,24 +217,42 @@ describe('ContextManagerTaskHook', () => {
         getContext: jest.fn().mockResolvedValue({
           conversationRounds: [],
         }),
-        addConversationRound: jest.fn().mockResolvedValue(undefined),
+        addConversationRound: jest.fn().mockResolvedValue(mockUpdatedContext),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
       await hook.postExec(mockContext, { success: true, structuredOutputs: [] });
 
-      // Status should be updated
-      expect(mockContext.context?.summary.currentStatus).toBe('completed');
+      // Status should be updated in the context returned by addConversationRound
+      expect(mockUpdatedContext.summary.currentStatus).toBe('completed');
     });
 
     it('should add task to completedSteps on success', async () => {
+      const mockUpdatedContext = {
+        taskId: 'test-1',
+        sessionId: 'session-1',
+        conversationRounds: [],
+        summary: {
+          sessionIntent: 'test',
+          currentTask: 'test task',
+          completedSteps: ['test task'], // Updated by the hook
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'completed',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {},
+      };
+
       mockContext.context = {
         taskId: 'test-1',
         sessionId: 'session-1',
-        currentTurn: 1,
-        conversationRounds: [],
-        messages: [],
-        summary: {
+                conversationRounds: [],
+                summary: {
           sessionIntent: 'test',
           currentTask: 'test task',
           completedSteps: [], // Will be updated
@@ -222,24 +274,42 @@ describe('ContextManagerTaskHook', () => {
         getContext: jest.fn().mockResolvedValue({
           conversationRounds: [],
         }),
-        addConversationRound: jest.fn().mockResolvedValue(undefined),
+        addConversationRound: jest.fn().mockResolvedValue(mockUpdatedContext),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
       await hook.postExec(mockContext, { success: true, structuredOutputs: [] });
 
       // Task should be added to completedSteps
-      expect(mockContext.context?.summary.completedSteps).toContain('test task');
+      expect(mockUpdatedContext.summary.completedSteps).toContain('test task');
     });
 
     it('should handle saveContext errors gracefully', async () => {
+      const mockUpdatedContext = {
+        taskId: 'test-1',
+        sessionId: 'session-1',
+        conversationRounds: [],
+        summary: {
+          sessionIntent: 'test',
+          currentTask: 'test task',
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'completed',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {},
+      };
+
       mockContext.context = {
         taskId: 'test-1',
         sessionId: 'session-1',
-        currentTurn: 1,
-        conversationRounds: [],
-        messages: [],
-        summary: {
+                conversationRounds: [],
+                summary: {
           sessionIntent: 'test',
           currentTask: 'test task',
           completedSteps: [],
@@ -261,7 +331,7 @@ describe('ContextManagerTaskHook', () => {
         getContext: jest.fn().mockResolvedValue({
           conversationRounds: [],
         }),
-        addConversationRound: jest.fn().mockResolvedValue(undefined),
+        addConversationRound: jest.fn().mockResolvedValue(mockUpdatedContext),
         saveContext: jest.fn().mockRejectedValue(new Error('Save failed')),
       };
 

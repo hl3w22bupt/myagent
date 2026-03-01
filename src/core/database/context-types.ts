@@ -91,17 +91,12 @@ export interface TaskContext {
   // 基础信息
   taskId: string;
   sessionId: string;
-  currentTurn: number;
 
-  // 对话轮次（新格式，扁平结构）
+  // 对话轮次（扁平结构）
   conversationRounds: ConversationRound[];
 
-  // ⭐ 对话历史（由 TaskHook 预加载，供 Agent 使用）
+  // 对话历史（由 TaskHook 预加载，供 Agent 使用）
   conversationHistory?: ConversationHistoryEntry[];
-
-  // 保留旧字段用于向后兼容（标记为 deprecated）
-  /** @deprecated 使用 conversationRounds 代替 */
-  messages: Message[];
 
   // 压缩摘要（Anchored Iterative Summarization）
   summary: StructuredSummary;
@@ -120,23 +115,6 @@ export interface TaskContext {
     lastCompressedAt?: Date;
     compressed?: boolean;
   };
-}
-
-/**
- * 消息结构
- */
-export interface Message {
-  id: string;
-  taskId: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  metadata: {
-    timestamp: Date;
-    tokens?: number;
-    skillCalls?: string[];  // Skills used in this message
-    sessionId?: string;
-  };
-  compressed?: boolean;
 }
 
 /**
