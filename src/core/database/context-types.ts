@@ -3,6 +3,59 @@
  */
 
 /**
+ * 对话历史条目（用于 Agent 层）
+ */
+export interface ConversationHistoryEntry {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}
+
+/**
+ * 对话轮次信息（扁平结构，避免嵌套）
+ * 用于替代嵌套的 messages 数组，提供更清晰的对话历史
+ */
+export interface ConversationRound {
+  /** 轮次编号 */
+  round: number;
+
+  /** 时间戳 */
+  timestamp: Date;
+
+  /** 用户消息 */
+  userMessage: string;
+
+  /** 助手回复（成功时有值） */
+  assistantReply?: string;
+
+  /** ⭐ 兼容字段：assistantOutput 是 assistantReply 的别名 */
+  assistantOutput?: string;
+
+  /** 产物信息（成功时有值） */
+  artifacts?: ArtifactInfo[];
+
+  /** 错误信息（失败时有值） */
+  error?: string;
+}
+
+/**
+ * 产物信息（用于对话轮次记录）
+ */
+export interface ArtifactInfo {
+  /** 产物类型：video, text, code, image, audio, table, infographic 等 */
+  type: string;
+
+  /** 文件路径（对于有文件的产物） */
+  path?: string;
+
+  /** 内容（对于文本类型） */
+  content?: string;
+
+  /** 描述 */
+  description?: string;
+}
+
+/**
  * HITL (Human-in-the-Loop) 状态
  */
 export interface HITLState {
@@ -40,7 +93,14 @@ export interface TaskContext {
   sessionId: string;
   currentTurn: number;
 
-  // 对话历史
+  // 对话轮次（新格式，扁平结构）
+  conversationRounds: ConversationRound[];
+
+  // ⭐ 对话历史（由 TaskHook 预加载，供 Agent 使用）
+  conversationHistory?: ConversationHistoryEntry[];
+
+  // 保留旧字段用于向后兼容（标记为 deprecated）
+  /** @deprecated 使用 conversationRounds 代替 */
   messages: Message[];
 
   // 压缩摘要（Anchored Iterative Summarization）

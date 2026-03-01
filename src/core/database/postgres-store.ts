@@ -21,6 +21,7 @@ import type {
   ArtifactIndex,
   CompressionHistory,
   OutputIndex,
+  ConversationRound,
 } from './context-types';
 
 /**
@@ -206,6 +207,8 @@ export class PostgresDataStore implements Database {
           task_id TEXT PRIMARY KEY,
           session_id TEXT NOT NULL,
           current_turn INTEGER DEFAULT 1,
+          conversation_rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
+          messages_count INTEGER DEFAULT 0,
           summary JSONB NOT NULL DEFAULT '{}'::jsonb,
           working_memory JSONB NOT NULL DEFAULT '{}'::jsonb,
           metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -315,6 +318,26 @@ export class PostgresDataStore implements Database {
             WHERE table_name = 'artifacts' AND column_name = 'metadata'
           ) THEN
             ALTER TABLE artifacts ADD COLUMN metadata JSONB;
+          END IF;
+        END $$;
+      `);
+
+      // 自动迁移：为 task_contexts 表添加 conversation_rounds 和 messages_count 列（如果不存在）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'task_contexts' AND column_name = 'conversation_rounds'
+          ) THEN
+            ALTER TABLE task_contexts ADD COLUMN conversation_rounds JSONB NOT NULL DEFAULT '[]'::jsonb;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'task_contexts' AND column_name = 'messages_count'
+          ) THEN
+            ALTER TABLE task_contexts ADD COLUMN messages_count INTEGER DEFAULT 0;
           END IF;
         END $$;
       `);
@@ -852,6 +875,7 @@ export class PostgresDataStore implements Database {
         taskId,
         sessionId,
         currentTurn: 1,
+        conversationRounds: [],  // 新格式：扁平的对话轮次
         messages: [
           {
             id: messageId,
@@ -918,6 +942,13 @@ export class PostgresDataStore implements Database {
         compressed: row.compressed,
       }));
 
+      // DEBUG: Log messages count
+      console.log('[DEBUG] getContext:', {
+        taskId,
+        messagesCount: messages.length,
+        conversationRoundsCount: (contextRow.conversation_rounds || []).length,
+      });
+
       // Get artifacts
       const artifactsResult = await client.query(
         'SELECT * FROM artifacts WHERE task_id = $1',
@@ -941,6 +972,7 @@ export class PostgresDataStore implements Database {
         taskId: contextRow.task_id,
         sessionId: contextRow.session_id,
         currentTurn: contextRow.current_turn,
+        conversationRounds: contextRow.conversation_rounds || [],  // 新格式：扁平的对话轮次
         messages,
         summary: contextRow.summary,
         artifactIndex: artifacts,
@@ -1022,6 +1054,106 @@ export class PostgresDataStore implements Database {
       }
 
       return context;
+    } finally {
+      client.release();
+    }
+  }
+
+  async addConversationRound(taskId: string, round: ConversationRound): Promise<TaskContext> {
+    console.log('[DEBUG] addConversationRound called', { taskId, round: round.round, userMessage: round.userMessage?.substring(0, 50) });
+    const client = await this.pool.connect();
+
+    try {
+      // Get current context
+      const context = await this.getContext(taskId);
+      if (!context) {
+        throw new Error(`Context not found for task: ${taskId}`);
+      }
+
+      console.log('[DEBUG] Current conversationRounds count:', context.conversationRounds?.length || 0);
+
+      // Add new round to conversationRounds array
+      const rounds = context.conversationRounds || [];
+      rounds.push(round);
+
+      console.log('[DEBUG] New conversationRounds count:', rounds.length);
+
+      // Update conversation_rounds and messages_count in database
+      await client.query(
+        `UPDATE task_contexts
+         SET conversation_rounds = $1,
+             messages_count = $2,
+             updated_at = $3
+         WHERE task_id = $4`,
+        [
+          JSON.stringify(rounds),
+          rounds.length,
+          Date.now(),  // Fix: use number instead of ISO string
+          taskId,
+        ]
+      );
+
+      console.log('[DEBUG] Database updated successfully', { taskId, roundsCount: rounds.length });
+
+      // Also update messages for backward compatibility
+      // Build messages array from conversationRounds
+      const updatedMessages: Message[] = [];
+      for (const r of rounds) {
+        // Parse timestamp (might be string from JSON or Date object)
+        const timestamp = r.timestamp instanceof Date ? r.timestamp : new Date(r.timestamp);
+
+        // Add user message
+        updatedMessages.push({
+          id: `msg-round-${r.round}-user`,
+          taskId,
+          role: 'user',
+          content: r.userMessage,
+          metadata: { timestamp },
+        });
+        // Add assistant message if exists
+        if (r.assistantReply) {
+          updatedMessages.push({
+            id: `msg-round-${r.round}-assistant`,
+            taskId,
+            role: 'assistant',
+            content: r.assistantReply,
+            metadata: { timestamp },
+          });
+        }
+        // Add error message if exists (instead of assistant)
+        if (r.error) {
+          updatedMessages.push({
+            id: `msg-round-${r.round}-error`,
+            taskId,
+            role: 'system',
+            content: `Error: ${r.error}`,
+            metadata: { timestamp },
+          });
+        }
+      }
+
+      // Insert new messages (delete old ones first for simplicity)
+      await client.query('DELETE FROM messages WHERE task_id = $1', [taskId]);
+      for (const msg of updatedMessages) {
+        const ts = msg.metadata.timestamp instanceof Date
+          ? msg.metadata.timestamp.getTime()
+          : new Date(msg.metadata.timestamp).getTime();
+        await client.query(
+          `INSERT INTO messages (id, task_id, role, content, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            msg.id,
+            taskId,
+            msg.role,
+            msg.content,
+            msg.metadata,
+            ts,
+          ]
+        );
+      }
+
+      // Return updated context
+      return await this.getContext(taskId) as TaskContext;
     } finally {
       client.release();
     }

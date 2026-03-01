@@ -3,7 +3,7 @@ import { TaskContext } from './types';
 import { ContextManager } from '../../context/manager';
 import { LLMSummarizer } from '../../llm/summarizer';
 import { getDataStore } from '../../database/data-store';
-import { agentManager } from '../../../index';
+import { ConversationHistoryEntry } from '../../database/context-types';
 
 /**
  * Context Manager TaskHook
@@ -41,10 +41,15 @@ export class ContextManagerTaskHook extends BaseTaskHook {
       // 将上下文附加到TaskContext
       context.context = taskContext;
 
+      // ⭐ 新增：构建对话历史供 Agent 使用
+      const history = this.buildConversationHistory(taskContext.conversationRounds);
+      (context as any).conversationHistory = history;
+
       services.logger.info('Task context created', {
         taskId,
         sessionId,
         currentTurn: taskContext.currentTurn,
+        conversationHistoryLength: history.length,
       });
 
       return undefined;
@@ -60,7 +65,8 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         taskId,
         sessionId,
         currentTurn: 0,
-        messages: [],
+        conversationRounds: [],  // 新格式：扁平的对话轮次
+        messages: [],  // 保留用于向后兼容
         summary: {
           sessionIntent: '',
           currentTask: task,
@@ -81,10 +87,63 @@ export class ContextManagerTaskHook extends BaseTaskHook {
     }
   }
 
+  /**
+   * 构建对话历史供 Agent 使用
+   * 将 conversationRounds 转换为 Agent 需要的格式
+   */
+  private buildConversationHistory(rounds: any[]): ConversationHistoryEntry[] {
+    if (!rounds || rounds.length === 0) {
+      return [];
+    }
+
+    return rounds.flatMap((round: any) => {
+      const timestamp = round.timestamp instanceof Date ? round.timestamp.getTime() : round.timestamp;
+      const entries: ConversationHistoryEntry[] = [
+        { role: 'user', content: round.userMessage, timestamp },
+      ];
+
+      const reply = round.assistantOutput || round.assistantReply;
+      if (reply) {
+        entries.push({ role: 'assistant', content: reply, timestamp });
+      }
+
+      return entries;
+    });
+  }
+
   async postExec(context: TaskContext, result: any): Promise<void> {
-    const { taskId, sessionId, services } = context;
+    const { taskId, services } = context;
 
     try {
+      // ⭐ 新增：保存对话轮次
+      // 从数据库重新加载最新的 context，以获取正确的 round 号
+      const latestContext = await this.contextManager.getContext(taskId);
+      const currentRound = (latestContext?.conversationRounds?.length || 0) + 1;
+
+      // 从 result.structuredOutputs 获取 artifacts（只记录类型）
+      const artifacts = (result.structuredOutputs || [])
+        .map((so: any) => ({
+          type: so.result_type,
+        }))
+        .filter(Boolean);
+
+      const newRound = {
+        round: currentRound,
+        timestamp: new Date(),
+        userMessage: context.task,
+        assistantOutput: result.success ? result.output : undefined,
+        error: result.success ? undefined : result.error,
+        artifacts,
+      };
+
+      await this.contextManager.addConversationRound(taskId, newRound);
+
+      services.logger.info('Conversation round saved', {
+        taskId,
+        round: currentRound,
+        hasArtifact: artifacts.length > 0,
+      });
+
       // 更新上下文的最终状态
       if (context.context) {
         context.context.summary.currentStatus = context.status;
@@ -94,54 +153,8 @@ export class ContextManagerTaskHook extends BaseTaskHook {
           context.context.summary.completedSteps.push(context.task);
         }
 
-        // ⭐ 关键修复：从 Agent 获取最新的对话消息并保存到 context
-        try {
-          const agent = await agentManager.acquire(sessionId);
-
-          if (agent) {
-            const conversationHistory = agent.getState().conversationHistory;
-
-            console.log('[ContextManagerTaskHook] Syncing conversationHistory to database context', {
-              taskId,
-              historyLength: conversationHistory.length,
-              contextMessages: context.context.messages.length
-            });
-
-            // 将 Agent 的 conversationHistory 同步到 context.messages
-            // 只保留在数据库中还没有的消息
-            const existingMessageIds = new Set(
-              context.context.messages.map(m => `${m.role}:${m.content.substring(0, 50)}`)
-            );
-
-            const newMessages = conversationHistory.filter((msg: any) => {
-              const key = `${msg.role}:${msg.content.substring(0, 50)}`;
-              return !existingMessageIds.has(key);
-            });
-
-            // 添加新消息到数据库
-            for (const msg of newMessages) {
-              await this.contextManager.addMessage(taskId, {
-                id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                role: msg.role as 'user' | 'assistant',
-                content: msg.content,
-                metadata: {
-                  timestamp: new Date(msg.timestamp),
-                  tokens: 0 // TODO: 可以计算实际 token 数
-                },
-                compressed: false
-              });
-            }
-
-            // 更新 context 以反映新添加的消息
-            const updatedContext = await this.contextManager.getContext(taskId);
-            if (updatedContext) {
-              context.context = updatedContext;
-            }
-          }
-        } catch (error) {
-          console.error('[ContextManagerTaskHook] Failed to sync Agent conversationHistory:', error);
-          // 继续执行，不要因为同步失败而中断整个流程
-        }
+        // ⭐ 注意：我们不再同步 conversationHistory 到 messages 表
+        // 直接使用 conversationRounds 作为唯一数据源
 
         // 保存上下文
         await this.contextManager.saveContext(context.context);

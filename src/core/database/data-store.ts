@@ -84,6 +84,7 @@ import type {
   ArtifactIndex,
   OutputIndex,
   CompressionHistory,
+  ConversationRound,
 } from './context-types';
 
 /**
@@ -278,6 +279,19 @@ export class DataStore {
       } else {
         console.log('[DataStore] Migration: ptc_codes column already exists');
       }
+
+      // Migration 2: Add conversation_rounds and messages_count columns to task_contexts table
+      const contextTableInfo = this.db.exec('PRAGMA table_info(task_contexts)');
+      const hasConversationRounds = contextTableInfo[0]?.values?.some((row: any[]) => row[1] === 'conversation_rounds');
+
+      if (!hasConversationRounds) {
+        console.log('[DataStore] Migration: Adding conversation_rounds and messages_count columns to task_contexts table');
+        this.db.run('ALTER TABLE task_contexts ADD COLUMN conversation_rounds TEXT');
+        this.db.run('ALTER TABLE task_contexts ADD COLUMN messages_count INTEGER DEFAULT 0');
+        console.log('[DataStore] Migration: conversation_rounds and messages_count columns added successfully');
+      } else {
+        console.log('[DataStore] Migration: conversation_rounds and messages_count columns already exist');
+      }
     } catch (error) {
       console.error('[DataStore] Migration error:', error);
       // Don't throw - allow app to continue even if migration fails
@@ -372,6 +386,8 @@ export class DataStore {
         task_id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
         current_turn INTEGER DEFAULT 0,
+        conversation_rounds TEXT,
+        messages_count INTEGER DEFAULT 0,
         summary TEXT,
         working_memory TEXT,
         metadata TEXT,
@@ -777,7 +793,8 @@ export class DataStore {
       taskId,
       sessionId,
       currentTurn: 0,
-      messages: [],
+      conversationRounds: [],  // 新格式：扁平的对话轮次
+      messages: [],  // 保留用于向后兼容
       summary: {
         sessionIntent: '',
         currentTask: input,
@@ -870,12 +887,88 @@ export class DataStore {
       taskId: contextRow.task_id,
       sessionId: contextRow.session_id,
       currentTurn: contextRow.current_turn,
+      conversationRounds: JSON.parse(contextRow.conversation_rounds || '[]'),
       messages,
       summary: JSON.parse(contextRow.summary),
       artifactIndex: artifacts,
       workingMemory: JSON.parse(contextRow.working_memory),
       metadata: JSON.parse(contextRow.metadata),
     };
+  }
+
+  /**
+   * 添加对话轮次到上下文
+   * 新方法：使用扁平的 ConversationRound 结构
+   */
+  async addConversationRound(taskId: string, round: ConversationRound): Promise<TaskContext> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 先获取当前 context
+    const context = await this.getContext(taskId);
+    if (!context) {
+      throw new Error(`Task context not found: ${taskId}`);
+    }
+
+    // 更新 conversationRounds 数组
+    const rounds = context.conversationRounds || [];
+    rounds.push(round);
+
+    // 同时更新 messages（用于向后兼容）
+    // 从 conversationRounds 构建 messages
+    const updatedMessages: Message[] = [];
+    for (const r of rounds) {
+      // 添加用户消息
+      updatedMessages.push({
+        id: `msg-round-${r.round}-user`,
+        taskId,
+        role: 'user',
+        content: r.userMessage,
+        metadata: { timestamp: r.timestamp },
+      });
+      // 添加助手消息（如果有）
+      if (r.assistantReply) {
+        updatedMessages.push({
+          id: `msg-round-${r.round}-assistant`,
+          taskId,
+          role: 'assistant',
+          content: r.assistantReply,
+          metadata: { timestamp: r.timestamp },
+        });
+      }
+    }
+
+    this.db.run(
+      `UPDATE task_contexts
+       SET conversation_rounds = ?, messages_count = ?, updated_at = ?
+       WHERE task_id = ?`,
+      [
+        JSON.stringify(rounds),
+        rounds.length,
+        Date.now(),
+        taskId,
+      ]
+    );
+
+    await this.save();
+
+    // 返回更新后的 context
+    const updated = await this.getContext(taskId);
+    if (!updated) {
+      throw new Error(`Task context not found after update: ${taskId}`);
+    }
+    return updated;
+  }
+
+  /**
+   * 获取对话轮次历史
+   */
+  async getConversationRounds(taskId: string): Promise<ConversationRound[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const context = await this.getContext(taskId);
+    return context?.conversationRounds || [];
   }
 
   async saveContext(context: TaskContext): Promise<void> {
@@ -886,10 +979,12 @@ export class DataStore {
 
     this.db.run(
       `UPDATE task_contexts
-       SET current_turn = ?, summary = ?, working_memory = ?, metadata = ?, updated_at = ?
+       SET current_turn = ?, conversation_rounds = ?, messages_count = ?, summary = ?, working_memory = ?, metadata = ?, updated_at = ?
        WHERE task_id = ?`,
       [
         context.currentTurn,
+        JSON.stringify(context.conversationRounds || []),
+        (context.conversationRounds || []).length,
         JSON.stringify(context.summary),
         JSON.stringify(context.workingMemory),
         JSON.stringify(context.metadata),

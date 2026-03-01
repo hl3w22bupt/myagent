@@ -68,8 +68,9 @@ export const config: ApiRouteConfig = {
 
   /**
    * API route configuration.
+   * DISABLED: Use /agent/execute instead (has race condition fix and more features)
    */
-  path: '/agent/delegate',
+  path: '/agent/delegate-disabled',
   method: 'POST',
 
   /**

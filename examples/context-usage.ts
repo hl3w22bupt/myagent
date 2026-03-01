@@ -54,9 +54,12 @@ async function basicUsageExample() {
   const artifacts = await store.getArtifacts('task-1');
   console.log('提取到的Artifacts:', artifacts.length);
 
-  // 5. 获取LLM格式的上下文
-  const llmContext = await manager.getContextForLLM('task-1');
-  console.log('LLM上下文已生成:', llmContext);
+  // 5. 获取对话历史（新方法）
+  const contextForCheck = await manager.getContext('task-1');
+  if (contextForCheck) {
+    const conversationHistory = manager.getConversationHistoryForAgent(contextForCheck);
+    console.log('对话历史已生成:', conversationHistory.length, '条消息');
+  }
 
   await store.close();
 }

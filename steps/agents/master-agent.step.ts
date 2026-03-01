@@ -189,7 +189,39 @@ export const handler = async (
       // 获取上下文
       const contextManager = new ContextManager();
       const context = await contextManager.getContext(taskId);
-      const contextStr = await contextManager.getContextForLLM(taskId);
+
+      // ⭐ 使用新的方法获取对话历史
+      // 如果 context 为 null，创建一个临时的空上下文
+      const taskContext = context || {
+        taskId,
+        sessionId,
+        currentTurn: 1,
+        conversationRounds: [],
+        messages: [],
+        summary: {
+          sessionIntent: '',
+          currentTask: message,
+          completedSteps: [],
+          filesModified: [],
+          decisionsMade: [],
+          currentStatus: 'pending',
+          nextSteps: [],
+          errorsAndSolutions: [],
+          technicalDetails: {},
+        },
+        artifactIndex: [],
+        workingMemory: {},
+        metadata: {},
+      };
+      const conversationHistory = contextManager.getConversationHistoryForAgent(taskContext);
+      (context as any).conversationHistory = conversationHistory;
+
+      console.log('[master-agent.chat] conversationHistory loaded:', {
+        taskId,
+        conversationHistoryLength: conversationHistory.length,
+        conversationRoundsLength: taskContext.conversationRounds.length,
+        conversationHistoryPreview: conversationHistory.map((h: any) => `${h.role}: ${h.content.substring(0, 20)}`).join(', '),
+      });
 
       // 添加 agent 相关信息到 context
       // 这确保 hooks 和 agent.run() 能够访问 agentType 和 agent 实例
@@ -199,15 +231,13 @@ export const handler = async (
 
       logger.info('Context loaded for chat', {
         taskId,
-        hasContext: !!contextStr,
-        contextLength: contextStr?.length || 0,
+        conversationHistoryLength: conversationHistory.length,
         agentType: agentTypeName,
       });
 
-      // 构造聊天提示词
-      const chatPrompt = contextStr
-        ? `## Conversation History\n${contextStr}\n\n## User Message\n${message}`
-        : message;
+      // 构造聊天提示词（使用 conversationHistory）
+      // Agent.run() 会使用 conversationHistory 构建对话上下文
+      const chatPrompt = message;
 
       // 触发Agent Hook: onTaskStart
       // ⚠️ 传递 message（用户消息）而不是 chatPrompt（完整上下文）
@@ -307,23 +337,10 @@ export const handler = async (
 
       logger.info('Chat response sent to stream', { taskId, uniqueId });
 
-      // 保存用户消息到上下文
-      await contextManager.addMessage(taskId, {
-        id: `msg-${Date.now()}-user`,
-        role: 'user',
-        content: message,
-        metadata: { timestamp: new Date() },
-      });
+      // ⭐ 注意：我们不再使用 addMessage，改用 conversationRounds
+      // ConversationRound 将由 ContextManagerTaskHook.postExec 保存
 
-      // 保存Agent回复到上下文
-      await contextManager.addMessage(taskId, {
-        id: `msg-${Date.now()}-assistant`,
-        role: 'assistant',
-        content: responseContent,
-        metadata: { timestamp: new Date() },
-      });
-
-      logger.info('Chat messages saved to context', { taskId });
+      logger.info('Chat messages completed', { taskId });
 
       return {
         success: true,
@@ -595,6 +612,7 @@ export const handler = async (
         sessionId: '',
         currentTurn: 0,
         messages: [],
+        conversationRounds: [],
         summary: null,
         artifactIndex: [],
         workingMemory: {},
@@ -604,6 +622,8 @@ export const handler = async (
     (taskContext.context as any).agentType = agentTypeName;
     (taskContext.context as any).agent = agent;
     (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
+
+    // 注意：formattedHistory 将在获取上下文后设置（见下文 taskWithContext 定义后）
 
     logger.info('[master-agent.step] rewriteRequest setting:', {
       'input.rewriteRequest': input.rewriteRequest,
@@ -649,22 +669,33 @@ export const handler = async (
     }
 
     // === 获取历史上下文 ===
-    const contextManager = new ContextManager();
-    const contextStr = await contextManager.getContextForLLM(taskId);
-
-    // 将上下文添加到任务描述中
-    const taskWithContext = contextStr
-      ? `## Conversation History\n${contextStr}\n\n## Current Task\n${taskContext.task}`
-      : taskContext.task;
-
-    if (contextStr) {
-      logger.info('Loaded conversation history for task', {
+    // ⭐ TaskHook.preExec 已经加载了 conversationHistory
+    // conversationHistory 存储在 taskContext.conversationHistory（不是 taskContext.context.conversationHistory）
+    if (!(taskContext as any).conversationHistory) {
+      const contextManager = new ContextManager();
+      const conversationHistory = contextManager.getConversationHistoryForAgent(taskContext.context);
+      (taskContext as any).conversationHistory = conversationHistory;
+      console.log('[master-agent] Loaded conversationHistory from ContextManager:', {
         taskId,
-        contextLength: contextStr.length,
+        conversationHistoryLength: conversationHistory.length,
+      });
+    } else {
+      console.log('[master-agent] conversationHistory already exists from preExec:', {
+        taskId,
+        conversationHistoryLength: (taskContext as any).conversationHistory.length,
       });
     }
 
-    taskContext.task = taskWithContext; // 更新任务描述
+    // 保存原始任务（用于传递给 Agent.run）
+    const originalTaskForAgent = input.task;
+
+    // 添加原始任务到 context
+    (taskContext.context as any).originalTask = input.task;
+
+    logger.info('Conversation history loaded', {
+      taskId,
+      conversationHistoryLength: (taskContext as any).conversationHistory?.length || 0,
+    });
 
     // === Agent Hook: onTaskStart ===
     // ⚠️ 传递原始任务（input.task）而不是 taskWithContext（包含对话历史）
@@ -679,7 +710,19 @@ export const handler = async (
     // Update LLM trace configuration
     agent.updateLLMTraceConfig(taskId);
 
-    const result = await agent.run(taskContext.task, taskId, taskContext.context);
+    // ⭐ 将 conversationHistory 从 taskContext 复制到 taskContext.context
+    // 因为 agent.run() 接收 context 参数，期望 context.conversationHistory 存在
+    if ((taskContext as any).conversationHistory) {
+      (taskContext.context as any).conversationHistory = (taskContext as any).conversationHistory;
+      console.log('[master-agent] Copied conversationHistory to context:', {
+        taskId,
+        conversationHistoryLength: (taskContext.context as any).conversationHistory.length,
+      });
+    }
+
+    // ⭐ 传递原始任务（而不是格式化的 taskWithContext）给 Agent.run()
+    // 格式化的对话历史已经在 context.formattedHistory 中
+    const result = await agent.run(originalTaskForAgent, taskId, taskContext.context);
 
     // 调试：立即检查 result 的内容
     console.log('[master-agent] Got result from agent.run():', {

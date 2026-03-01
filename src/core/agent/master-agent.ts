@@ -71,6 +71,9 @@ export class MasterAgent extends Agent {
     const startTime = Date.now();
     const steps: any[] = [];
 
+    // Save original task before any rewriting (needed for subagent delegation)
+    const originalTask = task;
+
     console.log('[MasterAgent] run() called', {
       sessionId: this.sessionId,
       explicitDelegateTo: this.explicitDelegateTo,
@@ -93,13 +96,33 @@ export class MasterAgent extends Agent {
 
     if (shouldRewriteRequest) {
       try {
-        // Get conversation history from context manager
+        // ⭐ 优先使用传入的 context.conversationHistory（由 TaskHook 预加载）
+        // 如果没有，则从数据库加载
+        let conversationHistory: any[] = [];
         const taskContext = await this.contextManager.getContext(effectiveTaskId);
-        const conversationHistory = taskContext?.messages || [];
+
+        if (context?.conversationHistory && context.conversationHistory.length > 0) {
+          conversationHistory = context.conversationHistory;
+          console.log('[MasterAgent] Using conversationHistory from context parameter', {
+            historyLength: conversationHistory.length,
+            source: 'TaskHook preExec',
+          });
+        } else {
+          // Fallback: 尝试从 conversationRounds 构建历史
+          conversationHistory = taskContext?.conversationRounds
+            ? this.contextManager.getConversationHistoryForAgent(taskContext)
+            : [];
+          console.log('[MasterAgent] Using conversationHistory from database', {
+            historyLength: conversationHistory.length,
+            source: 'Database conversationRounds',
+          });
+        }
 
         console.log('[MasterAgent] Conversation history for rewrite:', {
           historyLength: conversationHistory.length,
           taskId: effectiveTaskId,
+          conversationRoundsCount: taskContext?.conversationRounds?.length || 0,
+          conversationHistoryPreview: conversationHistory.map((m: any) => ({ role: m.role, content: m.content?.substring(0, 50) })),
         });
 
         // ⭐ Configure trace for request rewriter's LLM calls
@@ -180,7 +203,16 @@ export class MasterAgent extends Agent {
         // ⭐ Send direct delegation notification to taskExecution stream
         await this.sendDirectDelegationNotification(task, this.explicitDelegateTo, _taskId);
 
-        return this.executeDirectDelegation(task, this.explicitDelegateTo, steps, startTime, _taskId, 'direct');
+        // Build execution context for direct delegation
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        const directDelegationContext = {
+          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
+          ...(context?.originalTask && { originalTask: context.originalTask }),
+          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+          ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+        };
+
+        return this.executeDirectDelegation(task, this.explicitDelegateTo, steps, startTime, _taskId, 'direct', originalTask, directDelegationContext);
       }
 
       // Step 1: Create delegation plan (intelligent analysis)
@@ -225,18 +257,44 @@ export class MasterAgent extends Agent {
         // User should see how task was analyzed before delegation
         await this.notifyTaskDecomposition(task, delegationSteps[0].task, plan, _taskId);
 
-        return this.executeDirectDelegation(task, [delegateTarget], steps, startTime, _taskId, 'planned');
+        // Build execution context for planned delegation
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        const plannedDelegationContext = {
+          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
+          ...(context?.originalTask && { originalTask: context.originalTask }),
+          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+          ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+        };
+
+        return this.executeDirectDelegation(task, [delegateTarget], steps, startTime, _taskId, 'planned', undefined, plannedDelegationContext);
       }
 
       // No delegation - execute directly
       console.log('[MasterAgent] Executing directly (no delegation needed)');
 
-      // Combine all direct execution steps into a single task
-      const combinedTask = directExecutionSteps.map((step, index) => {
-        return `Step ${index + 1}: ${step.task}`;
-      }).join('\n\n');
+      // Build combined task with reasoning, plan steps, and original request
+      // This ensures original user request is preserved during execution
+      const combinedTask = `<reasoning>
+${plan.reasoning || 'Direct execution by MasterAgent'}
+</reasoning>
 
-      console.log('[MasterAgent] Combined task:', combinedTask);
+<steps>
+${directExecutionSteps.map((step, index) => {
+  const stepInfo = `Step ${index + 1}: ${step.task}`;
+  const reasonInfo = step.reason ? `\nReason: ${step.reason}` : '';
+  return `${stepInfo}${reasonInfo}`;
+}).join('\n\n')}
+</steps>
+
+<original_request>
+${task}
+</original_request>`;
+
+      console.log('[MasterAgent] Combined task with original request preserved:', {
+        hasReasoning: !!plan.reasoning,
+        stepsCount: directExecutionSteps.length,
+        originalTask: task.substring(0, 100),
+      });
 
       // Step 3: Notify task decomposition before execution
       await this.notifyTaskDecomposition(task, combinedTask, plan, _taskId);
@@ -249,11 +307,22 @@ export class MasterAgent extends Agent {
       });
 
       // Pass original task in context for better PTC generation
+      // ⭐ 关键修复：传递原始用户任务（未格式化）以供 conversationHistory 存储
       const executionContext = {
-        originalTask: task,  // Original user request
+        originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
+        originalTask: originalTask,  // Original user request (before rewriting)
         combinedTask: combinedTask,  // MasterAgent's plan
-        delegationPlan: plan  // Full delegation plan
+        delegationPlan: plan,  // Full delegation plan
+        // ⭐ 传递 conversationHistory 给直接执行路径
+        ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+        // ⭐ 传递 rewriteRequest
+        ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
       };
+
+      console.log('[MasterAgent] Direct execution context created', {
+        hasConversationHistory: !!executionContext.conversationHistory,
+        conversationHistoryLength: executionContext.conversationHistory?.length || 0,
+      });
 
       const result = await super.run(combinedTask, _taskId, executionContext);
 
@@ -480,7 +549,8 @@ export class MasterAgent extends Agent {
       })
       .join('\n');
 
-    // Use PromptBuilder for proper message construction
+    // Step 3: Build LLM messages with System + Assistant + User structure
+    // System role: Basic system instructions
     const systemPrompt = `You are a master agent planning task execution with intelligent delegation to specialized subagents.
 
 ## Confidence-Based Delegation
@@ -504,13 +574,14 @@ Subagents are SPECIALIZED for domain-specific analysis (code review, data analys
 
 When confidence < 70, ALWAYS handle directly with the master agent.`;
 
-    const userPrompt = `<available_subagents>
+    // Assistant role: Planning template and instructions (with <reasoning> tag)
+    const assistantPrompt = `<reasoning>
+I am a master agent that intelligently delegates tasks to specialized subagents. Here is my planning framework:
+
+## Available Subagents
+<available_subagents>
 ${subagentsList}
 </available_subagents>
-
-<task>
-${task}
-</task>
 
 ## Delegation Strategy
 
@@ -614,7 +685,12 @@ Task: "Add animation highlights to the Pascal Triangle video"
 - **CRITICAL**: CREATIVE tasks (web pages, content generation, new features) should ALWAYS be handled directly, NOT delegated
 - Consider if the task has sufficient context (files, data, specifics)
 - **CRITICAL**: If no subagent matches, NEVER use "none", "null", "master", or any placeholder as delegateTo value. Simply omit the "delegateTo" field entirely to indicate handling directly.
-`;
+</reasoning>`;
+
+    // User role: Only conversation history and current request
+    const userPrompt = `<task>
+${task}
+</task>`;
 
     // ⭐ Send delegation planning notification (analyzing status)
     const streams = getAgentStreams();
@@ -642,9 +718,10 @@ Task: "Add animation highlights to the Pascal Triangle video"
       console.log('[MasterAgent] Delegation planning (analyzing) notification sent');
     }
 
-    // Proper message structure: system message for instructions, user message for content
+    // Step 4: Call LLM with System + Assistant + User message structure
     const response = await this.llm.messagesCreate([
       { role: 'system' as const, content: systemPrompt },
+      { role: 'assistant' as const, content: assistantPrompt },
       { role: 'user' as const, content: userPrompt }
     ], {}, 'delegation planning');
 
@@ -910,7 +987,9 @@ Task: "Add animation highlights to the Pascal Triangle video"
     steps: any[],
     startTime: number,
     taskId?: string,
-    delegationType: 'direct' | 'planned' = 'direct'
+    delegationType: 'direct' | 'planned' = 'direct',
+    originalTask?: string,  // 原始任务参数（未格式化的）
+    context?: any  // 上下文参数，包含 conversationHistory, originalTask, rewriteRequest 等
   ): Promise<AgentResult> {
     try {
       // For simplicity, delegate to the first subagent in the list
@@ -954,13 +1033,29 @@ Task: "Add animation highlights to the Pascal Triangle video"
       const subagent = await this.getOrCreateSubagent(subagentName);
 
       // === Trigger subagent hooks (like step layer does for MasterAgent) ===
+      // ⭐ 注意：conversationHistory 现在由 TaskHook.preExec 统一加载
+      // ⭐ 将 context 中的 conversationHistory 传递给 subagent
       const subagentContext = {
         agentType: 'Agent',
-        agentId: (subagent as any).sessionId, // Access private sessionId via type assertion
-        sessionId: (subagent as any).sessionId, // Add sessionId for notification hooks
-        taskId: taskId, // Add taskId for notification hooks
+        agentId: (subagent as any).sessionId,
+        sessionId: (subagent as any).sessionId,
+        taskId: taskId,
         agent: subagent,
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        ...(context?.originalUserTask && { originalUserTask: context.originalUserTask }),
+        // ⭐ 传递 conversationHistory 给 subagent
+        ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+        // ⭐ 传递 originalTask 给 subagent
+        ...(context?.originalTask && { originalTask: context.originalTask }),
+        // ⭐ 传递 rewriteRequest 给 subagent
+        ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
       };
+
+      console.log('[MasterAgent] Subagent context created', {
+        subagentName,
+        hasConversationHistory: !!subagentContext.conversationHistory,
+        conversationHistoryLength: subagentContext.conversationHistory?.length || 0,
+      });
 
       // Call onTaskStart hook
       if (this.hookManager) {
@@ -974,7 +1069,8 @@ Task: "Add animation highlights to the Pascal Triangle video"
       }
 
       // Execute task with subagent
-      const result = await subagent.run(task, taskId);
+      // Note: task already includes the current message, formattedHistory contains full history
+      const result = await subagent.run(task, taskId, subagentContext);
 
       // Call onTaskComplete hook
       if (this.hookManager) {
