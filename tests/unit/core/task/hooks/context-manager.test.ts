@@ -110,7 +110,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
+        conversationRounds: [],
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -130,12 +130,16 @@ describe('ContextManagerTaskHook', () => {
         },
       };
 
-      // Mock saveContext
+      // Mock all required contextManager methods
       (hook as any).contextManager = {
+        getContext: jest.fn().mockResolvedValue({
+          conversationRounds: [],
+        }),
+        addConversationRound: jest.fn().mockResolvedValue(undefined),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
-      await hook.postExec(mockContext, { success: true });
+      await hook.postExec(mockContext, { success: true, structuredOutputs: [] });
 
       // Should log with correct metadata
       expect(mockContext.services.logger.info).toHaveBeenCalledWith(
@@ -153,7 +157,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
+        conversationRounds: [],
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -174,12 +178,16 @@ describe('ContextManagerTaskHook', () => {
 
       mockContext.status = 'completed';
 
-      // Mock saveContext
+      // Mock all required contextManager methods
       (hook as any).contextManager = {
+        getContext: jest.fn().mockResolvedValue({
+          conversationRounds: [],
+        }),
+        addConversationRound: jest.fn().mockResolvedValue(undefined),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
-      await hook.postExec(mockContext, { success: true });
+      await hook.postExec(mockContext, { success: true, structuredOutputs: [] });
 
       // Status should be updated
       expect(mockContext.context?.summary.currentStatus).toBe('completed');
@@ -190,7 +198,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
+        conversationRounds: [],
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -209,12 +217,16 @@ describe('ContextManagerTaskHook', () => {
         },
       };
 
-      // Mock saveContext
+      // Mock all required contextManager methods
       (hook as any).contextManager = {
+        getContext: jest.fn().mockResolvedValue({
+          conversationRounds: [],
+        }),
+        addConversationRound: jest.fn().mockResolvedValue(undefined),
         saveContext: jest.fn().mockResolvedValue(undefined),
       };
 
-      await hook.postExec(mockContext, { success: true });
+      await hook.postExec(mockContext, { success: true, structuredOutputs: [] });
 
       // Task should be added to completedSteps
       expect(mockContext.context?.summary.completedSteps).toContain('test task');
@@ -225,7 +237,7 @@ describe('ContextManagerTaskHook', () => {
         taskId: 'test-1',
         sessionId: 'session-1',
         currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
+        conversationRounds: [],
         messages: [],
         summary: {
           sessionIntent: 'test',
@@ -246,11 +258,15 @@ describe('ContextManagerTaskHook', () => {
 
       // Mock saveContext to throw error
       (hook as any).contextManager = {
+        getContext: jest.fn().mockResolvedValue({
+          conversationRounds: [],
+        }),
+        addConversationRound: jest.fn().mockResolvedValue(undefined),
         saveContext: jest.fn().mockRejectedValue(new Error('Save failed')),
       };
 
       // Should not throw
-      await expect(hook.postExec(mockContext, { success: true })).resolves.toBeUndefined();
+      await expect(hook.postExec(mockContext, { success: true, structuredOutputs: [] })).resolves.toBeUndefined();
 
       // Should log error
       expect(mockContext.services.logger.error).toHaveBeenCalledWith(

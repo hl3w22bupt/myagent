@@ -254,6 +254,12 @@ export interface PTCResult {
  * Delegation plan for MasterAgent.
  */
 export interface DelegationPlan {
+  /** Selected subagents (from LLM response) */
+  selected_subagents?: string[];
+
+  /** Overall confidence score (0-100) */
+  confidence?: number;
+
   /** Steps in the plan */
   steps: DelegationStep[];
 

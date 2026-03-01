@@ -1,6 +1,6 @@
 name: volcano-tts
 version: 1.0.0
-description: "火山引擎语音合成（Text-to-Speech）技能，支持多种情感和声音风格"
+description: "火山引擎语音合成（Text-to-Speech）技能，支持多种情感和声音风格。生成音频文件，不含视频。如需与视频合并，请配合 ffmpeg 使用。"
 tags: [tts, audio, speech, volcano, chinese, voice]
 
 type: pure-script

@@ -197,45 +197,6 @@ export class PTCGenerator {
       contextSection += '</available_variables>\n\n';
     }
 
-    // 检测用户明确要求的技能
-    const explicitlyRequestedSkills: string[] = [];
-    const skillNames = Array.from(this.skills.keys());
-
-    for (const skillName of skillNames) {
-      // 匹配多种表达方式：
-      // - "use X skill"
-      // - "using X"
-      // - "with X skill"
-      // - "X skill to"
-      const patterns = [
-        new RegExp(`use\\s+${skillName}\\s+skill`, 'i'),
-        new RegExp(`using\\s+${skillName}`, 'i'),
-        new RegExp(`with\\s+${skillName}\\s+skill`, 'i'),
-        new RegExp(`${skillName}\\s+skill\\s+to`, 'i'),
-        new RegExp(`use\\s+the\\s+${skillName}`, 'i'),
-        new RegExp(`${skillName}\\s+must`, 'i'),
-      ];
-
-      if (patterns.some(pattern => pattern.test(task))) {
-        explicitlyRequestedSkills.push(skillName);
-      }
-    }
-
-    // 构建技能要求指令
-    let skillRequirement = '';
-    if (explicitlyRequestedSkills.length > 0) {
-      skillRequirement = `
-CRITICAL - USER EXPLICITLY REQUESTED SKILLS:
-The user has explicitly requested the following skills:
-${explicitlyRequestedSkills.map(s => `- ${s}`).join('\n')}
-
-YOU MUST USE THESE SKILLS in your selected_skills array.
-DO NOT ignore user's explicit skill requests.
-DO NOT attempt to solve the task without using these skills.
-These skills take priority over all other considerations.
-`;
-    }
-
     const prompt = `CRITICAL - SKILL NAME VALIDATION:
 1. You MUST ONLY use skill names from the EXACT list below
 2. DO NOT create, invent, or combine skill names
@@ -249,9 +210,7 @@ IMPORTANT GUIDELINES:
 3. For simple conversational messages, greetings, or casual chat - return EMPTY selected_skills
 4. For factual questions (locations, definitions, facts), use web-search skill
 5. DO NOT force skill usage when the task doesn't clearly require it
-6. ${explicitlyRequestedSkills.length > 0 ?
-   'CRITICAL: User explicitly requested skills - YOU MUST include them in selected_skills' :
-   'If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills'}
+6. If user mentions specific skills (e.g., "use X skill", "using Y"), you MUST select those skills
 
 SKILL SELECTION STRATEGY:
 - First, determine if this is a CONVERSATIONAL task (chat, greeting, casual message) → NO skills needed
@@ -282,15 +241,15 @@ CONVERSATIONAL TASK EXAMPLES (use NO skills, confidence 0.0):
 
 SKILL TASK EXAMPLES (use skills with confidence > 0.6):
 - "搜索一下北京天气" → confidence: 0.9, selected_skills: ["web-search"]
-- "帮我生成一个视频" → confidence: 0.8, selected_skills: ["video-generation"]
+- "帮我生成一个视频" → confidence: 0.8, selected_skills: ["remotion-generator"]
+- "创建带讲解的教学视频" → confidence: 0.9, selected_skills: ["remotion-generator", "volcano-tts", "ffmpeg"]
+  Reasoning: 生成视频结构 + 添加语音解说 + 合并音视频
 - "分析这段文本的情感" → confidence: 0.8, selected_skills: ["text-analyzer"]
 - "用 volcano-tts 读这段话" → confidence: 1.0, selected_skills: ["volcano-tts"]
 
 <available_skills>
 ${skillsList}
 </available_skills>
-
-${skillRequirement}
 
 ${contextSection}
 <task>

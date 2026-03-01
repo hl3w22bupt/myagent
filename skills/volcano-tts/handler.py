@@ -30,9 +30,83 @@ DEFAULT_TTS_VOICE_TYPE = os.getenv('DEFAULT_TTS_VOICE_TYPE', 'BV001_streaming')
 DEFAULT_TTS_SPEED = float(os.getenv('DEFAULT_TTS_SPEED', '1.3'))  # 提高默认语速，更自然
 DEFAULT_TTS_VOLUME = float(os.getenv('DEFAULT_TTS_VOLUME', '1.0'))
 
+# 火山引擎 TTS 文本长度限制
+MAX_TEXT_LENGTH = 200  # 单次请求最大字符数（火山引擎 API 实际限制）
+
 # 输出目录（与 lite-tts 保持一致）
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "audios"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def split_text_for_tts(text: str, max_length: int = MAX_TEXT_LENGTH) -> list[str]:
+    """将长文本分割成适合 TTS 的片段
+
+    Args:
+        text: 要分割的文本
+        max_length: 每段最大长度
+
+    Returns:
+        文本片段列表
+    """
+    if len(text) <= max_length:
+        return [text]
+
+    chunks = []
+    current_chunk = ""
+
+    # 按句子分割（保留分隔符）
+    import re
+    sentences = re.split(r'([。！？.!?;；\n]+)', text)
+
+    for i in range(0, len(sentences), 2):
+        sentence = sentences[i]
+        delimiter = sentences[i + 1] if i + 1 < len(sentences) else ""
+
+        combined = sentence + delimiter
+
+        if len(current_chunk) + len(combined) <= max_length:
+            current_chunk += combined
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            # 如果单个句子超过限制，强制分割
+            if len(combined) > max_length:
+                for j in range(0, len(combined), max_length):
+                    chunks.append(combined[j:j + max_length])
+                current_chunk = ""
+            else:
+                current_chunk = combined
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def merge_wav_files(wav_files: list[str], output_path: str) -> None:
+    """合并多个 WAV 文件
+
+    Args:
+        wav_files: WAV 文件路径列表
+        output_path: 输出文件路径
+    """
+    import wave
+
+    # 读取所有文件
+    audio_data = []
+    params = None
+
+    for wav_file in wav_files:
+        with wave.open(wav_file, 'rb') as wf:
+            if params is None:
+                params = wf.getparams()
+            audio_data.append(wf.readframes(wf.getnframes()))
+
+    # 写入合并后的文件
+    with wave.open(output_path, 'wb') as wf:
+        wf.setparams(params)
+        for data in audio_data:
+            wf.writeframes(data)
 
 
 def generate_output_filename(task_id: str, index: int = 1, extension: str = "wav") -> str:
@@ -336,33 +410,69 @@ def execute_volcano_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
     if pitch < 0.5 or pitch > 2.0:
         return build_validation_error("音调必须在 0.5 到 2.0 之间")
 
-    # 调用火山引擎 API（传入 task_id）
-    api_result = call_volcano_tts_api(
-        text=text,
-        voice_type=voice_type,
-        emotion=emotion,
-        speed=speed,
-        volume=volume,
-        pitch=pitch,
-        output_format=output_format,
-        sample_rate=sample_rate,
-        task_id=task_id
-    )
+    # 文本长度检查与分段处理
+    text_chunks = split_text_for_tts(text, MAX_TEXT_LENGTH)
 
-    if not api_result.get("success"):
-        return api_result
+    if len(text_chunks) > 1:
+        print(f"[volcano-tts] 文本长度 {len(text)} 超过限制 {MAX_TEXT_LENGTH}，分为 {len(text_chunks)} 段处理")
 
-    # 使用与 API 调用相同的文件名
-    filename = generate_output_filename(task_id, index=1, extension="wav")
-    output_path = OUTPUT_DIR / filename
+    # 处理每一段文本
+    chunk_files = []
+    total_duration = 0.0
+    total_size = 0
+
+    for index, chunk in enumerate(text_chunks, start=1):
+        chunk_task_id = f"{task_id}_chunk{index}"
+
+        api_result = call_volcano_tts_api(
+            text=chunk,
+            voice_type=voice_type,
+            emotion=emotion,
+            speed=speed,
+            volume=volume,
+            pitch=pitch,
+            output_format=output_format,
+            sample_rate=sample_rate,
+            task_id=chunk_task_id
+        )
+
+        if not api_result.get("success"):
+            # 返回具体的错误信息
+            return build_execution_error(
+                f"第 {index}/{len(text_chunks)} 段转换失败: {api_result.get('content', {}).get('message', 'Unknown error')}"
+            )
+
+        # 记录音频文件
+        chunk_filename = generate_output_filename(chunk_task_id, index=1, extension="wav")
+        chunk_path = OUTPUT_DIR / chunk_filename
+        chunk_files.append(str(chunk_path))
+
+        total_duration += api_result["duration"]
+        total_size += api_result["size"]
+
+    # 合并音频文件（如果有多段）
+    if len(text_chunks) > 1:
+        filename = generate_output_filename(task_id, index=1, extension="wav")
+        output_path = OUTPUT_DIR / filename
+
+        try:
+            merge_wav_files(chunk_files, str(output_path))
+
+            # 删除临时文件
+            for f in chunk_files:
+                Path(f).unlink(missing_ok=True)
+        except Exception as e:
+            return build_execution_error(f"音频合并失败: {str(e)}")
+    else:
+        output_path = chunk_files[0]
 
     execution_time = int((time.time() - start_time) * 1000)
 
     return build_success_output(
         audio_path=str(output_path),
         audio_url=f"file://{output_path}",
-        duration=api_result["duration"],
-        size=api_result["size"],
+        duration=total_duration,
+        size=total_size,
         voice_type=voice_type,
         emotion=emotion,
         text_length=len(text),

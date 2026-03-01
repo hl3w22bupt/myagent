@@ -240,6 +240,44 @@ export class LLMClient {
       // Determine trace level based on whether it's a skill or agent call
       const level = skillName ? 'skill-internal' : 'agent-internal';
 
+      // Parse delegation plan from response (for delegation planning calls)
+      let delegationInfo: any = undefined;
+      if (purpose === 'delegation planning') {
+        try {
+          // Extract <plan> JSON from response using a more robust approach
+          // Strategy: find positions of <plan> and </plan> tags
+          const planStart = response.content.indexOf('<plan>');
+          const planEnd = response.content.lastIndexOf('</plan>');
+
+          if (planStart !== -1 && planEnd !== -1 && planEnd > planStart) {
+            // Extract content between tags (excluding the tags themselves)
+            const jsonStr = response.content.substring(planStart + 6, planEnd).trim();
+            const plan = JSON.parse(jsonStr);
+
+            // Extract delegation information
+            const delegationSteps = plan.steps?.filter((s: any) => s.delegateTo && (s.confidence ?? 0) >= 70) || [];
+
+            delegationInfo = {
+              plan: {
+                steps: plan.steps || [],
+                reasoning: plan.reasoning || '',
+              },
+              confidenceSummary: plan.steps?.map((s: any) => ({
+                task: s.task?.substring(0, 100) + (s.task?.length > 100 ? '...' : ''),
+                delegateTo: s.delegateTo || null,
+                confidence: s.confidence ?? 0,
+              })) || [],
+              delegationDecision: delegationSteps.length > 0
+                ? `Delegating to ${delegationSteps[0].delegateTo} (confidence: ${delegationSteps[0].confidence})`
+                : 'No delegation (confidence < 70), executing directly',
+              delegates: delegationSteps.map((s: any) => s.delegateTo),
+            };
+          }
+        } catch (parseError) {
+          console.warn('[LLMClient] Failed to parse delegation plan from response:', parseError);
+        }
+      }
+
       await this.streams.executionTraces.set(taskId, id, {
         id,
         level,
@@ -269,6 +307,8 @@ export class LLMClient {
           data: {
             totalTokens: response.usage?.total_tokens || 0,
           },
+          // Add parsed delegation info for delegation planning calls
+          ...(delegationInfo && { delegationInfo }),
         },
       });
 

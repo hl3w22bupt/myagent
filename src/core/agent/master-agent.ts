@@ -242,10 +242,33 @@ export class MasterAgent extends Agent {
       const delegationSteps = plan.steps.filter((s) => s.delegateTo && (s.confidence ?? 0) >= 70);
       const directExecutionSteps = plan.steps.filter((s) => !s.delegateTo || (s.confidence ?? 0) < 70);
 
+      // Log detailed delegation analysis
+      console.log('[MasterAgent] Delegation Analysis:', {
+        selected_subagents: plan.selected_subagents || [],
+        overall_confidence: plan.confidence ?? 0,
+        reasoning: plan.reasoning?.substring(0, 100) + (plan.reasoning?.length > 100 ? '...' : ''),
+        totalSteps: plan.steps.length,
+        delegationSteps: delegationSteps.length,
+        directSteps: directExecutionSteps.length,
+        stepsDetails: plan.steps.map((s, i) => ({
+          index: i + 1,
+          task: s.task.substring(0, 80) + (s.task.length > 80 ? '...' : ''),
+          delegateTo: s.delegateTo || null,
+          confidence: s.confidence ?? 0,
+          action: s.delegateTo && (s.confidence ?? 0) >= 70 ? 'DELEGATE' : 'DIRECT'
+        }))
+      });
+
       if (delegationSteps.length > 0) {
         // Has delegation - execute with the first delegated subagent
         const delegateTarget = delegationSteps[0].delegateTo!;
-        console.log('[MasterAgent] Delegating to:', delegateTarget);
+        const delegateConfidence = delegationSteps[0].confidence ?? 0;
+
+        console.log('[MasterAgent] Delegating to:', delegateTarget, {
+          confidence: delegateConfidence,
+          reason: delegationSteps[0].reason || 'No reason provided',
+          task: delegationSteps[0].task.substring(0, 100)
+        });
 
         steps.push({
           type: 'execution',
@@ -270,7 +293,12 @@ export class MasterAgent extends Agent {
       }
 
       // No delegation - execute directly
-      console.log('[MasterAgent] Executing directly (no delegation needed)');
+      console.log('[MasterAgent] Executing directly (no delegation needed)', {
+        reason: delegationSteps.length === 0
+          ? 'No steps with confidence >= 70'
+          : 'All steps have confidence < 70',
+        stepsToExecute: directExecutionSteps.length
+      });
 
       // Build combined task with reasoning, plan steps, and original request
       // This ensures original user request is preserved during execution
@@ -598,8 +626,9 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 2. General tasks without clear domain alignment (e.g., "create a webpage")
 3. Tasks that require broad capabilities beyond a single domain
 4. Vague tasks lacking specific context (e.g., "review the code" without file)
-5. **VIDEO GENERATION OR ENHANCEMENT TASKS** - ALWAYS handle directly
+5. **VIDEO/AUDIO GENERATION TASKS** - ALWAYS handle directly (including script analysis, audio generation, video merging)
 6. **FRONTEND/WEB DEVELOPMENT TASKS** - typically require creative design, not code analysis
+7. **DO NOT split creative/production tasks** - even if a subtask seems analytical, if the overall task is creative/production, handle all parts directly
 
 ### Domain Alignment Examples:
 - "Review auth.ts for security" → security-auditor (confidence: 95) ✓
@@ -617,74 +646,71 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 
 ## Response Format
 
-<plan>
+**IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no <plan> tags.**
+
+Respond with this exact JSON structure:
 {
+  "selected_subagents": ["subagent-name"] or [],
+  "confidence": 85,
+  "reasoning": "why this matches OR why handling directly",
   "steps": [
     {
-      "task": "specific task or subtask",
-      "delegateTo": "subagent-name (optional - omit if handling directly)",
+      "task": "specific task",
+      "delegateTo": "subagent-name or null",
       "confidence": 85,
-      "reason": "why this matches the subagent OR why handling directly"
+      "reason": "why"
     }
-  ],
-  "reasoning": "overall delegation strategy and rationale"
+  ]
 }
-</plan>
+
+Rules:
+- selected_subagents: array of subagent names (empty array if handling directly)
+- confidence: 0-100, only include selected_subagents if confidence >= 70
+- steps: detailed breakdown of the task
 
 ## Examples
 
 Example 1 - Perfect Match (confidence 95):
 Task: "Review the authentication code in auth.ts for security issues"
-→ Delegate to: security-auditor
-→ Confidence: 95
-→ Reason: "Explicit security review of authentication code directly matches security-auditor's specialty"
+Response: {
+  "selected_subagents": ["security-auditor"],
+  "confidence": 95,
+  "reasoning": "Explicit security review of authentication code directly matches security-auditor's specialty",
+  "steps": [{"task": "Review auth.ts for security issues", "delegateTo": "security-auditor", "confidence": 95}]
+}
 
 Example 2 - Strong Match (confidence 80):
 Task: "Analyze the user_behavior.csv dataset and create visualizations"
-→ Delegate to: data-analyst
-→ Confidence: 80
-→ Reason: "CSV analysis and visualization directly matches data-analyst's skills"
+Response: {
+  "selected_subagents": ["data-analyst"],
+  "confidence": 80,
+  "reasoning": "CSV analysis and visualization directly matches data-analyst's skills",
+  "steps": [{"task": "Analyze CSV data", "delegateTo": "data-analyst", "confidence": 80}]
+}
 
 Example 3 - Low Confidence - Handle Directly (confidence 25):
 Task: "Create an iPhone 18 product promotional webpage"
-→ Handle directly (no delegateTo field)
-→ Confidence: 25
-→ Reason: "Creative web development task, not code analysis. No subagent specializes in web page creation."
-JSON Example:
-{
-  "task": "Create an iPhone 18 product promotional webpage",
+Response: {
+  "selected_subagents": [],
   "confidence": 25,
-  "reason": "Creative web development task, not code analysis. No subagent specializes in web page creation."
+  "reasoning": "Creative web development task, not code analysis. No subagent specializes in web page creation.",
+  "steps": [{"task": "Create webpage", "delegateTo": null, "confidence": 25}]
 }
 
-Example 4 - Vague Task (confidence 0):
-Task: "Review the code"
-→ Handle directly (no delegateTo field)
-→ Confidence: 0
-→ Reason: "No specific file or domain mentioned - insufficient context for delegation"
-
-Example 5 - Creative Task (confidence 15):
-Task: "Generate a landing page for our product"
-→ Handle directly (no delegateTo field)
-→ Confidence: 15
-→ Reason: "Frontend development requires creative design, not code review or analysis. No relevant subagent."
-
-Example 6 - Video Task (confidence 0):
-Task: "Add animation highlights to the Pascal Triangle video"
-→ Handle directly (no delegateTo field)
-→ Confidence: 0
-→ Reason: "Video enhancement task - use remotion-generator skill directly"
+Example 4 - Video Production (confidence 0):
+Task: "Generate CNN teaching video audio and merge with video"
+Response: {
+  "selected_subagents": [],
+  "confidence": 0,
+  "reasoning": "Video production task - handle directly using volcano-tts and ffmpeg tools",
+  "steps": [{"task": "Generate video with audio", "delegateTo": null, "confidence": 0}]
+}
 
 ## Important Rules:
-- Output ONLY valid JSON inside <plan> tags
-- Include "confidence" field (0-100) for every step
-- Delegate ONLY when confidence >= 70 AND there's a clear domain match
-- **CRITICAL**: When confidence < 70, you MUST omit the "delegateTo" field entirely - DO NOT include it even with a low confidence value
-- Omit "delegateTo" field if handling directly
-- **CRITICAL**: Use EXACTLY the subagent name from the list above (lowercase with hyphens, e.g., "code-reviewer", "security-auditor"). Do NOT transform the name format.
-- **CRITICAL**: CREATIVE tasks (web pages, content generation, new features) should ALWAYS be handled directly, NOT delegated
-- Consider if the task has sufficient context (files, data, specifics)
-- **CRITICAL**: If no subagent matches, NEVER use "none", "null", "master", or any placeholder as delegateTo value. Simply omit the "delegateTo" field entirely to indicate handling directly.
+- Return ONLY valid JSON (no markdown, no tags)
+- selected_subagents is an array of names (empty if handling directly)
+- Include "confidence" field (0-100)
+- Delegate ONLY when confidence >= 70
 </reasoning>`;
 
     // User role: Only conversation history and current request
@@ -828,55 +854,49 @@ ${task}
       return sanitizedPlan;
     };
 
-    // Strategy 1: Extract from <plan> tags (non-greedy)
-    let jsonMatch = response.content.match(/<plan>\s*(\{.*?\})\s*<\/plan>/s);
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        parsedPlan = JSON.parse(jsonMatch[1]);
-        console.log('[MasterAgent] Parsed plan using strategy 1 (<plan> tags)');
-        return cacheAndReturn(parsedPlan);
-      } catch (error: any) {
-        lastError = error;
-        console.warn('[MasterAgent] Strategy 1 failed:', error.message);
-      }
-    }
+    // Parse delegation plan from LLM response
+    // Try multiple strategies in order
+    const parseStrategies = [
+      // Strategy 1: Direct JSON (no markdown, no tags)
+      () => {
+        const trimmed = response.content.trim();
+        // Check if it starts with { and is valid JSON
+        if (trimmed.startsWith('{')) {
+          return JSON.parse(trimmed);
+        }
+        return null;
+      },
+      // Strategy 2: Extract from <plan> tags (for backward compatibility)
+      () => {
+        const planStart = response.content.indexOf('<plan>');
+        const planEnd = response.content.lastIndexOf('</plan>');
+        if (planStart !== -1 && planEnd !== -1) {
+          const jsonStr = response.content.substring(planStart + 6, planEnd).trim();
+          return JSON.parse(jsonStr);
+        }
+        return null;
+      },
+      // Strategy 3: Extract from markdown code block
+      () => {
+        const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          return JSON.parse(codeBlockMatch[1]);
+        }
+        return null;
+      },
+    ];
 
-    // Strategy 2: Extract from <plan> tags (greedy, for multi-line)
-    jsonMatch = response.content.match(/<plan>\s*(\{[\s\S]*?\})\s*<\/plan>/);
-    if (jsonMatch && jsonMatch[1]) {
+    for (const strategy of parseStrategies) {
       try {
-        parsedPlan = JSON.parse(jsonMatch[1]);
-        console.log('[MasterAgent] Parsed plan using strategy 2 (<plan> tags, greedy)');
-        return cacheAndReturn(parsedPlan);
+        parsedPlan = strategy();
+        if (parsedPlan) {
+          const strategyName = strategy.name || 'anonymous';
+          console.log(`[MasterAgent] Parsed delegation plan successfully using: ${strategyName}`);
+          return cacheAndReturn(parsedPlan);
+        }
       } catch (error: any) {
         lastError = error;
-        console.warn('[MasterAgent] Strategy 2 failed:', error.message);
-      }
-    }
-
-    // Strategy 3: Find any JSON object in the response
-    jsonMatch = response.content.match(/\{[\s\S]*?\}/);
-    if (jsonMatch && jsonMatch[0]) {
-      try {
-        parsedPlan = JSON.parse(jsonMatch[0]);
-        console.log('[MasterAgent] Parsed plan using strategy 3 (raw JSON)');
-        return cacheAndReturn(parsedPlan);
-      } catch (error: any) {
-        lastError = error;
-        console.warn('[MasterAgent] Strategy 3 failed:', error.message);
-      }
-    }
-
-    // Strategy 4: Try to find JSON between code blocks
-    jsonMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        parsedPlan = JSON.parse(jsonMatch[1]);
-        console.log('[MasterAgent] Parsed plan using strategy 4 (code block)');
-        return cacheAndReturn(parsedPlan);
-      } catch (error: any) {
-        lastError = error;
-        console.warn('[MasterAgent] Strategy 4 failed:', error.message);
+        continue;
       }
     }
 
@@ -999,7 +1019,10 @@ ${task}
       // and send delegation planning notification to taskExecution stream (for chat display)
       const streams = getAgentStreams();
       if (streams && streams.executionTraces && taskId) {
-        // 1. Record delegation planning trace
+        // Get the full plan for detailed trace recording (if available)
+        const cachedPlan = this.getCachedPlan(task);
+
+        // 1. Record delegation planning trace with full plan details
         const delegationId = `delegation-planning-${this.sessionId}-${Date.now()}`;
         await streams.executionTraces.set(taskId, delegationId, {
           id: delegationId,
@@ -1016,6 +1039,19 @@ ${task}
             reasoning: delegationType === 'direct'
               ? `Direct delegation to ${subagentName} (user specified via delegateTo parameter)`
               : `Planned delegation to ${subagentName} (based on LLM analysis)`,
+            // Include full plan details for 'planned' delegation type
+            ...(delegationType === 'planned' && cachedPlan ? {
+              plan: {
+                steps: cachedPlan.steps,
+                reasoning: cachedPlan.reasoning,
+              },
+              confidenceSummary: cachedPlan.steps.map(s => ({
+                task: s.task,
+                delegateTo: s.delegateTo || 'MasterAgent',
+                confidence: s.confidence ?? 0,
+                reason: s.reason,
+              })),
+            } : {}),
           }
         });
         console.log('[MasterAgent] Direct delegation trace recorded', { taskId, subagentName });

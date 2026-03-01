@@ -1,6 +1,6 @@
 name: remotion-generator
 version: 1.0.0
-description: Generate videos using Remotion framework from natural language descriptions
+description: Generate videos using Remotion framework from natural language descriptions. Generates visual content only (no audio). For videos with voice narration, use with volcano-tts + ffmpeg to merge audio.
 tags: [remotion, video, animation, media-generation]
 type: hybrid
 
