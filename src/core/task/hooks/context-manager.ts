@@ -48,7 +48,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
       services.logger.info('Task context created', {
         taskId,
         sessionId,
-        currentTurn: taskContext.currentTurn,
+        roundsCount: taskContext.conversationRounds.length,
         conversationHistoryLength: history.length,
       });
 
@@ -64,9 +64,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
       context.context = {
         taskId,
         sessionId,
-        currentTurn: 0,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
-        messages: [],  // 保留用于向后兼容
+        conversationRounds: [],
         summary: {
           sessionIntent: '',
           currentTask: task,
@@ -136,7 +134,8 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         artifacts,
       };
 
-      await this.contextManager.addConversationRound(taskId, newRound);
+      // addConversationRound 返回更新后的上下文
+      const updatedContext = await this.contextManager.addConversationRound(taskId, newRound);
 
       services.logger.info('Conversation round saved', {
         taskId,
@@ -144,27 +143,30 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         hasArtifact: artifacts.length > 0,
       });
 
-      // 更新上下文的最终状态
-      if (context.context) {
-        context.context.summary.currentStatus = context.status;
+      // 更新上下文的最终状态 - 使用从数据库返回的最新上下文
+      if (updatedContext) {
+        // 更新状态
+        updatedContext.summary.currentStatus = context.status;
 
         // 如果任务成功，添加到已完成步骤
-        if (result.success && context.context.summary.completedSteps) {
-          context.context.summary.completedSteps.push(context.task);
+        if (result.success && updatedContext.summary.completedSteps) {
+          updatedContext.summary.completedSteps.push(context.task);
         }
 
         // ⭐ 注意：我们不再同步 conversationHistory 到 messages 表
         // 直接使用 conversationRounds 作为唯一数据源
 
         // 保存上下文
-        await this.contextManager.saveContext(context.context);
+        await this.contextManager.saveContext(updatedContext);
 
         services.logger.info('Task context saved', {
           taskId,
-          currentTurn: context.context.currentTurn,
-          messagesCount: context.context.messages.length,
-          hasCompression: !!context.context.metadata.lastCompressedAt,
+          roundsCount: updatedContext.conversationRounds.length,
+          hasCompression: !!updatedContext.metadata.lastCompressedAt,
+          currentStatus: updatedContext.summary.currentStatus,
         });
+      } else {
+        services.logger.warn('Failed to get updated context after addConversationRound', { taskId });
       }
     } catch (error) {
       services.logger.error('Failed to save task context', {

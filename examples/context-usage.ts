@@ -4,7 +4,6 @@
 
 import { ContextManager } from '../src/core/context/manager';
 import { getDataStore } from '../src/core/database/data-store';
-import type { Message } from '../src/core/database/context-types';
 
 async function basicUsageExample() {
   console.log('=== 基本使用示例 ===');
@@ -23,11 +22,11 @@ async function basicUsageExample() {
 
   console.log('任务上下文已创建:', {
     taskId: context.taskId,
-    currentTurn: context.currentTurn,
+    roundsCount: context.conversationRounds.length,
   });
 
   // 2. 添加用户消息
-  const userMessage: Message = {
+  const userMessage = {
     id: 'msg-1',
     taskId: 'task-1',
     role: 'user',
@@ -39,7 +38,7 @@ async function basicUsageExample() {
   console.log('用户消息已添加');
 
   // 3. 添加助手响应
-  const assistantMessage: Message = {
+  const assistantMessage = {
     id: 'msg-2',
     taskId: 'task-1',
     role: 'assistant',
@@ -48,7 +47,7 @@ async function basicUsageExample() {
   };
 
   const updated = await manager.addMessage('task-1', assistantMessage);
-  console.log('助手响应已添加，当前轮次:', updated.currentTurn);
+  console.log('助手响应已添加，当前轮次:', updated.conversationRounds.length);
 
   // 4. 查询Artifacts
   const artifacts = await store.getArtifacts('task-1');
@@ -92,8 +91,8 @@ async function multiTurnExample() {
 
   const context = await manager.getContext('task-2');
   if (context) {
-    console.log('对话轮次:', context.currentTurn);
-    console.log('消息数量:', context.messages.length);
+    console.log('对话轮次:', context.conversationRounds.length);
+    console.log('消息数量:', context.conversationRounds.length);
   }
 
   await store.close();
@@ -121,7 +120,7 @@ async function compressionExample() {
   const context = await manager.getContext('task-3');
   if (context) {
     console.log('最后压缩时间:', context.metadata.lastCompressedAt);
-    console.log('当前消息数:', context.messages.length);
+    console.log('当前消息数:', context.conversationRounds.length);
   }
 
   // 查看压缩历史

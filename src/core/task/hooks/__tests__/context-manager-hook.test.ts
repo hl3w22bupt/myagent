@@ -42,7 +42,7 @@ describe('ContextManagerTaskHook Integration', () => {
 
     expect(taskContext.context).toBeDefined();
     if (taskContext.context) {
-      expect(taskContext.context.messages).toEqual([]);
+      expect(taskContext.context.conversationRounds).toEqual([]);
       expect(taskContext.context.summary.currentTask).toBe('测试任务');
     }
   });
@@ -56,9 +56,7 @@ describe('ContextManagerTaskHook Integration', () => {
       context: {
         taskId: 'test-task-2',
         sessionId: 'test-session-2',
-        currentTurn: 1,
-        conversationRounds: [],  // 新格式：扁平的对话轮次
-        messages: [],
+        conversationRounds: [],
         summary: {
           sessionIntent: '',
           currentTask: '测试任务',

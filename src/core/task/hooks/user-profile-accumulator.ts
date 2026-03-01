@@ -68,8 +68,7 @@ export class UserProfileAccumulatorHook extends BaseTaskHook {
         (context as any).context = {
           taskId: context.taskId,
           sessionId: context.sessionId,
-          currentTurn: 0,
-          messages: [],
+          conversationRounds: [],
           summary: null,
           artifactIndex: [],
           workingMemory: {},

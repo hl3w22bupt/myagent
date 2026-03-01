@@ -80,7 +80,6 @@ export type CreateTaskData = Omit<Task, 'createdAt' | 'updatedAt'>;
 
 import type {
   TaskContext,
-  Message,
   ArtifactIndex,
   OutputIndex,
   CompressionHistory,
@@ -792,9 +791,7 @@ export class DataStore {
     const context: TaskContext = {
       taskId,
       sessionId,
-      currentTurn: 0,
-      conversationRounds: [],  // 新格式：扁平的对话轮次
-      messages: [],  // 保留用于向后兼容
+      conversationRounds: [],
       summary: {
         sessionIntent: '',
         currentTask: input,
@@ -812,12 +809,11 @@ export class DataStore {
     };
 
     this.db.run(
-      `INSERT INTO task_contexts (task_id, session_id, current_turn, summary, working_memory, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO task_contexts (task_id, session_id, summary, working_memory, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         context.taskId,
         context.sessionId,
-        context.currentTurn,
         JSON.stringify(context.summary),
         JSON.stringify(context.workingMemory),
         JSON.stringify(context.metadata),
@@ -844,26 +840,6 @@ export class DataStore {
     const contextRow = contextStmt.getAsObject() as any;
     contextStmt.free();
 
-    // 获取消息
-    const messagesStmt = this.db.prepare('SELECT * FROM messages WHERE task_id = ? ORDER BY created_at ASC');
-    messagesStmt.bind([taskId]);
-    const messages: Message[] = [];
-    while (messagesStmt.step()) {
-      const msgRow = messagesStmt.getAsObject() as any;
-      messages.push({
-        id: msgRow.id,
-        taskId: msgRow.task_id,
-        role: msgRow.role,
-        content: msgRow.content,
-        metadata: msgRow.metadata ? JSON.parse(msgRow.metadata) : {
-          timestamp: new Date(),
-          tokens: 0,
-        },
-        compressed: msgRow.compressed === 1,
-      });
-    }
-    messagesStmt.free();
-
     // 获取 artifacts
     const artifactsStmt = this.db.prepare('SELECT * FROM artifacts WHERE task_id = ?');
     artifactsStmt.bind([taskId]);
@@ -886,9 +862,7 @@ export class DataStore {
     return {
       taskId: contextRow.task_id,
       sessionId: contextRow.session_id,
-      currentTurn: contextRow.current_turn,
       conversationRounds: JSON.parse(contextRow.conversation_rounds || '[]'),
-      messages,
       summary: JSON.parse(contextRow.summary),
       artifactIndex: artifacts,
       workingMemory: JSON.parse(contextRow.working_memory),
@@ -913,30 +887,6 @@ export class DataStore {
     // 更新 conversationRounds 数组
     const rounds = context.conversationRounds || [];
     rounds.push(round);
-
-    // 同时更新 messages（用于向后兼容）
-    // 从 conversationRounds 构建 messages
-    const updatedMessages: Message[] = [];
-    for (const r of rounds) {
-      // 添加用户消息
-      updatedMessages.push({
-        id: `msg-round-${r.round}-user`,
-        taskId,
-        role: 'user',
-        content: r.userMessage,
-        metadata: { timestamp: r.timestamp },
-      });
-      // 添加助手消息（如果有）
-      if (r.assistantReply) {
-        updatedMessages.push({
-          id: `msg-round-${r.round}-assistant`,
-          taskId,
-          role: 'assistant',
-          content: r.assistantReply,
-          metadata: { timestamp: r.timestamp },
-        });
-      }
-    }
 
     this.db.run(
       `UPDATE task_contexts
@@ -979,10 +929,9 @@ export class DataStore {
 
     this.db.run(
       `UPDATE task_contexts
-       SET current_turn = ?, conversation_rounds = ?, messages_count = ?, summary = ?, working_memory = ?, metadata = ?, updated_at = ?
+       SET conversation_rounds = ?, messages_count = ?, summary = ?, working_memory = ?, metadata = ?, updated_at = ?
        WHERE task_id = ?`,
       [
-        context.currentTurn,
         JSON.stringify(context.conversationRounds || []),
         (context.conversationRounds || []).length,
         JSON.stringify(context.summary),
@@ -996,7 +945,7 @@ export class DataStore {
     await this.save();
   }
 
-  async addMessage(taskId: string, message: Omit<Message, 'taskId'>): Promise<TaskContext> {
+  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1023,15 +972,11 @@ export class DataStore {
       ]
     );
 
-    // 更新 currentTurn
-    const newCurrentTurn = context.currentTurn + 1;
-
     this.db.run(
       `UPDATE task_contexts
-       SET current_turn = ?, metadata = ?, updated_at = ?
+       SET metadata = ?, updated_at = ?
        WHERE task_id = ?`,
       [
-        newCurrentTurn,
         JSON.stringify(context.metadata),
         Date.now(),
         taskId,

@@ -4,13 +4,13 @@
  * 从消息中提取Artifact信息，用于跟踪文件修改、函数调用等
  */
 
-import type { ArtifactIndex, Message } from '../database/context-types';
+import type { ArtifactIndex } from '../database/context-types';
 
 export class ArtifactExtractor {
   /**
    * 从消息中提取Artifacts
    */
-  extractFromMessage(message: Message): Omit<ArtifactIndex, 'taskId'>[] {
+  extractFromMessage(message: { content: string; metadata?: { skillCalls?: string[] } }): Omit<ArtifactIndex, 'taskId'>[] {
     const artifacts: Omit<ArtifactIndex, 'taskId'>[] = [];
 
     // 1. 提取文件路径
@@ -22,7 +22,7 @@ export class ArtifactExtractor {
     artifacts.push(...functionArtifacts);
 
     // 3. 从metadata中的skillCalls提取
-    if (message.metadata.skillCalls) {
+    if (message.metadata?.skillCalls) {
       for (const skill of message.metadata.skillCalls) {
         artifacts.push({
           id: `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,

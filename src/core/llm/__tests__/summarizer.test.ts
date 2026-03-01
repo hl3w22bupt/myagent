@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { LLMSummarizer } from '../summarizer';
-import { Message } from '../../database/context-types';
 
 describe('LLMSummarizer', () => {
   let summarizer: LLMSummarizer;
@@ -13,7 +12,7 @@ describe('LLMSummarizer', () => {
   });
 
   it('should generate structured summary from messages', async () => {
-    const messages: Message[] = [
+    const messages = [
       {
         id: 'msg-1',
         taskId: 'test-task',

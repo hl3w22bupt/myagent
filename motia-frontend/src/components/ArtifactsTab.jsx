@@ -143,7 +143,7 @@ const ArtifactsTab = ({ taskId, task }) => {
       map[round].push(artifact);
 
       // 统计每轮的 skill 调用
-      const skillName = artifact.metadata?.skill_name || 'unknown';
+      const skillName = artifact.metadata?.skill_name || 'agent';
       if (!info[round]) {
         info[round] = { skills: new Set(), count: 0 };
       }

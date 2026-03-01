@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { ContextManager } from '../manager';
 import { getDataStore } from '../../database/data-store';
-import type { Message } from '../../database/context-types';
 
 describe('ContextManager', () => {
   let manager: ContextManager;
@@ -21,15 +20,14 @@ describe('ContextManager', () => {
     const context = await manager.createTaskContext('task-1', 'session-1', '测试任务');
 
     expect(context.taskId).toBe('task-1');
-    expect(context.currentTurn).toBe(0);
-    expect(context.messages).toEqual([]);
+    expect(context.conversationRounds).toEqual([]);
     expect(context.summary.currentTask).toBe('测试任务');
   });
 
   it('should add message and update turn count', async () => {
     await manager.createTaskContext('task-2', 'session-2', '测试');
 
-    const message: Message = {
+    const message = {
       id: 'msg-1',
       taskId: 'task-2',
       role: 'user',
@@ -39,8 +37,7 @@ describe('ContextManager', () => {
 
     const updated = await manager.addMessage('task-2', message);
 
-    expect(updated.currentTurn).toBe(1);
-    expect(updated.messages).toHaveLength(1);
+    expect(updated.conversationRounds).toHaveLength(1);
   });
 
   it('should compress context when token threshold exceeded', async () => {
@@ -48,7 +45,7 @@ describe('ContextManager', () => {
 
     // 添加大量消息模拟token超限
     for (let i = 0; i < 25; i++) {
-      const message: Message = {
+      const message = {
         id: `msg-${i}`,
         taskId: 'task-3',
         role: 'assistant',
@@ -63,7 +60,7 @@ describe('ContextManager', () => {
     // 应该触发压缩
     expect(context).not.toBeNull();
     if (context) {
-      expect(context.messages.length).toBeLessThan(25);
+      expect(context.conversationRounds.length).toBeLessThan(25);
       expect(context.metadata.lastCompressedAt).toBeDefined();
     }
   });
@@ -71,7 +68,7 @@ describe('ContextManager', () => {
   it('should extract and track artifacts from messages', async () => {
     await manager.createTaskContext('task-4', 'session-4', '测试');
 
-    const message: Message = {
+    const message = {
       id: 'msg-1',
       taskId: 'task-4',
       role: 'assistant',

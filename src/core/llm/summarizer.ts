@@ -11,7 +11,7 @@
 
 import { LLMClient } from './client';
 import { LLMClientFactory } from './factory';
-import type { Message, StructuredSummary } from '../database/context-types';
+import type { ConversationRound, StructuredSummary } from '../database/context-types';
 
 export interface LLMSummarizerConfig {
   apiKey?: string;
@@ -77,8 +77,28 @@ export class LLMSummarizer {
 
   /**
    * 生成上下文的结构化摘要
+   * @deprecated 使用 summarizeFromRounds 代替
    */
-  async summarizeContext(messages: Message[]): Promise<StructuredSummary> {
+  async summarizeContext(messages: Array<{ role: string; content: string }>): Promise<StructuredSummary> {
+    return this.summarizeFromMessages(messages);
+  }
+
+  /**
+   * 从对话轮次生成摘要（新方法）
+   */
+  async summarizeFromRounds(rounds: ConversationRound[]): Promise<StructuredSummary> {
+    // 将 ConversationRound 转换为 Message 格式（兼容旧方法）
+    const messages = rounds.flatMap(r => [
+      { role: 'user' as const, content: r.userMessage },
+      ...(r.assistantOutput ? [{ role: 'assistant' as const, content: r.assistantOutput }] : []),
+    ]);
+    return this.summarizeFromMessages(messages);
+  }
+
+  /**
+   * 从消息数组生成摘要
+   */
+  async summarizeFromMessages(messages: Array<{ role: string; content: string }>): Promise<StructuredSummary> {
     // 1. 构建提示词
     const prompt = this.buildSummarizationPrompt(messages);
 
@@ -170,7 +190,7 @@ export class LLMSummarizer {
   /**
    * 构建摘要生成的提示词
    */
-  private buildSummarizationPrompt(messages: Message[]): string {
+  private buildSummarizationPrompt(messages: Array<{ role: string; content: string }>): string {
     const messagesText = messages
       .map(m => `[${m.role}]: ${m.content}`)
       .join('\n\n');
@@ -186,7 +206,7 @@ ${messagesText}
   /**
    * 获取默认摘要（当LLM调用失败时使用）
    */
-  private getDefaultSummary(messages: Message[]): StructuredSummary {
+  private getDefaultSummary(messages: Array<{ role: string; content: string }>): StructuredSummary {
     return {
       sessionIntent: '无法确定',
       currentTask: messages.length > 0 ? messages[messages.length - 1].content.substring(0, 100) : '未知任务',

@@ -54,41 +54,79 @@ export const handler = async (request: any, { logger }: any) => {
     // 获取会话信息
     const session = await store.getSession(sessionId);
 
+    // 如果会话不存在，尝试从任务表获取数据
+    let tasks = [];
+    let isVirtualSession = false;
+
     if (!session) {
-      logger.info('Get Session API: Session not found', { sessionId });
-      return {
-        status: 404,
-        body: {
-          success: false,
-          error: 'Session not found',
-        },
-      };
+      logger.info('Get Session API: Session not found in sessions table, trying tasks table', { sessionId });
+      // 尝试获取该 session 的任务
+      const tasksResult = await store.listTasks({ sessionId });
+      tasks = tasksResult.tasks;
+
+      if (tasks.length === 0) {
+        return {
+          status: 404,
+          body: {
+            success: false,
+            error: 'Session not found',
+          },
+        };
+      }
+
+      isVirtualSession = true;
+    } else {
+      // 获取该会话的所有任务
+      const tasksResult = await store.listTasks({ sessionId });
+      tasks = tasksResult.tasks;
     }
 
-    // 获取该会话的所有任务
-    const { tasks } = await store.listTasks({ sessionId });
+    // 获取关联的用户（通过 last_session_id）
+    let userId = null;
+    try {
+      const client = (store as any).pool;
+      const userResult = await client.query(
+        'SELECT user_id FROM users WHERE last_session_id = $1 LIMIT 1',
+        [sessionId]
+      );
+      if (userResult.rows.length > 0) {
+        userId = userResult.rows[0].user_id;
+      }
+    } catch (err) {
+      // 忽略错误，userId 保持为 null
+      logger.warn('Failed to fetch userId', { error: err.message, sessionId });
+    }
 
     // 获取第一个任务的上下文（假设一个 session 对应一个主要上下文）
     let context = null;
-    let messages = [];
+    let conversationRounds = [];
     let artifacts = [];
 
     if (tasks.length > 0) {
       const firstTaskId = tasks[0].id;
       context = await store.getContext(firstTaskId);
-      messages = context?.messages || [];
+      conversationRounds = context?.conversationRounds || [];
       artifacts = await store.getArtifacts(firstTaskId);
     }
+
+    // 构建 session 数据（虚拟 session 使用任务的创建时间）
+    const sessionData = session || {
+      sessionId,
+      createdAt: tasks.length > 0 ? tasks[0].createdAt : new Date(),
+      lastActiveAt: tasks.length > 0 ? tasks[tasks.length - 1].createdAt : new Date(),
+      metadata: { isVirtualSession: true },
+    };
 
     return {
       status: 200,
       body: {
         success: true,
         data: {
-          sessionId: session.sessionId,
-          createdAt: session.createdAt.toISOString(),
-          lastActiveAt: session.lastActiveAt.toISOString(),
-          metadata: session.metadata,
+          sessionId: sessionData.sessionId,
+          userId: userId,
+          createdAt: sessionData.createdAt.toISOString(),
+          lastActiveAt: sessionData.lastActiveAt.toISOString(),
+          metadata: sessionData.metadata,
           tasks: tasks.map((t: any) => ({
             taskId: t.id,
             task: t.task,
@@ -98,16 +136,24 @@ export const handler = async (request: any, { logger }: any) => {
             output: t.output,
           })),
           context: context ? {
-            currentTurn: context.currentTurn,
             summary: context.summary,
             workingMemory: context.workingMemory,
+            conversationRounds: context.conversationRounds,
           } : null,
-          messages: messages.map((m: any) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            timestamp: m.metadata?.timestamp || new Date().toISOString(),
-          })),
+          messages: conversationRounds.flatMap((r: any) => [
+            {
+              id: `msg-${r.round}-user`,
+              role: 'user',
+              content: r.userMessage,
+              timestamp: r.timestamp,
+            },
+            ...(r.assistantOutput ? [{
+              id: `msg-${r.round}-assistant`,
+              role: 'assistant',
+              content: r.assistantOutput,
+              timestamp: r.timestamp,
+            }] : []),
+          ]),
           artifacts: artifacts.map((a: any) => ({
             id: a.id,
             type: a.artifactType,

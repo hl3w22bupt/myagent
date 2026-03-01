@@ -49,17 +49,23 @@ export const handler = async (
       };
     }
 
+    // 构建 conversationHistory（Agent 使用的扁平格式）
+    const conversationHistory = contextManager.getConversationHistoryForAgent(context);
+
     logger.info('Context retrieved', {
       taskId,
-      currentTurn: context.currentTurn,
-      messageCount: context.messages.length,
+      roundsCount: context.conversationRounds.length,
+      historyCount: conversationHistory.length,
     });
 
     return {
       status: 200,
       body: {
         success: true,
-        data: context,
+        data: {
+          ...context,
+          conversationHistory, // 添加对话历史（Agent 格式）
+        },
       },
     };
   } catch (error) {
