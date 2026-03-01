@@ -17,6 +17,9 @@ import { getAgentStreams } from './hooks/progress-notify';
 import { ContextManager } from '../context/manager';
 import { HITLState } from '../database/context-types';
 
+// 对话历史配置
+const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
+
 /**
  * Base Agent class with core Agent capabilities.
  */
@@ -284,10 +287,24 @@ export class Agent {
     // Update activity time
     this.state.lastActivityAt = Date.now();
 
+    // ⭐ 关键修复：优先存储原始用户消息（而非 XML 格式化的 combinedTask）
+    // - context.originalUserTask: 原始用户输入（未格式化）
+    // - context.originalTask: 也可能是原始任务（向后兼容）
+    // - task: 当前任务（可能是 combinedTask/rewrittenTask）
+    const userTaskToStore = context?.originalUserTask || context?.originalTask || task;
+
+    console.log('[Agent] Choosing task for conversation history storage:', {
+      hasOriginalUserTask: !!context?.originalUserTask,
+      hasOriginalTask: !!context?.originalTask,
+      'task length': task.length,
+      'userTaskToStore length': userTaskToStore.length,
+      'is different': userTaskToStore !== task,
+    });
+
     // Record user input
     this.state.conversationHistory.push({
       role: 'user',
-      content: task,
+      content: userTaskToStore,  // ← 存储原始用户消息，而非格式化后的任务
       timestamp: Date.now(),
     });
 
@@ -298,12 +315,12 @@ export class Agent {
       });
 
       // 使用 TaskHook 提供的对话历史（包含之前的轮次）
-      // 然后添加当前的用户消息
+      // 然后添加当前的用户消息（使用原始用户消息）
       this.state.conversationHistory = [
         ...context.conversationHistory,
         {
           role: 'user',
-          content: task,
+          content: userTaskToStore,  // ← 存储原始用户消息，而非格式化后的任务
           timestamp: Date.now(),
         },
       ];
@@ -951,22 +968,35 @@ export class Agent {
   /**
    * 构建对话提示词（用于对话模式）
    * 将 conversationHistory 转换为 LLM 可以理解的 XML 格式
+   *
+   * 目标格式：
+   * <reasoning>...</reasoning>
+   * <conversation_history>...</conversation_history>
+   * <current_request>...</current_request>
    */
   private buildConversationPrompt(context: any, currentTask: string): string {
-    // 如果 context 中包含 combinedTask（来自 MasterAgent），直接使用
-    // combinedTask 已经包含 <reasoning>, <steps>, <original_request> 格式
-    if (context?.combinedTask) {
-      return context.combinedTask;
+    // ⭐ 关键修复：使用原始用户消息而非 combinedTask 格式
+
+    // 提取原始用户消息（优先使用 originalUserTask，否则从 currentTask 中提取）
+    let userRequest: string;
+    if (context?.originalUserTask) {
+      userRequest = context.originalUserTask;
+    } else if (currentTask.includes('<original_request>')) {
+      const match = currentTask.match(/<original_request>\s*(.*?)\s*<\/original_request>/s);
+      userRequest = match ? match[1].trim() : currentTask;
+    } else {
+      userRequest = currentTask;
     }
 
-    // 提取 reasoning（从 delegationPlan 或 combinedTask）
+    // 提取 reasoning（优先级：delegationPlan.reasoning > reasoning > 直接响应）
     const reasoning = context?.delegationPlan?.reasoning || context?.reasoning || '直接响应';
 
-    // 构建对话历史部分
+    // 构建对话历史部分（保留最近 MAX_CONVERSATION_MESSAGES 条消息）
     let historySection = '';
     if (context?.conversationHistory && context.conversationHistory.length > 0) {
       const historyLines: string[] = [];
-      for (const msg of context.conversationHistory) {
+      const recentHistory = context.conversationHistory.slice(-MAX_CONVERSATION_MESSAGES);
+      for (const msg of recentHistory) {
         if (msg.role === 'user') {
           historyLines.push(`User: ${msg.content}`);
         } else if (msg.role === 'assistant') {
@@ -980,13 +1010,13 @@ ${historyLines.join('\n')}
 `;
     }
 
-    // 返回 XML 格式
+    // 返回清晰的 XML 格式
     return `<reasoning>
 ${reasoning}
 </reasoning>
 
 ${historySection}<current_request>
-${currentTask}
+${userRequest}
 </current_request>`;
   }
 

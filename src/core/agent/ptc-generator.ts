@@ -11,6 +11,9 @@ import { LLMClientFactory } from '../llm/factory';
 import { PTCGenerationOptions, PTCResult } from './types';
 import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
 
+// 对话历史配置（与 agent.ts 保持一致）
+const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
+
 /**
  * Simplified Skill Metadata for PTC Generator.
  * Includes metadata field for input_schema and output_schema access.
@@ -179,8 +182,8 @@ export class PTCGenerator {
 
     if (options?.history && options.history.length > 0) {
       contextSection += '<conversation_history>\n';
-      for (const msg of options.history.slice(-5)) {
-        // Last 5 messages
+      for (const msg of options.history.slice(-MAX_CONVERSATION_MESSAGES)) {
+        // 最近 MAX_CONVERSATION_MESSAGES 条消息
         contextSection += `${msg.role}: ${msg.content}\n`;
       }
       contextSection += '</conversation_history>\n\n';
@@ -745,8 +748,8 @@ Always prioritize available skills over direct computation or common knowledge.`
 
     if (options?.history && options.history.length > 0) {
       contextSection += '<conversation_history>\n';
-      for (const msg of options.history.slice(-5)) {
-        // Last 5 messages
+      for (const msg of options.history.slice(-MAX_CONVERSATION_MESSAGES)) {
+        // 最近 MAX_CONVERSATION_MESSAGES 条消息
         contextSection += `${msg.role}: ${msg.content}\n`;
       }
       contextSection += '</conversation_history>\n\n';

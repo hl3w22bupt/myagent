@@ -13,8 +13,6 @@ import { z } from 'zod';
 import { EventConfig } from 'motia';
 import { stateLockManager } from '../../src/utils/state-lock';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
-import { ContextManager } from '../../src/core/context/manager';
-import type { ConversationRound, ArtifactInfo, ArtifactIndex } from '../../src/core/database/context-types';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';

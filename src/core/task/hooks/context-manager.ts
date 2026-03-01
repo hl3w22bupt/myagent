@@ -3,7 +3,6 @@ import { TaskContext } from './types';
 import { ContextManager } from '../../context/manager';
 import { LLMSummarizer } from '../../llm/summarizer';
 import { getDataStore } from '../../database/data-store';
-import { agentManager } from '../../../index';
 import { ConversationHistoryEntry } from '../../database/context-types';
 
 /**
@@ -113,7 +112,7 @@ export class ContextManagerTaskHook extends BaseTaskHook {
   }
 
   async postExec(context: TaskContext, result: any): Promise<void> {
-    const { taskId, sessionId, services } = context;
+    const { taskId, services } = context;
 
     try {
       // ⭐ 新增：保存对话轮次

@@ -4,7 +4,7 @@
  * 提供任务上下文的创建、更新、查询和压缩功能
  */
 
-import type { TaskContext, Message, ConversationRound, ArtifactInfo, ConversationHistoryEntry } from '../database/context-types';
+import type { TaskContext, Message, ConversationRound, ConversationHistoryEntry } from '../database/context-types';
 import { DataStore, getDataStore } from '../database/data-store';
 import { ContextCompressor } from './compressor';
 import { ArtifactExtractor } from './artifact-extractor';

@@ -99,7 +99,7 @@ export class MasterAgent extends Agent {
         // ⭐ 优先使用传入的 context.conversationHistory（由 TaskHook 预加载）
         // 如果没有，则从数据库加载
         let conversationHistory: any[] = [];
-        let taskContext = await this.contextManager.getContext(effectiveTaskId);
+        const taskContext = await this.contextManager.getContext(effectiveTaskId);
 
         if (context?.conversationHistory && context.conversationHistory.length > 0) {
           conversationHistory = context.conversationHistory;
@@ -204,9 +204,11 @@ export class MasterAgent extends Agent {
         await this.sendDirectDelegationNotification(task, this.explicitDelegateTo, _taskId);
 
         // Build execution context for direct delegation
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
         const directDelegationContext = {
-          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
           ...(context?.originalTask && { originalTask: context.originalTask }),
+          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
           ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
         };
 
@@ -256,9 +258,11 @@ export class MasterAgent extends Agent {
         await this.notifyTaskDecomposition(task, delegationSteps[0].task, plan, _taskId);
 
         // Build execution context for planned delegation
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
         const plannedDelegationContext = {
-          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
+          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
           ...(context?.originalTask && { originalTask: context.originalTask }),
+          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
           ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
         };
 
@@ -303,8 +307,10 @@ ${task}
       });
 
       // Pass original task in context for better PTC generation
+      // ⭐ 关键修复：传递原始用户任务（未格式化）以供 conversationHistory 存储
       const executionContext = {
-        originalTask: task,  // Original user request
+        originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
+        originalTask: originalTask,  // Original user request (before rewriting)
         combinedTask: combinedTask,  // MasterAgent's plan
         delegationPlan: plan,  // Full delegation plan
         // ⭐ 传递 conversationHistory 给直接执行路径
@@ -989,19 +995,6 @@ ${task}
       // For simplicity, delegate to the first subagent in the list
       const subagentName = delegates[0];
 
-      // Extract original message from formatted task if needed
-      // task might be formatted XML like <conversation_history>...</conversation_history>\n\n<current_message>actual message</current_message>
-      let actualMessage = task;
-      if (task.includes('<current_message>')) {
-        // Extract the actual message from <current_message> tags
-        const match = task.match(/<current_message>([\s\S]*?)<\/current_message>/);
-        if (match && match[1]) {
-          actualMessage = match[1].trim();
-        }
-      }
-      // Use provided originalTask if available, otherwise use extracted message
-      const messageForHistory = originalTask || actualMessage;
-
       // Record direct delegation in traces (bypassing LLM planning)
       // and send delegation planning notification to taskExecution stream (for chat display)
       const streams = getAgentStreams();
@@ -1048,6 +1041,8 @@ ${task}
         sessionId: (subagent as any).sessionId,
         taskId: taskId,
         agent: subagent,
+        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        ...(context?.originalUserTask && { originalUserTask: context.originalUserTask }),
         // ⭐ 传递 conversationHistory 给 subagent
         ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
         // ⭐ 传递 originalTask 给 subagent
