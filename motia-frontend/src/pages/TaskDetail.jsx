@@ -2049,7 +2049,16 @@ function TaskDetail() {
       let textContent = ''
       if (typeof result === 'object') {
         // 优先使用 parsedResult（即 structuredOutput）
-        textContent = parsedResult.content || result.content || result.text || String(parsedResult)
+        if (typeof parsedResult === 'object' && parsedResult !== null) {
+          // 处理对象结果，尝试提取有效字符串
+          textContent = parsedResult.content || result.content || result.text
+          if (!textContent) {
+            // 如果没有 content 字段，尝试 JSON.stringify 对象
+            textContent = JSON.stringify(parsedResult, null, 2)
+          }
+        } else {
+          textContent = String(parsedResult || '')
+        }
       } else if (typeof result === 'string') {
         textContent = result
       } else {
