@@ -230,16 +230,37 @@ const ArtifactsTab = ({ taskId, task }) => {
   const fileTree = useMemo(() => {
     const root = { name: 'root', path: 'root', type: 'folder', children: [] };
 
-    // 过滤出有 path 的代码类产物
-    const codeArtifacts = allArtifacts.filter(a =>
-      a.path &&
-      (a.type === 'code' || a.artifact_type === 'code' ||
-       a.type === 'html' || a.artifact_type === 'html' ||
-       a.type === 'markdown' || a.artifact_type === 'markdown')
-    );
+    // 过滤出有 path 的产物（所有类型，不仅仅是代码）
+    const fileArtifacts = allArtifacts.filter(a => a.path && a.path.trim());
 
-    codeArtifacts.forEach(artifact => {
-      const pathParts = artifact.path.split('/').filter(p => p);
+    // 处理路径的函数：将绝对路径转换为相对于项目/outputs 的路径
+    const normalizePath = (fullPath) => {
+      // 如果是相对路径，直接返回
+      if (!fullPath.startsWith('/')) {
+        return fullPath;
+      }
+
+      // 如果是绝对路径，尝试找到 outputs 目录
+      const outputsIndex = fullPath.indexOf('/outputs/');
+      if (outputsIndex !== -1) {
+        // 返回 outputs/ 之后的部分
+        return fullPath.substring(outputsIndex + 1); // +1 to keep the slash
+      }
+
+      // 如果包含 artifacts 目录
+      const artifactsIndex = fullPath.indexOf('/artifacts/');
+      if (artifactsIndex !== -1) {
+        return fullPath.substring(artifactsIndex + 1);
+      }
+
+      // 如果都找不到，返回文件名
+      const parts = fullPath.split('/');
+      return parts[parts.length - 1];
+    };
+
+    fileArtifacts.forEach(artifact => {
+      const normalizedPath = normalizePath(artifact.path);
+      const pathParts = normalizedPath.split('/').filter(p => p);
       let currentNode = root;
 
       pathParts.forEach((part, index) => {
@@ -432,12 +453,7 @@ const ArtifactsTab = ({ taskId, task }) => {
           <div className="file-tree-header">
             <h3>项目文件</h3>
             <span className="file-count">
-              {allArtifacts.filter(a =>
-                a.path &&
-                (a.type === 'code' || a.artifact_type === 'code' ||
-                 a.type === 'html' || a.artifact_type === 'html' ||
-                 a.type === 'markdown' || a.artifact_type === 'markdown')
-              ).length} 个文件
+              {allArtifacts.filter(a => a.path && a.path.trim()).length} 个文件
             </span>
           </div>
           <div className="file-tree-content">
