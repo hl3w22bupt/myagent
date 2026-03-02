@@ -447,65 +447,95 @@ const ArtifactsTab = ({ taskId, task }) => {
         )}
       </div>
 
-      {/* 文件树视图 */}
+      {/* 文件树视图 - IDE 布局：左侧文件树 + 右侧预览 */}
       {viewMode === 'tree' && (
-        <div className="file-tree-container">
-          <div className="file-tree-header">
-            <h3>项目文件</h3>
-            <span className="file-count">
-              {allArtifacts.filter(a => a.path && a.path.trim()).length} 个文件
-            </span>
+        <div className="ide-layout-container">
+          {/* 左侧文件树 */}
+          <div className="file-tree-sidebar">
+            <div className="file-tree-header">
+              <h3>项目文件</h3>
+              <span className="file-count">
+                {allArtifacts.filter(a => a.path && a.path.trim()).length} 个文件
+              </span>
+            </div>
+            <div className="file-tree-content">
+              {fileTree.children && fileTree.children.length > 0 ? (
+                fileTree.children.map((node, index) => (
+                  <FileTreeNode
+                    key={`${node.path}-${index}`}
+                    node={node}
+                    onFileClick={handleFileClick}
+                    selectedPath={selectedFilePath}
+                    expandedFolders={expandedFolders}
+                    onToggleExpand={toggleFolder}
+                  />
+                ))
+              ) : (
+                <div className="file-tree-empty">
+                  <p>暂无文件产物</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="file-tree-content">
-            {fileTree.children && fileTree.children.length > 0 ? (
-              fileTree.children.map((node, index) => (
-                <FileTreeNode
-                  key={`${node.path}-${index}`}
-                  node={node}
-                  onFileClick={handleFileClick}
-                  selectedPath={selectedFilePath}
-                  expandedFolders={expandedFolders}
-                  onToggleExpand={toggleFolder}
-                />
-              ))
+
+          {/* 右侧预览区 */}
+          <div className="artifact-preview">
+            {selectedArtifact ? (
+              <>
+                <div className="artifact-info">
+                  <h3>{selectedArtifact.description || '产物详情'}</h3>
+                  <div className="info-grid">
+                    <span>类型: <strong>{selectedArtifact.type || selectedArtifact.artifact_type}</strong></span>
+                  </div>
+                  <div className="path-info">
+                    <span>路径: <code>{selectedArtifact.path}</code></span>
+                  </div>
+                </div>
+                <div className="artifact-content">
+                  {renderArtifact(selectedArtifact)}
+                </div>
+              </>
             ) : (
-              <div className="file-tree-empty">
-                <p>暂无代码文件产物</p>
+              <div className="artifact-placeholder">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <p>请选择文件查看内容</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* 预览区 */}
-      <div className="artifact-preview">
-        {selectedArtifact ? (
-          <>
-            <div className="artifact-info">
-              <h3>{selectedArtifact.description || '产物详情'}</h3>
-              <div className="info-grid">
-                <span>类型: <strong>{selectedArtifact.type || selectedArtifact.artifact_type}</strong></span>
-                {viewMode === 'round' && (
+      {/* 按轮次视图的预览区 */}
+      {viewMode === 'round' && (
+        <div className="artifact-preview">
+          {selectedArtifact ? (
+            <>
+              <div className="artifact-info">
+                <h3>{selectedArtifact.description || '产物详情'}</h3>
+                <div className="info-grid">
+                  <span>类型: <strong>{selectedArtifact.type || selectedArtifact.artifact_type}</strong></span>
                   <span>轮次: <strong>第 {parseInt(selectedRound) + 1} 轮</strong></span>
-                )}
+                </div>
+                <div className="path-info">
+                  <span>路径: <code>{selectedArtifact.path}</code></span>
+                </div>
               </div>
-              <div className="path-info">
-                <span>路径: <code>{selectedArtifact.path}</code></span>
+              <div className="artifact-content">
+                {renderArtifact(selectedArtifact)}
               </div>
+            </>
+          ) : (
+            <div className="artifact-placeholder">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <p>请选择对话轮次和产物查看</p>
             </div>
-            <div className="artifact-content">
-              {renderArtifact(selectedArtifact)}
-            </div>
-          </>
-        ) : (
-          <div className="artifact-placeholder">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-            <p>{viewMode === 'tree' ? '请选择文件查看内容' : '请选择对话轮次和产物查看'}</p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
