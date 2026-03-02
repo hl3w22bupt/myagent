@@ -266,6 +266,7 @@
   flex-direction: column;
   border-right: 1px solid #e9ecef;
   background: #f8f9fa;
+  overflow: hidden;
 }
 
 /* IDE 布局中的文件树头部 */
@@ -282,8 +283,33 @@
 .ide-layout-container .file-tree-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 8px 0;
   background: white;
+}
+
+/* 确保文件树节点可以处理长文件名 */
+.ide-layout-container .file-tree-node {
+  min-width: max-content;
+}
+
+/* 文件树滚动条样式 */
+.ide-layout-container .file-tree-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.ide-layout-container .file-tree-content::-webkit-scrollbar-track {
+  background: #f1f3f5;
+}
+
+.ide-layout-container .file-tree-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.ide-layout-container .file-tree-content::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* IDE 布局中的预览区 */
