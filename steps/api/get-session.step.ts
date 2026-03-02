@@ -56,7 +56,7 @@ export const handler = async (request: any, { logger }: any) => {
 
     // 如果会话不存在，尝试从任务表获取数据
     let tasks = [];
-    let isVirtualSession = false;
+    let _isVirtualSession = false;
 
     if (!session) {
       logger.info('Get Session API: Session not found in sessions table, trying tasks table', { sessionId });
@@ -74,7 +74,7 @@ export const handler = async (request: any, { logger }: any) => {
         };
       }
 
-      isVirtualSession = true;
+      _isVirtualSession = true;
     } else {
       // 获取该会话的所有任务
       const tasksResult = await store.listTasks({ sessionId });
@@ -94,7 +94,7 @@ export const handler = async (request: any, { logger }: any) => {
       }
     } catch (err) {
       // 忽略错误，userId 保持为 null
-      logger.warn('Failed to fetch userId', { error: err.message, sessionId });
+      logger.warn('Failed to fetch userId', { error: err instanceof Error ? err.message : String(err), sessionId });
     }
 
     // 获取第一个任务的上下文（假设一个 session 对应一个主要上下文）

@@ -11,6 +11,7 @@ import { getAgentStreams } from './hooks/progress-notify';
 import { RequestRewriter } from './request-rewriter';
 import { ContextManager } from '../context/manager';
 import { getDataStore } from '../database/data-store';
+import { OrchestratedContext } from '../context/orchestrator';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -204,12 +205,12 @@ export class MasterAgent extends Agent {
         await this.sendDirectDelegationNotification(task, this.explicitDelegateTo, _taskId);
 
         // Build execution context for direct delegation
-        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        // ⭐ 传递完整的 context 对象，包括 workingMemory.userProfile
         const directDelegationContext = {
-          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
-          ...(context?.originalTask && { originalTask: context.originalTask }),
-          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
-          ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+          // 保留原始 context 的所有内容
+          ...context,
+          // 添加/覆盖原始用户任务（未格式化）以供 conversationHistory 存储
+          originalUserTask: originalTask,
         };
 
         return this.executeDirectDelegation(task, this.explicitDelegateTo, steps, startTime, _taskId, 'direct', originalTask, directDelegationContext);
@@ -281,12 +282,12 @@ export class MasterAgent extends Agent {
         await this.notifyTaskDecomposition(task, delegationSteps[0].task, plan, _taskId);
 
         // Build execution context for planned delegation
-        // ⭐ 传递原始用户任务（未格式化）以供 conversationHistory 存储
+        // ⭐ 传递完整的 context 对象，包括 workingMemory.userProfile
         const plannedDelegationContext = {
-          originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
-          ...(context?.originalTask && { originalTask: context.originalTask }),
-          ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
-          ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+          // 保留原始 context 的所有内容
+          ...context,
+          // 添加/覆盖原始用户任务（未格式化）以供 conversationHistory 存储
+          originalUserTask: originalTask,
         };
 
         return this.executeDirectDelegation(task, [delegateTarget], steps, startTime, _taskId, 'planned', undefined, plannedDelegationContext);
@@ -335,16 +336,15 @@ ${task}
       });
 
       // Pass original task in context for better PTC generation
-      // ⭐ 关键修复：传递原始用户任务（未格式化）以供 conversationHistory 存储
+      // ⭐ 关键修复：传递完整的 context，包括 workingMemory.userProfile
       const executionContext = {
+        // 保留原始 context 的所有内容（包括 workingMemory.userProfile）
+        ...context,
+        // 添加/覆盖执行特定字段
         originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
         originalTask: originalTask,  // Original user request (before rewriting)
         combinedTask: combinedTask,  // MasterAgent's plan
         delegationPlan: plan,  // Full delegation plan
-        // ⭐ 传递 conversationHistory 给直接执行路径
-        ...(context?.conversationHistory && { conversationHistory: context.conversationHistory }),
-        // ⭐ 传递 rewriteRequest
-        ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
       };
 
       console.log('[MasterAgent] Direct execution context created', {
@@ -1068,6 +1068,52 @@ ${task}
       // Get or create subagent instance
       const subagent = await this.getOrCreateSubagent(subagentName);
 
+      // ⭐ NEW: Get userProfile from orchestrator to pass to subagent
+      // This ensures user profile is available in all subagent LLM calls
+      let userProfile: any = undefined;
+      try {
+        console.log('[MasterAgent] Calling orchestrator.getContext for subagent delegation', {
+          hasContext: !!context,
+          contextKeys: context ? Object.keys(context) : 'no context',
+          'context.context?.workingMemory?.userProfile': !!context?.context?.workingMemory?.userProfile,
+          'context.workingMemory?.userProfile': !!context?.workingMemory?.userProfile,
+        });
+        const orchestratedContext: OrchestratedContext = await this.orchestrator.getContext(context || {}, this.state);
+        userProfile = orchestratedContext.userProfile;
+        if (userProfile) {
+          console.log('[MasterAgent] User profile extracted for subagent delegation', {
+            hasPreferences: !!userProfile.preferences,
+            hasHabits: !!userProfile.habits,
+            hasTags: !!userProfile.tags,
+            preferencesCount: userProfile.preferences?.length || 0,
+            habitsCount: userProfile.habits?.length || 0,
+            tagsCount: userProfile.tags?.length || 0,
+          });
+        } else {
+          console.log('[MasterAgent] No user profile found in orchestrated context');
+        }
+      } catch (error) {
+        console.warn('[MasterAgent] Failed to extract user profile for subagent:', error);
+      }
+
+      // ⭐ NEW: Extract userContext from parent context (for application-specific subagent templates)
+      // Check both possible locations: context.context.workingMemory.userContext and context.workingMemory.userContext
+      const userContext = context?.context?.workingMemory?.userContext
+        || context?.workingMemory?.userContext;
+
+      if (userContext) {
+        console.log('[MasterAgent] UserContext found, will pass to subagent', {
+          hasName: !!userContext.name,
+          hasPersonality: !!userContext.personality,
+          hasIntimacyLevel: !!userContext.intimacy_level,
+        });
+      } else {
+        console.log('[MasterAgent] No userContext found in parent context', {
+          'context.context?.workingMemory?.userContext': !!context?.context?.workingMemory?.userContext,
+          'context.workingMemory?.userContext': !!context?.workingMemory?.userContext,
+        });
+      }
+
       // === Trigger subagent hooks (like step layer does for MasterAgent) ===
       // ⭐ 注意：conversationHistory 现在由 TaskHook.preExec 统一加载
       // ⭐ 将 context 中的 conversationHistory 传递给 subagent
@@ -1085,6 +1131,13 @@ ${task}
         ...(context?.originalTask && { originalTask: context.originalTask }),
         // ⭐ 传递 rewriteRequest 给 subagent
         ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+        // ⭐ NEW: 传递 userProfile 和 userContext 给 subagent（通过 workingMemory）
+        ...((userProfile || userContext) && {
+          workingMemory: {
+            ...(userContext && { userContext }),
+            ...(userProfile && { userProfile }),
+          }
+        }),
       };
 
       console.log('[MasterAgent] Subagent context created', {

@@ -619,6 +619,16 @@ export const handler = async (
     (taskContext.context as any).agent = agent;
     (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
 
+    // ⭐ 关键修复：将 userContext 从 metadata 复制到 workingMemory
+    // 这样 Agent.buildEnhancedSystemPrompt() 和 Orchestrator 都能找到它
+    if (input.userContext) {
+      (taskContext.context as any).workingMemory.userContext = input.userContext;
+      logger.info('[master-agent.step] userContext copied to workingMemory', {
+        hasName: !!input.userContext.name,
+        hasPersonality: !!input.userContext.personality,
+      });
+    }
+
     // 注意：formattedHistory 将在获取上下文后设置（见下文 taskWithContext 定义后）
 
     logger.info('[master-agent.step] rewriteRequest setting:', {

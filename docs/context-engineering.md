@@ -2,7 +2,8 @@
 
 > **文档目的**: 记录上下文工程的设计理念、架构思路和演进方向
 > **创建时间**: 2025-02-09
-> **状态**: 活跃讨论中，会持续更新
+> **状态**: 活跃开发中，部分功能已实现
+> **最后更新**: 2026-03-02
 
 ---
 
@@ -326,22 +327,77 @@
 
 ## 十、当前项目的实现现状
 
+### 已完成功能 (2026-03-02)
+
+#### 1. 用户画像系统 ✅
+
+**实现文件**: `src/core/task/hooks/user-profile-accumulator.ts`
+
+**功能特性**:
+- `UserProfileAccumulatorHook`: 通用用户画像累积 Hook
+  - `preExec`: 从 users 表加载 userId 的 userProfile，注入到 workingMemory
+  - `postExec`: 提取本次会话特征，累积通用字段到用户画像
+- 支持的画像字段:
+  - `preferences`: 用户偏好 (简洁回复/详细回复)
+  - `habits`: 用户习惯 (夜间活跃/日间活跃/长时间会话)
+  - `tags`: 用户标签 (新用户/活跃用户/高活跃)
+  - `data.behavior`: 行为统计 (总会话数，向后兼容)
+
+**数据库支持**:
+- `users` 表存储用户基本信息
+- `user_profiles` 表存储用户画像数据
+
+#### 2. Context API ✅
+
+**实现文件**: `steps/api/context-api.step.ts` 等
+
+**API 端点**:
+- `GET /api/contexts/:taskId` - 获取任务上下文
+- `GET /api/sessions/:sessionId` - 获取会话上下文
+- `GET /api/users/:userId` - 获取用户画像
+- `POST /api/contexts/:taskId/compress` - 手动触发上下文压缩
+- `GET /api/contexts/:sessionId/messages` - 获取会话消息历史
+- `GET /api/contexts/:sessionId/outputs` - 获取会话产物
+- `GET /api/contexts/:sessionId/artifacts` - 获取会话 Artifact
+
+#### 3. 前端上下文视图 ✅
+
+**实现文件**: `motia-frontend/src/components/ContextTab.jsx`
+
+**功能特性**:
+- 三个子 Tab: Task Context / Session Context / User Context
+- Task Context: 显示任务上下文、消息历史、压缩摘要
+- Session Context: 显示会话信息、执行历史
+- User Context: 显示用户画像、偏好、习惯、标签
+- 自动加载: 从 taskContext 获取 sessionId，再加载 session 和 user 数据
+- 防止无限加载: 修复了没有 userId 时的无限加载状态
+
 ### 现有架构
 
 ```
 数据库层
   - SQLite/PostgreSQL存储
   - tasks, task_contexts, messages, artifacts表
+  - users, user_profiles表 (新增)
 
 业务层
   - ContextManager: 统一管理上下文
   - ContextCompressor: 智能压缩
   - LLMSummarizer: LLM摘要生成
   - ArtifactExtractor: 文件和函数调用索引
+  - UserProfileAccumulatorHook: 用户画像累积 (新增)
 
 应用层
   - ContextManagerTaskHook: 任务生命周期钩子
+  - UserProfileAccumulatorHook: 用户画像钩子 (新增)
   - Agent: 按需获取和使用上下文
+
+API 层 (新增)
+  - Context API: 上下文查询接口
+  - 用户画像 API: 用户数据查询接口
+
+前端层 (新增)
+  - ContextTab: 上下文视图组件
 ```
 
 ### 数据流
@@ -395,53 +451,126 @@
 
 ## 十一、未来演进方向
 
-### 阶段1：性能优化
+### 已完成 ✅
 
-1. **智能缓存机制**
-   - LRU缓存减少数据库查询
-   - 缓存失效策略
+- [x] **用户画像系统** (2026-03-02)
+  - UserProfileAccumulatorHook 实现
+  - 偏好、习惯、标签累积
+  - 数据库持久化
 
-2. **混合压缩策略**
-   - 规则压缩 + LLM压缩
-   - 异步压缩避免阻塞
-   - Token估算优化
+- [x] **Context API** (2026-03-02)
+  - 任务上下文查询
+  - 会话上下文查询
+  - 用户画像查询
 
-3. **数据库查询优化**
-   - 批量查询消除N+1
-   - JOIN查询优化
-   - 索引优化
+- [x] **前端上下文视图** (2026-03-02)
+  - ContextTab 组件实现
+  - 三个子 Tab: Task/Session/User
+  - 自动加载和状态管理
 
-### 阶段2：架构重构
+### 阶段1：性能优化 (部分完成)
 
-1. **策略模式**
-   - 支持多种压缩策略
-   - 可扩展的架构
+1. **智能缓存机制** ⏳
+   - [ ] LRU缓存减少数据库查询
+   - [ ] 缓存失效策略
 
-2. **依赖注入**
-   - 解耦组件依赖
-   - 提升可测试性
+2. **混合压缩策略** ⏳
+   - [ ] 规则压缩 + LLM压缩
+   - [ ] 异步压缩避免阻塞
+   - [ ] Token估算优化
 
-3. **统一错误处理**
-   - 智能重试机制
-   - 降级策略
+3. **数据库查询优化** ⏳
+   - [ ] 批量查询消除N+1
+   - [ ] JOIN查询优化
+   - [ ] 索引优化
 
-### 阶段3：智能化升级
+### 阶段2：架构重构 (未开始)
 
-1. **引入向量数据库**
-   - 语义检索能力
-   - ChromaDB或pgvector
+1. **策略模式** ⏳
+   - [ ] 支持多种压缩策略
+   - [ ] 可扩展的架构
 
-2. **上下文编排层**
-   - 多源数据融合
-   - 智能排序和裁剪
+2. **依赖注入** ⏳
+   - [ ] 解耦组件依赖
+   - [ ] 提升可测试性
 
-3. **自适应策略**
-   - 根据任务类型动态调整
-   - 个性化的上下文配置
+3. **统一错误处理** ⏳
+   - [ ] 智能重试机制
+   - [ ] 降级策略
+
+### 阶段3：智能化升级 (未开始)
+
+1. **引入向量数据库** ⏳
+   - [ ] 语义检索能力
+   - [ ] ChromaDB或pgvector
+
+2. **上下文编排层** ⏳
+   - [ ] 多源数据融合
+   - [ ] 智能排序和裁剪
+
+3. **自适应策略** ⏳
+   - [ ] 根据任务类型动态调整
+   - [ ] 个性化的上下文配置
+
+### 阶段4：三层数据源完善 (部分完成)
+
+1. **Context 层** ✅
+   - [x] 对话历史管理
+   - [x] 上下文压缩
+   - [x] Artifact 索引
+   - [x] API 查询接口
+
+2. **Memory 层** 🚧 (进行中)
+   - [x] 用户画像基础结构
+   - [x] 偏好累积
+   - [ ] 成功模式学习
+   - [ ] 失败案例记录
+   - [ ] 跨会话画像应用
+
+3. **Knowledge 层** ⏳
+   - [x] Skill 定义 (已有)
+   - [ ] Markdown 知识库
+   - [ ] RAG 系统
 
 ---
 
 ## 十二、讨论记录
+
+### 2026-03-02: 文档更新和实现确认
+
+**参与者**: Leo, Claude
+
+**核心议题**:
+1. 确认已完成的功能实现
+2. 更新文档以反映当前状态
+3. 规划下一步开发方向
+
+**已确认完成的功能**:
+1. **用户画像系统**
+   - UserProfileAccumulatorHook 实现
+   - 支持 preferences、habits、tags 累积
+   - 数据库表 users 和 user_profiles
+
+2. **Context API**
+   - 7 个 API 端点实现
+   - 支持任务、会话、用户三个维度的上下文查询
+
+3. **前端上下文视图**
+   - ContextTab 组件
+   - 三个子 Tab: Task Context / Session Context / User Context
+   - 修复无限加载问题
+
+**关键洞察**:
+- 三层数据源架构设计正确，正在逐步实现
+- Memory 层已有了基础，需要扩展成功模式学习和失败案例记录
+- Knowledge 层目前只有 Skill，可以考虑添加 Markdown 知识库
+
+**下一步计划**:
+- 完善 Memory 层：添加成功模式和失败案例记录
+- 考虑实现 Markdown 知识库作为 Knowledge 层的轻量级方案
+- 评估向量数据库的引入时机
+
+---
 
 ### 2025-02-09: 初次讨论
 
@@ -476,8 +605,15 @@
 
 ### 内部文档
 - `/docs/context-management.md` - 上下文管理系统使用指南
+- `/docs/SYSTEM_CONCEPTS_OVERVIEW.md` - 系统核心概念全梳理
 - `/src/core/context/manager.ts` - ContextManager实现
 - `/src/core/context/compressor.ts` - ContextCompressor实现
+
+### 实现文件
+- `/src/core/task/hooks/user-profile-accumulator.ts` - 用户画像累积 Hook
+- `/src/core/task/hooks/context-manager.ts` - 上下文管理 Hook
+- `/steps/api/context-api.step.ts` - Context API 实现
+- `/motia-frontend/src/components/ContextTab.jsx` - 前端上下文视图
 
 ### 外部参考
 - [LangChain Context Management](https://python.langchain.com/docs/expression_language/how_to/message_history/)

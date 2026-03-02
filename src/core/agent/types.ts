@@ -231,6 +231,12 @@ export interface PTCGenerationOptions {
 
   /** Original task (for multi-turn conversations) */
   originalTask?: string;
+
+  /** 用户画像（来自跨会话累积） */
+  userProfile?: any;
+
+  /** 应用特定上下文（如 AI 女友的角色设定） */
+  userContext?: any;
 }
 
 /**
