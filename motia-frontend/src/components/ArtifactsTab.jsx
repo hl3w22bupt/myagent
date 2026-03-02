@@ -3,6 +3,28 @@ import './ArtifactsTab.css';
 import CodePlayer from './CodePlayer';
 import AudioPlayer from './AudioPlayer';
 import VideoPlayer from './VideoPlayer';
+import {
+  File,
+  Folder,
+  FolderOpen,
+  FileCode,
+  FileText,
+  Video,
+  Music,
+  Image as ImageIcon,
+  FileJson,
+  Braces,
+  Type,
+  Database,
+  GitBranch,
+  Lock,
+  FileSpreadsheet,
+  Palette,
+  Globe,
+  Cpu,
+  Coffee,
+  Package,
+} from 'lucide-react';
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -74,11 +96,88 @@ const CodeContentRenderer = ({ path }) => {
   return <CodePlayer code={content} language={language} filename={filename} />;
 };
 
+// 图标组件
+const Icon = ({ name, size = 14, className = '' }) => {
+  const icons = {
+    'folder': Folder,
+    'folder-open': FolderOpen,
+    'file': File,
+    'file-code': FileCode,
+    'file-text': FileText,
+    'video': Video,
+    'music': Music,
+    'image': ImageIcon,
+    'json': FileJson,
+    'braces': Braces,
+    'type': Type,
+    'database': Database,
+    'git': GitBranch,
+    'lock': Lock,
+    'spreadsheet': FileSpreadsheet,
+    'palette': Palette,
+    'globe': Globe,
+    'cpu': Cpu,
+    'coffee': Coffee,
+    'package': Package,
+  };
+
+  const IconComponent = icons[name] || File;
+  return <IconComponent size={size} className={`file-icon-svg ${className}`} />;
+};
+
 // 文件树节点组件
 const FileTreeNode = ({ node, level = 0, onFileClick, selectedPath, expandedFolders, onToggleExpand }) => {
   const isFolder = node.type === 'folder';
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
+
+  // 根据文件类型获取图标名称
+  const getFileIconName = (fileName, artifactType) => {
+    if (artifactType) {
+      const typeIcons = {
+        'video': 'video',
+        'audio': 'music',
+        'image': 'image',
+        'code': 'file-code',
+        'html': 'globe',
+        'markdown': 'file-text',
+        'text': 'file-text',
+        'table': 'spreadsheet',
+      };
+      if (typeIcons[artifactType]) {
+        return typeIcons[artifactType];
+      }
+    }
+
+    // 根据文件扩展名判断
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    const extIcons = {
+      // 视频文件
+      'mp4': 'video', 'mov': 'video', 'avi': 'video', 'mkv': 'video', 'webm': 'video',
+      // 音频文件
+      'mp3': 'music', 'wav': 'music', 'flac': 'music', 'aac': 'music', 'm4a': 'music',
+      // 图片文件
+      'png': 'image', 'jpg': 'image', 'jpeg': 'image', 'gif': 'image', 'svg': 'image', 'webp': 'image',
+      // 代码文件
+      'js': 'braces', 'jsx': 'cpu', 'ts': 'braces', 'tsx': 'cpu', 'py': 'cpu',
+      'java': 'coffee', 'cpp': 'file-code', 'c': 'file-code', 'cs': 'file-code', 'go': 'braces',
+      'rs': 'file-code', 'rb': 'package', 'php': 'file-code',
+      // 样式文件
+      'css': 'palette', 'scss': 'palette', 'less': 'palette',
+      // 模板文件
+      'html': 'globe', 'htm': 'globe', 'xml': 'file-code',
+      // 数据文件
+      'json': 'json', 'yaml': 'file-text', 'yml': 'file-text', 'toml': 'file-text',
+      // 数据库
+      'sql': 'database', 'db': 'database', 'sqlite': 'database',
+      // 文档文件
+      'md': 'file-text', 'markdown': 'file-text', 'txt': 'file-text',
+      'pdf': 'file-text',
+      // 其他
+      'git': 'git', 'env': 'lock',
+    };
+    return extIcons[ext] || 'file';
+  };
 
   const handleClick = () => {
     if (isFolder) {
@@ -97,15 +196,13 @@ const FileTreeNode = ({ node, level = 0, onFileClick, selectedPath, expandedFold
       >
         {isFolder ? (
           <>
-            <span className="folder-icon">
-              {isExpanded ? '📂' : '📁'}
-            </span>
+            <Icon name={isExpanded ? 'folder-open' : 'folder'} size={16} />
             <span className="node-name">{node.name}</span>
             <span className="node-count">({node.children?.length || 0})</span>
           </>
         ) : (
           <>
-            <span className="file-icon">📄</span>
+            <Icon name={getFileIconName(node.name, node.artifact?.type)} size={14} />
             <span className="node-name">{node.name}</span>
           </>
         )}
@@ -131,7 +228,7 @@ const FileTreeNode = ({ node, level = 0, onFileClick, selectedPath, expandedFold
 
 const ArtifactsTab = ({ taskId, task }) => {
   // 视图模式: 'round' (按轮次) 或 'tree' (按文件树)
-  const [viewMode, setViewMode] = useState('round');
+  const [viewMode, setViewMode] = useState('tree');
   const [selectedRound, setSelectedRound] = useState('');
   const [selectedArtifact, setSelectedArtifact] = useState(null);
 
@@ -484,11 +581,15 @@ const ArtifactsTab = ({ taskId, task }) => {
               <>
                 <div className="artifact-info">
                   <h3>{selectedArtifact.description || '产物详情'}</h3>
-                  <div className="info-grid">
-                    <span>类型: <strong>{selectedArtifact.type || selectedArtifact.artifact_type}</strong></span>
-                  </div>
-                  <div className="path-info">
-                    <span>路径: <code>{selectedArtifact.path}</code></span>
+                  <div className="info-row">
+                    <div className="info-group">
+                      <span className="info-label">类型:</span>
+                      <strong className="info-value">{selectedArtifact.type || selectedArtifact.artifact_type}</strong>
+                    </div>
+                    <div className="info-group">
+                      <span className="info-label">路径:</span>
+                      <code className="info-value path-value">{selectedArtifact.path}</code>
+                    </div>
                   </div>
                 </div>
                 <div className="artifact-content">
@@ -514,12 +615,19 @@ const ArtifactsTab = ({ taskId, task }) => {
             <>
               <div className="artifact-info">
                 <h3>{selectedArtifact.description || '产物详情'}</h3>
-                <div className="info-grid">
-                  <span>类型: <strong>{selectedArtifact.type || selectedArtifact.artifact_type}</strong></span>
-                  <span>轮次: <strong>第 {parseInt(selectedRound) + 1} 轮</strong></span>
-                </div>
-                <div className="path-info">
-                  <span>路径: <code>{selectedArtifact.path}</code></span>
+                <div className="info-row">
+                  <div className="info-group">
+                    <span className="info-label">类型:</span>
+                    <strong className="info-value">{selectedArtifact.type || selectedArtifact.artifact_type}</strong>
+                  </div>
+                  <div className="info-group">
+                    <span className="info-label">轮次:</span>
+                    <strong className="info-value">第 {parseInt(selectedRound) + 1} 轮</strong>
+                  </div>
+                  <div className="info-group">
+                    <span className="info-label">路径:</span>
+                    <code className="info-value path-value">{selectedArtifact.path}</code>
+                  </div>
                 </div>
               </div>
               <div className="artifact-content">

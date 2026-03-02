@@ -88,6 +88,39 @@
   flex-shrink: 0;
 }
 
+/* 信息行：类型和路径在同一行 */
+.info-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 24px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.info-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-label {
+  color: #6c757d;
+}
+
+.info-value {
+  color: #495057;
+}
+
+.path-value {
+  background: #f1f3f5;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  word-break: break-all;
+  max-width: 500px;
+}
+
 .artifact-info h3 {
   margin: 0 0 12px 0;
   font-size: 14px;
@@ -416,6 +449,30 @@
   margin-right: 6px;
   font-size: 14px;
   flex-shrink: 0;
+}
+
+/* SVG 图标样式 */
+.file-icon-svg {
+  flex-shrink: 0;
+  stroke: #64748b;
+}
+
+/* 不同文件类型的图标颜色 */
+.file-tree-node:hover .file-icon-svg {
+  stroke: #475569;
+}
+
+.file-tree-node.selected .file-icon-svg {
+  stroke: #1971c2;
+}
+
+/* 文件夹图标颜色 */
+.file-tree-node.folder .file-icon-svg {
+  stroke: #d97706;
+}
+
+.file-tree-node.folder:hover .file-icon-svg {
+  stroke: #b45309;
 }
 
 .node-name {
