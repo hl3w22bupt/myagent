@@ -10,6 +10,8 @@ import { LLMClient } from './llm-client';
 import { LLMClientFactory } from '../llm/factory';
 import { PTCGenerationOptions, PTCResult } from './types';
 import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
+import { ContextManager } from '../context/manager';
+import Handlebars from 'handlebars';
 
 // 对话历史配置（与 agent.ts 保持一致）
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -749,8 +751,43 @@ CRITICAL - YOU MUST FIX THIS ERROR:
     // This ensures subagent's personality and behavior guidelines are passed to code generation
     let agentSystemPromptSection = '';
     if (this.systemPrompt && this.systemPrompt.trim()) {
+      // Build template data from options
+      const templateData: any = {};
+
+      // Add userContext (from options.userContext)
+      if (options?.userContext) {
+        templateData.userContext = options.userContext;
+        console.log('[PTC Generator] Rendering systemPrompt with userContext', {
+          hasName: !!options.userContext.name,
+          hasPersonality: !!options.userContext.personality,
+        });
+      }
+
+      // Add userProfile (from options.userProfile)
+      if (options?.userProfile) {
+        templateData.userProfile = options.userProfile;
+        console.log('[PTC Generator] Rendering systemPrompt with userProfile', {
+          hasPreferences: !!options.userProfile.preferences,
+          hasHabits: !!options.userProfile.habits,
+        });
+      }
+
+      // Render the template (works fine even without template syntax)
+      let renderedPrompt = this.systemPrompt;
+      try {
+        const template = Handlebars.compile(this.systemPrompt);
+        renderedPrompt = template(templateData);
+        console.log('[PTC Generator] System prompt rendered successfully', {
+          originalLength: this.systemPrompt.length,
+          renderedLength: renderedPrompt.length,
+        });
+      } catch (error) {
+        console.warn('[PTC Generator] Failed to render systemPrompt template, using raw:', error);
+        renderedPrompt = this.systemPrompt;
+      }
+
       agentSystemPromptSection = `<agent_system_prompt>
-${this.systemPrompt}
+${renderedPrompt}
 </agent_system_prompt>
 
 CRITICAL - AGENT BEHAVIOR GUIDELINES:
@@ -763,6 +800,28 @@ You MUST follow these guidelines when generating code:
 
 `;
       console.log('[PTC Generator] Using agent systemPrompt in code generation');
+    }
+
+    // IMPORTANT: Add user profile section for personalization
+    // This enables cross-session user preference injection
+    let userProfileSection = '';
+    if (options?.userProfile) {
+      const contextManager = new ContextManager();
+      const profileText = contextManager.formatUserProfile(options.userProfile);
+      if (profileText) {
+        userProfileSection = `${profileText}
+
+CRITICAL - USER PREFERENCE GUIDELINES:
+The <用户画像> above contains USER'S PREFERENCES AND HABITS.
+You MUST follow these guidelines when generating code:
+1. Match the code style to user preferences (e.g., "喜欢简洁回复" → concise code)
+2. Consider user habits when structuring output (e.g., "夜间活跃" → detailed logging)
+3. Apply user-specific patterns and conventions
+4. Adjust communication style based on user profile
+
+`;
+        console.log('[PTC Generator] Using user profile in code generation');
+      }
     }
 
     // Define firstSkillParam for use in the prompt template below
@@ -789,7 +848,7 @@ IMPORTANT - Code structure requirements:
 - DO NOT import asyncio
 - Just write the logic code that goes inside the async function
 
-${agentSystemPromptSection}<skills>
+${agentSystemPromptSection}${userProfileSection}<skills>
 ${skillsBlock}
 </skills>
 

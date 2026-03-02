@@ -16,6 +16,9 @@ import { retryOperation, isDefaultRetryableError } from './retry';
 import { getAgentStreams } from './hooks/progress-notify';
 import { ContextManager } from '../context/manager';
 import { HITLState } from '../database/context-types';
+import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrator';
+import { DefaultContextOrchestrator } from '../context/default-orchestrator';
+import Handlebars from 'handlebars';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -29,8 +32,11 @@ export class Agent {
   protected sandbox: any;
   protected ptcGenerator: PTCGenerator;
   protected sessionId: string;
-  private state: SessionState;
+  protected state: SessionState;
   protected agentName: string = ''; // Agent display name (e.g., "Master Agent", "system-guide")
+
+  // Context orchestrator for assembling context from multiple sources
+  protected orchestrator: ContextOrchestrator;
 
   // Dynamic skill discovery
   private skillDiscovery: SkillDiscovery;
@@ -97,6 +103,10 @@ export class Agent {
 
     // Initialize agent name from config if provided
     this.agentName = (config as any).name || '';
+
+    // Initialize context orchestrator
+    // Default orchestrator extracts: history from state, userProfile from context.workingMemory
+    this.orchestrator = new DefaultContextOrchestrator();
 
     // Initialize clarification flag from config (default: true)
     // Use underscore naming to match YAML convention (enable_clarification)
@@ -351,7 +361,7 @@ export class Agent {
       }
 
       // ⭐ Step 0: Analyze intent and send notification
-      const intent = await this.notifyIntentAnalysis(task, effectiveTaskId);
+      const intent = await this.notifyIntentAnalysis(task, effectiveTaskId, context);
 
       // === HITL Checkpoint: Check if clarification is needed ===
       const clarification = await this.checkIntentClarification(intent, task, effectiveTaskId || '', context);
@@ -450,8 +460,11 @@ export class Agent {
         });
 
         // Build conversation messages for LLM (简化为 system + user)
+        // ⭐ Inject user profile into system prompt for personalization
+        const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(context);
+
         const messages: any[] = [
-          { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
+          { role: 'system', content: enhancedSystemPrompt },
           { role: 'user', content: userContent }
         ];
 
@@ -524,8 +537,11 @@ export class Agent {
         });
 
         // Build conversation messages for LLM (简化为 system + user)
+        // ⭐ Inject user profile into system prompt for personalization
+        const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(context);
+
         const messages: any[] = [
-          { role: 'system', content: this.config.systemPrompt || 'You are a helpful assistant.' },
+          { role: 'system', content: enhancedSystemPrompt },
           { role: 'user', content: userContent }
         ];
 
@@ -590,16 +606,38 @@ export class Agent {
               selectedSkills: skillPlan.selectedSkills
             });
 
-            // Build options for PTC generator
+            // ⭐ Use orchestrator to assemble context from multiple sources
+            // This provides a unified way to get: history, variables, originalTask, userProfile
+            const orchestratedContext: OrchestratedContext = await this.orchestrator.getContext(context || {}, this.state);
+
+            // Build options for PTC generator from orchestrated context
             const ptcOptions: any = {
-              history: this.state.conversationHistory,
-              variables: Object.fromEntries(this.state.variables),
+              history: orchestratedContext.history,
+              variables: orchestratedContext.variables,
             };
 
-            // If context contains originalTask (from MasterAgent), pass it directly
-            // This ensures PTC code generator respects the original user request
-            if (context && context.originalTask) {
-              ptcOptions.originalTask = context.originalTask;
+            // Add originalTask if present (for multi-turn conversations)
+            if (orchestratedContext.originalTask) {
+              ptcOptions.originalTask = orchestratedContext.originalTask;
+            }
+
+            // Add userProfile if present (for personalization)
+            if (orchestratedContext.userProfile) {
+              ptcOptions.userProfile = orchestratedContext.userProfile;
+              console.log('[Agent] Injecting user profile into PTC generation', {
+                hasPreferences: !!orchestratedContext.userProfile.preferences,
+                hasHabits: !!orchestratedContext.userProfile.habits,
+                hasTags: !!orchestratedContext.userProfile.tags,
+              });
+            }
+
+            // Add userContext if present (for application-specific templates)
+            if (orchestratedContext.userContext) {
+              ptcOptions.userContext = orchestratedContext.userContext;
+              console.log('[Agent] Injecting userContext into PTC generation', {
+                hasName: !!orchestratedContext.userContext.name,
+                hasPersonality: !!orchestratedContext.userContext.personality,
+              });
             }
 
             // Generate code directly with pre-selected skills
@@ -1192,7 +1230,7 @@ ${userRequest}
   /**
    * Analyze task intent and send notification.
    */
-  private async notifyIntentAnalysis(task: string, taskId?: string): Promise<{
+  private async notifyIntentAnalysis(task: string, taskId?: string, context?: any): Promise<{
     intent: string;
     reasoning: string;
     category: string;
@@ -1207,7 +1245,7 @@ ${userRequest}
     }
 
     try {
-      const analysisResult = await this.analyzeIntentWithLLM(task);
+      const analysisResult = await this.analyzeIntentWithLLM(task, context);
 
       const event = {
         type: 'intent_analysis',
@@ -1347,8 +1385,10 @@ ${userRequest}
 
   /**
    * Analyze task intent using LLM.
+   * @param task - The task to analyze
+   * @param context - The task context (optional, for userProfile and conversationHistory)
    */
-  private async analyzeIntentWithLLM(task: string): Promise<{
+  private async analyzeIntentWithLLM(task: string, context?: any): Promise<{
     intent: string;
     reasoning: string;
     category: string;
@@ -1356,50 +1396,61 @@ ${userRequest}
     possibleIntents?: string[];
   }> {
     try {
-      const prompt = `Analyze the following task and identify the user's intent:
-
-Task: "${task}"
-
-Please respond in the following JSON format:
-{
-  "intent": "video_generation|code_generation|review|design|frontend_design|text_generation|general",
-  "category": "creative|analytical|technical",
-  "reasoning": "Brief explanation of why this intent was chosen",
-  "confidence": 0.0-1.0,
-  "possibleIntents": ["alternative_intent_1", "alternative_intent_2"]  // Only include if confidence < 0.7
-}
-
-Intent types:
-- video_generation: Creating videos, animations, visual content
-- code_generation: Writing code, programming, software development
-- review: Reviewing code, analyzing content, quality assessment
-- design: Creating designs, visual content, layouts
-- frontend_design: Web development, UI/UX, frontend code
-- text_generation: Writing documentation, content creation
-- general: General tasks that don't fit other categories
-
-Categories:
-- creative: Creating new content (video, design, code)
-- analytical: Analyzing existing content (review, audit)
-- technical: Technical implementation (code, infrastructure)
-
-Confidence:
-- 0.9-1.0: Very clear intent with specific details
-- 0.7-0.9: Clear intent but minor ambiguity
-- 0.5-0.7: Somewhat unclear, multiple possible interpretations
-- 0.3-0.5: Vague, needs clarification
-- 0.0-0.3: Very vague, highly ambiguous
-
-Respond ONLY with valid JSON, no other text.`;
-
-      // Build system prompt for intent analysis
-      const intentSystemPrompt = `You are an intent analyzer. Your task is to determine the user's intent from their request.
+      // ⭐ 构建意图分析的 system prompt，包含用户画像信息
+      // 用户画像有助于理解用户偏好和沟通风格
+      let intentSystemPrompt = `You are an intent analyzer. Your task is to determine the user's intent from their request.
 Analyze the task description and categorize it appropriately. Provide confidence scores to indicate certainty.`;
+
+      // ⭐ 追加用户画像到意图分析 prompt
+      const profileText = this.getUserProfileText(context);
+      if (profileText) {
+        intentSystemPrompt += `\n\n${profileText}`;
+      }
+
+      // ⭐ 构建包含对话历史的 user prompt
+      let userPrompt = `Analyze the following task and identify the user's intent:\n\nTask: "${task}"`;
+
+      // ⭐ 添加对话历史上下文
+      const conversationHistory = this.state.conversationHistory || [];
+      if (conversationHistory.length > 0) {
+        // 只取最近几轮对话，避免 prompt 过长
+        const recentHistory = conversationHistory.slice(-10); // 最近 5 轮（10 条消息）
+        console.log('[Agent] Intent Analysis: Including conversation history', {
+          totalHistory: conversationHistory.length,
+          includedHistory: recentHistory.length,
+        });
+        userPrompt += `\n\nRecent conversation history for context:\n`;
+        recentHistory.forEach((msg: any) => {
+          userPrompt += `${msg.role}: ${msg.content}\n`;
+        });
+      } else {
+        console.log('[Agent] Intent Analysis: No conversation history available');
+      }
+
+      // ⭐ 添加用户画像到 intent analysis
+      if (profileText) {
+        console.log('[Agent] Intent Analysis: Including user profile in system prompt');
+      }
+
+      userPrompt += `\n\nPlease respond in the following JSON format:
+{
+  "intent": "your_intent_here",
+  "category": "creative|analytical|technical",
+  "reasoning": "Brief explanation",
+  "confidence": 0.0-1.0
+}`;
+
+      console.log('[Agent] Sending intent analysis request:', {
+      systemPromptLength: intentSystemPrompt.length,
+      userPromptLength: userPrompt.length,
+      hasConversationHistory: conversationHistory.length > 0,
+      hasUserProfile: !!profileText,
+    });
 
       const response = await this.llm.messagesCreate(
         [
           { role: 'system', content: intentSystemPrompt },
-          { role: 'user', content: prompt }
+          { role: 'user', content: userPrompt }
         ],
         { max_tokens: 500, temperature: 0.3 },
         'intent analysis'
@@ -1578,6 +1629,87 @@ Analyze the task description and categorize it appropriately. Provide confidence
       }
     } catch (error) {
       console.error('[Agent] Failed to save HITL state:', error);
+    }
+  }
+
+  /**
+   * 获取格式化后的用户画像文本
+   *
+   * 用于其他 LLM 调用（如 Summarizer、RequestRewriter、意图分析等）
+   *
+   * @param context - 任务上下文
+   * @returns 格式化后的用户画像文本，如果没有用户画像则返回空字符串
+   */
+  protected getUserProfileText(context: any): string {
+    const userProfile = context?.context?.workingMemory?.userProfile
+      || context?.workingMemory?.userProfile;
+
+    if (!userProfile) return '';
+
+    const contextManager = new ContextManager();
+    return contextManager.formatUserProfile(userProfile);
+  }
+
+  /**
+   * 构建增强的 system prompt，包含用户画像
+   *
+   * 用于所有直接 LLM 调用（如对话模式、无技能命中时的直接响应）
+   * 支持 Handlebars 模板渲染（用于 subagent 的动态 system prompt）
+   *
+   * @param context - 任务上下文
+   * @returns 增强后的 system prompt
+   */
+  protected buildEnhancedSystemPrompt(context: any): string {
+    const basePrompt = this.config.systemPrompt || 'You are a helpful assistant.';
+
+    // 准备模板数据
+    const templateData: any = {};
+
+    // 添加 userContext
+    const userContext = context?.workingMemory?.userContext
+      || context?.context?.workingMemory?.userContext;
+    if (userContext) {
+      templateData.userContext = userContext;
+      console.log('[Agent] Rendering system prompt with userContext', {
+        hasName: !!userContext.name,
+        hasPersonality: !!userContext.personality,
+        hasIntimacyLevel: !!userContext.intimacy_level,
+      });
+    }
+
+    // 添加 userProfile
+    const userProfile = context?.workingMemory?.userProfile
+      || context?.context?.workingMemory?.userProfile;
+    if (userProfile) {
+      templateData.userProfile = userProfile;
+      console.log('[Agent] Rendering system prompt with userProfile', {
+        hasPreferences: !!userProfile.preferences,
+        hasHabits: !!userProfile.habits,
+        hasTags: !!userProfile.tags,
+      });
+    }
+
+    // 编译并渲染模板（无模板时直接返回原文本）
+    try {
+      const template = Handlebars.compile(basePrompt);
+      let rendered = template(templateData);
+
+      // 追加 userProfile（如果模板中没有处理）
+      const profileText = this.getUserProfileText(context);
+      if (profileText) {
+        rendered = `${rendered}\n\n${profileText}`;
+        console.log('[Agent] Appended userProfile to rendered prompt');
+      }
+
+      console.log('[Agent] System prompt rendered successfully', {
+        renderedLength: rendered.length,
+        noTemplateSyntax: !rendered.includes('{{'),
+      });
+      return rendered;
+    } catch (error) {
+      console.error('[Agent] Failed to render system prompt template:', error);
+      // 失败时返回原始 prompt
+      return basePrompt;
     }
   }
 

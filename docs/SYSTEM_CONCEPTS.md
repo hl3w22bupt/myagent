@@ -791,6 +791,7 @@ rag:
 │ 1. TaskHook.preExec()                                        │
 │    ├─ DefaultTaskHook: 初始化                                │
 │    ├─ ContextManagerTaskHook: 加载上下文                     │
+│    ├─ UserProfileAccumulatorHook: 加载用户画像               │
 │    ├─ UserAllowTaskHook: 权限检查                            │
 │    └─ MetricsCollectorTaskHook: 指标初始化                   │
 └──────────────────────────────────────────────────────────────┘
@@ -842,6 +843,7 @@ rag:
 │ 6. TaskHook.postExec(context, result)                        │
 │    ├─ DefaultTaskHook: 清理资源                              │
 │    ├─ ContextManagerTaskHook: 保存上下文                     │
+│    ├─ UserProfileAccumulatorHook: 更新用户画像               │
 │    ├─ MetricsCollectorTaskHook: 记录指标                     │
 │    └─ (如果需要) 压缩上下文                                   │
 └──────────────────────────────────────────────────────────────┘

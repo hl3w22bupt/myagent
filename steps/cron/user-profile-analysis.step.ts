@@ -109,7 +109,8 @@ export const handler = async ({ logger, emit }: any) => {
         if (userResult.rows.length > 0) {
           activeUserIds.add(userResult.rows[0].user_id);
         }
-      } catch (err) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_err) {
         // 忽略错误
       }
     }
@@ -208,11 +209,13 @@ async function analyzeUser(
               }
             }
           }
-        } catch (err) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_err) {
           // 忽略单个任务获取失败
         }
       }
-    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_err) {
       // 忽略单个会话获取失败
     }
   }

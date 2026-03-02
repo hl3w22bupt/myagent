@@ -52,6 +52,25 @@ export default function ContextTab({ taskId, sessionId: propSessionId }) {
     fetchTaskContext()
   }, [taskId, activeSubTab])
 
+  // 当切换到 session 或 user tab 时，如果还没有 sessionId，先获取任务上下文
+  useEffect(() => {
+    if ((activeSubTab === 'session' || activeSubTab === 'user') && !sessionId) {
+      // 需要先获取任务上下文来得到 sessionId
+      const fetchTaskForSessionId = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/contexts/${taskId}`)
+          const data = await res.json()
+          if (data.success && data.data.sessionId) {
+            setSessionId(data.data.sessionId)
+          }
+        } catch (err) {
+          console.error('Failed to load task context for sessionId:', err)
+        }
+      }
+      fetchTaskForSessionId()
+    }
+  }, [activeSubTab, sessionId, taskId])
+
   // 当 sessionId 变化时获取会话上下文
   useEffect(() => {
     if (!sessionId || activeSubTab !== 'session') return
@@ -79,6 +98,40 @@ export default function ContextTab({ taskId, sessionId: propSessionId }) {
 
     fetchSessionContext()
   }, [sessionId, activeSubTab])
+
+  // 当切换到 user tab 且有 sessionId 时，尝试获取用户上下文
+  useEffect(() => {
+    if (activeSubTab !== 'user') return
+
+    // 如果没有 sessionId，等待上面的 useEffect 先获取
+    if (!sessionId) return
+
+    // 如果已经加载过用户上下文，不需要重复加载
+    if (userContext) return
+
+    // 尝试从会话上下文中获取 userId
+    if (sessionContext?.userId) {
+      fetchUserContext(sessionContext.userId)
+    } else {
+      // 没有会话上下文或 userId，尝试直接获取会话
+      const fetchSessionForUser = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`)
+          const data = await res.json()
+          if (data.success && data.data.userId) {
+            fetchUserContext(data.data.userId)
+          } else {
+            // 没有 userId，标记加载完成
+            setLoading(prev => ({ ...prev, user: false }))
+          }
+        } catch (err) {
+          console.error('Failed to load session for user context:', err)
+          setLoading(prev => ({ ...prev, user: false }))
+        }
+      }
+      fetchSessionForUser()
+    }
+  }, [activeSubTab, sessionId, sessionContext])
 
   // 获取用户上下文
   const fetchUserContext = async (userId) => {
@@ -488,7 +541,7 @@ function UserContextContent({ context, loading }) {
         {/* 用户偏好 */}
         <ContextCard
           title="用户偏好"
-          iconType="summary"
+          iconType="preference"
           expanded={expandedCards.has('profile')}
           onToggle={() => toggleCard('profile')}
         >
@@ -512,7 +565,7 @@ function UserContextContent({ context, loading }) {
         {profile.habits && profile.habits.length > 0 && (
           <ContextCard
             title="用户习惯"
-            iconType="conversation"
+            iconType="habit"
             count={profile.habits.length}
             expanded={expandedCards.has('habits')}
             onToggle={() => toggleCard('habits')}
@@ -532,7 +585,7 @@ function UserContextContent({ context, loading }) {
         {profile.tags && profile.tags.length > 0 && (
           <ContextCard
             title="用户标签"
-            iconType="artifact"
+            iconType="tag"
             count={profile.tags.length}
             expanded={expandedCards.has('tags')}
             onToggle={() => toggleCard('tags')}
@@ -549,7 +602,7 @@ function UserContextContent({ context, loading }) {
         {context.sessions && context.sessions.length > 0 && (
           <ContextCard
             title="关联会话"
-            iconType="memory"
+            iconType="session"
             count={context.sessions.length}
             expanded={expandedCards.has('sessions')}
             onToggle={() => toggleCard('sessions')}
@@ -568,7 +621,7 @@ function UserContextContent({ context, loading }) {
         {profile.data?.behavior && (
           <ContextCard
             title="行为数据"
-            iconType="memory"
+            iconType="behavior"
             expanded={expandedCards.has('behavior')}
             onToggle={() => toggleCard('behavior')}
           >
@@ -605,6 +658,43 @@ function ContextCard({ title, iconType, count, expanded, onToggle, children }) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9.5 2A2.5 2.5 0 0112 4.5v15a2.5 2.5 0 01-4.96.44 2.5 2.5 0 01-2.96-3.08 3 3 0 01-.34-5.58" strokeWidth="2"/>
         <path d="M14.5 2A2.5 2.5 0 0012 4.5v15a2.5 2.5 0 004.96.44 2.5 2.5 0 002.96-3.08 3 3 0 00.34-5.58" strokeWidth="2"/>
+      </svg>
+    ),
+    // 用户偏好 - 心形 icon
+    preference: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" strokeWidth="2"/>
+      </svg>
+    ),
+    // 用户习惯 - 时钟/重复 icon
+    habit: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" strokeWidth="2"/>
+        <polyline points="12 6 12 12 16 14" strokeWidth="2"/>
+      </svg>
+    ),
+    // 用户标签 - 标签 icon
+    tag: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" strokeWidth="2"/>
+        <line x1="7" y1="7" x2="7.01" y2="7" strokeWidth="2"/>
+      </svg>
+    ),
+    // 关联会话 - 会话组 icon
+    session: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" strokeWidth="2"/>
+        <circle cx="9" cy="7" r="4" strokeWidth="2"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87" strokeWidth="2"/>
+        <path d="M16 3.13a4 4 0 010 7.75" strokeWidth="2"/>
+      </svg>
+    ),
+    // 行为数据 - 图表/趋势 icon
+    behavior: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10" strokeWidth="2"/>
+        <line x1="12" y1="20" x2="12" y2="4" strokeWidth="2"/>
+        <line x1="6" y1="20" x2="6" y2="14" strokeWidth="2"/>
       </svg>
     ),
   }

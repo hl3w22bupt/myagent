@@ -2,7 +2,8 @@
 
 > **文档目的**: 记录上下文工程的设计理念、架构思路和演进方向
 > **创建时间**: 2025-02-09
-> **状态**: 活跃讨论中，会持续更新
+> **状态**: 活跃开发中，部分功能已实现
+> **最后更新**: 2026-03-02
 
 ---
 
@@ -326,39 +327,192 @@
 
 ## 十、当前项目的实现现状
 
+### 已完成功能 (2026-03-02)
+
+#### 1. 用户画像系统 ✅
+
+**实现文件**: `src/core/task/hooks/user-profile-accumulator.ts`
+
+**功能特性**:
+- `UserProfileAccumulatorHook`: 通用用户画像累积 Hook
+  - `preExec`: 从 users 表加载 userId 的 userProfile，注入到 workingMemory
+  - `postExec`: 提取本次会话特征，累积通用字段到用户画像
+- 支持的画像字段:
+  - `preferences`: 用户偏好 (简洁回复/详细回复)
+  - `habits`: 用户习惯 (夜间活跃/日间活跃/长时间会话)
+  - `tags`: 用户标签 (新用户/活跃用户/高活跃)
+  - `data.behavior`: 行为统计 (总会话数，向后兼容)
+
+**数据库支持**:
+- `users` 表存储用户基本信息
+- `user_profiles` 表存储用户画像数据
+
+#### 2. 编排层架构 ✅ 新增
+
+**实现文件**: `src/core/context/orchestrator.ts`, `src/core/context/default-orchestrator.ts`
+
+**功能特性**:
+- `ContextOrchestrator` 接口：定义上下文编排标准
+- `DefaultContextOrchestrator` 实现：统一从多个数据源组装上下文
+- `OrchestratedContext` 接口：包含 history, variables, userProfile, userContext
+- 支持配置开关：`enableUserProfile` 控制是否启用用户画像
+
+**数据源优先级**:
+- `history`: 从 `state.conversationHistory` 获取
+- `variables`: 从 `state.variables` 获取
+- `userProfile`: 从 `context.workingMemory.userProfile` 获取
+- `userContext`: 从 `context.workingMemory.userContext` 获取
+
+#### 3. Handlebars 模板渲染 ✅ 新增
+
+**实现文件**: `src/core/agent/agent.ts`, `src/core/agent/ptc-generator.ts`
+
+**功能特性**:
+- 支持在 system prompt 中使用 Handlebars 模板语法
+- 模板变量：`{{userContext.xxx}}`, `{{userProfile.xxx}}`
+- 自动渲染：即使没有模板语法，也能正常工作
+- 应用场景：
+  - Subagent system prompt 动态化
+  - AI 角色设定注入（如 AI 女友的性格）
+  - 用户偏好动态适配
+
+**示例**:
+```handlebars
+你是一个{{userContext.name}}，性格特点：
+{{#each userContext.personality}}
+- {{this}}
+{{/each}}
+
+用户偏好：
+{{#each userProfile.preferences}}
+- {{this}}
+{{/each}}
+```
+
+#### 4. userContext 支持 ✅ 新增
+
+**实现文件**: `src/core/agent/master-agent.ts`, `steps/agents/master-agent.step.ts`
+
+**功能特性**:
+- API 层接收 `userContext` 参数（应用特定上下文）
+- master-agent.step.ts 将 userContext 复制到 workingMemory
+- MasterAgent 委托时传递完整 context（不再丢失数据）
+- 编排器统一提取 userContext
+
+**与 userProfile 的区别**:
+| 类型 | 来源 | 作用域 | 示例 |
+|------|------|--------|------|
+| userProfile | 数据库自动累积 | 跨会话通用 | 偏好、习惯、标签 |
+| userContext | API 参数传入 | 单次会话特定 | AI 角色设定 |
+
+#### 5. Intent Analysis 增强 ✅ 新增
+
+**实现文件**: `src/core/agent/agent.ts` 的 `analyzeIntentWithLLM()` 方法
+
+**功能特性**:
+- 添加对话历史上下文：最近 10 条消息
+- 添加用户画像支持：了解用户偏好和风格
+- 移除硬编码的意图类型：支持灵活的意图分类
+
+#### 6. Context API ✅
+
+**实现文件**: `steps/api/context-api.step.ts` 等
+
+**API 端点**:
+- `GET /api/contexts/:taskId` - 获取任务上下文
+- `GET /api/sessions/:sessionId` - 获取会话上下文
+- `GET /api/users/:userId` - 获取用户画像
+- `POST /api/contexts/:taskId/compress` - 手动触发上下文压缩
+- `GET /api/contexts/:sessionId/messages` - 获取会话消息历史
+- `GET /api/contexts/:sessionId/outputs` - 获取会话产物
+- `GET /api/contexts/:sessionId/artifacts` - 获取会话 Artifact
+
+#### 7. 前端上下文视图 ✅
+
+**实现文件**: `motia-frontend/src/components/ContextTab.jsx`
+
+**功能特性**:
+- 三个子 Tab: Task Context / Session Context / User Context
+- Task Context: 显示任务上下文、消息历史、压缩摘要
+- Session Context: 显示会话信息、执行历史
+- User Context: 显示用户画像、偏好、习惯、标签
+- 自动加载: 从 taskContext 获取 sessionId，再加载 session 和 user 数据
+- 防止无限加载: 修复了没有 sessionId 时的无限加载状态
+- Icon 优化: 为每个卡片添加语义化的 SVG icon
+
 ### 现有架构
 
 ```
 数据库层
   - SQLite/PostgreSQL存储
   - tasks, task_contexts, messages, artifacts表
+  - users, user_profiles表
 
 业务层
   - ContextManager: 统一管理上下文
   - ContextCompressor: 智能压缩
   - LLMSummarizer: LLM摘要生成
   - ArtifactExtractor: 文件和函数调用索引
+  - UserProfileAccumulatorHook: 用户画像累积
+  - ContextOrchestrator: 上下文编排层 ✅ 新增
+    - DefaultContextOrchestrator: 默认实现 ✅ 新增
+  - Handlebars: 模板渲染引擎 ✅ 新增
 
 应用层
   - ContextManagerTaskHook: 任务生命周期钩子
+  - UserProfileAccumulatorHook: 用户画像钩子
   - Agent: 按需获取和使用上下文
+    - buildEnhancedSystemPrompt: Handlebars 模板渲染 ✅ 新增
+    - analyzeIntentWithLLM: 增强的意图分析 ✅ 新增
+  - MasterAgent: 委托时传递完整上下文 ✅ 修复
+
+API 层
+  - Context API: 上下文查询接口
+  - 用户画像 API: 用户数据查询接口
+  - master-agent.step: userContext 复制 ✅ 新增
+
+前端层
+  - ContextTab: 上下文视图组件
+    - 自动加载修复 ✅ 新增
+    - Icon 优化 ✅ 新增
 ```
 
-### 数据流
+### 数据流（更新）
 
 ```
-用户输入
-  → Agent处理
-  → ContextManagerTaskHook.preExec (创建上下文)
-  → 从数据库继承历史上下文
-  → 任务执行...
-  → Agent.conversationHistory (内存状态)
-  → ContextManagerTaskHook.postExec (同步到数据库)
-  → 检查是否需要压缩
-  → LLMSummarizer.summarize (调用LLM API)
-  → ContextCompressor.compress
-  → DataStore.save (持久化)
-  → 前端实时更新 (WebSocket)
+用户输入 + userContext (可选)
+  ↓
+master-agent.step.ts
+  ↓ 复制 userContext 到 workingMemory ✅ 新增
+  ↓
+UserProfileAccumulatorHook.preExec()
+  ↓ 加载 userProfile 到 workingMemory
+  ↓
+Agent.run()
+  ↓ 通过 orchestrator.getContext() 获取统一上下文 ✅ 新增
+  │
+  ├─ history (从 state)
+  ├─ variables (从 state)
+  ├─ userProfile (从 workingMemory)
+  └─ userContext (从 workingMemory) ✅ 新增
+  ↓
+Agent.buildEnhancedSystemPrompt()
+  ↓ Handlebars 渲染 {{userContext.xxx}} {{userProfile.xxx}} ✅ 新增
+  ↓
+┌─────────────────────────────────────────────────┐
+│  所有 LLM 调用都使用这个增强的 system prompt    │
+├─────────────────────────────────────────────────┤
+│  • PTCGenerator.generateCode()                   │
+│  • Intent Analysis（增强版）✅ 新增              │
+│  • 其他 LLM 调用（预留接口）                     │
+└─────────────────────────────────────────────────┘
+  ↓
+任务执行...
+  ↓
+ContextManagerTaskHook.postExec()
+  ↓ 同步到数据库
+  ↓
+前端实时更新 (WebSocket)
 ```
 
 ### 优点
@@ -395,53 +549,223 @@
 
 ## 十一、未来演进方向
 
-### 阶段1：性能优化
+### 已完成 ✅
 
-1. **智能缓存机制**
-   - LRU缓存减少数据库查询
-   - 缓存失效策略
+- [x] **用户画像系统** (2026-03-02)
+  - UserProfileAccumulatorHook 实现
+  - 偏好、习惯、标签累积
+  - 数据库持久化
 
-2. **混合压缩策略**
-   - 规则压缩 + LLM压缩
-   - 异步压缩避免阻塞
-   - Token估算优化
+- [x] **编排层架构** (2026-03-02) ✅ 新增
+  - ContextOrchestrator 接口定义
+  - DefaultContextOrchestrator 默认实现
+  - 统一的上下文获取接口
 
-3. **数据库查询优化**
-   - 批量查询消除N+1
-   - JOIN查询优化
-   - 索引优化
+- [x] **Handlebars 模板渲染** (2026-03-02) ✅ 新增
+  - 支持动态 system prompt
+  - userContext 和 userProfile 模板变量
+  - 简化的渲染逻辑（移除 hasHandlebars 检查）
 
-### 阶段2：架构重构
+- [x] **userContext 支持** (2026-03-02) ✅ 新增
+  - API 层接收应用特定上下文
+  - workingMemory 复制逻辑
+  - 编排器统一提取
 
-1. **策略模式**
-   - 支持多种压缩策略
-   - 可扩展的架构
+- [x] **Intent Analysis 增强** (2026-03-02) ✅ 新增
+  - 对话历史上下文
+  - 用户画像支持
+  - 移除硬编码意图类型
 
-2. **依赖注入**
-   - 解耦组件依赖
-   - 提升可测试性
+- [x] **Context API** (2026-03-02)
+  - 任务上下文查询
+  - 会话上下文查询
+  - 用户画像查询
 
-3. **统一错误处理**
-   - 智能重试机制
-   - 降级策略
+- [x] **前端上下文视图** (2026-03-02)
+  - ContextTab 组件实现
+  - 三个子 Tab: Task/Session/User
+  - 自动加载和状态管理
+  - 无限加载问题修复 ✅ 新增
+  - Icon 语义化优化 ✅ 新增
 
-### 阶段3：智能化升级
+- [x] **跨会话画像应用** (2026-03-02) ✅ 新增
+  - 所有 Subagent LLM 调用注入 userProfile
+  - PTCGenerator 支持 userProfile
+  - Intent Analysis 支持 userProfile 和对话历史
 
-1. **引入向量数据库**
-   - 语义检索能力
-   - ChromaDB或pgvector
+### 阶段1：性能优化 (部分完成)
 
-2. **上下文编排层**
-   - 多源数据融合
-   - 智能排序和裁剪
+1. **智能缓存机制** ⏳
+   - [ ] LRU缓存减少数据库查询
+   - [ ] 缓存失效策略
 
-3. **自适应策略**
-   - 根据任务类型动态调整
-   - 个性化的上下文配置
+2. **混合压缩策略** ⏳
+   - [ ] 规则压缩 + LLM压缩
+   - [ ] 异步压缩避免阻塞
+   - [ ] Token估算优化
+
+3. **数据库查询优化** ⏳
+   - [ ] 批量查询消除N+1
+   - [ ] JOIN查询优化
+   - [ ] 索引优化
+
+### 阶段2：架构重构 (部分完成)
+
+1. **编排层架构** ✅ (2026-03-02)
+   - [x] ContextOrchestrator 接口定义
+   - [x] DefaultContextOrchestrator 实现
+   - [x] 统一的上下文获取接口
+   - [ ] 智能化编排器（根据任务类型过滤）⏳
+
+2. **模板渲染** ✅ (2026-03-02)
+   - [x] Handlebars 集成
+   - [x] 动态 system prompt
+   - [ ] 更多模板函数（if/else、循环等）⏳
+
+3. **策略模式** ⏳
+   - [ ] 支持多种压缩策略
+   - [ ] 可扩展的架构
+
+4. **依赖注入** ⏳
+   - [ ] 解耦组件依赖
+   - [ ] 提升可测试性
+
+5. **统一错误处理** ⏳
+   - [ ] 智能重试机制
+   - [ ] 降级策略
+
+### 阶段3：智能化升级 (未开始)
+
+1. **引入向量数据库** ⏳
+   - [ ] 语义检索能力
+   - [ ] ChromaDB或pgvector
+
+2. **上下文编排层** ⏳
+   - [ ] 多源数据融合
+   - [ ] 智能排序和裁剪
+
+3. **自适应策略** ⏳
+   - [ ] 根据任务类型动态调整
+   - [ ] 个性化的上下文配置
+
+### 阶段4：三层数据源完善 (部分完成)
+
+1. **Context 层** ✅
+   - [x] 对话历史管理
+   - [x] 上下文压缩
+   - [x] Artifact 索引
+   - [x] API 查询接口
+
+2. **Memory 层** 🚧 (进行中)
+   - [x] 用户画像基础结构
+   - [x] 偏好累积
+   - [x] 跨会话画像应用 (2026-03-02) ✅ 新增
+   - [ ] 成功模式学习
+   - [ ] 失败案例记录
+
+3. **Knowledge 层** ⏳
+   - [x] Skill 定义 (已有)
+   - [ ] Markdown 知识库
+   - [ ] RAG 系统
 
 ---
 
 ## 十二、讨论记录
+
+### 2026-03-02: 文档更新和实现确认
+
+**参与者**: Leo, Claude
+
+**核心议题**:
+1. 确认已完成的功能实现
+2. 更新文档以反映当前状态
+3. 规划下一步开发方向
+
+**已确认完成的功能**:
+1. **用户画像系统**
+   - UserProfileAccumulatorHook 实现
+   - 支持 preferences、habits、tags 累积
+   - 数据库表 users 和 user_profiles
+
+2. **Context API**
+   - 7 个 API 端点实现
+   - 支持任务、会话、用户三个维度的上下文查询
+
+3. **前端上下文视图**
+   - ContextTab 组件
+   - 三个子 Tab: Task Context / Session Context / User Context
+   - 修复无限加载问题
+
+**关键洞察**:
+- 三层数据源架构设计正确，正在逐步实现
+- Memory 层已有了基础，需要扩展成功模式学习和失败案例记录
+- Knowledge 层目前只有 Skill，可以考虑添加 Markdown 知识库
+
+**下一步计划**:
+- 完善 Memory 层：添加成功模式和失败案例记录
+- 考虑实现 Markdown 知识库作为 Knowledge 层的轻量级方案
+- 评估向量数据库的引入时机
+- 在 Summarizer 和 RequestRewriter 中应用用户画像
+
+---
+
+### 2026-03-02: 编排层实现和前端修复 (新增)
+
+**参与者**: Leo, Claude
+
+**核心议题**:
+1. 确认编排层架构的实现
+2. 修复前端 Context Tab 的加载问题
+3. 优化 User Context 的 icon 显示
+
+**新确认完成的功能**:
+1. **编排层架构**
+   - ContextOrchestrator 接口和 DefaultContextOrchestrator 实现
+   - 统一的 OrchestratedContext 接口
+   - 支持 history, variables, userProfile, userContext
+
+2. **Handlebars 模板渲染**
+   - 安装 handlebars 依赖
+   - buildEnhancedSystemPrompt 实现
+   - PTCGenerator 模板渲染支持
+   - 简化渲染逻辑（移除 hasHandlebars 检查）
+
+3. **userContext 支持**
+   - API 层接收 userContext 参数
+   - master-agent.step.ts 复制到 workingMemory
+   - MasterAgent 修复 context 传递（不再丢失数据）
+
+4. **Intent Analysis 增强**
+   - 添加对话历史（最近 10 条消息）
+   - 添加用户画像支持
+   - 移除硬编码的意图类型
+
+5. **前端修复**
+   - Context Tab 无限加载问题修复（自动获取 sessionId）
+   - Icon 语义化优化（preference, habit, tag, session, behavior）
+
+6. **代码质量改进**
+   - 修复 lint 错误（unused vars, 类型安全）
+   - 添加单元测试（default-orchestrator.test.ts）
+   - 简化代码逻辑
+
+**关键洞察**:
+- 编排层是架构演进的关键一步，为未来智能化打下基础
+- Handlebars 模板为 AI 角色设定等应用场景提供了灵活的机制
+- userContext 和 userProfile 的分离设计正确：通用 vs 应用特定
+- 直接点击 User Context tab 会无限加载是因为缺少 sessionId，需要先获取 Task Context
+
+**解决的 Bug**:
+1. MasterAgent 只传递部分字段导致 userProfile/userContext 丢失
+   - 修复：使用 `...context` 展开完整上下文
+2. Handlebars 导入错误（namespace import 不工作）
+   - 修复：改为 default import
+3. Context Tab 无限加载（没有 sessionId）
+   - 修复：添加自动获取 Task Context 的逻辑
+4. Icon 不匹配（用 summary 表示偏好、conversation 表示习惯等）
+   - 修复：添加新的 icon 类型（preference, habit, tag, session, behavior）
+
+---
 
 ### 2025-02-09: 初次讨论
 
@@ -476,8 +800,15 @@
 
 ### 内部文档
 - `/docs/context-management.md` - 上下文管理系统使用指南
+- `/docs/SYSTEM_CONCEPTS_OVERVIEW.md` - 系统核心概念全梳理
 - `/src/core/context/manager.ts` - ContextManager实现
 - `/src/core/context/compressor.ts` - ContextCompressor实现
+
+### 实现文件
+- `/src/core/task/hooks/user-profile-accumulator.ts` - 用户画像累积 Hook
+- `/src/core/task/hooks/context-manager.ts` - 上下文管理 Hook
+- `/steps/api/context-api.step.ts` - Context API 实现
+- `/motia-frontend/src/components/ContextTab.jsx` - 前端上下文视图
 
 ### 外部参考
 - [LangChain Context Management](https://python.langchain.com/docs/expression_language/how_to/message_history/)

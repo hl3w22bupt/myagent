@@ -208,7 +208,13 @@
 │   │  │  - messages[]                     │ │  ← 对话历史                  │
 │   │  │  - summary: StructuredSummary     │ │  ← 压缩摘要                  │
 │   │  │  - artifactIndex[]                │ │  ← 产物索引                  │
-│   │  │  - workingMemory: Record          │ │  ← 工作内存                  │
+│   │  │  - workingMemory: Record          │ │  ← 工作内存 (含 userProfile)│
+│   │  │                                    │ │                            │
+│   │  │  Memory 层数据 (UserProfile):     │ │                            │
+│   │  │  ├─ preferences: 用户偏好          │ │                            │
+│   │  │  ├─ habits: 用户习惯               │ │                            │
+│   │  │  ├─ tags: 用户标签                 │ │                            │
+│   │  │  └─ data.behavior: 行为统计        │ │                            │
 │   │  │  - metadata:                      │ │                                │
 │   │  │    - totalTokens                  │ │                                │
 │   │  │    - llmCallsCount                │ │                                │
@@ -240,6 +246,18 @@
 │   - 当消息过多时自动压缩                                                     │
 │   - 使用 Anchored Iterative Summarization                                   │
 │   - 保留最近 20 条消息 + 压缩摘要                                            │
+│                                                                              │
+│  Context API (已实现)                                                       │
+│   ├─ GET /api/contexts/:taskId              获取任务上下文                   │
+│   ├─ GET /api/sessions/:sessionId           获取会话上下文                   │
+│   ├─ GET /api/users/:userId                获取用户画像                     │
+│   ├─ POST /api/contexts/:taskId/compress   手动触发压缩                     │
+│   ├─ GET /api/contexts/:sessionId/messages 会话消息历史                     │
+│   ├─ GET /api/contexts/:sessionId/outputs  会话输出记录                     │
+│   └─ GET /api/contexts/:sessionId/artifacts 会话 Artifact 索引              │
+│                                                                              │
+│  前端视图 (已实现)                                                          │
+│   └─ ContextTab 组件: 三个子 Tab (Task/Session/User)                         │
 └─────────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -260,6 +278,15 @@
 │   │  │   - id, taskId, type, path         │                              │
 │   │  │   - description, timestamp          │                              │
 │   │  │                                     │                              │
+│   │  ├─ User (用户)                        │                              │
+│   │  │   - id, createdAt, lastSessionId   │                              │
+│   │  │                                     │                              │
+│   │  ├─ UserProfile (用户画像)             │                              │
+│   │  │   - preferences: 用户偏好           │                              │
+│   │  │   - habits: 用户习惯                │                              │
+│   │  │   - tags: 用户标签                  │                              │
+│   │  │   - data.behavior: 行为统计         │                              │
+│   │  │                                     │                              │
 │   │  └─ CompressionHistory (压缩历史)      │                              │
 │   │       - originalTokenCount             │                              │
 │   │       - compressedTokenCount           │                              │
@@ -275,6 +302,8 @@
 │  关键方法:                                                                   │
 │   ├─ createTask() / updateTask() / getTask() / listTasks()                  │
 │   ├─ createTaskContext() / getContext() / saveContext()                     │
+│   ├─ createUser() / getUser() / updateUser()                                │
+│   ├─ updateUserProfile() / getUserProfile()                                 │
 │   ├─ addArtifact() / getArtifact() / listArtifacts()                        │
 │   └─ saveCompressionHistory() / getCompressionHistory()                    │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -394,6 +423,7 @@ master-agent.step.ts (事件处理)
     ├─ 2. TaskHook.preExec(context)
     │       ├─ DefaultTaskHook
     │       ├─ ContextManagerTaskHook
+    │       ├─ UserProfileAccumulatorHook (加载用户画像)
     │       ├─ UserAllowTaskHook
     │       └─ MetricsCollectorTaskHook
     │
@@ -450,6 +480,7 @@ master-agent.step.ts (事件处理)
     ├─ 8. TaskHook.postExec(context, result)
     │       ├─ 保存 Context
     │       ├─ 提取 Artifacts
+    │       ├─ 更新用户画像 (UserProfileAccumulatorHook)
     │       ├─ 压缩上下文 (如需要)
     │       └─ 记录指标
     │
