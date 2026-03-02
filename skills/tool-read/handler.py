@@ -107,7 +107,7 @@ def _call_llm_for_params(task: str) -> Dict[str, Any]:
 
     Only called when in task mode (no direct parameters provided).
     """
-    if not LLM_CLIENT_AVAILABLE:
+    if LLM_CLIENT_AVAILABLE:
         # Fallback: extract file path from task using regex
         match = re.search(r'["\']?([\w./\\-]+)["\']?', task)
         if match:

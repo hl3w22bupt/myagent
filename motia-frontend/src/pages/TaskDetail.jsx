@@ -2065,9 +2065,12 @@ function TaskDetail() {
         textContent = String(result)
       }
 
+      // 确保 textContent 是字符串
+      const safeTextContent = typeof textContent === 'string' ? textContent : JSON.stringify(textContent)
+
       return (
         <div className="result-visual result-visual-text">
-          <pre className="text-artifact-content">{textContent}</pre>
+          <pre className="text-artifact-content">{safeTextContent}</pre>
         </div>
       )
     }

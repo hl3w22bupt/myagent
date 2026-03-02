@@ -237,13 +237,58 @@ class ClaudeSkillHook(BaseHook):
         """
         Post-execution: infer artifacts using LLM.
 
-        Handles text and code types - uses LLM to determine the actual artifacts produced.
-        """
-        result_type = result.get("result_type")
+        Handles text, code, markdown, json, html types - uses LLM to determine the actual artifacts produced.
+        Also handles output_files directly if available.
 
-        # 处理 text、code 和 markdown 类型
-        # markdown 类型可能是误判，需要用 LLM 重新推断实际产物
-        if result_type not in ("text", "code", "markdown"):
+        只对 Claude skills 生效，native skills (tool-*) 直接返回。
+        """
+        # ClaudeSkillHook 只处理 Claude skills，不对 native skills 生效
+        # native skills 有明确的 result_type，不需要 LLM 推理
+        if context.skill_name.startswith("tool-"):
+            return None
+
+        result_type = result.get("result_type")
+        metadata = result.get("metadata", {})
+        if not isinstance(output_files, list):
+            output_files = result.get("output_files", [])
+        if not isinstance(output_files, list):
+            output_files = []
+
+        if output_files and result_type not in ("video", "image", "audio", "gif", "infographic", "report"):
+            # 对于非媒体类型，如果有 output_files，直接创建 artifacts
+            file_path = output_files[0] if output_files else None
+            if file_path:
+                # 确定 artifact_type
+                artifact_type = result_type
+                if result_type == "code":
+                    artifact_type = "code"
+                elif result_type == "json":
+                    artifact_type = "code"  # JSON 也作为代码类型处理
+                elif result_type == "html":
+                    artifact_type = "code"
+                elif result_type == "markdown":
+                    artifact_type = "code"
+                else:
+                    artifact_type = "text"
+
+                # 创建 artifacts
+                artifacts = [{"path": file_path, "type": artifact_type}]
+
+                # 确保 metadata 是字典
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                if "skill_name" not in metadata:
+                    metadata["skill_name"] = context.skill_name
+
+                # ⚠️ 重要：保留原始 content，只添加 artifacts 字段
+                # 不要覆盖 content，因为 tool-write 已经设置了正确的格式 {code, language, filename}
+                result["artifacts"] = artifacts
+                result["metadata"] = metadata
+                print(f"[ClaudeSkillHook] Direct artifact from output_files: {file_path} (type: {artifact_type})")
+                return result
+
+        # 处理 text、code、markdown、json、html 类型 - 用 LLM 推理
+        if result_type not in ("text", "code", "markdown", "json", "html"):
             return None
 
         print(f"[ClaudeSkillHook] Inferring artifacts for skill: {context.skill_name}, result_type: {result_type}")

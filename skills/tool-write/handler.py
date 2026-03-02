@@ -61,6 +61,125 @@ def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def _infer_file_type(file_path: str) -> tuple:
+    """
+    根据文件扩展名推断 MIME 类型和 result_type。
+
+    Returns:
+        (mime_type, result_type, output_builder_method_name)
+    """
+    ext = Path(file_path).suffix.lower()
+
+    # 扩展名映射到 (mime_type, result_type)
+    type_mapping = {
+        # 图片
+        '.png': ('image/png', 'image'),
+        '.jpg': ('image/jpeg', 'image'),
+        '.jpeg': ('image/jpeg', 'image'),
+        '.gif': ('image/gif', 'gif'),
+        '.svg': ('image/svg+xml', 'image'),
+        '.webp': ('image/webp', 'image'),
+        '.ico': ('image/x-icon', 'image'),
+        '.bmp': ('image/bmp', 'image'),
+
+        # 视频
+        '.mp4': ('video/mp4', 'video'),
+        '.mov': ('video/quicktime', 'video'),
+        '.avi': ('video/x-msvideo', 'video'),
+        '.mkv': ('video/x-matroska', 'video'),
+        '.webm': ('video/webm', 'video'),
+        '.flv': ('video/x-flv', 'video'),
+
+        # 音频
+        '.mp3': ('audio/mpeg', 'audio'),
+        '.wav': ('audio/wav', 'audio'),
+        '.ogg': ('audio/ogg', 'audio'),
+        '.flac': ('audio/flac', 'audio'),
+        '.aac': ('audio/aac', 'audio'),
+        '.m4a': ('audio/mp4', 'audio'),
+
+        # 文档
+        '.pdf': ('application/pdf', 'report'),
+
+        # 代码
+        '.js': ('text/javascript', 'code'),
+        '.jsx': ('text/javascript', 'code'),
+        '.ts': ('text/typescript', 'code'),
+        '.tsx': ('text/typescript', 'code'),
+        '.py': ('text/x-python', 'code'),
+        '.java': ('text/x-java-source', 'code'),
+        '.c': ('text/x-c', 'code'),
+        '.cpp': ('text/x-c++', 'code'),
+        '.h': ('text/x-c', 'code'),
+        '.hpp': ('text/x-c++', 'code'),
+        '.cs': ('text/x-csharp', 'code'),
+        '.php': ('text/x-php', 'code'),
+        '.rb': ('text/x-ruby', 'code'),
+        '.go': ('text/x-go', 'code'),
+        '.rs': ('text/x-rust', 'code'),
+        '.kt': ('text/x-kotlin', 'code'),
+        '.swift': ('text/x-swift', 'code'),
+        '.sh': ('text/x-shellscript', 'code'),
+        '.bash': ('text/x-shellscript', 'code'),
+        '.zsh': ('text/x-shellscript', 'code'),
+        '.fish': ('text/x-fish', 'code'),
+        '.ps1': ('text/x-powershell', 'code'),
+        '.sql': ('text/x-sql', 'code'),
+        '.css': ('text/css', 'code'),
+        '.scss': ('text/x-scss', 'code'),
+        '.less': ('text/x-less', 'code'),
+        '.xml': ('text/xml', 'code'),
+        '.yaml': ('text/x-yaml', 'code'),
+        '.yml': ('text/x-yaml', 'code'),
+        '.toml': ('text/x-toml', 'code'),
+        '.ini': ('text/x-ini', 'code'),
+        '.conf': ('text/x-ini', 'code'),
+        '.vim': ('text/x-vim', 'code'),
+        '.lua': ('text/x-lua', 'code'),
+        '.r': ('text/x-r', 'code'),
+        '.m': ('text/x-objective-c', 'code'),
+        '.mm': ('text/x-objective-c++', 'code'),
+        '.dart': ('text/x-dart', 'code'),
+        '.ex': ('text/x-elixir', 'code'),
+        '.exs': ('text/x-elixir', 'code'),
+        '.erl': ('text/x-erlang', 'code'),
+        '.hs': ('text/x-haskell', 'code'),
+        '.lhs': ('text/x-literate-haskell', 'code'),
+        '.lisp': ('text/x-lisp', 'code'),
+        '.lsp': ('text/x-lisp', 'code'),
+        '.scm': ('text/x-scheme', 'code'),
+        '.scala': ('text/x-scala', 'code'),
+        '.kt': ('text/x-kotlin', 'code'),
+        '.kts': ('text/x-kotlin', 'code'),
+        '.pl': ('text/x-perl', 'code'),
+        '.pm': ('text/x-perl', 'code'),
+        '.t': ('text/x-perl', 'code'),
+        '.vb': ('text/x-vb', 'code'),
+        '.vbs': ('text/x-vbscript', 'code'),
+
+        # Markdown
+        '.md': ('text/markdown', 'markdown'),
+        '.markdown': ('text/markdown', 'markdown'),
+
+        # HTML
+        '.html': ('text/html', 'html'),
+        '.htm': ('text/html', 'html'),
+        '.xhtml': ('application/xhtml+xml', 'html'),
+
+        # JSON
+        '.json': ('application/json', 'json'),
+        '.jsonc': ('application/json', 'json'),
+
+        # 数据
+        '.csv': ('text/csv', 'table'),
+        '.tsv': ('text/tab-separated-values', 'table'),
+
+        # 默认文本
+    }
+
+    return type_mapping.get(ext, ('text/plain', 'text'))
+
+
 def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     """Direct execution with parsed parameters."""
     file_path = params.get("file_path")
@@ -82,16 +201,55 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         # Write content to file
         Path(file_path).write_text(content, encoding="utf-8")
 
+        # 推断文件类型
+        mime_type, result_type = _infer_file_type(file_path)[:2]
+        file_size = len(content.encode('utf-8'))
+
         if OUTPUT_BUILDER_AVAILABLE:
-            output = OutputBuilder() \
-                .set_text(f"Successfully wrote {len(content)} characters to {file_path}")
-            # Add output_files metadata for tracking (use set_metadata to avoid x- prefix)
+            output = OutputBuilder()
+
+            # 根据文件类型使用不同的构建方法
+            # 对于代码类文件（code, json, markdown, html），使用 set_code 以便 task-result-handler 正确处理
+            if result_type in ('code', 'json', 'markdown', 'html'):
+                # 提取语言名称（去掉 text/x- 前缀）
+                language = mime_type.replace('text/x-', '').replace('text/', '')
+                if result_type == 'markdown':
+                    language = 'markdown'
+                elif result_type == 'html':
+                    language = 'html'
+                elif result_type == 'json':
+                    language = 'json'
+                output.set_code(content, language, Path(file_path).name)
+            elif result_type in ('image', 'video', 'audio', 'gif'):
+                # 对于媒体文件，使用 set_media
+                from core.skill.output_builder import MediaInfo
+                media_info = MediaInfo(
+                    path=file_path,
+                    mime_type=mime_type,
+                    size=file_size
+                )
+                output.set_media(media_info)
+            elif result_type == 'report':
+                # PDF 等文档
+                from core.skill.output_builder import MediaInfo
+                media_info = MediaInfo(
+                    path=file_path,
+                    mime_type=mime_type,
+                    size=file_size
+                )
+                output.set_media(media_info)
+                output.set_result_type('report')
+            else:
+                # 默认文本
+                output.set_text(f"Successfully wrote {len(content)} characters to {file_path}")
+
+            # 添加 output_files 元数据
             output.set_metadata("output_files", [file_path])
             return output.build()
         else:
             return {
                 "success": True,
-                "result_type": "text",
+                "result_type": result_type,
                 "content": f"Successfully wrote {len(content)} characters to {file_path}",
                 "output_files": [file_path]
             }
