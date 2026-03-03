@@ -244,13 +244,12 @@ class ClaudeSkillHook(BaseHook):
         """
         # ClaudeSkillHook 只处理 Claude skills，不对 native skills 生效
         # native skills 有明确的 result_type，不需要 LLM 推理
-        if context.skill_name.startswith("tool-"):
+        if context.skill_type == "native":
             return None
 
         result_type = result.get("result_type")
         metadata = result.get("metadata", {})
-        if not isinstance(output_files, list):
-            output_files = result.get("output_files", [])
+        output_files = result.get("output_files", [])
         if not isinstance(output_files, list):
             output_files = []
 

@@ -827,7 +827,7 @@ export class PostgresDataStore implements Database {
 
     try {
       const result = await client.query(
-        `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id = ANY($1) GROUP BY task_id`,
+        `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id = ANY($1) AND metadata::text LIKE '%"is_final": true%' GROUP BY task_id`,
         [taskIds]
       );
 
@@ -1153,6 +1153,57 @@ export class PostgresDataStore implements Database {
         // PostgreSQL returns bigint as string, need to convert to number then Date
         timestamp: new Date(parseInt(row.timestamp)),
       }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const setParts: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (updates.artifactType !== undefined) {
+        setParts.push(`artifact_type = $${paramIndex++}`);
+        values.push(updates.artifactType);
+      }
+      if (updates.action !== undefined) {
+        setParts.push(`action = $${paramIndex++}`);
+        values.push(updates.action);
+      }
+      if (updates.path !== undefined) {
+        setParts.push(`path = $${paramIndex++}`);
+        values.push(updates.path);
+      }
+      if (updates.description !== undefined) {
+        setParts.push(`description = $${paramIndex++}`);
+        values.push(updates.description);
+      }
+      if (updates.commitHash !== undefined) {
+        setParts.push(`commit_hash = $${paramIndex++}`);
+        values.push(updates.commitHash);
+      }
+      if (updates.metadata !== undefined) {
+        setParts.push(`metadata = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.metadata));
+      }
+      if (updates.timestamp !== undefined) {
+        const ts = updates.timestamp instanceof Date ? updates.timestamp.getTime() : updates.timestamp;
+        setParts.push(`timestamp = $${paramIndex++}`);
+        values.push(ts);
+      }
+
+      if (setParts.length === 0) return;
+
+      values.push(artifactId);
+
+      await client.query(
+        `UPDATE artifacts SET ${setParts.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
     } finally {
       client.release();
     }

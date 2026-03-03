@@ -435,6 +435,54 @@ const ArtifactsTab = ({ taskId, task }) => {
   const renderArtifact = (artifact) => {
     const type = artifact.type || artifact.artifact_type;
     const path = artifact.path;
+    const metadata = artifact.metadata || {};
+
+    // 获取文件扩展名
+    const getFileExt = (filePath) => {
+      if (!filePath) return '';
+      const parts = filePath.split('.');
+      return parts.length > 1 ? parts.pop().toLowerCase() : '';
+    };
+
+    const ext = getFileExt(path);
+
+    // Table 渲染组件
+    if (type === 'table' || (metadata.tableData || (metadata.columns && metadata.rows))) {
+      const tableData = metadata.tableData || {
+        columns: metadata.columns || [],
+        rows: metadata.rows || [],
+        title: metadata.title || artifact.description
+      };
+
+      return (
+        <div className="table-artifact-wrapper">
+          {tableData.title && <h4 className="table-title">{tableData.title}</h4>}
+          <div className="table-container">
+            <table className="artifact-table">
+              <thead>
+                <tr>
+                  {(tableData.columns || []).map((col, i) => (
+                    <th key={i}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(tableData.rows || []).map((row, i) => (
+                  <tr key={i}>
+                    {(tableData.columns || []).map((_, j) => (
+                      <td key={j}>{row[j] !== undefined ? String(row[j]) : ''}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="table-info">
+            {metadata.rowCount} 行 × {metadata.columnCount || tableData.columns?.length || 0} 列
+          </div>
+        </div>
+      );
+    }
 
     switch (type) {
       case 'video':
@@ -444,9 +492,11 @@ const ArtifactsTab = ({ taskId, task }) => {
       case 'code':
       case 'html':
       case 'markdown':
+      case 'json':
         // 使用 CodeContentRenderer，它会使用 CodePlayer 组件
         return <CodeContentRenderer path={path} />;
       case 'image':
+      case 'infographic':
         // For images, use the media API, get blob URL for better control
         return (
           <div className="image-wrapper">
@@ -464,6 +514,33 @@ const ArtifactsTab = ({ taskId, task }) => {
             />
           </div>
         );
+      case 'file':
+        // For file type, determine how to render based on file extension
+        const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
+        const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv'];
+        const audioExts = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma'];
+        const codeExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'json', 'html', 'css', 'md', 'xml', 'yaml', 'yml', 'sh', 'sql', 'txt', 'csv'];
+
+        if (imageExts.includes(ext)) {
+          return (
+            <div className="image-wrapper">
+              <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
+                   alt={artifact.description}
+                   className="artifact-image"
+                   style={{ width: '100%', maxWidth: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain' }}
+              />
+            </div>
+          );
+        } else if (videoExts.includes(ext)) {
+          return <VideoPlayer videoPath={path} getBlobUrl={getMediaBlobUrl} />;
+        } else if (audioExts.includes(ext)) {
+          return <AudioPlayer audioPath={path} getBlobUrl={getMediaBlobUrl} filename={path.split('/').pop()} />;
+        } else if (codeExts.includes(ext)) {
+          return <CodeContentRenderer path={path} />;
+        } else {
+          // Default: show as text
+          return <CodeContentRenderer path={path} />;
+        }
       default:
         return <div className="text-artifact">{artifact.description || path}</div>;
     }

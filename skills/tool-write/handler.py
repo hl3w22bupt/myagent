@@ -185,6 +185,9 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     file_path = params.get("file_path")
     content = params.get("content", "")
 
+    # Get workspace directory
+    workspace_dir = params.get("_workspace_dir") or os.getenv("MOTIA_WORKSPACE_DIR")
+
     if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
@@ -193,6 +196,11 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
             ).build()
         else:
             return {"success": False, "error": "file_path is required"}
+
+    # Use workspace for relative paths
+    original_file_path = file_path
+    if workspace_dir and not os.path.isabs(file_path):
+        file_path = os.path.join(workspace_dir, file_path)
 
     try:
         # Create parent directories if they don't exist

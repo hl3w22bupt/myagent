@@ -214,7 +214,8 @@ class SkillExecutor:
                 result = await self.hook_executor.execute_with_hooks(
                     skill_name=skill_name,
                     skill_func=_skill_func,
-                    input_data=input_data
+                    input_data=input_data,
+                    skill_type=str(skill.type)  # Pass skill type from registry
                 )
 
                 execution_time = time.time() - start_time

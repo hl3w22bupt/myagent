@@ -764,7 +764,7 @@ export class DataStore {
 
     const placeholders = taskIds.map(() => '?').join(',');
     const stmt = this.db.prepare(
-      `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id IN (${placeholders}) GROUP BY task_id`
+      `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id IN (${placeholders}) AND metadata LIKE '%"is_final": true%' GROUP BY task_id`
     );
     stmt.bind(taskIds);
 
@@ -1007,6 +1007,55 @@ export class DataStore {
         artifact.metadata ? JSON.stringify(artifact.metadata) : null,
         artifact.timestamp instanceof Date ? artifact.timestamp.getTime() : Date.now(),
       ]
+    );
+
+    await this.save();
+  }
+
+  async updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    if (updates.artifactType !== undefined) {
+      setParts.push('artifact_type = ?');
+      values.push(updates.artifactType);
+    }
+    if (updates.action !== undefined) {
+      setParts.push('action = ?');
+      values.push(updates.action);
+    }
+    if (updates.path !== undefined) {
+      setParts.push('path = ?');
+      values.push(updates.path);
+    }
+    if (updates.description !== undefined) {
+      setParts.push('description = ?');
+      values.push(updates.description);
+    }
+    if (updates.commitHash !== undefined) {
+      setParts.push('commit_hash = ?');
+      values.push(updates.commitHash);
+    }
+    if (updates.metadata !== undefined) {
+      setParts.push('metadata = ?');
+      values.push(JSON.stringify(updates.metadata));
+    }
+    if (updates.timestamp !== undefined) {
+      const ts = updates.timestamp instanceof Date ? updates.timestamp.getTime() : updates.timestamp;
+      setParts.push('timestamp = ?');
+      values.push(ts);
+    }
+
+    if (setParts.length === 0) return;
+
+    values.push(artifactId);
+
+    this.db.run(
+      `UPDATE artifacts SET ${setParts.join(', ')} WHERE id = ?`,
+      values
     );
 
     await this.save();

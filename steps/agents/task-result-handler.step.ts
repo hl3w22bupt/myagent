@@ -592,7 +592,59 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           }
 
           // 处理 text 类型
-          if (resultType === 'text' && content) {
+          // 如果有 output_files，优先创建 file 类型的 artifact（而不是 text）
+          const outputFiles = structuredResult?.output_files as Array<{type: string; 'file-type': string; path: string}> | undefined;
+          if (outputFiles && outputFiles.length > 0 && resultType === 'text') {
+            // Create file artifacts for each output file
+            // 对于多 skill 场景，同一文件可能被多个 skill 处理，只保留一个 artifact（最后一个）
+            for (const file of outputFiles) {
+              const fileType = file['file-type'] || 'unknown';
+              const filePath = file.path;
+
+              // 检查是否已存在相同路径的 artifact
+              const existingArtifacts = await store.getArtifacts(taskId);
+              const existingArtifact = existingArtifacts.find((a: any) => a.path === filePath && a.artifact_type === 'file');
+
+              if (existingArtifact) {
+                // 更新现有 artifact（保留最后一个 skill 的信息）
+                await store.updateArtifact(existingArtifact.id, {
+                  artifactType: 'file',
+                  action: 'generated',
+                  path: filePath,
+                  description: `File output: ${filePath.split('/').pop()}`,
+                  metadata: {
+                    conversation_round: artifactRound,
+                    skill_name: skillName,
+                    is_final: isFinalArtifact,
+                    file_type: fileType,
+                    originalTask: task,
+                    mimeType: `application/${fileType}`,
+                  },
+                  timestamp: new Date(),
+                });
+                logger.info('✅ File artifact updated from output_files', { filePath, fileType, skillName, artifactId: existingArtifact.id });
+              } else {
+                // 创建新 artifact
+                await store.addArtifact({
+                  taskId,
+                  artifactType: 'file',
+                  action: 'generated',
+                  path: filePath,
+                  description: `File output: ${filePath.split('/').pop()}`,
+                  metadata: {
+                    conversation_round: artifactRound,
+                    skill_name: skillName,
+                    is_final: isFinalArtifact,
+                    file_type: fileType,
+                    originalTask: task,
+                    mimeType: `application/${fileType}`,
+                  },
+                  timestamp: new Date(),
+                });
+                logger.info('✅ File artifact added from output_files', { filePath, fileType, skillName });
+              }
+            }
+          } else if (resultType === 'text' && content) {
             const textContent = typeof content === 'string' ? content : content.text || content.message || content.content || '';
 
             if (textContent.trim()) {

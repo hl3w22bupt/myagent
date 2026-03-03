@@ -88,24 +88,41 @@ class SecurityValidator:
             env_commands = set(cmd.strip() for cmd in env_whitelist.split(','))
             self.whitelist = env_commands
 
-    def validate_command(self, command: str, args: List[str]) -> Tuple[bool, Optional[str]]:
+    def validate_command(self, command: str, args: List[str], use_shell: bool = False) -> Tuple[bool, Optional[str]]:
         """
         Validate if command is allowed and safe.
 
         Args:
-            command: Base command name
-            args: Command arguments
+            command: Base command name (or full command string if use_shell=True)
+            args: Command arguments (ignored if use_shell=True and command contains spaces)
+            use_shell: If True, command is a full shell command string
 
         Returns:
             Tuple of (is_valid, error_message)
         """
+        # For shell mode, extract the base command name
+        base_command = command
+        if use_shell:
+            # Extract the first word as the base command
+            # Handle quoted commands and special cases
+            parts = command.split(None, 1)  # Split on first whitespace
+            if parts:
+                base_command = parts[0]
+                # Remove shell operators from base command
+                for op in ['>', '<', '|', '&', ';']:
+                    if op in base_command:
+                        base_command = base_command.split(op)[0].strip()
+
         # Check if command is in whitelist
-        if command not in self.whitelist:
+        if base_command not in self.whitelist:
             available = ', '.join(sorted(self.whitelist))
-            return False, f"Command '{command}' not in whitelist. Available commands: {available}"
+            return False, f"Command '{base_command}' not in whitelist. Available commands: {available}"
 
         # Build full command string for pattern checking
-        full_command = command + ' ' + ' '.join(args)
+        if use_shell:
+            full_command = command
+        else:
+            full_command = command + ' ' + ' '.join(args)
 
         # Check for dangerous patterns
         for pattern in self.DANGEROUS_PATTERNS:

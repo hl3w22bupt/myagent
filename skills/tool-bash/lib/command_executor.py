@@ -40,17 +40,19 @@ class CommandExecutor:
         args: Optional[List[str]] = None,
         env: Optional[Dict[str, str]] = None,
         working_dir: Optional[str] = None,
-        timeout: int = 30
+        timeout: int = 30,
+        use_shell: bool = False
     ) -> Dict[str, Any]:
         """
         Execute a shell command.
 
         Args:
             command: Command to execute
-            args: Command arguments
+            args: Command arguments (ignored if use_shell=True and command contains spaces)
             env: Environment variables
             working_dir: Working directory
             timeout: Timeout in seconds
+            use_shell: If True, execute command through shell (supports redirection, pipes)
 
         Returns:
             Dictionary with execution results (stdout, stderr, exit_code, etc.)
@@ -59,7 +61,7 @@ class CommandExecutor:
         args = args or []
 
         # Validate command
-        is_valid, error_msg = self.validator.validate_command(command, args)
+        is_valid, error_msg = self.validator.validate_command(command, args, use_shell=use_shell)
         if not is_valid:
             return {
                 'success': False,
@@ -97,20 +99,32 @@ class CommandExecutor:
         else:
             work_path = None
 
-        # Build command list
-        cmd_list = [command] + args
-
         # Execute command
         try:
-            result = subprocess.run(
-                cmd_list,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=full_env,
-                cwd=work_path,
-                timeout=timeout,
-                text=True
-            )
+            if use_shell:
+                # Use shell mode for commands with redirection, pipes, etc.
+                result = subprocess.run(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=full_env,
+                    cwd=work_path,
+                    timeout=timeout,
+                    text=True,
+                    shell=True
+                )
+            else:
+                # Build command list for safe execution
+                cmd_list = [command] + args
+                result = subprocess.run(
+                    cmd_list,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=full_env,
+                    cwd=work_path,
+                    timeout=timeout,
+                    text=True
+                )
 
             stdout = result.stdout or ''
             stderr = result.stderr or ''

@@ -5,11 +5,13 @@ Manages hook execution and progress reporting.
 """
 import asyncio
 import os
+import pathlib
 import time
-from typing import Callable, Optional, Dict, Any, List
+from typing import Callable, Optional, Dict, Any, List, Tuple
 from .base import BaseHook, SkillContext, HookResult, NoOpHook
 from .manager import HookManager
 from .system.progress_notification_hook import ProgressNotificationHook
+from .workspace_manager import WorkspaceManager
 
 
 class SkillHookExecutor:
@@ -62,7 +64,8 @@ class SkillHookExecutor:
         self,
         skill_name: str,
         skill_func: Callable,
-        input_data: Dict[str, Any]
+        input_data: Dict[str, Any],
+        skill_type: str = "claude"
     ) -> Dict[str, Any]:
         """
         Execute skill with hook lifecycle.
@@ -71,15 +74,18 @@ class SkillHookExecutor:
             skill_name: Name of the skill
             skill_func: Main skill function
             input_data: Input data for skill
+            skill_type: Type of skill ("pure-script", "pure-prompt", "hybrid")
 
         Returns:
             Skill execution result
         """
-        # Add skill_name to input_data for internal use
+        # Add skill_name and workspace_dir to input_data for internal use
         enhanced_input = {
             "_skill_name": skill_name,
             **input_data
         }
+
+        # workspace_dir will be set after workspace creation below
 
         # Create execution context
         # Try to get task_id and session_id from input_data or environment
@@ -92,8 +98,22 @@ class SkillHookExecutor:
             session_id=session_id,
             input_data=input_data,
             metadata=input_data.get("metadata", {}),
-            execution_start_time=asyncio.get_event_loop().time()
+            execution_start_time=asyncio.get_event_loop().time(),
+            workspace_dir="",  # Will be set after workspace creation
+            skill_type="native" if skill_type in ("pure-script", "hybrid") else "claude"
         )
+
+        # ============ Workspace Management ============
+        # Create workspace before skill execution
+        workspace_dir = WorkspaceManager.create_workspace(task_id, skill_name)
+        context.workspace_dir = workspace_dir
+
+        # Set environment variable as fallback
+        os.environ['MOTIA_WORKSPACE_DIR'] = workspace_dir
+
+        # Pass workspace_dir to skill via enhanced_input
+        enhanced_input["_workspace_dir"] = workspace_dir
+        # ==============================================
 
         # Pre-exec hook
         try:
@@ -141,6 +161,70 @@ class SkillHookExecutor:
                 result.update(post_result)
         except Exception as e:
             print(f"Warning: Post-hook error: {e}")
+
+        # ============ Artifact Management ============
+        # Always scan workspace and transfer artifacts (takes priority over explicit output_files)
+        # Scan task-level workspace to capture files created/modified by any skill in this task
+        # This supports multi-skill workflows where downstream skills modify files created by upstream skills
+        if workspace_dir:
+            # Get task-level workspace (one level up from skill workspace)
+            task_workspace = os.path.dirname(workspace_dir)
+            if os.path.exists(task_workspace):
+                artifacts = WorkspaceManager.scan_task_artifacts(task_workspace)
+            else:
+                artifacts = WorkspaceManager.scan_artifacts(workspace_dir)
+
+            transferred_files = []
+            for artifact_type, items in artifacts.items():
+                dest_dir = f"outputs/{artifact_type}"
+                for item in items:
+                    # Handle both tuple (rel_path, skill_name) and string (rel_path) formats
+                    if isinstance(item, tuple):
+                        rel_path, item_skill_name = item
+                    else:
+                        rel_path, item_skill_name = item, skill_name
+
+                    src_path = os.path.join(task_workspace, rel_path)
+                    try:
+                        dest_path = WorkspaceManager.transfer_artifact(
+                            src_path,
+                            dest_dir,
+                            task_id,
+                            item_skill_name
+                        )
+                        # Get file extension for file-type field
+                        file_ext = pathlib.Path(rel_path).suffix.lower().lstrip('.')
+                        if not file_ext:
+                            file_ext = "unknown"
+
+                        transferred_files.append({
+                            "type": "file",
+                            "file-type": file_ext,
+                            "path": dest_path
+                        })
+                    except Exception as e:
+                        print(f"[WorkspaceManager] Warning: Failed to transfer {src_path}: {e}")
+
+            # Update result with transferred file paths
+            if transferred_files:
+                result["output_files"] = transferred_files
+            # If no files were transferred but result had output_files pointing to workspace,
+            # those files are now lost (workspace cleaned), so remove stale references
+            elif "output_files" in result:
+                # Check if any output_files point to workspace
+                workspace_files = [f for f in result["output_files"]
+                                 if isinstance(f, str) and workspace_dir in f]
+                if workspace_files:
+                    # Remove stale workspace references
+                    if transferred_files:
+                        result["output_files"] = transferred_files
+                    else:
+                        # No files transferred, but we had workspace files that are now gone
+                        result["output_files"] = []
+
+        # NOTE: Workspace cleanup is now handled at task level (TaskWorkspaceHook)
+        # to support inter-skill file dependencies during task execution.
+        # ===========================================
 
         # ============ 新增：强制验证 OutputBuilder 格式 ============
         if not isinstance(result, dict) or 'result_type' not in result or 'content' not in result:

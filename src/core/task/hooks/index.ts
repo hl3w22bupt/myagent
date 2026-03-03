@@ -9,6 +9,7 @@ export { UserAllowTaskHook } from './user-allow';
 export { MetricsCollectorTaskHook } from './metrics';
 export { TaskTraceHook } from './trace-hook';
 export { UserProfileAccumulatorHook } from './user-profile-accumulator';
+export { TaskWorkspaceHook } from './task-workspace-hook';
 
 // Types
 export * from './types';

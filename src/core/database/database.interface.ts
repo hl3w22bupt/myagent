@@ -47,6 +47,7 @@ export interface Database {
    * Artifact operations
    */
   addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void>;
+  updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void>;
   getArtifacts(taskId: string): Promise<ArtifactIndex[]>;
 
   /**
