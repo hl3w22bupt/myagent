@@ -35,12 +35,6 @@ class SkillHookExecutor:
                 # 检查是否已存在同类型的 hook，避免重复注册
                 if not any(isinstance(existing, type(hook)) for existing in self.hook_manager.hooks):
                     self.hook_manager.register(hook)
-                    print(f"[SkillHookExecutor] Registered hook: {type(hook).__name__}")
-                else:
-                    print(f"[SkillHookExecutor] Skipping duplicate hook: {type(hook).__name__}")
-        else:
-            import sys
-            print(f"[SkillHookExecutor] No hooks provided", file=sys.stderr)
 
     async def report_progress(
         self,
@@ -81,11 +75,6 @@ class SkillHookExecutor:
         Returns:
             Skill execution result
         """
-        print(f"[DEBUG] SkillHookExecutor.execute_with_hooks called: skill_name={skill_name}")
-        print(f"[DEBUG] Registered hooks: {len(self.hook_manager.hooks)}")
-        for i, hook in enumerate(self.hook_manager.hooks):
-            print(f"[DEBUG]   hook[{i}]: {type(hook).__name__}")
-
         # Add skill_name to input_data for internal use
         enhanced_input = {
             "_skill_name": skill_name,
@@ -130,7 +119,6 @@ class SkillHookExecutor:
         # Execute main logic
         try:
             result = await skill_func(enhanced_input)
-            print(f"[DEBUG] skill_func returned: {result}")
         except Exception as e:
             # Return OutputBuilder format for errors
             result = {
@@ -149,10 +137,8 @@ class SkillHookExecutor:
         # Post-exec hook
         try:
             post_result = await self.hook_manager.post_exec(context, result)
-            print(f"[DEBUG] post_result from hook_manager: {post_result}")
             if post_result:
                 result.update(post_result)
-                print(f"[DEBUG] result after update: {result}")
         except Exception as e:
             print(f"Warning: Post-hook error: {e}")
 

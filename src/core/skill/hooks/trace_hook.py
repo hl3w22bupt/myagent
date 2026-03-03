@@ -58,8 +58,6 @@ class SkillTraceHook(BaseHook):
             )
             response.raise_for_status()
 
-            print(f"[SkillTraceHook] ✓ Trace sent: {trace_data.get('id')} - {trace_data.get('status')}")
-
         except Exception as e:
             # Silent failure, don't interrupt main flow
             print(f"[SkillTraceHook] ✗ Failed to send trace: {e}")

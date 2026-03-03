@@ -101,28 +101,79 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
             return {"success": False, "error": str(e)}
 
 
+def _extract_file_path_regex(task: str) -> str | None:
+    """
+    Extract file path from task using regex patterns.
+
+    Tries multiple patterns to handle different task formats:
+    1. Quoted paths: "file" or 'file'
+    2. Relative paths: ./path, ../path
+    3. Absolute paths: /path/to/file
+    4. File paths with extensions: package.json, src/main.py, .env
+    5. Simple filenames without extensions: README, Makefile
+
+    Returns:
+        File path if found, None otherwise
+    """
+    # Common English verbs to skip in file path matching
+    common_verbs = {'read', 'show', 'view', 'get', 'open', 'load', 'check', 'cat', 'display', 'list', 'print', 'write', 'create', 'show', 'me', 'the', 'of', 'contents'}
+
+    # Pattern 1: Match paths in quotes
+    quote_match = re.search(r'["\']([\w./\\-]+)["\']', task, re.ASCII)
+    if quote_match:
+        return quote_match.group(1)
+
+    # Pattern 2: Match relative paths (starting with ./ or ../)
+    # This must come before absolute paths to avoid matching ./path as /path
+    rel_match = re.search(r'((?:\.\./|./)[\w./\\-]*)', task, re.ASCII)
+    if rel_match:
+        return rel_match.group(1)
+
+    # Pattern 3: Match absolute paths (starting with /)
+    # But only if they're long enough (avoid matching single words like "file /path")
+    abs_match = re.search(r'(/[a-zA-Z0-9_./\\-]+)', task, re.ASCII)
+    if abs_match:
+        return abs_match.group(1)
+
+    # Pattern 4: Match file paths with extensions (like package.json, src/main.py, .env, .gitignore)
+    # This pattern matches: word.word, word/word.word, .word
+    ext_match = re.search(r'([\w/\\\-]*\.[a-zA-Z0-9]+)', task, re.ASCII)
+    if ext_match:
+        path = ext_match.group(1)
+        # Skip if it's a common verb or short word
+        if path.lower() not in common_verbs and len(path) > 3:
+            return path
+
+    # Pattern 5: Match simple filenames without extensions (like README, Makefile)
+    # Only match all-caps or specific patterns
+    simple_match = re.search(r'\b([A-Z][A-Z0-9_]+|Makefile|Gemfile|Rakefile)\b', task, re.ASCII)
+    if simple_match:
+        return simple_match.group(1)
+
+    return None
+
+
 def _call_llm_for_params(task: str) -> Dict[str, Any]:
     """
     Use internal LLM to parse task into parameters.
 
     Only called when in task mode (no direct parameters provided).
-    """
-    if LLM_CLIENT_AVAILABLE:
-        # Fallback: extract file path from task using regex
-        match = re.search(r'["\']?([\w./\\-]+)["\']?', task)
-        if match:
-            return {"file_path": match.group(1)}
-        raise ValueError("LLM client not available and couldn't parse file path from task")
 
+    Priority:
+    1. Try to use LLM to extract file path
+    2. If LLM fails, use regex fallback
+    """
+    # Try to use LLM first
     try:
         llm = get_llm_client(skill_name="tool-read")
     except ValueError:
-        # Fallback to regex
-        match = re.search(r'["\']?([\w./\\-]+)["\']?', task)
-        if match:
-            return {"file_path": match.group(1)}
-        raise ValueError("LLM client initialization failed")
+        # LLM not available, use regex fallback
+        file_path = _extract_file_path_regex(task)
+        if file_path:
+            return {"file_path": file_path}
+        raise ValueError("LLM client not available and couldn't parse file path from task")
 
+    # LLM is available, use it to parse the task
     prompt = f"""You are a parameter parser for file reading operations.
 
 Task: {task}
@@ -149,18 +200,18 @@ Return ONLY JSON, no other text, no markdown, no code blocks."""
 
         try:
             return json.loads(content)
-        except json.JSONDecodeError:
-            # Fallback: try to extract file path from task
-            match = re.search(r'["\']?([\w./\\-]+)["\']?', task)
-            if match:
-                return {"file_path": match.group(1)}
-            raise ValueError(f"Failed to parse LLM response as JSON: {content}")
+        except json.JSONDecodeError as je:
+            # Fallback: try to extract file path from task using regex
+            file_path = _extract_file_path_regex(task)
+            if file_path:
+                return {"file_path": file_path}
+            raise ValueError(f"Failed to parse LLM response as JSON: {content}. Error: {je}")
 
     except Exception as e:
         # Fallback: extract file path from task using regex
-        match = re.search(r'["\']?([\w./\\-]+)["\']?', task)
-        if match:
-            return {"file_path": match.group(1)}
+        file_path = _extract_file_path_regex(task)
+        if file_path:
+            return {"file_path": file_path}
         raise ValueError(f"LLM parsing failed: {str(e)}")
 
 

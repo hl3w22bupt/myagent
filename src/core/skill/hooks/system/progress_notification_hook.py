@@ -72,15 +72,12 @@ class ProgressNotificationHook(BaseHook):
             )
             response.raise_for_status()
 
-            print(f"[ProgressNotificationHook] ✓ Notification sent: {notification_type} @ {stage}")
-
         except Exception as e:
             # Silent failure, don't interrupt main flow
             print(f"[ProgressNotificationHook] ✗ Failed to send notification: {e}")
 
     async def pre_exec(self, context: SkillContext) -> None:
         """Notify pre-execution start"""
-        print(f"[ProgressNotificationHook] pre_exec called: skill={context.skill_name}, task_id={context.task_id}")
         await self._send_notification(
             context,
             "step",
@@ -99,8 +96,6 @@ class ProgressNotificationHook(BaseHook):
 
         简化版：只发送必要的信息，避免大量数据传输
         """
-        print(f"[DEBUG] ProgressNotificationHook.post_exec received result: {result}")
-
         # Handle case where result might be None
         if result is None:
             result = {}
@@ -146,7 +141,6 @@ class ProgressNotificationHook(BaseHook):
 
         # Add notification metadata to result
         result.setdefault("metadata", {})["progress_notified"] = True
-        print(f"[DEBUG] ProgressNotificationHook.post_exec returning result: {result}")
         return result
 
     async def on_progressing_notify(
