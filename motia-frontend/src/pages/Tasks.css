@@ -365,6 +365,76 @@
   transform: translateY(0);
 }
 
+.pin-button,
+.unpin-button {
+  padding: 0.375rem;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 未置顶状态：透明背景 */
+.pin-button {
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.pin-button:hover {
+  background-color: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.2);
+}
+
+.pin-button:active {
+  transform: translateY(0);
+}
+
+/* 已置顶状态：实心黄色背景，表示选中 */
+.unpin-button {
+  background-color: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.15);
+}
+
+.unpin-button:hover {
+  background-color: #fde68a;
+  color: #b45309;
+  border-color: #fcd34d;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(251, 191, 36, 0.25);
+}
+
+.unpin-button:active {
+  transform: translateY(0);
+}
+
+.pin-button:disabled,
+.unpin-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-buttons-group {
+  display: flex;
+  gap: 0.25rem;
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+}
+
 /* 小重试按钮样式 - 用于任务卡片 */
 .retry-button-small {
   padding: 0.375rem;

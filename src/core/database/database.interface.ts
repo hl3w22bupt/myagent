@@ -34,6 +34,9 @@ export interface Database {
   }): Promise<{ tasks: Task[]; total: number }>;
   deleteTask(taskId: string): Promise<boolean>;
   deleteTasks(taskIds: string[]): Promise<number>;
+  pinTask(taskId: string): Promise<Task>;      // Pin a task
+  unpinTask(taskId: string): Promise<Task>;    // Unpin a task
+  listPinnedTasks(): Promise<Task[]>;          // List all pinned tasks
 
   /**
    * Context operations
@@ -47,6 +50,7 @@ export interface Database {
    * Artifact operations
    */
   addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void>;
+  updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void>;
   getArtifacts(taskId: string): Promise<ArtifactIndex[]>;
 
   /**

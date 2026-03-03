@@ -56,6 +56,67 @@
   transform: translateY(0);
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pin-button-detail,
+.unpin-button-detail {
+  padding: 0.5rem;
+  background-color: transparent;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 未置顶状态：透明背景 */
+.pin-button-detail {
+  background-color: transparent;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+}
+
+.pin-button-detail:hover {
+  background-color: #FEF3C7;
+  color: #D97706;
+  border-color: #FDE68A;
+  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.1);
+}
+
+/* 已置顶状态：实心黄色背景，表示选中 */
+.unpin-button-detail {
+  background-color: #FEF3C7;
+  color: #D97706;
+  border-color: #FDE68A;
+  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.15);
+}
+
+.unpin-button-detail:hover {
+  background-color: #FDE68A;
+  color: #B45309;
+  border-color: #FCD34D;
+}
+
+.pin-button-detail:active,
+.unpin-button-detail:active {
+  transform: translateY(0);
+}
+
+.pin-button-detail:disabled,
+.unpin-button-detail:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .loading {
   display: flex;
   justify-content: center;

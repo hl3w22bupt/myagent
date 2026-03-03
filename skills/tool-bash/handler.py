@@ -82,10 +82,12 @@ Task: """ + task + """
 
 Requirements:
 - Analyze the task and determine the best shell command
-- Common commands: ls, find, grep, cat, head, tail, wc, cd, pwd, mkdir, cp, mv, echo, date
+- Common commands: ls, find, grep, cat, head, tail, wc, cd, pwd, mkdir, cp, mv, echo, date, tee
 - Return ONLY the command name (e.g., 'ls', 'find'), not a full command string
 - For find/search operations, prefer find over ls + grep
 - Args should be returned as a JSON array of strings
+- Commands will execute in workspace directory automatically
+- For writing content to files, you can use 'echo' with output redirection (>) or use 'tee' command
 
 Return format (JSON only, no other text):
 {"command": "command_name", "args": ["arg1", "arg2"], "reasoning": "Brief explanation of why this command was chosen"}
@@ -95,6 +97,8 @@ Examples:
 - Task: "查找当前目录下所有 .py 文件" -> {"command": "find", "args": [".", "-name", "*.py"]}
 - Task: "查看 package.json 的内容" -> {"command": "cat", "args": ["package.json"]}
 - Task: "列出当前目录文件" -> {"command": "ls", "args": []}
+- Task: "创建hello.txt文件并写入hello world" -> {"command": "echo", "args": ["hello", "world", ">", "hello.txt"], "reasoning": "Use echo with output redirection to write to file"}
+- Task: "创建data.json文件" -> {"command": "touch", "args": ["data.json"], "reasoning": "Use touch to create empty file"}
 
 Generate the command now. Return ONLY valid JSON, no markdown, no code blocks."""
 
@@ -186,9 +190,17 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
     working_dir = input_data.get('working_dir')
     timeout = input_data.get('timeout', 30)
 
+    # Use workspace as default working directory if not explicitly provided
+    workspace_dir = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR')
+    if workspace_dir and not working_dir:
+        working_dir = workspace_dir
+
     # Check if direct command/args are provided (backward compatibility)
     direct_command = input_data.get('command')
     direct_args = input_data.get('args')
+
+    # Initialize use_shell flag (will be set based on command type)
+    use_shell = False
 
     # Validate task
     if not task and not direct_command:
@@ -221,9 +233,14 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
         args = direct_args if isinstance(direct_args, list) else []
         reasoning = "Direct command execution"
 
+        # Check for shell operators (redirection, pipes) - requires shell mode
+        if '>' in command or '|' in command or '&' in command:
+            use_shell = True
+            # Don't split, use full command string
+            args = []
         # Handle case where direct_command is a full command string (e.g., "ls -lh file.txt")
         # We need to split it into command and args
-        if not args and ' ' in command:
+        elif not args and ' ' in command:
             # Use shlex to properly split the command (handles quoted strings)
             import shlex
             try:
@@ -232,9 +249,9 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     command = parts[0]
                     args = parts[1:]
             except Exception as e:
-                # If splitting fails, use the original command as-is
-                # This will be handled by CommandExecutor with shell=True
-                pass
+                # If splitting fails, use shell mode
+                use_shell = True
+                args = []
     else:
         # Use LLM to generate command from task
         llm_result = call_llm_for_command(task)
@@ -268,6 +285,16 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
         args = llm_result.get("args", [])
         reasoning = llm_result.get("reasoning", "Command generated from task description")
 
+        # Check if LLM generated output redirection (which requires shell mode)
+        # If args contain '>' or '>>', we need to use shell=True
+        use_shell = False
+        if args and any('>' in str(arg) for arg in args):
+            # Build full command string for shell execution
+            full_command = command + ' ' + ' '.join(f'"{arg}"' if ' ' in str(arg) else str(arg) for arg in args)
+            command = full_command
+            args = []  # Clear args, use full command string
+            use_shell = True
+
     # Import command executor
     try:
         from command_executor import CommandExecutor
@@ -286,7 +313,8 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
             args=args,
             env=env,
             working_dir=working_dir,
-            timeout=timeout
+            timeout=timeout,
+            use_shell=use_shell
         )
 
         # Handle execution result

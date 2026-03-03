@@ -6,9 +6,8 @@ describe('DataStore', () => {
   let dataStore: ReturnType<typeof getDataStore>;
 
   beforeAll(async () => {
-    // Don't pass :memory: for PostgreSQL - it will use the configured database
-    dataStore = getDataStore();
-    // Database is already initialized in jest.setup.ts
+    // Use separate test database to avoid polluting the main database
+    dataStore = getDataStore('data/__memory__');
     await dataStore.initialize();
   });
 

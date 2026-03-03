@@ -47,39 +47,27 @@ def get_default_hooks(
     Returns:
         List of default hook instances
     """
-    print(f"[DEBUG] get_default_hooks called with notify_hook_api_url={notify_hook_api_url}")
-
     hooks = []
 
     enabled_hooks = HOOK_CONFIG["enabled"]
-    print(f"[DEBUG]   enabled_hooks={enabled_hooks}")
 
     # Progress notification hook
     if "progress_notification" in enabled_hooks:
-        print(f"[DEBUG]   Progress notification is enabled")
         if notify_hook_api_url is not None:
             api_url = notify_hook_api_url or HOOK_CONFIG["settings"]["progress_notification"]["api_url"]
-            print(f"[DEBUG]   api_url={api_url}")
             if api_url:
                 hooks.append(ProgressNotificationHook(api_url))
-                print(f"[DEBUG]   Added ProgressNotificationHook")
-        else:
-            print(f"[DEBUG]   notify_hook_api_url is None, skipping ProgressNotificationHook")
 
     # Claude skill hook
     if "claude_skill" in enabled_hooks:
-        print(f"[DEBUG]   Claude skill hook is enabled")
         if HOOK_CONFIG["settings"]["claude_skill"].get("enabled", True):
             hooks.append(ClaudeSkillHook())
-            print(f"[DEBUG]   Added ClaudeSkillHook")
 
     # Trace hook
     if "trace" in enabled_hooks:
-        print(f"[DEBUG]   Trace hook is enabled")
         if HOOK_CONFIG["settings"]["trace"].get("enabled", True):
             api_url = trace_hook_api_url or HOOK_CONFIG["settings"]["trace"]["api_url"]
             hooks.append(SkillTraceHook(api_url))
-            print(f"[DEBUG]   Added SkillTraceHook with api_url={api_url}")
 
     print(f"[DEBUG]   Returning {len(hooks)} hooks")
     return hooks

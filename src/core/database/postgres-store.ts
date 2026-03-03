@@ -321,6 +321,19 @@ export class PostgresDataStore implements Database {
         END $$;
       `);
 
+      // 自动迁移：为 tasks 表添加 pinned 列（如果不存在）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tasks' AND column_name = 'pinned'
+          ) THEN
+            ALTER TABLE tasks ADD COLUMN pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+
       // 自动迁移：为 task_contexts 表添加 conversation_rounds 和 messages_count 列（如果不存在）
       await safeQuery(`
         DO $$
@@ -566,6 +579,10 @@ export class PostgresDataStore implements Database {
         // Convert boolean to integer (PostgreSQL stores as INTEGER)
         values.push(updates.isRetry ? 1 : 0);
       }
+      if (updates.pinned !== undefined) {
+        fields.push(`pinned = $${paramIndex++}`);
+        values.push(updates.pinned);
+      }
 
       fields.push(`updated_at = $${paramIndex++}`);
       values.push(updated.updatedAt.getTime());
@@ -630,8 +647,8 @@ export class PostgresDataStore implements Database {
       const total = parseInt(countResult.rows[0].count);
       console.log('[PostgresDataStore] listTasks: COUNT query took', Date.now() - countStart, 'ms, total:', total);
 
-      // Get paginated results
-      let query = `SELECT * FROM tasks ${whereClause} ORDER BY created_at DESC`;
+      // Get paginated results - always sort pinned tasks first, then by creation date
+      let query = `SELECT * FROM tasks ${whereClause} ORDER BY pinned DESC, created_at DESC`;
       if (filters?.limit) {
         query += ` LIMIT $${paramIndex++}`;
         values.push(filters.limit);
@@ -814,6 +831,35 @@ export class PostgresDataStore implements Database {
   }
 
   /**
+   * Pin a task to top
+   */
+  async pinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: true });
+  }
+
+  /**
+   * Unpin a task
+   */
+  async unpinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: false });
+  }
+
+  /**
+   * List all pinned tasks
+   */
+  async listPinnedTasks(): Promise<Task[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT * FROM tasks WHERE pinned = true ORDER BY updated_at DESC`
+      );
+      return result.rows.map(this.mapDbTaskToTask);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * 批量获取任务的产物数量
    * @param taskIds 任务ID列表
    * @returns Map<taskId, artifactCount>
@@ -827,7 +873,7 @@ export class PostgresDataStore implements Database {
 
     try {
       const result = await client.query(
-        `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id = ANY($1) GROUP BY task_id`,
+        `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id = ANY($1) AND metadata::text LIKE '%"is_final": true%' GROUP BY task_id`,
         [taskIds]
       );
 
@@ -1153,6 +1199,57 @@ export class PostgresDataStore implements Database {
         // PostgreSQL returns bigint as string, need to convert to number then Date
         timestamp: new Date(parseInt(row.timestamp)),
       }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void> {
+    const client = await this.pool.connect();
+
+    try {
+      const setParts: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (updates.artifactType !== undefined) {
+        setParts.push(`artifact_type = $${paramIndex++}`);
+        values.push(updates.artifactType);
+      }
+      if (updates.action !== undefined) {
+        setParts.push(`action = $${paramIndex++}`);
+        values.push(updates.action);
+      }
+      if (updates.path !== undefined) {
+        setParts.push(`path = $${paramIndex++}`);
+        values.push(updates.path);
+      }
+      if (updates.description !== undefined) {
+        setParts.push(`description = $${paramIndex++}`);
+        values.push(updates.description);
+      }
+      if (updates.commitHash !== undefined) {
+        setParts.push(`commit_hash = $${paramIndex++}`);
+        values.push(updates.commitHash);
+      }
+      if (updates.metadata !== undefined) {
+        setParts.push(`metadata = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.metadata));
+      }
+      if (updates.timestamp !== undefined) {
+        const ts = updates.timestamp instanceof Date ? updates.timestamp.getTime() : updates.timestamp;
+        setParts.push(`timestamp = $${paramIndex++}`);
+        values.push(ts);
+      }
+
+      if (setParts.length === 0) return;
+
+      values.push(artifactId);
+
+      await client.query(
+        `UPDATE artifacts SET ${setParts.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
     } finally {
       client.release();
     }
@@ -1603,6 +1700,7 @@ export class PostgresDataStore implements Database {
       output: row.output,
       error: row.error,
       executionTime: row.execution_time,
+      pinned: row.pinned || false,
       metadata: row.metadata,
       structuredOutput: row.structured_output,
       ptcCodes: row.ptc_codes,

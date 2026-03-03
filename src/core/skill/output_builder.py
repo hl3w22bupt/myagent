@@ -641,6 +641,11 @@ class OutputBuilder:
             "metadata": metadata
         }
 
+        # 对于 text 和 markdown 类型，同时设置 output 字段
+        # 这样 task-result-handler 可以正确处理并创建 artifacts
+        if self._result_type in ("text", "markdown") and isinstance(self._content, str):
+            output["output"] = self._content
+
         # 添加可选的 title 和 description
         if self._title is not None:
             output["title"] = self._title

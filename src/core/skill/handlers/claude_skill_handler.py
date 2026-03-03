@@ -138,8 +138,6 @@ class ClaudeSkillHandler:
         """
         构建 Prompt（根据模式路由）
         """
-        print(f"[DEBUG] _build_prompt called with mode={self.mode}, MODE_FILE={self.MODE_FILE}, MODE_TEMPLATE={self.MODE_TEMPLATE}")
-
         if self.mode == self.MODE_FILE:
             return self._build_from_file(input_data)
         elif self.mode == self.MODE_TEMPLATE:
@@ -503,7 +501,6 @@ class ClaudeSkillHandler:
             elif hasattr(self._llm_client, 'generate'):
                 # LLMClient 有 generate 方法，但可能是协程
                 # 降级到直接使用 Anthropic API
-                print(f"[DEBUG] LLMClient.generate() found, falling back to Anthropic API")
                 return self._call_anthropic_api(prompt)
             else:
                 raise AttributeError("LLMClient has no compatible method")

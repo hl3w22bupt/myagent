@@ -43,6 +43,7 @@ Thumbs.db
 # Video output (project root)
 outputs
 outputs/
+tmp-workspace/
 
 # Jupyter
 .ipynb_checkpoints/

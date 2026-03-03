@@ -24,6 +24,7 @@ import {
   MetricsCollectorTaskHook,
   TaskTraceHook,
   UserProfileAccumulatorHook,
+  TaskWorkspaceHook,
   TaskContext,
 } from '../../src/core/task/hooks/index';
 import { ContextManager } from '../../src/core/context/manager';
@@ -428,6 +429,7 @@ export const handler = async (
   taskHookExecutor.registerHook(new MetricsCollectorTaskHook());
   taskHookExecutor.registerHook(new TaskTraceHook());
   taskHookExecutor.registerHook(new UserProfileAccumulatorHook()); // MyEcho: 用户画像累积
+  taskHookExecutor.registerHook(new TaskWorkspaceHook()); // Workspace: 清理 task 级别的 workspace
 
   // Build TaskContext
   const taskContext: TaskContext = {

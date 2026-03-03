@@ -159,6 +159,7 @@ export const handler = async (request: any, { logger }: any) => {
       metadata: task.metadata,
       sessionId: task.sessionId,
       timestamp: safeToISOString(task.createdAt),
+      pinned: task.pinned || false,  // 置顶状态
       // 添加产物数量
       artifactsCount: artifactCounts.get(task.id) || 0,
     }));

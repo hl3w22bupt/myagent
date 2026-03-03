@@ -344,10 +344,12 @@ function TaskDetail() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(null) // 当前选择的图片轮次
   const [selectedCodeIndex, setSelectedCodeIndex] = useState(null) // 当前选择的代码轮次
   const [selectedTextIndex, setSelectedTextIndex] = useState(null) // 当前选择的文本轮次
+  const [selectedFileIndex, setSelectedFileIndex] = useState(null) // 当前选择的文件轮次
   const [selectedAudioIndex, setSelectedAudioIndex] = useState(null) // 当前选择的音频轮次
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
   const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Map()) // artifactId -> favoriteId 映射
   const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
+  const [pinningTask, setPinningTask] = useState(false) // 置顶操作加载状态
 
   // 表格状态管理
   const [tableSearchQuery, setTableSearchQuery] = useState('')
@@ -705,6 +707,7 @@ function TaskDetail() {
         console.log('正在查询任务详情:', id)
         const task = await tasksAPI.getTaskDetails(id)
         console.log('任务详情查询成功:', task)
+        console.log('[TaskDetail] pinned status:', task?.pinned, 'for task:', task?.taskId)
         setTask(task)
         setError('')
         setLoading(false)
@@ -794,6 +797,7 @@ function TaskDetail() {
       const imageCount = task.artifacts.filter(a => a.type === 'image').length
       const codeCount = task.artifacts.filter(a => a.type === 'code').length
       const textCount = task.artifacts.filter(a => a.type === 'text').length
+      const fileCount = task.artifacts.filter(a => a.type === 'file').length
       if (videoCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedVideoIndex(null)
@@ -809,6 +813,10 @@ function TaskDetail() {
       if (textCount > 0) {
         // 重置为null，这样会自动选择最新的轮次
         setSelectedTextIndex(null)
+      }
+      if (fileCount > 0) {
+        // 重置为null，这样会自动选择最新的轮次
+        setSelectedFileIndex(null)
       }
     }
   }, [task?.artifacts])
@@ -981,6 +989,17 @@ function TaskDetail() {
       return 'text'
     }
 
+    // 最优先：从 artifacts 判断类型（因为 file 类型的 artifact 是在 task-result-handler 中创建的）
+    if (result.artifacts && result.artifacts.length > 0) {
+      // 按优先级检查 artifact 类型
+      const typePriority = ['video', 'audio', 'image', 'table', 'file', 'code', 'markdown', 'html', 'json', 'text']
+      for (const type of typePriority) {
+        if (result.artifacts.some(a => a.type === type || a.artifact_type === type)) {
+          return type
+        }
+      }
+    }
+
     // 优先：从顶层 structuredOutput 获取（新格式）
     if (typeof result === 'object' && result.structuredOutput?.result_type) {
       const resultType = result.structuredOutput.result_type
@@ -996,6 +1015,7 @@ function TaskDetail() {
         'markdown': 'markdown',
         'html': 'html',
         'json': 'json',
+        'file': 'file',
       }
 
       return typeMapping[resultType] || resultType
@@ -1015,6 +1035,7 @@ function TaskDetail() {
         'markdown': 'markdown',
         'html': 'html',
         'json': 'json',
+        'file': 'file',
       }
 
       return typeMapping[resultType] || resultType
@@ -1737,6 +1758,136 @@ function TaskDetail() {
       )
     }
 
+    // 处理 FILE artifacts（新：统一文件类型）
+    const fileArtifacts = task?.artifacts
+      ? task.artifacts
+        .filter(artifact => artifact.type === 'file' && artifact.metadata?.is_final === true)
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      : [];
+
+    if (fileArtifacts.length > 0) {
+      const currentIndex = selectedFileIndex !== null
+        ? selectedFileIndex
+        : fileArtifacts.length - 1;
+
+      const selectedArtifact = fileArtifacts[currentIndex];
+      let filePath = selectedArtifact.path;
+      // 移除前导的/outputs/如果存在
+      filePath = filePath.replace(/^\/?outputs\//, '');
+
+      // 获取文件扩展名用于判断如何渲染
+      const getFileExt = (path) => {
+        if (!path) return '';
+        const parts = path.split('.');
+        return parts.length > 1 ? parts.pop().toLowerCase() : '';
+      };
+
+      const ext = getFileExt(filePath);
+      const fileType = selectedArtifact.metadata?.file_type || ext;
+
+      // 根据文件类型决定渲染方式
+      const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
+      const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv'];
+      const audioExts = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma'];
+      const codeExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'json', 'html', 'css', 'md', 'xml', 'yaml', 'yml', 'sh', 'sql', 'txt', 'csv'];
+
+      const isImage = imageExts.includes(ext);
+      const isVideo = videoExts.includes(ext);
+      const isAudio = audioExts.includes(ext);
+      const isCode = codeExts.includes(ext);
+
+      return (
+        <div className="result-visual result-visual-with-file">
+          {/* 版本选择器 */}
+          <div className="video-version-selector">
+            <span className="version-label">轮次</span>
+            <div className="version-dropdown-wrapper">
+              <select
+                value={selectedFileIndex !== null ? selectedFileIndex : fileArtifacts.length - 1}
+                onChange={(e) => setSelectedFileIndex(parseInt(e.target.value))}
+                className="version-dropdown"
+              >
+                {fileArtifacts.map((artifact, index) => {
+                  const isLatest = index === fileArtifacts.length - 1;
+                  const time = new Date(artifact.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  });
+
+                  return (
+                    <option key={artifact.id} value={index}>
+                      第 {index + 1} 轮 · {time}
+                      {isLatest ? ' · 最新' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <svg className="dropdown-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            {/* 版本描述 */}
+            {(() => {
+              const currentIndex = selectedFileIndex !== null ? selectedFileIndex : fileArtifacts.length - 1;
+              const artifact = fileArtifacts[currentIndex];
+              const fullDescription = artifact?.description || '';
+
+              return (
+                <Tooltip content={fullDescription}>
+                  <span className="version-description-inline">
+                    {fullDescription}
+                  </span>
+                </Tooltip>
+              );
+            })()}
+            {/* 文件类型标签 */}
+            <span className="file-type-badge">{fileType.toUpperCase()}</span>
+            {/* 收藏按钮 */}
+            <div className="artifact-actions">
+              {favoriteArtifacts.has(selectedArtifact.id) ? (
+                <button
+                  className="favorite-btn active"
+                  onClick={() => handleRemoveFromFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="从精选移除"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="favorite-btn"
+                  onClick={() => handleAddToFavorites(selectedArtifact.id)}
+                  disabled={loadingFavorites}
+                  title="添加到精选"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.67 6.5L12 17.77l-6.67 2.87 1.67-6.5L2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 文件内容渲染器 */}
+          {isImage ? (
+            <ImagePlayer imagePath={filePath} getBlobUrl={getMediaBlobUrl} />
+          ) : isVideo ? (
+            <VideoPlayer videoPath={filePath} getBlobUrl={getMediaBlobUrl} />
+          ) : isAudio ? (
+            <AudioPlayer audioPath={filePath} getBlobUrl={getMediaBlobUrl} filename={filePath.split('/').pop()} />
+          ) : (
+            <CodeViewer
+              codePath={filePath}
+              getBlobUrl={getMediaBlobUrl}
+            />
+          )}
+        </div>
+      );
+    }
+
     if (resultType === 'image' && parsedResult.content?.path) {
       // 处理图片
       let imagePath = parsedResult.content.path
@@ -2049,16 +2200,28 @@ function TaskDetail() {
       let textContent = ''
       if (typeof result === 'object') {
         // 优先使用 parsedResult（即 structuredOutput）
-        textContent = parsedResult.content || result.content || result.text || String(parsedResult)
+        if (typeof parsedResult === 'object' && parsedResult !== null) {
+          // 处理对象结果，尝试提取有效字符串
+          textContent = parsedResult.content || result.content || result.text
+          if (!textContent) {
+            // 如果没有 content 字段，尝试 JSON.stringify 对象
+            textContent = JSON.stringify(parsedResult, null, 2)
+          }
+        } else {
+          textContent = String(parsedResult || '')
+        }
       } else if (typeof result === 'string') {
         textContent = result
       } else {
         textContent = String(result)
       }
 
+      // 确保 textContent 是字符串
+      const safeTextContent = typeof textContent === 'string' ? textContent : JSON.stringify(textContent)
+
       return (
         <div className="result-visual result-visual-text">
-          <pre className="text-artifact-content">{textContent}</pre>
+          <pre className="text-artifact-content">{safeTextContent}</pre>
         </div>
       )
     }
@@ -2162,6 +2325,14 @@ function TaskDetail() {
             </svg>
           ),
           label: '文本'
+        },
+        file: {
+          icon: (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="tab-icon">
+              <path d="M4 1.5a.5.5 0 0 0-.5.5h6a.5.5 0 0 0 0 1h-6a.5.5 0 0 0-.5-.5zM2 2a2 2 0 0 1 2-2h5.293a1 1 0 0 1 .707.293l2.5 2.5A1 1 0 0 1 13 4.293V13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm1.5 3a.5.5 0 0 0 .5-.5h6a.5.5 0 0 0 0-1h-6a.5.5 0 0 0-.5.5zm0 2a.5.5 0 0 0 .5-.5h6a.5.5 0 0 0 0-1h-6a.5.5 0 0 0-.5.5zm0 2a.5.5 0 0 0 .5-.5h6a.5.5 0 0 0 0-1h-6a.5.5 0 0 0-.5.5z"/>
+            </svg>
+          ),
+          label: '文件'
         }
       },
       text: {
@@ -2182,12 +2353,46 @@ function TaskDetail() {
     return tabConfigs[tabName]?.[resultType] || tabConfigs[tabName]?.video || defaultConfig
   }
 
+  // 获取结果类型（优先从task的artifacts判断）
+  const getResultTypeFromTask = () => {
+    // 按优先级检查 artifact 类型（只看is_final=true的）
+    const typePriority = ['video', 'audio', 'image', 'table', 'file', 'code', 'markdown', 'html', 'json', 'text']
+    const finalArtifacts = task?.artifacts?.filter(a => a.metadata?.is_final === true) || []
+
+    for (const type of typePriority) {
+      if (finalArtifacts.some(a => a.type === type || a.artifact_type === type)) {
+        return type
+      }
+    }
+
+    // 兜底：从structuredOutput判断
+    const structuredType = task?.structuredOutput?.result_type || task?.result_type
+    if (structuredType) {
+      const typeMapping = {
+        'infographic': 'image',
+        'video': 'video',
+        'image': 'image',
+        'audio': 'audio',
+        'table': 'table',
+        'code': 'code',
+        'markdown': 'markdown',
+        'html': 'html',
+        'json': 'json',
+        'file': 'file',
+      }
+      return typeMapping[structuredType] || structuredType
+    }
+
+    return 'text'
+  }
+
   const renderResult = (result) => {
     const resultType = result ? getResultType(result) : 'unknown'
-    const hasVisual = result && ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json', 'text'].includes(resultType)
+    const hasVisual = result && ['video', 'image', 'table', 'code', 'audio', 'markdown', 'html', 'json', 'text', 'file'].includes(resultType)
 
-    // 获取 visual tab 的配置
-    const visualTabConfig = getTabConfig('visual', resultType)
+    // 获取 visual tab 的配置（优先从task的artifacts判断）
+    const tabResultType = getResultTypeFromTask()
+    const visualTabConfig = getTabConfig('visual', tabResultType)
 
     // visual tab 始终显示（即使没有结果也可以显示加载状态）
     return (
@@ -2671,6 +2876,36 @@ function TaskDetail() {
     }
   }
 
+  const handlePinTask = async () => {
+    setPinningTask(true)
+    try {
+      await tasksAPI.pinTask(task.taskId)
+      // 刷新任务详情
+      const updatedTask = await tasksAPI.getTaskDetails(id)
+      setTask(updatedTask)
+    } catch (error) {
+      console.error('置顶失败:', error)
+      alert('置顶失败，请稍后重试')
+    } finally {
+      setPinningTask(false)
+    }
+  }
+
+  const handleUnpinTask = async () => {
+    setPinningTask(true)
+    try {
+      await tasksAPI.unpinTask(task.taskId)
+      // 刷新任务详情
+      const updatedTask = await tasksAPI.getTaskDetails(id)
+      setTask(updatedTask)
+    } catch (error) {
+      console.error('取消置顶失败:', error)
+      alert('取消置顶失败，请稍后重试')
+    } finally {
+      setPinningTask(false)
+    }
+  }
+
   const handleRetryTask = async () => {
     if (retrying) return
 
@@ -2877,19 +3112,46 @@ function TaskDetail() {
         <Link to="/tasks" className="back-link">
           ← 返回任务列表
         </Link>
-        <button
-          className="delete-button-detail"
-          onClick={handleDeleteTask}
-          title="删除任务"
-          aria-label="删除任务"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
+        <div className="header-actions">
+          {task?.pinned ? (
+            <button
+              className="unpin-button-detail"
+              onClick={handleUnpinTask}
+              title="取消置顶"
+              disabled={pinningTask}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="17" x2="12" y2="22"></line>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+              </svg>
+            </button>
+          ) : (
+            <button
+              className="pin-button-detail"
+              onClick={handlePinTask}
+              title="置顶"
+              disabled={pinningTask}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="17" x2="12" y2="22"></line>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+              </svg>
+            </button>
+          )}
+          <button
+            className="delete-button-detail"
+            onClick={handleDeleteTask}
+            title="删除任务"
+            aria-label="删除任务"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* 任务信息 */}
@@ -2939,7 +3201,7 @@ function TaskDetail() {
             </div>
             <div className="info-item">
               <span className="info-label">产物数:</span>
-              <span className="info-value">{task.artifacts?.length || 0} 个</span>
+              <span className="info-value">{task.artifacts?.filter(a => a.metadata?.is_final === true).length || 0} 个</span>
             </div>
             {(task.metadata?.delegates?.filter(d => d != null).length > 0) ||
              (task.metadata?.skillNames && task.metadata.skillNames.length > 0) ? (

@@ -34,6 +34,8 @@ class SkillContext:
     input_data: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     execution_start_time: float = 0.0
+    workspace_dir: str = ""  # Per-task workspace directory
+    skill_type: str = "claude"  # "native" or "claude"
 
 
 class BaseHook(ABC):

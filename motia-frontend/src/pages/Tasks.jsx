@@ -19,6 +19,7 @@ function Tasks() {
   const [selectedTasks, setSelectedTasks] = useState(new Set())
   const [isSelectMode, setIsSelectMode] = useState(false)
   const [deletingTasks, setDeletingTasks] = useState(new Set())
+  const [pinningTasks, setPinningTasks] = useState(new Set())
   const pageSize = 12
 
   // 使用 useRef 防止重复提交（立即生效，不受 setState 异步影响）
@@ -69,6 +70,13 @@ function Tasks() {
     fetchTasks()
   }, [filter, sortBy, searchQuery, selectedSkill, page])
 
+  // 调试：监听 tasks 状态变化
+  useEffect(() => {
+    console.log('[Tasks] Tasks state updated:', tasks.length, 'tasks')
+    const pinnedTasks = tasks.filter(t => t.pinned)
+    console.log('[Tasks] Pinned tasks:', pinnedTasks.length, pinnedTasks.map(t => ({ id: t.taskId, pinned: t.pinned })))
+  }, [tasks])
+
   const fetchTasks = async () => {
     try {
       setLoading(true)
@@ -91,19 +99,35 @@ function Tasks() {
       const apiResponse = await tasksAPI.getTasks(params)
       let allTasks = apiResponse.data || []
 
-      // 排序
-      allTasks = [...allTasks].sort((a, b) => {
-        switch (sortBy) {
-          case 'newest':
-            return new Date(b.timestamp) - new Date(a.timestamp)
-          case 'oldest':
-            return new Date(a.timestamp) - new Date(b.timestamp)
-          case 'duration':
-            return (b.executionTime || 0) - (a.executionTime || 0)
-          default:
-            return 0
-        }
-      })
+      // 调试：检查 pinned 字段
+      console.log('[Tasks] Fetched tasks:', allTasks.length, 'tasks')
+      if (allTasks.length > 0) {
+        console.log('[Tasks] First task pinned status:', allTasks[0].pinned, 'Task:', allTasks[0].taskId)
+      }
+
+      // 只有在需要前端排序时才排序（后端已按 pinned DESC, created_at DESC 排序）
+      if (needsAllData) {
+        allTasks = [...allTasks].sort((a, b) => {
+          // 首先按 pinned 状态排序（置顶的在前）
+          const aPinned = a.pinned ? 1 : 0
+          const bPinned = b.pinned ? 1 : 0
+          if (aPinned !== bPinned) {
+            return bPinned - aPinned
+          }
+
+          // pinned 状态相同时，按选定条件排序
+          switch (sortBy) {
+            case 'newest':
+              return new Date(b.timestamp) - new Date(a.timestamp)
+            case 'oldest':
+              return new Date(a.timestamp) - new Date(b.timestamp)
+            case 'duration':
+              return (b.executionTime || 0) - (a.executionTime || 0)
+            default:
+              return 0
+          }
+        })
+      }
 
       // 如果有搜索查询，进行过滤
       if (searchQuery) {
@@ -165,6 +189,46 @@ function Tasks() {
     } catch (error) {
       console.error('删除任务失败:', error)
       alert('删除任务失败,请稍后重试')
+    }
+  }
+
+  const handlePinTask = async (taskId, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    setPinningTasks(prev => new Set([...prev, taskId]))
+    try {
+      await tasksAPI.pinTask(taskId)
+      fetchTasks()
+    } catch (error) {
+      console.error('置顶失败:', error)
+      alert('置顶失败，请稍后重试')
+    } finally {
+      setPinningTasks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(taskId)
+        return newSet
+      })
+    }
+  }
+
+  const handleUnpinTask = async (taskId, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    setPinningTasks(prev => new Set([...prev, taskId]))
+    try {
+      await tasksAPI.unpinTask(taskId)
+      fetchTasks()
+    } catch (error) {
+      console.error('取消置顶失败:', error)
+      alert('取消置顶失败，请稍后重试')
+    } finally {
+      setPinningTasks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(taskId)
+        return newSet
+      })
     }
   }
 
@@ -552,19 +616,46 @@ function Tasks() {
                     <div className="detail-item detail-item-with-action">
                       <span className="detail-label">执行时间:</span>
                       <span className="detail-value">{formatDuration(task.executionTime)}</span>
-                      <button
-                        className="delete-button"
-                        onClick={(e) => handleDeleteTask(task.taskId, e)}
-                        title="删除任务"
-                        aria-label="删除任务"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          <line x1="10" y1="11" x2="10" y2="17"></line>
-                          <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
-                      </button>
+                      <div className="action-buttons-group">
+                        {task.pinned ? (
+                          <button
+                            className="unpin-button"
+                            onClick={(e) => handleUnpinTask(task.taskId, e)}
+                            title="取消置顶"
+                            disabled={pinningTasks.has(task.taskId)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="17" x2="12" y2="22"></line>
+                              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                            </svg>
+                          </button>
+                        ) : (
+                          <button
+                            className="pin-button"
+                            onClick={(e) => handlePinTask(task.taskId, e)}
+                            title="置顶"
+                            disabled={pinningTasks.has(task.taskId)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="17" x2="12" y2="22"></line>
+                              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          className="delete-button"
+                          onClick={(e) => handleDeleteTask(task.taskId, e)}
+                          title="删除任务"
+                          aria-label="删除任务"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     {task.skill && (
                       <div className="detail-item">

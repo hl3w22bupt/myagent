@@ -67,6 +67,9 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     old_string = params.get("old_string")
     new_string = params.get("new_string")
 
+    # Get workspace directory
+    workspace_dir = params.get("_workspace_dir") or os.getenv("MOTIA_WORKSPACE_DIR")
+
     if not all([file_path, old_string]):
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
@@ -76,11 +79,36 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"success": False, "error": "file_path and old_string are required"}
 
+    # Use workspace for relative paths
+    if workspace_dir and not os.path.isabs(file_path):
+        file_path = os.path.join(workspace_dir, file_path)
+
     try:
         # Read file content
         path = Path(file_path)
         if not path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+            # If file not found in current skill workspace, search in task-level workspace
+            # This supports multi-skill workflows where upstream skills create files
+            if workspace_dir:
+                # Get task-level workspace (one level up from skill workspace)
+                task_workspace = os.path.dirname(workspace_dir)
+                if os.path.exists(task_workspace):
+                    # Search in all skill subdirectories
+                    found = False
+                    for skill_dir in os.listdir(task_workspace):
+                        skill_path = os.path.join(task_workspace, skill_dir)
+                        if os.path.isdir(skill_path):
+                            search_path = os.path.join(skill_path, os.path.basename(file_path))
+                            if os.path.exists(search_path):
+                                file_path = search_path
+                                path = Path(file_path)
+                                found = True
+                                break
+
+                    if not found:
+                        raise FileNotFoundError(f"File not found: {file_path} (searched in {task_workspace})")
+            else:
+                raise FileNotFoundError(f"File not found: {file_path}")
 
         content = path.read_text(encoding="utf-8")
 

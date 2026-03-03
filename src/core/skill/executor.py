@@ -214,7 +214,8 @@ class SkillExecutor:
                 result = await self.hook_executor.execute_with_hooks(
                     skill_name=skill_name,
                     skill_func=_skill_func,
-                    input_data=input_data
+                    input_data=input_data,
+                    skill_type=str(skill.type)  # Pass skill type from registry
                 )
 
                 execution_time = time.time() - start_time
@@ -469,7 +470,6 @@ class SkillExecutor:
             **input_data  # Include all fields from input_data
         }
 
-        print(f"[DEBUG] _execute_claude_skill calling handler with:")
         result = handler.execute(handler_input)
         # 移除 result 的打印输出，避免干扰 [STRUCTURED_OUTPUT] 标记
 

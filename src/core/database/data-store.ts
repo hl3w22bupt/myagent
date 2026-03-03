@@ -50,6 +50,7 @@ export interface Task {
   output?: string;
   error?: string;
   executionTime?: number;
+  pinned?: boolean;  // Whether task is pinned to top
   metadata?: {
     /** Subagent used for this task */
     subagent?: string;
@@ -277,6 +278,17 @@ export class DataStore {
         console.log('[DataStore] Migration: ptc_codes column added successfully');
       } else {
         console.log('[DataStore] Migration: ptc_codes column already exists');
+      }
+
+      // Migration 3: Add pinned column to tasks table
+      const hasPinned = tableInfo[0]?.values?.some((row: any[]) => row[1] === 'pinned');
+
+      if (!hasPinned) {
+        console.log('[DataStore] Migration: Adding pinned column to tasks table');
+        this.db.run('ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0');
+        console.log('[DataStore] Migration: pinned column added successfully');
+      } else {
+        console.log('[DataStore] Migration: pinned column already exists');
       }
 
       // Migration 2: Add conversation_rounds and messages_count columns to task_contexts table
@@ -621,6 +633,10 @@ export class DataStore {
       fields.push('is_retry = ?');
       values.push(updates.isRetry ? 1 : 0);
     }
+    if (updates.pinned !== undefined) {
+      fields.push('pinned = ?');
+      values.push(updates.pinned ? 1 : 0);
+    }
 
     fields.push('updated_at = ?');
     values.push(updated.updatedAt.getTime());
@@ -750,6 +766,38 @@ export class DataStore {
   }
 
   /**
+   * Pin a task to top
+   */
+  async pinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: true });
+  }
+
+  /**
+   * Unpin a task
+   */
+  async unpinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: false });
+  }
+
+  /**
+   * List all pinned tasks
+   */
+  async listPinnedTasks(): Promise<Task[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`SELECT * FROM tasks WHERE pinned = 1 ORDER BY updated_at DESC`);
+    const tasks: Task[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as any;
+      tasks.push(this.mapDbTaskToTask(row));
+    }
+    stmt.free();
+
+    return tasks;
+  }
+
+  /**
    * 批量获取任务的产物数量
    * @param taskIds 任务ID列表
    * @returns Map<taskId, artifactCount>
@@ -764,7 +812,7 @@ export class DataStore {
 
     const placeholders = taskIds.map(() => '?').join(',');
     const stmt = this.db.prepare(
-      `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id IN (${placeholders}) GROUP BY task_id`
+      `SELECT task_id, COUNT(*) as count FROM artifacts WHERE task_id IN (${placeholders}) AND metadata LIKE '%"is_final": true%' GROUP BY task_id`
     );
     stmt.bind(taskIds);
 
@@ -1007,6 +1055,55 @@ export class DataStore {
         artifact.metadata ? JSON.stringify(artifact.metadata) : null,
         artifact.timestamp instanceof Date ? artifact.timestamp.getTime() : Date.now(),
       ]
+    );
+
+    await this.save();
+  }
+
+  async updateArtifact(artifactId: string, updates: Partial<Omit<ArtifactIndex, 'id' | 'taskId'>>): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    if (updates.artifactType !== undefined) {
+      setParts.push('artifact_type = ?');
+      values.push(updates.artifactType);
+    }
+    if (updates.action !== undefined) {
+      setParts.push('action = ?');
+      values.push(updates.action);
+    }
+    if (updates.path !== undefined) {
+      setParts.push('path = ?');
+      values.push(updates.path);
+    }
+    if (updates.description !== undefined) {
+      setParts.push('description = ?');
+      values.push(updates.description);
+    }
+    if (updates.commitHash !== undefined) {
+      setParts.push('commit_hash = ?');
+      values.push(updates.commitHash);
+    }
+    if (updates.metadata !== undefined) {
+      setParts.push('metadata = ?');
+      values.push(JSON.stringify(updates.metadata));
+    }
+    if (updates.timestamp !== undefined) {
+      const ts = updates.timestamp instanceof Date ? updates.timestamp.getTime() : updates.timestamp;
+      setParts.push('timestamp = ?');
+      values.push(ts);
+    }
+
+    if (setParts.length === 0) return;
+
+    values.push(artifactId);
+
+    this.db.run(
+      `UPDATE artifacts SET ${setParts.join(', ')} WHERE id = ?`,
+      values
     );
 
     await this.save();
@@ -1656,6 +1753,7 @@ export class DataStore {
       output: row.output,
       error: row.error,
       executionTime: row.execution_time,
+      pinned: row.pinned === 1,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       structuredOutput: row.structured_output ? JSON.parse(row.structured_output) : undefined,
       ptcCodes: row.ptc_codes ? JSON.parse(row.ptc_codes) : undefined,
