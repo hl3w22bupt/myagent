@@ -1693,6 +1693,7 @@ export class PostgresDataStore implements Database {
       task: row.task,
       sessionId: row.session_id,
       status: row.status as TaskStatus,
+      app: row.app || 'default',
       // PostgreSQL returns bigint as string, need to convert to number
       createdAt: new Date(parseInt(row.created_at)),
       updatedAt: new Date(parseInt(row.updated_at)),

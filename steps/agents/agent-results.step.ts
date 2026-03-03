@@ -153,6 +153,7 @@ export const handler = async (request: any, { logger }: any) => {
       task: task.task,
       success: task.status === 'completed',
       status: task.status,
+      app: task.app,  // 应用标识
       output: task.output,
       error: task.error,
       executionTime: task.executionTime,

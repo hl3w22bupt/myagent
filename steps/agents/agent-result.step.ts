@@ -212,6 +212,7 @@ export const handler = async (request: any, { logger }: any) => {
           taskId: task.id,
           task: task.task,
           status: task.status,  // 返回实际状态
+          app: task.app,  // 应用标识
           success: success,
           output: task.output,
           error: task.error,

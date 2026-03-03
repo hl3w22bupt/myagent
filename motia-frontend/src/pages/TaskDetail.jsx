@@ -3164,6 +3164,17 @@ function TaskDetail() {
               <span className="info-value">{task.taskId}</span>
             </div>
             <div className="info-item">
+              <span className="info-label">应用:</span>
+              <span className="info-value info-app-badge">
+                <svg className="info-app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                {task.app || 'default'}
+              </span>
+            </div>
+            <div className="info-item">
               <span className="info-label">状态:</span>
               <div className="info-value-with-action">
                 <span className={`info-value status status-${task.status || 'pending'}`}>

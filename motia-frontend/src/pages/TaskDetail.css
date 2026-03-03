@@ -224,8 +224,17 @@
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 1rem 1.5rem;
+}
+
+/* 占据多列的 info-item */
+.info-item.span-2 {
+  grid-column: span 2;
+}
+
+.info-item.span-3 {
+  grid-column: span 3;
 }
 
 .info-item {
@@ -243,6 +252,17 @@
 
 /* 包含委派给和技能的 full-width 元素保持水平布局 */
 .info-item.full-width.inline-badges {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* 内联字段样式 - 紧凑布局，不换行 */
+.info-item.inline-fields {
+  grid-column: span 3;
+  flex-wrap: nowrap !important;
+}
+
+.badge-group {
   flex-direction: row;
   align-items: center;
 }
@@ -333,6 +353,25 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* App 徽章样式 */
+.info-app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.info-app-icon {
+  width: 1rem;
+  height: 1rem;
+  color: #7c3aed;
 }
 
 /* 技能Badge样式 - 柔和配色设计 */

@@ -430,9 +430,6 @@
 .action-buttons-group {
   display: flex;
   gap: 0.25rem;
-  position: absolute;
-  bottom: 1rem;
-  right: 1rem;
 }
 
 /* 小重试按钮样式 - 用于任务卡片 */
@@ -495,13 +492,6 @@
 
 .detail-item-with-action .delete-button {
   margin-left: auto;
-}
-
-.task-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.75rem;
-  margin-top: auto;
 }
 
 .task-id {
@@ -781,4 +771,53 @@
 .artifact-badge::before {
   content: '📦';
   font-size: 0.875rem;
+}
+
+/* App 徽章样式 */
+.detail-app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.detail-app-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: #7c3aed;
+}
+
+.detail-separator {
+  margin: 0 0.5rem;
+  color: #94a3b8;
+}
+
+/* Footer row - app on left, buttons on right */
+.detail-footer-row {
+  justify-content: space-between !important;
+  gap: 0 !important;
+}
+
+.detail-footer-row .spacer {
+  flex: 1;
+}
+
+/* Task footer - app on left, buttons on right, separate layer */
+.task-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 0.8rem;
+}
+
+.task-footer-app {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
 }

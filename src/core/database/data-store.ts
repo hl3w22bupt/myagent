@@ -44,6 +44,7 @@ export interface Task {
   task: string;
   sessionId: string;
   status: TaskStatus;
+  app: string;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
@@ -1747,6 +1748,7 @@ export class DataStore {
       task: row.task,
       sessionId: row.session_id,
       status: row.status as TaskStatus,
+      app: row.app || 'default',
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
