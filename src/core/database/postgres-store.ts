@@ -321,6 +321,19 @@ export class PostgresDataStore implements Database {
         END $$;
       `);
 
+      // 自动迁移：为 tasks 表添加 pinned 列（如果不存在）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tasks' AND column_name = 'pinned'
+          ) THEN
+            ALTER TABLE tasks ADD COLUMN pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+
       // 自动迁移：为 task_contexts 表添加 conversation_rounds 和 messages_count 列（如果不存在）
       await safeQuery(`
         DO $$
@@ -566,6 +579,10 @@ export class PostgresDataStore implements Database {
         // Convert boolean to integer (PostgreSQL stores as INTEGER)
         values.push(updates.isRetry ? 1 : 0);
       }
+      if (updates.pinned !== undefined) {
+        fields.push(`pinned = $${paramIndex++}`);
+        values.push(updates.pinned);
+      }
 
       fields.push(`updated_at = $${paramIndex++}`);
       values.push(updated.updatedAt.getTime());
@@ -630,8 +647,8 @@ export class PostgresDataStore implements Database {
       const total = parseInt(countResult.rows[0].count);
       console.log('[PostgresDataStore] listTasks: COUNT query took', Date.now() - countStart, 'ms, total:', total);
 
-      // Get paginated results
-      let query = `SELECT * FROM tasks ${whereClause} ORDER BY created_at DESC`;
+      // Get paginated results - always sort pinned tasks first, then by creation date
+      let query = `SELECT * FROM tasks ${whereClause} ORDER BY pinned DESC, created_at DESC`;
       if (filters?.limit) {
         query += ` LIMIT $${paramIndex++}`;
         values.push(filters.limit);
@@ -808,6 +825,35 @@ export class PostgresDataStore implements Database {
       );
 
       throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Pin a task to top
+   */
+  async pinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: true });
+  }
+
+  /**
+   * Unpin a task
+   */
+  async unpinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: false });
+  }
+
+  /**
+   * List all pinned tasks
+   */
+  async listPinnedTasks(): Promise<Task[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT * FROM tasks WHERE pinned = true ORDER BY updated_at DESC`
+      );
+      return result.rows.map(this.mapDbTaskToTask);
     } finally {
       client.release();
     }
@@ -1654,6 +1700,7 @@ export class PostgresDataStore implements Database {
       output: row.output,
       error: row.error,
       executionTime: row.execution_time,
+      pinned: row.pinned || false,
       metadata: row.metadata,
       structuredOutput: row.structured_output,
       ptcCodes: row.ptc_codes,

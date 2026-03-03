@@ -184,7 +184,16 @@ export const tasksAPI = {
     })
   },
   retryTask: (id) =>
-    apiClient.post('/agent/result/retry', {}, { params: { id } })
+    apiClient.post('/agent/result/retry', {}, { params: { id } }),
+  pinTask: (taskId) =>
+    apiClient.post('/api/tasks/pin', { taskId })
+      .then(response => response.data),
+  unpinTask: (taskId) =>
+    apiClient.post('/api/tasks/unpin', { taskId })
+      .then(response => response.data),
+  getPinnedTasks: () =>
+    apiClient.get('/api/tasks/pinned')
+      .then(response => response.data),
 }
 
 // 精选相关 API

@@ -34,6 +34,9 @@ export interface Database {
   }): Promise<{ tasks: Task[]; total: number }>;
   deleteTask(taskId: string): Promise<boolean>;
   deleteTasks(taskIds: string[]): Promise<number>;
+  pinTask(taskId: string): Promise<Task>;      // Pin a task
+  unpinTask(taskId: string): Promise<Task>;    // Unpin a task
+  listPinnedTasks(): Promise<Task[]>;          // List all pinned tasks
 
   /**
    * Context operations

@@ -349,6 +349,7 @@ function TaskDetail() {
   const [streamVersion, setStreamVersion] = useState(0) // 用于追踪 stream 变化的版本号
   const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Map()) // artifactId -> favoriteId 映射
   const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
+  const [pinningTask, setPinningTask] = useState(false) // 置顶操作加载状态
 
   // 表格状态管理
   const [tableSearchQuery, setTableSearchQuery] = useState('')
@@ -706,6 +707,7 @@ function TaskDetail() {
         console.log('正在查询任务详情:', id)
         const task = await tasksAPI.getTaskDetails(id)
         console.log('任务详情查询成功:', task)
+        console.log('[TaskDetail] pinned status:', task?.pinned, 'for task:', task?.taskId)
         setTask(task)
         setError('')
         setLoading(false)
@@ -2874,6 +2876,36 @@ function TaskDetail() {
     }
   }
 
+  const handlePinTask = async () => {
+    setPinningTask(true)
+    try {
+      await tasksAPI.pinTask(task.taskId)
+      // 刷新任务详情
+      const updatedTask = await tasksAPI.getTaskDetails(id)
+      setTask(updatedTask)
+    } catch (error) {
+      console.error('置顶失败:', error)
+      alert('置顶失败，请稍后重试')
+    } finally {
+      setPinningTask(false)
+    }
+  }
+
+  const handleUnpinTask = async () => {
+    setPinningTask(true)
+    try {
+      await tasksAPI.unpinTask(task.taskId)
+      // 刷新任务详情
+      const updatedTask = await tasksAPI.getTaskDetails(id)
+      setTask(updatedTask)
+    } catch (error) {
+      console.error('取消置顶失败:', error)
+      alert('取消置顶失败，请稍后重试')
+    } finally {
+      setPinningTask(false)
+    }
+  }
+
   const handleRetryTask = async () => {
     if (retrying) return
 
@@ -3080,19 +3112,46 @@ function TaskDetail() {
         <Link to="/tasks" className="back-link">
           ← 返回任务列表
         </Link>
-        <button
-          className="delete-button-detail"
-          onClick={handleDeleteTask}
-          title="删除任务"
-          aria-label="删除任务"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
+        <div className="header-actions">
+          {task?.pinned ? (
+            <button
+              className="unpin-button-detail"
+              onClick={handleUnpinTask}
+              title="取消置顶"
+              disabled={pinningTask}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="17" x2="12" y2="22"></line>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+              </svg>
+            </button>
+          ) : (
+            <button
+              className="pin-button-detail"
+              onClick={handlePinTask}
+              title="置顶"
+              disabled={pinningTask}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="17" x2="12" y2="22"></line>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-2.11 1.55l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+              </svg>
+            </button>
+          )}
+          <button
+            className="delete-button-detail"
+            onClick={handleDeleteTask}
+            title="删除任务"
+            aria-label="删除任务"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* 任务信息 */}

@@ -50,6 +50,7 @@ export interface Task {
   output?: string;
   error?: string;
   executionTime?: number;
+  pinned?: boolean;  // Whether task is pinned to top
   metadata?: {
     /** Subagent used for this task */
     subagent?: string;
@@ -277,6 +278,17 @@ export class DataStore {
         console.log('[DataStore] Migration: ptc_codes column added successfully');
       } else {
         console.log('[DataStore] Migration: ptc_codes column already exists');
+      }
+
+      // Migration 3: Add pinned column to tasks table
+      const hasPinned = tableInfo[0]?.values?.some((row: any[]) => row[1] === 'pinned');
+
+      if (!hasPinned) {
+        console.log('[DataStore] Migration: Adding pinned column to tasks table');
+        this.db.run('ALTER TABLE tasks ADD COLUMN pinned INTEGER DEFAULT 0');
+        console.log('[DataStore] Migration: pinned column added successfully');
+      } else {
+        console.log('[DataStore] Migration: pinned column already exists');
       }
 
       // Migration 2: Add conversation_rounds and messages_count columns to task_contexts table
@@ -621,6 +633,10 @@ export class DataStore {
       fields.push('is_retry = ?');
       values.push(updates.isRetry ? 1 : 0);
     }
+    if (updates.pinned !== undefined) {
+      fields.push('pinned = ?');
+      values.push(updates.pinned ? 1 : 0);
+    }
 
     fields.push('updated_at = ?');
     values.push(updated.updatedAt.getTime());
@@ -747,6 +763,38 @@ export class DataStore {
 
     await this.save();
     return changes;
+  }
+
+  /**
+   * Pin a task to top
+   */
+  async pinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: true });
+  }
+
+  /**
+   * Unpin a task
+   */
+  async unpinTask(taskId: string): Promise<Task> {
+    return this.updateTask(taskId, { pinned: false });
+  }
+
+  /**
+   * List all pinned tasks
+   */
+  async listPinnedTasks(): Promise<Task[]> {
+    await this.ensureInitialized();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`SELECT * FROM tasks WHERE pinned = 1 ORDER BY updated_at DESC`);
+    const tasks: Task[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as any;
+      tasks.push(this.mapDbTaskToTask(row));
+    }
+    stmt.free();
+
+    return tasks;
   }
 
   /**
@@ -1705,6 +1753,7 @@ export class DataStore {
       output: row.output,
       error: row.error,
       executionTime: row.execution_time,
+      pinned: row.pinned === 1,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       structuredOutput: row.structured_output ? JSON.parse(row.structured_output) : undefined,
       ptcCodes: row.ptc_codes ? JSON.parse(row.ptc_codes) : undefined,

@@ -220,6 +220,7 @@ export const handler = async (request: any, { logger }: any) => {
           structuredOutput: task.structuredOutput,  // Structured output at root level
           sessionId: task.sessionId,
           timestamp: safeToISOString(task.createdAt) || new Date().toISOString(),
+          pinned: task.pinned || false,  // 置顶状态
           // Include artifacts array
           artifacts: artifacts.map((artifact: ArtifactIndex) => ({
             id: artifact.id,
