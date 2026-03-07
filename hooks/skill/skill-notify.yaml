@@ -1,0 +1,13 @@
+# Skill Notification Hook
+# Sends notifications when skills complete
+
+type: notification
+trigger: postExec
+description: "技能执行完成时发送通知"
+enabled: false  # Disabled by default, requires LARK_SKILL_WEBHOOK env var
+config:
+  channel: lark
+  webhook: "{{ env.LARK_SKILL_WEBHOOK }}"
+  message_template: |
+    技能执行完成：{{ skillName }}
+    耗时：{{ executionTime }}ms

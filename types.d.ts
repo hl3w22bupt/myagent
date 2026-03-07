@@ -48,6 +48,7 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
   }
     
 }

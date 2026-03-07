@@ -1,0 +1,14 @@
+# Content Moderation Hook
+# Detects and blocks malicious content patterns
+
+type: condition_check
+trigger: preExec
+description: "检测 XSS 攻击和 SQL 注入等恶意内容"
+config:
+  patterns:
+    - regex: "<script[^>]*>.*?</script>"
+      stop: true
+      reason: "检测到 XSS 攻击"
+    - regex: "(DROP|DELETE)\\s+TABLE"
+      stop: true
+      reason: "检测到 SQL 注入"

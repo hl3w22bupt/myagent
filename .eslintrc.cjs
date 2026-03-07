@@ -12,6 +12,7 @@ module.exports = {
   env: {
     node: true,
     es6: true,
+    jest: true,
   },
   rules: {
     '@typescript-eslint/explicit-function-return-type': 'off',
@@ -19,4 +20,17 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }],
     'no-console': 'off',
   },
+  overrides: [
+    {
+      files: ['tests/**/*', '**/*.test.ts', '**/*.spec.ts'],
+      env: {
+        node: true,
+        es6: true,
+        jest: true,
+      },
+      rules: {
+        '@typescript-eslint/no-unused-vars': 'off',
+      },
+    },
+  ],
 };

@@ -1,0 +1,12 @@
+# Content Moderation Test Hook
+# Blocks tasks containing "DROP" or "DELETE"
+
+type: condition_check
+trigger: preExec
+description: "测试内容审查 - 阻止敏感操作"
+enabled: true
+config:
+  patterns:
+    - regex: "DROP|DELETE"
+      stop: true
+      reason: "检测到危险操作关键词，任务已阻止"

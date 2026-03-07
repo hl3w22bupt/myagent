@@ -913,10 +913,17 @@ ${task}
 
   /**
    * Get or create a subagent instance.
+   *
+   * For workflow steps, each step creates a new subagent instance with a unique ID.
+   * For normal execution, the same subagent instance is reused across multiple calls.
    */
-  private async getOrCreateSubagent(name: string): Promise<Agent> {
-    if (this.subagents.has(name)) {
-      return this.subagents.get(name)!;
+  private async getOrCreateSubagent(name: string, context?: any): Promise<Agent> {
+    // Check if this is a workflow step execution
+    const workflowStepId = context?.workflowStepId;
+    const subagentKey = workflowStepId ? `${name}-${workflowStepId}` : name;
+
+    if (this.subagents.has(subagentKey)) {
+      return this.subagents.get(subagentKey)!;
     }
 
     // Create subagent instance
@@ -925,7 +932,7 @@ ${task}
 
     // Create unique sessionId for subagent with clear prefix
     // Using independent namespace to distinguish from master agent
-    const subagentSessionId = `subagent-${name}-${Date.now()}`;
+    const subagentSessionId = `subagent-${subagentKey}-${Date.now()}`;
 
     const subagent = new Agent(
       {
@@ -939,11 +946,12 @@ ${task}
       subagentSessionId
     );
 
-    this.subagents.set(name, subagent);
+    this.subagents.set(subagentKey, subagent);
 
     console.log(`[MasterAgent] Created subagent: ${name}`, {
       subagentSessionId,
       masterSessionId: this.sessionId,
+      workflowStepId,
     });
 
     return subagent;
@@ -1066,7 +1074,8 @@ ${task}
       });
 
       // Get or create subagent instance
-      const subagent = await this.getOrCreateSubagent(subagentName);
+      // Pass context to include workflowStepId for unique sessionId generation
+      const subagent = await this.getOrCreateSubagent(subagentName, context);
 
       // ⭐ NEW: Get userProfile from orchestrator to pass to subagent
       // This ensures user profile is available in all subagent LLM calls

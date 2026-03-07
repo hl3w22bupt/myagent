@@ -83,6 +83,20 @@ export const bodySchema = z.object({
    * This is useful for integrations (e.g., MyEcho) that manage their own conversation context.
    */
   rewriteRequest: z.boolean().optional().describe('Enable request rewriting with conversation history (default: true)'),
+
+  /**
+   * Optional: Workflow name to execute.
+   * When specified, uses the predefined workflow (sequence of agents) instead of LLM planning.
+   * Workflow list can be fetched from /api/workflows endpoint.
+   */
+  workflow: z.string().optional().describe('Workflow name to execute'),
+
+  /**
+   * Optional: Workflow input parameters.
+   * When specified with 'workflow', these parameters are passed directly to the workflow.
+   * If not provided, the 'task' parameter will be used as a fallback (mapped to 'requirement' for simple_dev_workflow).
+   */
+  workflow_input: z.record(z.string(), z.any()).optional().describe('Workflow input parameters'),
 });
 
 /**
@@ -135,7 +149,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest } =
+  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -177,9 +191,10 @@ export const handler = async (request: any, { emit, logger }: any) => {
     status: TaskStatus.PENDING,
     metadata: {
       subagent, // 保存 subagent 信息用于后续多轮对话
+      workflow, // 保存 workflow 信息
     },
   });
-  logger.info('Task record created in database', { taskId, status: 'PENDING', subagent });
+  logger.info('Task record created in database', { taskId, status: 'PENDING', subagent, workflow });
 
   // Emit agent task execution event
   // This will be picked up by the master-agent step
@@ -198,6 +213,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
       userContext, // MyEcho: User configuration bundle
       subagent, // MyEcho: Direct subagent selection
       rewriteRequest, // Request rewriting control (default: true)
+      workflow, // Workflow name to execute (if specified)
+      workflowInput: workflow_input, // Workflow input parameters (if specified)
     },
   } as any);
 
