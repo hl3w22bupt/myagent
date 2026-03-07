@@ -890,20 +890,32 @@ function ConversationContent({ rounds }) {
               <div className="ctx-messages">
                 <div className="ctx-message ctx-message-user">
                   <span className="ctx-message-role">User</span>
-                  <p>{round.userMessage}</p>
+                  <p>
+                    {typeof round.userMessage === 'object'
+                      ? JSON.stringify(round.userMessage, null, 2)
+                      : String(round.userMessage)}
+                  </p>
                 </div>
 
                 {round.assistantOutput && (
                   <div className="ctx-message ctx-message-assistant">
                     <span className="ctx-message-role">Assistant</span>
-                    <p>{round.assistantOutput}</p>
+                    <p>
+                      {typeof round.assistantOutput === 'object'
+                        ? JSON.stringify(round.assistantOutput, null, 2)
+                        : String(round.assistantOutput)}
+                    </p>
                   </div>
                 )}
 
                 {round.error && (
                   <div className="ctx-message ctx-message-error">
                     <span className="ctx-message-role">Error</span>
-                    <p>{round.error}</p>
+                    <p>
+                      {typeof round.error === 'object'
+                        ? JSON.stringify(round.error, null, 2)
+                        : String(round.error)}
+                    </p>
                   </div>
                 )}
               </div>

@@ -2504,7 +2504,9 @@ function TaskDetail() {
       <div className="message-group">
         <div className="group-timestamp">{groupTimestamp}</div>
         {group.map(msg => (
-          msg.progressType === 'chat' ? (
+          msg.progressType === 'workflow' ? (
+            <WorkflowBubble key={msg.id || msg.timestamp} message={msg} />
+          ) : msg.progressType === 'chat' ? (
             <ChatBubble key={msg.id || msg.timestamp} message={msg} />
           ) : (
             <MessageBubble key={msg.id || msg.timestamp} message={msg} />
@@ -2788,6 +2790,47 @@ function TaskDetail() {
             <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
           </div>
           <div className="chat-message">{content}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // 工作流气泡组件
+  const WorkflowBubble = ({ message }) => {
+    const content = message.content || ''
+
+    // 获取状态文本
+    const getStatusText = () => {
+      if (message.status === 'started') return '已启动'
+      if (message.status === 'running') return '执行中'
+      if (message.status === 'completed') return '已完成'
+      if (message.status === 'failed') return '失败'
+      return ''
+    }
+
+    // 工作流图标 - 流程图/管道图标
+    const workflowIcon = (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
+        <rect x="2" y="3" width="6" height="6" rx="1"/>
+        <rect x="16" y="3" width="6" height="6" rx="1"/>
+        <rect x="2" y="15" width="6" height="6" rx="1"/>
+        <rect x="16" y="15" width="6" height="6" rx="1"/>
+        <path d="M8 6h8M8 18h8M5 9v6M19 9v6"/>
+      </svg>
+    )
+
+    return (
+      <div className="chat-bubble workflow">
+        <div className="chat-avatar workflow-avatar">
+          {workflowIcon}
+        </div>
+        <div className="chat-content">
+          <div className="chat-message-header">
+            <span className="chat-status">{getStatusText()}</span>
+            <span className="chat-workflow-name">{message.metadata?.workflow || '工作流'}</span>
+            <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <div className="chat-message workflow-message">{content}</div>
         </div>
       </div>
     )
@@ -3215,7 +3258,8 @@ function TaskDetail() {
               <span className="info-value">{task.artifacts?.filter(a => a.metadata?.is_final === true).length || 0} 个</span>
             </div>
             {(task.metadata?.delegates?.filter(d => d != null).length > 0) ||
-             (task.metadata?.skillNames && task.metadata.skillNames.length > 0) ? (
+             (task.metadata?.skillNames && task.metadata.skillNames.length > 0) ||
+             task.metadata?.workflow ? (
               <div className="info-item full-width inline-badges">
                 {task.metadata?.delegates?.filter(d => d != null).length > 0 && (
                   <div className="badge-group">
@@ -3238,6 +3282,16 @@ function TaskDetail() {
                           {skill}
                         </span>
                       ))}
+                    </div>
+                  </div>
+                )}
+                {task.metadata?.workflow && (
+                  <div className="badge-group">
+                    <span className="info-label">工作流:</span>
+                    <div className="workflow-badges">
+                      <span className="workflow-badge">
+                        {task.metadata.workflow}
+                      </span>
                     </div>
                   </div>
                 )}

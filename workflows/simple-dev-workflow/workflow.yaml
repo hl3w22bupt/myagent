@@ -1,0 +1,37 @@
+name: "简单开发工作流"
+description: "开发分析 -> 代码实现"
+
+input_schema:
+  requirement:
+    type: string
+    required: true
+
+output_schema:
+  plan: object
+  implementation: object
+
+steps:
+  - id: plan
+    name: "制定计划"
+    agent: developer-engineer
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      planResult: "structuredOutput"
+
+  - id: implement
+    name: "实现代码"
+    agent: developer-engineer
+    depends_on: [plan]
+    input:
+      requirement: "{{ input.requirement }}"
+      plan: "{{ planResult }}"
+    output:
+      implementationResult: "structuredOutput"
+
+# Map intermediate variables to final output
+output:
+  plan:
+    from: "planResult"
+  implementation:
+    from: "implementationResult"

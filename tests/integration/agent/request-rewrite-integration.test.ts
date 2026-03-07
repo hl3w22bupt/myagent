@@ -16,11 +16,11 @@ describe('MasterAgent - RequestRewriter Integration', () => {
     // Mock streams BEFORE creating MasterAgent
     mockStreams = {
       taskExecution: {
-        // @ts-ignore - jest mockResolvedValue type issue
+        // @ts-expect-error - jest mockResolvedValue type issue
         set: jest.fn().mockResolvedValue(undefined),
       },
       executionTraces: {
-        // @ts-ignore - jest mockResolvedValue type issue
+        // @ts-expect-error - jest mockResolvedValue type issue
         set: jest.fn().mockResolvedValue(undefined),
       },
     };

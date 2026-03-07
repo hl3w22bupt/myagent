@@ -47,3 +47,76 @@ export interface TaskContext {
  * Result from preExec hook
  */
 export type PreExecResult = void | { stop?: boolean; reason?: string; modifiedTask?: string };
+
+// ============================================================
+// Configurable Hook System Types
+// ============================================================
+
+// Hook trigger timing
+export type HookTrigger = 'preExec' | 'postExec' | 'onProgressingNotify';
+
+// Hook types
+export type HookType =
+  | 'http_webhook'
+  | 'condition_check'
+  | 'middleware'
+  | 'notification';
+
+// Base hook configuration
+export interface ConfigurableHookConfig {
+  type: HookType;
+  trigger: HookTrigger | HookTrigger[];
+  config: Record<string, any>;
+}
+
+// HTTP Webhook config
+export interface HttpWebhookConfig {
+  url: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  headers?: Record<string, string>;
+  body?: Record<string, any>;
+  stop_on_response?: {
+    field: string;
+    operator: string;
+    value: any;
+  };
+  stop_reason?: string;
+}
+
+// Condition check config
+export interface ConditionCheckConfig {
+  patterns: Array<{
+    regex: string;
+    stop?: boolean;
+    reason?: string;
+  }>;
+}
+
+// Middleware config
+export interface MiddlewareConfig {
+  set?: Record<string, any>;
+  remove?: string[];
+  load_from?: Array<{
+    source: string;
+    target: string;
+    cache_ttl?: number;
+  }>;
+  transform?: Record<string, any>;
+}
+
+// Notification config
+export interface NotificationConfig {
+  channel: 'lark' | 'dingtalk' | 'slack' | 'email';
+  webhook?: string;
+  message_template: string;
+  send_when?: Array<{
+    field: string;
+    operator: string;
+    value: any;
+  }>;
+}
+
+// Hook handler interface
+export interface HookHandler {
+  execute(context: TaskContext, config: Record<string, any>): Promise<any>;
+}

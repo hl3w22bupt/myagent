@@ -1,0 +1,47 @@
+name: "条件分支工作流"
+description: "根据复杂度选择处理方式"
+
+input_schema:
+  code:
+    type: string
+    required: true
+  complexity:
+    type: string
+    required: true
+
+steps:
+  - id: check_complexity
+    name: "复杂度检查"
+    agent: data-analyst
+    input:
+      code: "{{ input.code }}"
+      complexity: "{{ input.complexity }}"
+    output:
+      isComplex: "structuredOutput.isComplex"
+
+  - id: simple_review
+    name: "简单审查"
+    agent: code-reviewer
+    depends_on: [check_complexity]
+    condition:
+      field: isComplex
+      operator: "=="
+      value: false
+    input:
+      code: "{{ input.code }}"
+    output:
+      simpleResult: "structuredOutput"
+
+  - id: complex_review
+    name: "复杂审查"
+    agent: code-reviewer
+    depends_on: [check_complexity]
+    condition:
+      field: isComplex
+      operator: "=="
+      value: true
+    input:
+      code: "{{ input.code }}"
+      deepAnalysis: true
+    output:
+      complexResult: "structuredOutput"

@@ -1,0 +1,11 @@
+# Task Enrichment Hook
+# Adds metadata to tasks before execution
+
+type: middleware
+trigger: preExec
+description: "为任务添加元数据"
+config:
+  set:
+    metadata.enrichedAt: "{{ new Date().toISOString() }}"
+  remove:
+    - metadata.sensitiveField

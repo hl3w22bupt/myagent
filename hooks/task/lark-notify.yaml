@@ -1,0 +1,19 @@
+# Lark Notification Hook
+# Sends notifications to Lark on task completion
+
+type: notification
+trigger: postExec
+description: "任务失败时发送飞书通知"
+enabled: false  # Disabled by default, requires LARK_WEBHOOK env var
+config:
+  channel: lark
+  webhook: "{{ env.LARK_WEBHOOK }}"
+  message_template: |
+    **任务通知**
+    - 任务：{{ task }}
+    - 状态：{{ status }}
+    - 耗时：{{ executionTime }}ms
+  send_when:
+    - field: status
+      operator: "in"
+      value: ["failed"]

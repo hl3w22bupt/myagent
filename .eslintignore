@@ -1,0 +1,21 @@
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Motia outputs
+outputs/
+tmp-workspace/
+
+# Sandbox workspace
+/tmp/motia-sandbox/
+/tmp/motia-sandbox-test/
+
+# Node modules
+node_modules/
+
+# Python modules (external dependencies)
+python_modules/

@@ -1,0 +1,18 @@
+# External Approval Hook
+# Requires external approval before task execution
+
+type: http_webhook
+trigger: preExec
+description: "需要外部审批通过后才能执行任务"
+enabled: true  # Enable this hook
+config:
+  url: "http://localhost:3010/api/approval/check"
+  method: POST
+  body:
+    task: "{{ task }}"
+    userId: "{{ metadata.userId }}"
+  stop_on_response:
+    field: "$.approved"
+    operator: "=="
+    value: false
+  stop_reason: "$.reason"

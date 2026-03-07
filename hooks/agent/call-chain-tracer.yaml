@@ -1,0 +1,9 @@
+# Call Chain Tracer Hook
+# Tracks agent call chain
+
+type: middleware
+trigger: preExec
+description: "追踪 agent 调用链"
+config:
+  set:
+    metadata.callChain: "{{ callChain }} > {{ agentType }}"

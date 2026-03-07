@@ -39,6 +39,10 @@ import {
   setAgentStreams,
 } from '../../src/core/agent/hooks/progress-notify';
 import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook';
+import { WorkflowEngine } from '../../src/core/workflow/engine';
+import { getWorkflowLoader } from '../../src/core/workflow/loader';
+import { getHookConfigLoader } from '../../src/core/task/hooks/hook-config-loader';
+import type { AgentResult } from '../../src/core/agent/types';
 
 /**
  * Input schema for Master Agent step.
@@ -110,6 +114,13 @@ export const inputSchema = _z.object({
    * When false, the original request will be used as-is without context enhancement.
    */
   rewriteRequest: _z.boolean().optional(),
+
+  /**
+   * Optional: Workflow input parameters.
+   * When specified with workflow, these parameters are passed directly to the workflow.
+   * If not provided, the task parameter will be used as a fallback.
+   */
+  workflowInput: _z.record(_z.string(), _z.any()).optional(),
 });
 
 /**
@@ -137,6 +148,19 @@ export const handler = async (
   input: any,
   { emit, logger, state: _state, streams: _streams }: any
 ) => {
+  // === Initialize Configurable Hooks ===
+  // Load hooks from hooks/ directory on first execution
+  if (!(globalThis as any).motiaHooksLoaded) {
+    try {
+      const hookLoader = getHookConfigLoader();
+      await hookLoader.loadFromDefaults();
+      (globalThis as any).motiaHooksLoaded = true;
+      logger.info('[MasterAgent] Configurable hooks loaded');
+    } catch (error: any) {
+      logger.warn('[MasterAgent] Failed to load configurable hooks:', error.message);
+    }
+  }
+
   // === 处理聊天消息 ===
   // 检查是否有 message 字段来判断是否是聊天事件
   // 注意：由于事件已经根据 subscribes 配置路由到这里，不需要检查 input.topic
@@ -215,7 +239,7 @@ export const handler = async (
       const conversationHistory = contextManager.getConversationHistoryForAgent(taskContext);
       (context as any).conversationHistory = conversationHistory;
 
-      console.log('[master-agent.chat] conversationHistory loaded:', {
+      logger.debug('[master-agent.chat] conversationHistory loaded:', {
         taskId,
         conversationHistoryLength: conversationHistory.length,
         conversationRoundsLength: taskContext.conversationRounds.length,
@@ -383,7 +407,20 @@ export const handler = async (
     });
   }
 
-  // === 处理正常任务执行（现有代码） ===
+  // === Workflow Execution Check ===
+  // Store workflow info for later use
+  // We'll execute workflow instead of agent.run(), but still go through all hooks
+  if (input.workflow) {
+    logger.info('[MasterAgent] Workflow specified', {
+      workflow: input.workflow,
+      task: input.task,
+      taskId: input.taskId || 'unknown',
+    });
+    (input as any).workflowName = input.workflow;
+    (input as any).workflowInput = input.workflowInput;
+  }
+
+  // === 处理正常任务执行（现有代码）===
   // Get or create sessionId
   const sessionId = input.sessionId || uuidv4();
   const taskId = input.taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -423,6 +460,8 @@ export const handler = async (
 
   // === TaskHook Setup ===
   const taskHookExecutor = new TaskHookExecutor();
+
+  // Register default hooks
   taskHookExecutor.registerHook(new DefaultTaskHook());
   taskHookExecutor.registerHook(new ContextManagerTaskHook());
   taskHookExecutor.registerHook(new UserAllowTaskHook());
@@ -430,6 +469,17 @@ export const handler = async (
   taskHookExecutor.registerHook(new TaskTraceHook());
   taskHookExecutor.registerHook(new UserProfileAccumulatorHook()); // MyEcho: 用户画像累积
   taskHookExecutor.registerHook(new TaskWorkspaceHook()); // Workspace: 清理 task 级别的 workspace
+
+  // Register configurable hooks from global executor (loaded from hooks/ directory)
+  if ((globalThis as any).motiaTaskHookExecutor) {
+    const globalExecutor = (globalThis as any).motiaTaskHookExecutor as TaskHookExecutor;
+    // Get hooks from global executor and register them
+    const globalHooks = (globalExecutor as any).hooks || [];
+    for (const hook of globalHooks) {
+      taskHookExecutor.registerHook(hook);
+      logger.info('[MasterAgent] Registered configurable hook', { hookName: hook.name || hook.constructor.name });
+    }
+  }
 
   // Build TaskContext
   const taskContext: TaskContext = {
@@ -557,7 +607,7 @@ export const handler = async (
       skillCount: input.availableSkills?.length || 0
     });
 
-    console.log('[master-agent.step] Input received:', {
+    logger.debug('[master-agent.step] Input received:', {
       taskId,
       sessionId,
       'input.delegateTo': input.delegateTo,
@@ -577,12 +627,12 @@ export const handler = async (
     }
     if (input.delegateTo && input.delegateTo.length > 0) {
       acquireOptions.delegateTo = input.delegateTo;
-      console.log('[master-agent.step] Added delegateTo to acquireOptions:', input.delegateTo);
+      logger.debug('[master-agent.step] Added delegateTo to acquireOptions:', input.delegateTo);
     } else {
-      console.log('[master-agent.step] No delegateTo in input or empty array');
+      logger.debug('[master-agent.step] No delegateTo in input or empty array');
     }
 
-    console.log('[master-agent.step] Calling agentManager.acquire with options:', acquireOptions);
+    logger.debug('[master-agent.step] Calling agentManager.acquire with options:', acquireOptions);
 
     const agent = await agentManager.acquire(sessionId, acquireOptions);
 
@@ -683,12 +733,12 @@ export const handler = async (
       const contextManager = new ContextManager();
       const conversationHistory = contextManager.getConversationHistoryForAgent(taskContext.context);
       (taskContext as any).conversationHistory = conversationHistory;
-      console.log('[master-agent] Loaded conversationHistory from ContextManager:', {
+      logger.debug('[master-agent] Loaded conversationHistory from ContextManager:', {
         taskId,
         conversationHistoryLength: conversationHistory.length,
       });
     } else {
-      console.log('[master-agent] conversationHistory already exists from preExec:', {
+      logger.debug('[master-agent] conversationHistory already exists from preExec:', {
         taskId,
         conversationHistoryLength: (taskContext as any).conversationHistory.length,
       });
@@ -722,7 +772,7 @@ export const handler = async (
     // 因为 agent.run() 接收 context 参数，期望 context.conversationHistory 存在
     if ((taskContext as any).conversationHistory) {
       (taskContext.context as any).conversationHistory = (taskContext as any).conversationHistory;
-      console.log('[master-agent] Copied conversationHistory to context:', {
+      logger.debug('[master-agent] Copied conversationHistory to context:', {
         taskId,
         conversationHistoryLength: (taskContext.context as any).conversationHistory.length,
       });
@@ -730,10 +780,129 @@ export const handler = async (
 
     // ⭐ 传递原始任务（而不是格式化的 taskWithContext）给 Agent.run()
     // 格式化的对话历史已经在 context.formattedHistory 中
-    const result = await agent.run(originalTaskForAgent, taskId, taskContext.context);
+
+    // === Workflow vs Normal Agent Execution ===
+    let result: AgentResult;
+    if ((input as any).workflowName) {
+      // Execute workflow
+      logger.info('[MasterAgent] Executing workflow', {
+        workflow: (input as any).workflowName,
+        taskId,
+      });
+
+      // Get or create workflow engine
+      if (!(globalThis as any).motiaWorkflowEngine) {
+        (globalThis as any).motiaWorkflowEngine = new WorkflowEngine(agentManager);
+        const workflowLoader = getWorkflowLoader((globalThis as any).motiaWorkflowEngine);
+        await workflowLoader.loadFromDefaults();
+        logger.info('[MasterAgent] Workflow engine initialized');
+      }
+      const workflowEngine = (globalThis as any).motiaWorkflowEngine;
+
+      // List all registered workflows for debugging
+      const registeredWorkflows = workflowEngine.listWorkflows();
+      logger.info('[MasterAgent] Registered workflows', {
+        count: registeredWorkflows.length,
+        names: registeredWorkflows.map((w: { name: string }) => w.name),
+        requestedWorkflow: (input as any).workflowName,
+      });
+
+      // Execute workflow
+      // Build workflow input: use workflowInput if provided, otherwise fallback to { requirement: input.task }
+      const workflowInput = (input as any).workflowInput || { requirement: input.task };
+      logger.info('[MasterAgent] Workflow input prepared', {
+        workflow: (input as any).workflowName,
+        hasWorkflowInput: !!(input as any).workflowInput,
+        inputKeys: Object.keys(workflowInput),
+      });
+
+      // Get workflow definition and send step plan notification
+      const workflowDef = (globalThis as any).motiaWorkflowEngine?.getWorkflow((input as any).workflowName);
+      if (workflowDef && workflowDef.steps) {
+        const timestamp = Date.now();
+        const uniqueId = `${taskId}-workflow-${timestamp}`;
+        const stepsList = workflowDef.steps.map((s: any) => `- ${s.name || s.id} (${s.agent})`).join('\n');
+
+        await _streams.taskExecution.set(taskId, uniqueId, {
+          progressType: 'workflow',
+          type: 'info',
+          role: 'system',
+          status: 'started',
+          content: `执行工作流: ${workflowDef.name || (input as any).workflowName}\n\n${stepsList}`,
+          timestamp: new Date(timestamp).toISOString(),
+          metadata: {
+            workflow: (input as any).workflowName,
+            stepCount: workflowDef.steps.length,
+          },
+        });
+        logger.info('[MasterAgent] Workflow step plan sent to stream', {
+          workflow: (input as any).workflowName,
+          stepCount: workflowDef.steps.length,
+        });
+      }
+
+      const workflowResult = await workflowEngine.execute(
+        (input as any).workflowName,
+        workflowInput,
+        { taskId, parentSessionId: sessionId }
+      );
+
+      // Convert workflow result to AgentResult format
+      // workflowResult.output is the structuredOutput from the last agent step
+      const workflowStructuredOutput = workflowResult.output;
+
+      // Extract artifactType from structuredOutput (same logic as agent)
+      const artifactType = workflowStructuredOutput?.result_type
+        ? ({
+            code: 'code',
+            infographic: 'image',
+            video: 'video',
+            image: 'image',
+            audio: 'audio',
+            table: 'table',
+          } as Record<string, string>)[workflowStructuredOutput.result_type] || workflowStructuredOutput.result_type
+        : null;
+
+      result = {
+        success: workflowResult.success,
+        output: JSON.stringify(workflowStructuredOutput),  // Store as JSON string for compatibility
+        structuredOutput: workflowStructuredOutput,        // Set structuredOutput for proper artifact detection
+        error: workflowResult.error,
+        executionTime: workflowResult.executionTime,
+        metadata: {
+          workflow: (input as any).workflowName,
+          artifactType: artifactType,  // Add artifactType to metadata
+          ...workflowResult.context,
+        },
+      } as any;
+
+      logger.info('[MasterAgent] Workflow execution completed', {
+        workflow: (input as any).workflowName,
+        success: result.success,
+        taskId,
+        'result keys': Object.keys(result),
+        'result.output': result.output,
+        'result.metadata': result.metadata,
+      });
+
+      // Detailed logging for workflow result
+      logger.debug('[MasterAgent] Workflow result details:', {
+        workflow: (input as any).workflowName,
+        success: result.success,
+        hasOutput: !!result.output,
+        outputKeys: result.output ? Object.keys(result.output) : [],
+        output: result.output,
+        contextKeys: result.metadata ? Object.keys(result.metadata) : [],
+        hasVariablesInContext: (result.metadata as any)?.variables !== undefined,
+        variables: (result.metadata as any)?.variables,
+      });
+    } else {
+      // Normal agent execution
+      result = await agent.run(originalTaskForAgent, taskId, taskContext.context);
+    }
 
     // 调试：立即检查 result 的内容
-    console.log('[master-agent] Got result from agent.run():', {
+    logger.debug('[master-agent] Got result from agent.run():', {
       taskId,
       'result keys': Object.keys(result),
       'result has structuredOutputs': 'structuredOutputs' in result,
@@ -834,7 +1003,7 @@ export const handler = async (
 
     // Emit completion event
     // 调试：检查 result.structuredOutputs
-    console.log('[master-agent] About to emit completion event:', {
+    logger.debug('[master-agent] About to emit completion event:', {
       taskId,
       'result keys': Object.keys(result),
       'result.structuredOutputs': (result as any).structuredOutputs,
