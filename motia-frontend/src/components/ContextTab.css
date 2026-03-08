@@ -8,7 +8,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  background: #F8FAFC;
+  background: #ffffff;
   border-radius: 12px;
   padding: 16px;
   gap: 16px;
@@ -558,7 +558,7 @@
 }
 
 .ctx-summary-block {
-  background: #F8FAFC;
+  background: #ffffff;
   border-radius: 8px;
   padding: 10px;
   border: 1px solid #F1F5F9;
@@ -888,7 +888,7 @@
 .ctx-message {
   padding: 12px 14px;
   border-radius: 8px;
-  background: #F8FAFC;
+  background: #ffffff;
   border: 1px solid #F1F5F9;
   transition: all 0.15s ease;
 }
@@ -899,12 +899,12 @@
 
 .ctx-message-user {
   border-left: 3px solid #3B82F6;
-  background: linear-gradient(to right, #EFF6FF, #F8FAFC);
+  background: linear-gradient(to right, #EFF6FF, #ffffff);
 }
 
 .ctx-message-assistant {
   border-left: 3px solid #10B981;
-  background: linear-gradient(to right, #ECFDF5, #F8FAFC);
+  background: linear-gradient(to right, #ECFDF5, #ffffff);
 }
 
 .ctx-message-error {
@@ -1148,97 +1148,5 @@
   .ctx-artifacts-grid {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 10px;
-  }
-}
-
-/* ===== 暗色模式支持 ===== */
-@media (prefers-color-scheme: dark) {
-  .ctx-container {
-    background: #1E293B;
-  }
-
-  .ctx-stats-card,
-  .ctx-card {
-    background: #334155;
-    border-color: #475569;
-  }
-
-  .ctx-stats-card:hover,
-  .ctx-card:hover {
-    border-color: #64748B;
-  }
-
-  .ctx-card-header:hover {
-    background: #475569;
-  }
-
-  .ctx-stats-title,
-  .ctx-card-title {
-    color: #F1F5F9;
-  }
-
-  .ctx-stat-label {
-    color: #94A3B8;
-  }
-
-  .ctx-stat-value {
-    color: #F1F5F9;
-  }
-
-  .ctx-summary-label {
-    color: #94A3B8;
-  }
-
-  .ctx-summary-value {
-    color: #F1F5F9;
-  }
-
-  .ctx-summary-block {
-    background: #475569;
-    border-color: #64748B;
-  }
-
-  .ctx-checklist li,
-  .ctx-next-steps li,
-  .ctx-file-row {
-    background: #475569;
-    border-color: #64748B;
-    color: #E2E8F0;
-  }
-
-  .ctx-decision-item {
-    background: #475569;
-  }
-
-  .ctx-message {
-    background: #475569;
-    border-color: #64748B;
-  }
-
-  .ctx-message p {
-    color: #E2E8F0;
-  }
-
-  .ctx-artifact-card {
-    background: #475569;
-    border-color: #64748B;
-  }
-
-  .ctx-artifact-path {
-    background: #334155;
-    border-color: #64748B;
-  }
-
-  .ctx-stats-meta {
-    border-top-color: #475569;
-  }
-
-  .ctx-meta-label {
-    color: #64748B;
-  }
-
-  .ctx-meta-value {
-    color: #94A3B8;
-    background: #334155;
   }
 }

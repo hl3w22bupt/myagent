@@ -352,7 +352,7 @@ export class DataStore {
     this.db.run(`
       CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY,
-        profile TEXT NOT NULL DEFAULT '{}'::jsonb,
+        profile TEXT NOT NULL DEFAULT '{}',
         created_at BIGINT NOT NULL,
         updated_at BIGINT NOT NULL,
         last_session_id TEXT
@@ -524,6 +524,7 @@ export class DataStore {
     const task: Task = {
       ...taskData,
       status: TaskStatus.PENDING,
+      app: taskData.app || 'default',  // Ensure app has a value
       createdAt: new Date(now),
       updatedAt: new Date(now),
       retryCount: 0,
@@ -531,13 +532,14 @@ export class DataStore {
     };
 
     this.db.run(
-      `INSERT INTO tasks (id, task, session_id, status, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, task, session_id, status, app, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.task,
         task.sessionId,
         task.status,
+        task.app,
         task.createdAt.getTime(),
         task.updatedAt.getTime(),
         task.output || null,
@@ -1743,12 +1745,17 @@ export class DataStore {
   }
 
   private mapDbTaskToTask(row: any): Task {
+    // Parse metadata if it's a string, otherwise use as-is
+    const parsedMetadata = typeof row.metadata === 'string'
+      ? (row.metadata ? JSON.parse(row.metadata) : {})
+      : (row.metadata || {});
+
     return {
       id: row.id,
       task: row.task,
       sessionId: row.session_id,
       status: row.status as TaskStatus,
-      app: row.app || 'default',
+      app: row.app || 'default',  // Use the dedicated app column
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
@@ -1756,7 +1763,7 @@ export class DataStore {
       error: row.error,
       executionTime: row.execution_time,
       pinned: row.pinned === 1,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      metadata: parsedMetadata,
       structuredOutput: row.structured_output ? JSON.parse(row.structured_output) : undefined,
       ptcCodes: row.ptc_codes ? JSON.parse(row.ptc_codes) : undefined,
       retryCount: row.retry_count,

@@ -141,9 +141,18 @@ export class PostgresDataStore implements Database {
 
         // Helper function to execute query and ignore initialization errors
         const safeQuery = async (query: string) => {
+          // Create a savepoint before each query
+          const savepoint = `safe_query_sp_${Math.random().toString(36).substr(2, 9)}`;
+          await client.query(`SAVEPOINT ${savepoint}`);
+
           try {
             await client.query(query);
+            await client.query(`RELEASE SAVEPOINT ${savepoint}`);
           } catch (error: any) {
+            // Rollback to savepoint on error to keep transaction alive
+            await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+            await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+
             // Ignore errors if the object already exists or during concurrent initialization
             const isIgnorableError =
               error.message.includes('already exists') ||
@@ -466,14 +475,15 @@ export class PostgresDataStore implements Database {
     try {
       const now = Date.now();
       const result = await client.query(
-        `INSERT INTO tasks (id, task, session_id, status, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `INSERT INTO tasks (id, task, session_id, status, app, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING *`,
         [
           data.id,
           data.task,
           data.sessionId,
           data.status,
+          data.app || 'default',  // App identifier
           now,
           now,
           data.completedAt?.getTime(),
@@ -1693,7 +1703,7 @@ export class PostgresDataStore implements Database {
       task: row.task,
       sessionId: row.session_id,
       status: row.status as TaskStatus,
-      app: row.app || 'default',
+      app: row.app || 'default',  // Use the dedicated app column
       // PostgreSQL returns bigint as string, need to convert to number
       createdAt: new Date(parseInt(row.created_at)),
       updatedAt: new Date(parseInt(row.updated_at)),

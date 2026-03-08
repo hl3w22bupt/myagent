@@ -22,6 +22,7 @@
     "@motiadev/stream-client-react": "^0.17.14-beta.196",
     "@types/react-syntax-highlighter": "^15.5.13",
     "axios": "^1.13.2",
+    "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
