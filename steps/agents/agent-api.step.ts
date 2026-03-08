@@ -40,6 +40,12 @@ export const bodySchema = z.object({
   availableSkills: z.array(z.string()).optional().describe('List of available skills'),
 
   /**
+   * Optional: Application identifier.
+   * Used to categorize tasks by application (e.g., 'myecho', 'default').
+   */
+  app: z.string().optional().describe('Application identifier (e.g., myecho, default)'),
+
+  /**
    * Optional: Use MasterAgent with delegation (default: false).
    * When true, the task will be executed by MasterAgent which can
    * delegate to specialized subagents (code-reviewer, data-analyst, security-auditor).
@@ -149,7 +155,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input } =
+  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -158,10 +164,14 @@ export const handler = async (request: any, { emit, logger }: any) => {
   // Generate sessionId if not provided (for multi-turn conversations)
   const finalSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+  // Determine app identifier (default to 'default' if not provided)
+  const appIdentifier = app || 'default';
+
   logger.info('Agent API: Received task request', {
     task,
     sessionId: finalSessionId,
     taskId,
+    app: appIdentifier,
     skills: availableSkills,
     useDelegation,
     subagents,
@@ -187,6 +197,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
   await store.createTask({
     id: taskId,
     task: task,
+    app: appIdentifier,  // Store app in dedicated column
     sessionId: finalSessionId,
     status: TaskStatus.PENDING,
     metadata: {
@@ -194,7 +205,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       workflow, // 保存 workflow 信息
     },
   });
-  logger.info('Task record created in database', { taskId, status: 'PENDING', subagent, workflow });
+  logger.info('Task record created in database', { taskId, app: appIdentifier, status: 'PENDING', subagent, workflow });
 
   // Emit agent task execution event
   // This will be picked up by the master-agent step

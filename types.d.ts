@@ -18,6 +18,7 @@ declare module 'motia' {
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'UserProfileAnalysis': CronHandler<never>
+    'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'execution-traces-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'tasks-unpin-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -48,7 +49,6 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
-    'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
   }
     
 }
