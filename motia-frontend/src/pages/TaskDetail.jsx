@@ -544,6 +544,42 @@ function TaskDetail() {
       return
     }
 
+    // 订阅 taskResult stream（获取最终任务结果）
+    let taskResultSubscription = null
+    try {
+      console.log('[🟢 开始订阅 taskResult stream...', { taskId: id })
+      taskResultSubscription = stream.subscribeGroup('taskResult', id)
+      subscriptions.push(taskResultSubscription)
+      console.log('[✅ taskResult 订阅成功]', taskResultSubscription)
+
+      // 监听任务结果更新
+      taskResultSubscription.addChangeListener((taskResult) => {
+        console.log('[🎉 taskResult] 收到任务完成结果:', taskResult)
+
+        // ✨ 数据格式与 /agent/result API 完全相同，直接使用
+        setTask(taskResult)
+        setLoading(false)
+
+        // 只有在首次成功获取数据时才结束 initialLoading
+        if (!hasInitialData.current) {
+          hasInitialData.current = true
+          setInitialLoading(false)
+        }
+
+        setPolling(false)
+
+        // 任务完成后，可以选择取消 taskExecution 订阅（节省资源）
+        if (taskResult.status === 'completed' || taskResult.status === 'failed') {
+          console.log('[✅ taskResult] 任务已完成，停止轮询')
+          subscriptionRef.current?.close()
+          subscriptionRef.current = null
+        }
+      })
+    } catch (error) {
+      console.error('[❌ taskResult 订阅失败]', error)
+      // taskResult 订阅失败不影响 taskExecution 订阅，继续执行
+    }
+
     // 标记已订阅
     isSubscribedRef.current = true
 
@@ -702,11 +738,20 @@ function TaskDetail() {
       pollIntervalRef.current = null
     }
 
+    // ✨ 优化：如果 stream 可用，就不启动轮询，完全依赖 stream
+    if (stream) {
+      console.log('[✨ Stream 可用，跳过轮询，完全依赖 stream 推送]')
+      return
+    }
+
+    // ⚠️ Stream 不可用时，才启用轮询作为兜底机制
+    console.log('[⚠️ Stream 不可用，启用轮询兜底机制]')
+
     const fetchTaskDetails = async () => {
       try {
-        console.log('正在查询任务详情:', id)
+        console.log('[轮询] 正在查询任务详情:', id)
         const task = await tasksAPI.getTaskDetails(id)
-        console.log('任务详情查询成功:', task)
+        console.log('[轮询] 任务详情查询成功:', task)
         console.log('[TaskDetail] pinned status:', task?.pinned, 'for task:', task?.taskId)
         setTask(task)
         setError('')
@@ -723,13 +768,13 @@ function TaskDetail() {
         }
         return { found: true, error: null }
       } catch (error) {
-        console.error('查询任务详情失败:', error)
+        console.error('[轮询] 查询任务详情失败:', error)
         setLoading(false)
         // 不要在失败时结束 initialLoading，让用户看到"加载中..."而不是"执行中"
 
         // 处理 404 错误：404 = Not Found，直接停止轮询
         if (error.response?.status === 404) {
-          console.error('任务不存在:', id)
+          console.error('[轮询] 任务不存在:', id)
           setError('任务不存在')
           setInitialLoading(false) // 404时结束加载，显示错误
           return { found: false, error: true, taskNotFound: true }
@@ -750,7 +795,7 @@ function TaskDetail() {
 
       const poll = async () => {
         pollCount++
-        console.log('轮询次数:', pollCount, '任务ID:', id)
+        console.log('[轮询] 次数:', pollCount, '任务ID:', id)
         const result = await fetchTaskDetails()
 
         // 如果找到任务、出错、任务不存在或达到最大轮询次数，停止轮询
@@ -762,7 +807,7 @@ function TaskDetail() {
           }
           if (result.taskNotFound) {
             // 任务不存在，停止轮询，不设置额外错误
-            console.log('任务不存在，停止轮询')
+            console.log('[轮询] 任务不存在，停止轮询')
           } else if (result.error && !result.taskNotFound) {
             setError('获取任务详情失败')
           } else if (!result.found && pollCount >= maxPolls) {
@@ -788,7 +833,7 @@ function TaskDetail() {
         pollIntervalRef.current = null
       }
     }
-  }, [id])
+  }, [id, stream]) // 依赖 stream，当 stream 变为可用时会重新执行并停止轮询
 
   // 重置版本选择当任务更新时
   useEffect(() => {

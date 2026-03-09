@@ -29,10 +29,45 @@ pnpm dev
 
 This starts the Motia runtime and the **Workbench** - a powerful UI for developing and debugging your workflows. By default, it's available at [`http://localhost:3000`](http://localhost:3000).
 
+> **Note**: The first time you run `npm run dev`, it will automatically check and set up the Python virtual environment. If you encounter any Python-related errors, run `npm run check:python-env` to verify and fix the environment.
+
 ```bash
 # Test your first endpoint
 curl http://localhost:3000/hello
 ```
+
+## Python Environment
+
+This project uses Python for sandbox execution and skill processing. The Python environment is automatically checked and set up when you run `npm run dev` for the first time.
+
+### Manual Python Environment Check
+
+If you encounter Python-related errors:
+
+```bash
+# Check and fix Python environment
+npm run check:python-env
+
+# Test Python environment
+bash scripts/test-python-env.sh
+```
+
+### Python Requirements
+
+The project requires Python 3.9+ with the following key dependencies:
+- `pyyaml` - YAML configuration parsing
+- `pydantic` - Data validation
+- `anthropic` - Claude AI SDK
+- `httpx` / `aiohttp` - HTTP clients
+
+All dependencies are listed in `requirements.txt` and are automatically installed in the `python_modules/` virtual environment.
+
+### Troubleshooting
+
+If sandbox execution fails:
+1. Run `npm run check:python-env` to verify dependencies
+2. Check `/tmp/motia-sandbox/` for debug scripts
+3. See `docs/troubleshooting/python-sandbox-failure.md` for detailed debugging guide
 
 ## How It Works
 

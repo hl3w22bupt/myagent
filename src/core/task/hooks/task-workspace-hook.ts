@@ -37,7 +37,17 @@ export class TaskWorkspaceHook extends BaseTaskHook {
       fs.mkdirSync(WORKSPACE_ROOT, { recursive: true });
     }
 
-    services.logger.info('[TaskWorkspaceHook] Workspace ready', { taskId, workspaceRoot: WORKSPACE_ROOT });
+    // Create task-specific workspace directory
+    const taskDir = path.join(WORKSPACE_ROOT, taskId);
+    if (!fs.existsSync(taskDir)) {
+      fs.mkdirSync(taskDir, { recursive: true });
+    }
+
+    services.logger.info('[TaskWorkspaceHook] Workspace ready', {
+      taskId,
+      workspaceRoot: WORKSPACE_ROOT,
+      taskDir,
+    });
   }
 
   /**

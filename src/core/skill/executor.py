@@ -614,7 +614,7 @@ class SkillExecutor:
             return skill.get_artifact_type()
         return 'text'
 
-    def _find_similar_skill(self, invalid_name: str, available_skills: list[str]) -> str | None:
+    def _find_similar_skill(self, invalid_name: str, available_skills: list[str]) -> Optional[str]:
         """
         Find similar skill name for typos or variations.
 

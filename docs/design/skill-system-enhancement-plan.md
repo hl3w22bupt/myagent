@@ -161,6 +161,130 @@ $ npm run dev
 ⚠️  Skill 'video-editor' skipped: missing packages ['opencv-python>=4.8.0']
 ```
 
+**实际应用案例：解决当前技能依赖问题**
+
+当前系统中存在的一些依赖问题可以通过依赖检查系统解决：
+
+**案例 1: remotion-generator 缺少 Chrome Headless Shell**
+
+当前问题：
+```
+remotion-generator 执行时失败：
+❌ Chrome Headless Shell not found
+```
+
+解决方案：
+```yaml
+# skills/remotion-generator/skill.yaml
+execution:
+  runtime:
+    requires:
+      bins: ["node", "npm"]
+      anyBins: ["ffmpeg", "chromium"]  # 视频处理需要任一
+      config: ["sandbox.enabled"]
+
+    install:
+      - id: "chrome-headless-shell"
+        kind: "script"
+        script: "scripts/install-chrome.sh"
+        bins: ["chrome-headless-shell"]
+        label: "Install Chrome Headless Shell for video rendering"
+```
+
+效果：
+```bash
+$ npm run dev
+⚠️  remotion-generator skipped: missing chrome-headless-shell
+💡 Auto-install available: npm run skill:install remotion-generator
+✅ Other skills loaded successfully
+```
+
+**案例 2: ffmpeg skill 缺少 FFmpeg 二进制**
+
+解决方案：
+```yaml
+# skills/tool-ffmpeg/skill.yaml
+name: tool-ffmpeg
+version: 1.0.0
+description: Process videos using FFmpeg
+
+execution:
+  runtime:
+    requires:
+      bins: ["ffmpeg"]
+
+    install:
+      - id: "ffmpeg-brew"
+        kind: "brew"
+        formula: "ffmpeg"
+        os: ["darwin"]
+      - id: "ffmpeg-apt"
+        kind: "apt"
+        packages: ["ffmpeg"]
+        os: ["linux"]
+```
+
+效果：
+```bash
+$ npm run dev
+⚠️  tool-ffmpeg skipped: missing ffmpeg
+💡 Install with: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)
+```
+
+**安装脚本示例：**
+
+```bash
+# skills/remotion-generator/scripts/install-chrome.sh
+#!/bin/bash
+
+echo "🔧 Installing Chrome Headless Shell..."
+
+# 检测平台
+OS_TYPE=$(uname -s)
+ARCH=$(uname -m)
+
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    if [[ "$ARCH" == "arm64" ]]; then
+        CHROME_DIR="chrome-headless-shell-mac-arm64"
+    else
+        CHROME_DIR="chrome-headless-shell-mac-x64"
+    fi
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+    if [[ "$ARCH" == "aarch64" ]]; then
+        CHROME_DIR="chrome-headless-shell-linux-arm64"
+    else
+        CHROME_DIR="chrome-headless-shell-linux-x64"
+    fi
+else
+    echo "❌ Unsupported platform: $OS_TYPE $ARCH"
+    exit 1
+fi
+
+TARGET_DIR="node_modules/.remotion/chrome-headless-shell/$CHROME_DIR"
+mkdir -p "$TARGET_DIR"
+
+# 下载
+echo "📥 Downloading Chrome Headless Shell..."
+BASE_URL="https://storage.googleapis.com/chrome-for-testing-public"
+curl -L "$BASE_URL/$CHROME_DIR/chrome-headless-shell-$CHROME_DIR.zip" -o chrome.zip
+
+# 解压
+echo "📦 Extracting..."
+unzip -q chrome.zip -d "$TARGET_DIR"
+rm chrome.zip
+
+echo "✅ Chrome Headless Shell installed successfully!"
+```
+
+**效果对比：**
+
+| 阶段 | 之前 | 之后 |
+|------|------|------|
+| **启动时** | 无检查，所有技能加载 | 检查依赖，跳过不满足的技能 |
+| **执行时** | 突然失败，错误难懂 | 提前知道，友好提示 |
+| **修复** | 手动查找，不知道缺什么 | 明确告知缺少什么，如何安装 |
+| **用户体验** | 💥 混乱 | ✅ 清晰 |
+
 #### 2. 环境变量和配置注入系统
 
 **问题：**

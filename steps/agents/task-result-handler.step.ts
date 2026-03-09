@@ -275,9 +275,11 @@ function parseUnifiedResult(output: string | undefined): Record<string, unknown>
  *
  * Logs agent execution results to console and optionally to file/database.
  * Handles both agent.task.completed and agent.task.failed events.
+ *
+ * Also pushes processed results to taskResult stream for real-time frontend updates.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const handler = async (input: z.infer<typeof inputSchema>, { logger, state }: any) => {
+export const handler = async (input: z.infer<typeof inputSchema>, { logger, state, streams }: any) => {
   const timestamp = new Date().toISOString();
 
   // Determine if this is a completed or failed event
@@ -1232,6 +1234,84 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     });
     // Don't throw - continue execution even if state update fails
   }
+
+  // ========== Push to taskResult Stream for real-time updates ==========
+  try {
+    // Get store instance
+    const unifiedStore = getDataStore();
+
+    // Get the complete task data from database (same as /agent/result API)
+    const finalTask = await unifiedStore.getTask(taskId);
+
+    if (finalTask) {
+      // Get all artifacts for this task
+      const finalArtifacts = await unifiedStore.getArtifacts(taskId);
+
+      // Map artifacts to match API format
+      const artifactsForStream = finalArtifacts.map((artifact: any) => ({
+        id: artifact.id,
+        type: artifact.artifactType,
+        action: artifact.action,
+        path: artifact.path,
+        description: artifact.description,
+        metadata: artifact.metadata,
+        timestamp: artifact.timestamp instanceof Date
+          ? artifact.timestamp.toISOString()
+          : new Date(artifact.timestamp).toISOString(),
+      }));
+
+      // Determine success based on status
+      const taskSuccess = finalTask.status === 'completed';
+
+      // Prepare metadata (parse if needed - same logic as API)
+      let parsedMetadata = finalTask.metadata;
+      if (typeof parsedMetadata === 'string') {
+        try {
+          parsedMetadata = JSON.parse(parsedMetadata);
+        } catch (error) {
+          console.warn('[TaskResultHandler] Failed to parse metadata as JSON:', error);
+          parsedMetadata = {};
+        }
+      }
+
+      // Push to taskResult stream with the same format as /agent/result API
+      // Use taskId as groupId - frontend subscribes with: stream.subscribeGroup('taskResult', taskId)
+      await streams.taskResult.set(taskId, taskId, {
+        taskId: finalTask.id,
+        task: finalTask.task,
+        sessionId: finalTask.sessionId,
+        app: finalTask.app,
+        success: taskSuccess,
+        status: finalTask.status,
+        output: finalTask.output,
+        error: finalTask.error,
+        executionTime: finalTask.executionTime,
+        structuredOutput: (finalTask as any).structuredOutput,
+        metadata: parsedMetadata,
+        artifacts: artifactsForStream,
+        pinned: finalTask.pinned || false,
+        timestamp: finalTask.createdAt instanceof Date
+          ? finalTask.createdAt.toISOString()
+          : new Date(finalTask.createdAt).toISOString(),
+      });
+
+      logger.info('✅ Task result pushed to stream', {
+        taskId,
+        sessionId,
+        status: finalTask.status,
+        artifactsCount: artifactsForStream.length,
+      });
+    } else {
+      logger.warn('Task not found in database when trying to push to stream', { taskId });
+    }
+  } catch (error: any) {
+    // Don't fail the handler if stream push fails
+    logger.error('Failed to push task result to stream', {
+      error: error.message,
+      taskId,
+    });
+  }
+  // ========== End Stream Push ==========
 
   return {
     logged: true,

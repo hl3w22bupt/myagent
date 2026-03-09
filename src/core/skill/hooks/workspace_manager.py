@@ -60,7 +60,9 @@ class WorkspaceManager:
             Absolute path to created workspace directory
         """
         workspace_dir = WorkspaceManager.get_workspace_dir(task_id, skill_name)
+        print(f"[WorkspaceManager] Creating workspace directory: {workspace_dir}")
         os.makedirs(workspace_dir, exist_ok=True)
+        print(f"[WorkspaceManager] ✓ Workspace created: {workspace_dir}")
         return workspace_dir
 
     @staticmethod

@@ -153,6 +153,17 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           stderr: result.stderr,
           stdout: result.stdout,
         });
+
+        // Check for common Python errors
+        if (result.stderr?.includes('ModuleNotFoundError')) {
+          console.error('[Sandbox] ⚠️ Python 依赖缺失！请运行: npm run check:python-env');
+        } else if (result.stderr?.includes('ImportError')) {
+          console.error('[Sandbox] ⚠️ Python 导入错误！请检查依赖是否完整安装');
+        } else if (result.stderr?.includes('Permission denied')) {
+          console.error('[Sandbox] ⚠️ 文件权限错误！请检查脚本执行权限');
+        } else if (result.stderr?.includes('No such file or directory')) {
+          console.error('[Sandbox] ⚠️ 文件不存在！请检查路径配置');
+        }
       }
 
       this.activeSessions.delete(sessionId);
@@ -341,6 +352,23 @@ export class LocalSandboxAdapter implements SandboxAdapter {
         structuredOutputs,  // 所有 structured outputs（新增）
       };
     } catch (error: any) {
+      console.error('[Sandbox] ⚠️ Sandbox execution threw exception:', {
+        sessionId,
+        errorType: error.constructor.name,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStack: error.stack?.substring(0, 500),
+      });
+
+      // Check for specific error types and provide helpful messages
+      if (error.code === 'ETIMEDOUT') {
+        console.error('[Sandbox] ⚠️ 执行超时！请检查是否有死循环或技能执行时间过长');
+      } else if (error.message?.includes('ENOENT')) {
+        console.error('[Sandbox] ⚠️ Python 可执行文件不存在！请运行: npm run check:python-env');
+      } else if (error.message?.includes('EACCES')) {
+        console.error('[Sandbox] ⚠️ 权限错误！请检查文件执行权限');
+      }
+
       return {
         success: false,
         error: {

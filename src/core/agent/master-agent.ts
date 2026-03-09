@@ -930,6 +930,16 @@ ${task}
     // This is a simplified version - actual implementation would load full config
     const config = this.subagentConfigs.get(name);
 
+    // ⭐ CRITICAL: Validate that subagent exists before creating
+    if (!config) {
+      const validSubagents = Array.from(this.subagentConfigs.keys()).sort();
+      throw new Error(
+        `Invalid subagent: "${name}" does not exist. ` +
+        `Valid subagents: ${validSubagents.join(', ')}. ` +
+        `Please check the subagents/ directory for available subagents.`
+      );
+    }
+
     // Create unique sessionId for subagent with clear prefix
     // Using independent namespace to distinguish from master agent
     const subagentSessionId = `subagent-${subagentKey}-${Date.now()}`;
@@ -937,8 +947,8 @@ ${task}
     const subagent = new Agent(
       {
         name,  // Set name for getSubjectInfo() to use as subjectSubTitle
-        systemPrompt: config?.systemPrompt || `You are ${name}.`,
-        availableSkills: config?.availableSkills || [],
+        systemPrompt: config.systemPrompt,  // No fallback - must exist
+        availableSkills: config.availableSkills || [],  // Config exists, so this is safe
         llm: this.config.llm,
         sandbox: this.config.sandbox,
         constraints: config?.constraints, // 传递 constraints 包含 enableClarification

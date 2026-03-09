@@ -24,7 +24,7 @@ class SecurityValidator:
 
         # System tools
         'ls', 'cat', 'grep', 'awk', 'sed', 'find', 'head', 'tail',
-        'wc', 'sort', 'uniq', 'cut', 'tr', 'dirname', 'basename',
+        'wc', 'sort', 'uniq', 'cut', 'tr', 'dirname', 'basename', 'cd',
 
         # Network tools
         'curl', 'wget', 'ping', 'ssh', 'scp', 'rsync',
