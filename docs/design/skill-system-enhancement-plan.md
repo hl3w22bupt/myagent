@@ -657,26 +657,37 @@ execution:
 
 ## 实施路线图
 
-### Phase 1: 基础增强（Week 1-2）
+### Phase 1: 基础增强（Week 1-2）✅ **已完成**
+
+**完成日期:** 2026-03-10
 
 **目标：** 核心依赖和环境管理
 
-- [ ] **Week 1**
-  - [ ] 设计 `execution.runtime` Schema
-  - [ ] 实现 `DependencyChecker`
-  - [ ] 实现 `SkillEnvLoader`
-  - [ ] 单元测试
+- [x] **Week 1**
+  - [x] 设计 `execution.runtime` Schema
+  - [x] 实现 `DependencyChecker` (268 lines)
+  - [x] 实现 `SkillEnvLoader` (217 lines)
+  - [x] 实现 `SkillFilter` (245 lines)
+  - [x] 单元测试
 
-- [ ] **Week 2**
-  - [ ] 集成到 `SkillRegistry`
-  - [ ] 集成到 `SkillExecutor`
-  - [ ] 配置文件支持
-  - [ ] 文档和示例
+- [x] **Week 2**
+  - [x] 集成到 `SkillRegistry`
+  - [x] 集成到 `SkillExecutor`
+  - [x] 配置文件支持 (skills-env.example.yaml)
+  - [x] 文档和示例
 
 **交付物：**
-- ✅ 依赖检查系统
-- ✅ 环境变量注入
-- ✅ 技能启用/禁用控制
+- ✅ 依赖检查系统 (`src/core/skill/dependency_checker.py`)
+- ✅ 环境变量注入 (`src/core/skill/env_loader.py`)
+- ✅ 技能启用/禁用控制 (`src/core/skill/filter.py`)
+- ✅ 集成到 SkillRegistry 和 SkillExecutor
+- ✅ 全部单元测试通过 (26/26 tests)
+
+**Commits:**
+- `9b89991` - feat: implement DependencyChecker for skill validation
+- `0c8a8ca` - feat: implement SkillEnvLoader for environment injection
+- `c88f3e7` - feat: implement SkillFilter for skill enable/disable control
+- `88b6b50` - feat: integrate Phase 1 components into SkillRegistry and SkillExecutor
 
 ### Phase 2: 开发体验（Week 3-4）
 
