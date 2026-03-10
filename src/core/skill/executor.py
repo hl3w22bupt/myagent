@@ -160,8 +160,8 @@ class SkillExecutor:
 
         # ✅ 新增：Load environment variables for this skill
         runtime_env = None
-        if skill.execution:
-            runtime_env = skill.execution.get('runtime', {}).get('env')
+        if skill.execution and skill.execution.runtime:
+            runtime_env = skill.execution.runtime.env
 
         injected_env = self.env_loader.load_for_skill(
             skill_name=skill_name,

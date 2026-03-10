@@ -30,6 +30,15 @@ class OutputSchema(BaseModel):
     properties: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RuntimeConfig(BaseModel):
+    """Runtime configuration for skill execution (Phase 3)."""
+    requires: Optional[Dict[str, Any]] = Field(None, description="Functional dependencies (Phase 1)")
+    resources: Optional[Dict[str, Any]] = Field(None, description="Hardware resource requirements (Phase 3)")
+    platform: Optional[Dict[str, Any]] = Field(None, description="Platform compatibility requirements (Phase 3)")
+    install: Optional[List[Dict[str, Any]]] = Field(None, description="Installation specifications (Phase 2)")
+    env: Optional[Dict[str, str]] = Field(None, description="Default environment variables")
+
+
 class ExecutionConfig(BaseModel):
     """Execution configuration for script-based Skills."""
     handler: str = Field(description="Python module or script file")
@@ -37,6 +46,7 @@ class ExecutionConfig(BaseModel):
     timeout: int = Field(default=30000, description="Timeout in milliseconds")
     script_path: Optional[str] = Field(None, description="Absolute path to script file (for Claude Skills)")
     skill_name: Optional[str] = Field(None, description="Skill name (for Claude Skills)")
+    runtime: Optional[RuntimeConfig] = Field(None, description="Runtime configuration (Phase 1-3)")
 
 
 class HookConfig(BaseModel):
