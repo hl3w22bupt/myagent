@@ -20,6 +20,7 @@ from .registry import SkillRegistry
 from .types import SkillType, SkillResult, SkillContext
 from .hooks.base import BaseHook, NoOpHook
 from .hooks.executor import SkillHookExecutor
+from .env_loader import SkillEnvLoader
 
 # Import Claude Skills components only when needed
 if TYPE_CHECKING:
@@ -41,7 +42,8 @@ class SkillExecutor:
         skills_dir: str = 'skills/',
         hooks: Optional[List[BaseHook]] = None,
         notify_hook_api_url: Optional[str] = None,
-        virtual_registry: Optional['VirtualSkillRegistry'] = None
+        virtual_registry: Optional['VirtualSkillRegistry'] = None,
+        env_loader_config_path: str = 'config/skills-env.yaml'
     ):
         """
         Initialize the Skill Executor.
@@ -52,6 +54,7 @@ class SkillExecutor:
             notify_hook_api_url: Optional URL for progress notifications (e.g., 'http://localhost:3000/api/notify')
                               If not provided, will try to get from MOTIA_NOTIFY_API_URL environment variable
             virtual_registry: Optional VirtualSkillRegistry for Claude Skills
+            env_loader_config_path: Path to skills environment configuration file
         """
         # Create registry with virtual registry support
         self.registry = SkillRegistry(skills_dir, virtual_registry=virtual_registry)
@@ -59,6 +62,9 @@ class SkillExecutor:
 
         # Store virtual registry for Claude Skill execution
         self._virtual_registry = virtual_registry
+
+        # ✅ 新增：Initialize environment variable loader
+        self.env_loader = SkillEnvLoader(config_path=env_loader_config_path)
 
         # Get notify_hook_api_url from parameter or environment variable
         if notify_hook_api_url is None:
@@ -152,6 +158,16 @@ class SkillExecutor:
         # Get artifact_type from skill
         artifact_type = self._get_skill_artifact_type(skill)
 
+        # ✅ 新增：Load environment variables for this skill
+        runtime_env = None
+        if skill.execution:
+            runtime_env = skill.execution.get('runtime', {}).get('env')
+
+        injected_env = self.env_loader.load_for_skill(
+            skill_name=skill_name,
+            runtime_env=runtime_env
+        )
+
         # Define the skill execution function（简化后的逻辑）
         async def _skill_func(enhanced_input: Dict[str, Any]) -> Any:
             """
@@ -209,102 +225,107 @@ class SkillExecutor:
         # for i, hook in enumerate(self.hook_executor.hook_manager.hooks):
         #     print(f"[DEBUG]     hook[{i}]: {type(hook).__name__}")
 
-        if has_hooks_configured:
-            try:
-                result = await self.hook_executor.execute_with_hooks(
-                    skill_name=skill_name,
-                    skill_func=_skill_func,
-                    input_data=input_data,
-                    skill_type=str(skill.type)  # Pass skill type from registry
-                )
+        # ✅ 新增：使用 try-finally 确保环境变量总是被清理
+        try:
+            if has_hooks_configured:
+                try:
+                    result = await self.hook_executor.execute_with_hooks(
+                        skill_name=skill_name,
+                        skill_func=_skill_func,
+                        input_data=input_data,
+                        skill_type=str(skill.type)  # Pass skill type from registry
+                    )
 
-                execution_time = time.time() - start_time
+                    execution_time = time.time() - start_time
 
-                # Convert hook result to SkillResult
-                # 支持两种格式：旧格式（直接 output/error）和 OutputBuilder 统一格式
-                if result.get("success"):
-                    # 成功：提取 output 或 content
-                    output = result.get("output")
-                    if output is None:
-                        # OutputBuilder 统一格式：内容在 content 字段
-                        output = result.get("content")
+                    # Convert hook result to SkillResult
+                    # 支持两种格式：旧格式（直接 output/error）和 OutputBuilder 统一格式
+                    if result.get("success"):
+                        # 成功：提取 output 或 content
+                        output = result.get("output")
+                        if output is None:
+                            # OutputBuilder 统一格式：内容在 content 字段
+                            output = result.get("content")
 
-                    # 保留完整的 structured_output（如果存在）
-                    metadata = {'artifact_type': artifact_type}
-                    if 'result_type' in result:
-                        # 这是 OutputBuilder 格式，保存完整的 structured_output
-                        structured_output = {
-                            k: v for k, v in result.items()
-                            if k not in ['success']  # 排除 success 字段
-                        }
-                        # 自动添加 skill_name 到 metadata 中
-                        if 'skill_name' not in structured_output.get('metadata', {}):
-                            structured_output.setdefault('metadata', {})['skill_name'] = skill_name
-                        metadata['structured_output'] = structured_output
+                        # 保留完整的 structured_output（如果存在）
+                        metadata = {'artifact_type': artifact_type}
+                        if 'result_type' in result:
+                            # 这是 OutputBuilder 格式，保存完整的 structured_output
+                            structured_output = {
+                                k: v for k, v in result.items()
+                                if k not in ['success']  # 排除 success 字段
+                            }
+                            # 自动添加 skill_name 到 metadata 中
+                            if 'skill_name' not in structured_output.get('metadata', {}):
+                                structured_output.setdefault('metadata', {})['skill_name'] = skill_name
+                            metadata['structured_output'] = structured_output
 
+                        return SkillResult(
+                            success=True,
+                            output=output,
+                            execution_time=execution_time,
+                            metadata=metadata
+                        )
+                    else:
+                        # 失败：提取 error
+                        error = result.get("error")
+                        if error is None:
+                            # OutputBuilder 统一格式：错误信息在 content 字段
+                            content = result.get("content", {})
+                            if isinstance(content, dict):
+                                # 从 content 中提取错误信息
+                                error = content.get("message") or content.get("details") or str(content)
+                            else:
+                                error = str(content)
+
+                        # 失败时也保留 structured_output（包含错误信息）
+                        metadata = {'artifact_type': artifact_type}
+                        if 'result_type' in result:
+                            structured_output = {
+                                k: v for k, v in result.items()
+                                if k not in ['success']
+                            }
+                            # 自动添加 skill_name 到 metadata 中
+                            if 'skill_name' not in structured_output.get('metadata', {}):
+                                structured_output.setdefault('metadata', {})['skill_name'] = skill_name
+                            metadata['structured_output'] = structured_output
+
+                        return SkillResult(
+                            success=False,
+                            error=error,
+                            execution_time=execution_time,
+                            metadata=metadata
+                        )
+                except Exception as e:
+                    execution_time = time.time() - start_time
+                    return SkillResult(
+                        success=False,
+                        error=str(e),
+                        execution_time=execution_time,
+                        metadata={'artifact_type': artifact_type}
+                    )
+            else:
+                # Execute without hooks (backward compatibility)
+                try:
+                    output = await _skill_func(input_data)
+                    execution_time = time.time() - start_time
                     return SkillResult(
                         success=True,
                         output=output,
                         execution_time=execution_time,
-                        metadata=metadata
+                        metadata={'artifact_type': artifact_type}
                     )
-                else:
-                    # 失败：提取 error
-                    error = result.get("error")
-                    if error is None:
-                        # OutputBuilder 统一格式：错误信息在 content 字段
-                        content = result.get("content", {})
-                        if isinstance(content, dict):
-                            # 从 content 中提取错误信息
-                            error = content.get("message") or content.get("details") or str(content)
-                        else:
-                            error = str(content)
-
-                    # 失败时也保留 structured_output（包含错误信息）
-                    metadata = {'artifact_type': artifact_type}
-                    if 'result_type' in result:
-                        structured_output = {
-                            k: v for k, v in result.items()
-                            if k not in ['success']
-                        }
-                        # 自动添加 skill_name 到 metadata 中
-                        if 'skill_name' not in structured_output.get('metadata', {}):
-                            structured_output.setdefault('metadata', {})['skill_name'] = skill_name
-                        metadata['structured_output'] = structured_output
-
+                except Exception as e:
+                    execution_time = time.time() - start_time
                     return SkillResult(
                         success=False,
-                        error=error,
+                        error=str(e),
                         execution_time=execution_time,
-                        metadata=metadata
+                        metadata={'artifact_type': artifact_type}
                     )
-            except Exception as e:
-                execution_time = time.time() - start_time
-                return SkillResult(
-                    success=False,
-                    error=str(e),
-                    execution_time=execution_time,
-                    metadata={'artifact_type': artifact_type}
-                )
-        else:
-            # Execute without hooks (backward compatibility)
-            try:
-                output = await _skill_func(input_data)
-                execution_time = time.time() - start_time
-                return SkillResult(
-                    success=True,
-                    output=output,
-                    execution_time=execution_time,
-                    metadata={'artifact_type': artifact_type}
-                )
-            except Exception as e:
-                execution_time = time.time() - start_time
-                return SkillResult(
-                    success=False,
-                    error=str(e),
-                    execution_time=execution_time,
-                    metadata={'artifact_type': artifact_type}
-                )
+        finally:
+            # ✅ 新增：Restore environment variables after skill execution
+            self.env_loader.restore(skill_name)
 
     async def _execute_native_prompt_skill(
         self,
