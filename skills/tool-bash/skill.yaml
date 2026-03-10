@@ -96,6 +96,23 @@ output_schema:
           description: "Whether output was truncated"
 
 execution:
+  runtime:
+    # Phase 1: Functional dependencies
+    requires:
+      bins: ["bash"]
+      config: ["sandbox.enabled"]
+
+    # Phase 3: Resource requirements
+    resources:
+      cpus: 1
+      memory: "512Mi"
+      priority: 1
+
+    # Phase 3: Platform requirements
+    platform:
+      os: ["linux", "darwin"]
+      arch: ["x86_64", "arm64"]
+
   handler: handler.py
   function: execute_shell_command
   timeout: 120000
