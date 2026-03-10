@@ -554,10 +554,19 @@ function TaskDetail() {
 
       // 监听任务结果更新
       taskResultSubscription.addChangeListener((taskResult) => {
-        console.log('[🎉 taskResult] 收到任务完成结果:', taskResult)
+        console.log('[🎉 taskResult] 收到任务完成结果')
+
+        // 🔧 fix: taskResult 可能是数组，取第一个元素
+        const data = Array.isArray(taskResult) ? taskResult[0] : taskResult
+
+        console.log('[🔍 taskResult] taskId:', data.taskId)
+        console.log('[🔍 taskResult] status:', data.status)
+        console.log('[🔍 taskResult] artifacts 数量:', data.artifacts?.length || 0)
+        console.log('[🔍 taskResult] 完整 artifacts 数据:', JSON.stringify(data.artifacts, null, 2))
+        console.log('[🔍 taskResult] 完整 taskResult 数据:', JSON.stringify(data, null, 2))
 
         // ✨ 数据格式与 /agent/result API 完全相同，直接使用
-        setTask(taskResult)
+        setTask(data)
         setLoading(false)
 
         // 只有在首次成功获取数据时才结束 initialLoading
@@ -569,7 +578,7 @@ function TaskDetail() {
         setPolling(false)
 
         // 任务完成后，可以选择取消 taskExecution 订阅（节省资源）
-        if (taskResult.status === 'completed' || taskResult.status === 'failed') {
+        if (data.status === 'completed' || data.status === 'failed') {
           console.log('[✅ taskResult] 任务已完成，停止轮询')
           subscriptionRef.current?.close()
           subscriptionRef.current = null
