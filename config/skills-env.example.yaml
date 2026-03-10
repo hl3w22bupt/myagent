@@ -1,0 +1,73 @@
+# Skills Environment Configuration
+#
+# This file allows you to override environment variables for specific skills.
+# Use this for sensitive information (API keys, secrets) and deployment-specific settings.
+
+skills:
+  # Web Search Skill Configuration
+  web-search:
+    enabled: true
+
+    # API Key configuration
+    apiKey:
+      source: env
+      provider: default
+      id: SEARCH_API_KEY
+      # Or provide direct value (not recommended for production)
+      # value: "sk-production-key"
+
+    # Environment variable overrides
+    env:
+      SEARCH_API_KEY: "sk-production-key-123"
+      SEARCH_ENGINE: "google"
+      SEARCH_TIMEOUT: "30"
+      SEARCH_MAX_RESULTS: "10"
+
+    # Additional configuration
+    config:
+      timeout: 30000
+      maxResults: 10
+
+  # Remotion Generator Configuration
+  remotion-generator:
+    enabled: true
+
+    env:
+      FFMPEG_PATH: "/usr/local/bin/ffmpeg"
+      NODE_ENV: "production"
+      REMOTION_SERVER: "http://render-server:8080"
+
+    config:
+      resolution: "1080p"
+      fps: 30
+      concurrency: 2
+
+  # Gemini API Skill Configuration
+  gemini-image:
+    enabled: false  # Disabled by default
+
+    apiKey:
+      source: env
+      provider: default
+      id: GEMINI_API_KEY
+
+    env:
+      GEMINI_MODEL: "gemini-2.0-pro-exp"
+
+  # Video Editor Configuration
+  video-editor:
+    enabled: true
+
+    env:
+      VIDEO_CODEC: "libx264"
+      AUDIO_CODEC: "aac"
+      PRESET: "medium"
+
+  # Code Analysis Configuration
+  code-analysis:
+    enabled: true
+
+    env:
+      PYLINT_ENABLED: "true"
+      MYPY_ENABLED: "true"
+      MAX_LINE_LENGTH: "100"
