@@ -2,16 +2,20 @@
 Skill dependency checker.
 
 Validates skill dependencies before loading:
-- Binary files (bins, anyBins)
+- Binary files (bins, anyBins) - functional dependencies
 - Environment variables (env)
 - Configuration items (config)
 - Python packages (pythonPackages)
+- Resources (cpus, gpus, memory) - resource requirements
+- Platform (os, arch, software) - platform compatibility
 """
 
 import shutil
 import os
 from typing import Dict, List, Any, Optional
 from pathlib import Path
+from .resource_validator import ResourceValidator, ResourceRequirements
+from .platform_validator import PlatformValidator, PlatformRequirements
 
 
 class DependencyChecker:
@@ -195,5 +199,46 @@ class DependencyChecker:
             if missing_pkgs:
                 result["valid"] = False
                 result["missing"].extend(missing_pkgs)
+
+        # 🆕 Check resources (Phase 3)
+        runtime = skill_metadata.get("execution", {}).get("runtime", {})
+        if "resources" in runtime:
+            resource_validator = ResourceValidator()
+            resource_validation = resource_validator.validate(runtime["resources"])
+
+            if resource_validation["valid"]:
+                resource_req = resource_validation["requirements"]
+                capability = resource_validator.check_local_capability(resource_req)
+
+                result["details"]["resources"] = capability
+
+                # Warn if resources not met
+                if capability["warnings"]:
+                    result["details"]["resource_warnings"] = capability["warnings"]
+
+                # Don't fail validation, just mark as needs_remote
+                if not capability["can_run_locally"]:
+                    result["needs_remote"] = True
+                    result["missing_resources"] = capability["missing"]
+            else:
+                result["details"]["resources"] = resource_validation
+
+        # 🆕 Check platform (Phase 3)
+        if "platform" in runtime:
+            platform_validator = PlatformValidator()
+            platform_validation = platform_validator.validate(runtime["platform"])
+
+            if platform_validation["valid"]:
+                platform_req = platform_validation["requirements"]
+                capability = platform_validator.check_local_capability(platform_req)
+
+                result["details"]["platform"] = capability
+
+                # Fail if platform doesn't match
+                if not capability["can_run_locally"]:
+                    result["valid"] = False
+                    result["missing"].extend(capability["missing"])
+            else:
+                result["details"]["platform"] = platform_validation
 
         return result
