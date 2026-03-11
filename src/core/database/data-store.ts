@@ -1003,8 +1003,8 @@ export class DataStore {
     const artifactId = artifact.id || `art-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     this.db.run(
-      `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, metadata, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, message_id, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         artifactId,
         artifact.taskId!,
@@ -1013,6 +1013,7 @@ export class DataStore {
         artifact.path,
         artifact.description || null,
         artifact.commitHash || null,
+        artifact.messageId || null,
         artifact.metadata ? JSON.stringify(artifact.metadata) : null,
         artifact.timestamp instanceof Date ? artifact.timestamp.getTime() : Date.now(),
       ]
@@ -1108,13 +1109,14 @@ export class DataStore {
     const outputId = output.id || `output-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     this.db.run(
-      `INSERT INTO outputs (id, task_id, session_id, round, output, execution_time, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO outputs (id, task_id, session_id, round, message_id, output, execution_time, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         outputId,
         output.taskId!,
         output.sessionId || '',
         output.round,
+        output.messageId || null,
         output.output,
         output.executionTime || null,
         output.timestamp instanceof Date ? output.timestamp.getTime() : Date.now(),

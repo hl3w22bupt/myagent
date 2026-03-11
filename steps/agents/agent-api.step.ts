@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { MessageIdGenerator } from '../../src/utils/message-id-generator';
 
 /**
  * Task counter for generating unique task IDs.
@@ -103,6 +104,13 @@ export const bodySchema = z.object({
    * If not provided, the 'task' parameter will be used as a fallback (mapped to 'requirement' for simple_dev_workflow).
    */
   workflow_input: z.record(z.string(), z.any()).optional().describe('Workflow input parameters'),
+
+  /**
+   * Optional: Message ID for tracking conversation messages.
+   * Used to link agent execution results with specific messages in external systems (e.g., MyEcho).
+   * If not provided, a new messageId will be generated automatically.
+   */
+  messageId: z.string().optional().describe('Message ID for tracking (format: msg-{timestamp}-{random})'),
 });
 
 /**
@@ -155,7 +163,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input } =
+  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -164,6 +172,9 @@ export const handler = async (request: any, { emit, logger }: any) => {
   // Generate sessionId if not provided (for multi-turn conversations)
   const finalSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+  // Determine messageId - use provided or generate new one
+  const messageId = providedMessageId || MessageIdGenerator.generate();
+
   // Determine app identifier (default to 'default' if not provided)
   const appIdentifier = app || 'default';
 
@@ -171,6 +182,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     task,
     sessionId: finalSessionId,
     taskId,
+    messageId,
     app: appIdentifier,
     skills: availableSkills,
     useDelegation,
@@ -179,7 +191,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     userId,
     hasUserContext: !!userContext,
     subagent,
-    rewriteRequest, // Log request rewriting setting
+    rewriteRequest,
   });
 
   // Log if no skills provided - PTCGenerator will handle selection
@@ -215,6 +227,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       taskId,
       task,
       sessionId: finalSessionId,
+      messageId, // Message ID for tracking
       systemPrompt,
       availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
       useDelegation,
@@ -238,13 +251,14 @@ export const handler = async (request: any, { emit, logger }: any) => {
         ? 'Task submitted for execution with MasterAgent delegation'
         : 'Task submitted for execution',
       taskId,
+      messageId, // Return the actual messageId used (generated or provided)
       task,
       sessionId: finalSessionId,
       useDelegation,
       availableSkills,
       userId,
       subagent,
-      rewriteRequest, // Include in response for confirmation
+      rewriteRequest,
     },
   };
 };

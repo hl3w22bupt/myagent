@@ -97,6 +97,12 @@ export const inputSchema = z
     sessionId: z.string().optional(),
 
     /**
+     * Message ID for tracking conversation messages.
+     * Links outputs and artifacts to specific messages in external systems (e.g., MyEcho).
+     */
+    messageId: z.string().optional(),
+
+    /**
      * Nested result object from Agent execution (present in completed events).
      */
     result: z
@@ -316,6 +322,11 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const taskId = input.taskId;
   const task = input.task || 'Unknown task';
   const sessionId = input.sessionId;
+  const messageId = input.messageId;  // Extract messageId for tracking
+
+  if (messageId) {
+    logger.info('Task Result Handler: MessageId present', { taskId, messageId });
+  }
 
   // NOTE: structuredOutput is now at root level (Agent.run() returns it there)
   // No need to move it from root to metadata anymore
@@ -458,6 +469,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               videoUrl = normalizeArtifactPath(videoUrl, 'video');
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'video',
                 action: 'generated',
                 path: videoUrl,
@@ -480,6 +492,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               audioPath = normalizeArtifactPath(audioPath, 'audio');
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'audio',
                 action: 'generated',
                 path: audioPath,
@@ -519,6 +532,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'code',
                 action: 'generated',
                 path: artifactPath,
@@ -545,6 +559,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               const normalizedPath = normalizeArtifactPath(infographicPath, 'image');
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'image',
                 action: 'generated',
                 path: normalizedPath,
@@ -575,6 +590,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
             await store.addArtifact({
               taskId,
+              messageId,
               artifactType: 'table',
               action: 'generated',
               path: artifactPath,
@@ -629,6 +645,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 // 创建新 artifact
                 await store.addArtifact({
                   taskId,
+                  messageId,
                   artifactType: 'file',
                   action: 'generated',
                   path: filePath,
@@ -668,6 +685,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'text',
                 action: 'generated',
                 path: artifactId,
@@ -707,6 +725,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
             await store.addArtifact({
               taskId,
+              messageId,
               artifactType: 'text',
               action: 'generated',
               path: artifactId,
@@ -747,6 +766,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
           await store.addArtifact({
             taskId,
+            messageId,
             artifactType: 'video',
             action: 'generated',
             path: videoUrl,
@@ -790,6 +810,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
               await store.addArtifact({
                 taskId,
+                messageId,
                 artifactType: 'video',
                 action: 'generated',
                 path: videoPath,
@@ -842,6 +863,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
           await store.addArtifact({
             taskId,
+            messageId,
             artifactType: 'code',
             action: 'generated',
             path: artifactPath,
@@ -876,6 +898,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
           await store.addArtifact({
             taskId,
+            messageId,
             artifactType: 'image',
             action: 'generated',
             path: normalizedPath,
@@ -912,6 +935,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
         await store.addArtifact({
           taskId,
+          messageId,
           artifactType: 'table',
           action: 'generated',
           path: artifactPath,
@@ -946,6 +970,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
           await store.addArtifact({
             taskId,
+            messageId,
             artifactType: 'audio',
             action: 'generated',
             path: audioPath,
@@ -1001,6 +1026,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
             await store.addArtifact({
               taskId,
+              messageId,
               artifactType: 'text',
               action: 'generated',
               path: artifactId, // Use artifactId as path (text is stored inline in metadata)

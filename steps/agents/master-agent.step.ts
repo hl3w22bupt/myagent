@@ -121,6 +121,12 @@ export const inputSchema = _z.object({
    * If not provided, the task parameter will be used as a fallback.
    */
   workflowInput: _z.record(_z.string(), _z.any()).optional(),
+
+  /**
+   * Optional: Message ID for tracking conversation messages.
+   * Links task execution results to specific messages in external systems (e.g., MyEcho).
+   */
+  messageId: _z.string().optional(),
 });
 
 /**
@@ -578,7 +584,7 @@ export const handler = async (
       logger.warn('Task stopped by pre-hook', { taskId, reason: preResult.reason });
       await emit({
         topic: 'agent.task.failed',
-        data: { taskId, sessionId, error: preResult.reason },
+        data: { taskId, sessionId, messageId: input.messageId, error: preResult.reason },
       } as any);
       return {
         success: false,
@@ -1017,6 +1023,7 @@ export const handler = async (
       data: {
         taskId,
         sessionId,
+        messageId: input.messageId,  // Pass through messageId for tracking
         task: input.task,
         result: {
           success: result.success,
@@ -1071,6 +1078,7 @@ export const handler = async (
       data: {
         taskId,
         sessionId,
+        messageId: input.messageId,  // Pass through messageId for tracking
         task: input.task,
         error: error.message,
         stack: error.stack,
