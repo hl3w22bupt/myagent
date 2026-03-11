@@ -435,6 +435,7 @@ export const handler = async (
     task: input.task,
     sessionId,
     taskId,
+    messageId: input.messageId,  // Log messageId for debugging
   });
 
   // === Agent Hook Setup ===

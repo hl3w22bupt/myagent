@@ -324,9 +324,12 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const sessionId = input.sessionId;
   const messageId = input.messageId;  // Extract messageId for tracking
 
-  if (messageId) {
-    logger.info('Task Result Handler: MessageId present', { taskId, messageId });
-  }
+  // Log messageId for debugging (always log to see if it's present)
+  logger.info('Task Result Handler: Received input', {
+    taskId,
+    messageId: messageId || 'NOT PROVIDED',
+    hasMessageId: !!messageId,
+  });
 
   // NOTE: structuredOutput is now at root level (Agent.run() returns it there)
   // No need to move it from root to metadata anymore
