@@ -1,7 +1,7 @@
 name: tool-bash
-version: 1.2.0
-description: "Execute shell commands safely. Supports hybrid mode: natural language task (LLM generates command) OR direct command/args execution. Use for file system operations, listing files, searching content, and shell utilities."
-tags: [tool, shell, bash, command, cli, executor, utility, file, filesystem, ls, find, grep, cat]
+version: 2.0.0
+description: "Execute shell commands safely with PTY support for interactive CLI tools. Supports hybrid mode: natural language task (LLM generates command) OR direct command/args execution. Use for file system operations, external CLI tools (claude, codex, pi), and shell utilities."
+tags: [tool, shell, bash, command, cli, executor, utility, file, filesystem, ls, find, grep, cat, pty, interactive, external-agent]
 type: pure-script
 
 input_schema:
@@ -13,7 +13,7 @@ input_schema:
       description: "Natural language task description. LLM will generate appropriate shell command (e.g., '列出 /tmp 目录的文件', '查找所有 .py 文件')"
     command:
       type: string
-      description: "Shell command to execute (e.g., ls, find, grep, cat)"
+      description: "Shell command to execute (e.g., ls, find, grep, cat, claude, codex, pi)"
     args:
       type: array
       items:
@@ -29,10 +29,22 @@ input_schema:
       type: integer
       description: "Command timeout in seconds (default: 30)"
       default: 30
+    pty:
+      type: boolean
+      description: "Use pseudo-terminal for interactive CLI tools (required for claude, codex, pi)"
+      default: false
+    background:
+      type: boolean
+      description: "Run command in background, returns sessionId for long-running processes"
+      default: false
   description: |
-    Execute shell commands safely with a whitelist mechanism. Returns raw text
-    output and execution metadata. Use for file system operations, listing files,
-    searching content, and shell utilities.
+    Execute shell commands safely with PTY support for interactive CLI tools.
+    Returns raw text output and execution metadata.
+
+    **PTY Mode**: Set pty=true for external CLI tools like claude, codex, pi that require
+    interactive terminal support. This is essential for the External Coding Agent Integration.
+
+    **Background Mode**: Set background=true for long-running processes, returns sessionId.
 
 output_schema:
   type: object
