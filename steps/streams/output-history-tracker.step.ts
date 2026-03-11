@@ -56,11 +56,12 @@ export const config: EventConfig = {
  * This allows users to view all generated outputs across conversation rounds.
  */
 export const handler = async (input: z.infer<typeof inputSchema>, { logger }: any) => {
-  const { taskId, sessionId, result } = input;
+  const { taskId, sessionId, result, messageId } = input;
 
   logger.info('[Output History Tracker] Received event', {
     taskId,
     sessionId,
+    messageId: messageId || 'NOT PROVIDED',
     hasResult: !!result,
     hasOutput: !!(result?.output),
   });
@@ -96,6 +97,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger }: an
       taskId,
       sessionId: sessionId || task.sessionId,
       round,
+      messageId,  // Message ID for tracking
       output: result.output,
       executionTime: result.executionTime,
       timestamp: new Date(),

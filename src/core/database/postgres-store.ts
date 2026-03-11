@@ -1110,8 +1110,8 @@ export class PostgresDataStore implements Database {
     try {
       const id = artifact.id || `artifact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       await client.query(
-        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, metadata, timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO artifacts (id, task_id, artifact_type, action, path, description, commit_hash, message_id, metadata, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           id,
           artifact.taskId || '',
@@ -1120,6 +1120,7 @@ export class PostgresDataStore implements Database {
           artifact.path,
           artifact.description || null,
           artifact.commitHash || null,
+          artifact.messageId || null,
           artifact.metadata || null,
           artifact.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
         ]
@@ -1272,13 +1273,14 @@ export class PostgresDataStore implements Database {
       const timestamp = output.timestamp instanceof Date ? output.timestamp.getTime() : Date.now();
 
       await client.query(
-        `INSERT INTO outputs (id, task_id, session_id, round, output, execution_time, timestamp)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO outputs (id, task_id, session_id, round, message_id, output, execution_time, timestamp)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           id,
           output.taskId!,
           output.sessionId || '',
           output.round,
+          output.messageId || null,
           output.output,
           output.executionTime || null,
           timestamp,

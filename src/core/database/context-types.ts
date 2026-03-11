@@ -176,6 +176,7 @@ export interface ArtifactIndex {
   path: string;
   description?: string;
   commitHash?: string;
+  messageId?: string;  // Message ID for tracking conversation messages
   metadata?: Record<string, any>;  // 扩展属性字段（与其他表保持一致）
   timestamp: Date;
 }
@@ -189,6 +190,7 @@ export interface OutputIndex {
   taskId: string;
   sessionId: string;
   round: number;
+  messageId?: string;  // Message ID for tracking conversation messages
   output: string;
   executionTime?: number;
   timestamp: Date;
