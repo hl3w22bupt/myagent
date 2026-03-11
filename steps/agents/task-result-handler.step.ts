@@ -1319,6 +1319,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         metadata: parsedMetadata,
         artifacts: artifactsForStream,
         pinned: finalTask.pinned || false,
+        messageId: messageId,  // ← Include messageId in taskResult for MyEcho matching
         timestamp: finalTask.createdAt instanceof Date
           ? finalTask.createdAt.toISOString()
           : new Date(finalTask.createdAt).toISOString(),
