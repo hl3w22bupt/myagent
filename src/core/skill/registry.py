@@ -12,8 +12,10 @@ import os
 import yaml
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING, Any
 from .types import SkillMetadata, SkillDefinition, SkillType
+from .dependency_checker import DependencyChecker
+from .filter import SkillFilter
 
 # Import VirtualSkillRegistry only when needed to avoid circular imports
 if TYPE_CHECKING:
@@ -33,7 +35,9 @@ class SkillRegistry:
     def __init__(
         self,
         skills_dir: str = 'skills/',
-        virtual_registry: Optional['VirtualSkillRegistry'] = None
+        virtual_registry: Optional['VirtualSkillRegistry'] = None,
+        filter_config: Optional[Dict[str, Any]] = None,
+        myagent_config: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize the Skill Registry.
@@ -41,6 +45,8 @@ class SkillRegistry:
         Args:
             skills_dir: Path to the skills directory
             virtual_registry: Optional VirtualSkillRegistry for Claude Skills
+            filter_config: Optional skill filter configuration
+            myagent_config: Optional myagent config for dependency checking
         """
         self.skills_dir = Path(skills_dir)
         self._metadata: Dict[str, SkillMetadata] = {}
@@ -50,6 +56,15 @@ class SkillRegistry:
         # Virtual registry for Claude Skills (optional)
         self._virtual_registry = virtual_registry
         self._virtual_metadata: Dict[str, SkillMetadata] = {}
+
+        # Initialize dependency checker
+        self.dependency_checker = DependencyChecker()
+
+        # Initialize skill filter
+        self.skill_filter = SkillFilter(filter_config) if filter_config else None
+
+        # Store myagent config for dependency checking
+        self.myagent_config = myagent_config or {}
 
     async def scan(self) -> Dict[str, SkillMetadata]:
         """
@@ -67,18 +82,33 @@ class SkillRegistry:
             raise FileNotFoundError(f"Skills directory not found: {self.skills_dir}")
 
         tasks = []
+        skill_paths = []
         for skill_path in self.skills_dir.iterdir():
             if skill_path.is_dir() and (skill_path / 'skill.yaml').exists():
                 tasks.append(self._load_metadata(skill_path))
+                skill_paths.append(skill_path)
 
         # Load all metadata in parallel
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for result in results:
+        for result, skill_path in zip(results, skill_paths):
             if isinstance(result, Exception):
                 print(f"Warning: Failed to load skill metadata: {result}")
                 continue
             if isinstance(result, SkillMetadata):
+                # ✅ 新增：检查依赖
+                if self.skill_filter and not self.skill_filter.is_eligible(result, level="workspace"):
+                    print(f"⚠️  Skill '{result.name}' filtered by skill filter")
+                    continue
+
+                # ✅ 新增：检查依赖
+                validation_result = await self._validate_dependencies(skill_path, result)
+                if not validation_result["valid"]:
+                    print(f"⚠️  Skill '{result.name}' skipped: dependency check failed")
+                    print(f"   Missing: {validation_result.get('missing', {})}")
+                    print(f"   Details: {validation_result.get('details', 'No details')}")
+                    continue
+
                 self._metadata[result.name] = result
 
         # Scan virtual registry for Claude Skills
@@ -144,6 +174,51 @@ class SkillRegistry:
             description=config['description'],
             tags=config.get('tags', []),
             type=SkillType(config.get('type', 'pure-script'))
+        )
+
+    async def _validate_dependencies(
+        self,
+        skill_path: Path,
+        metadata: SkillMetadata
+    ) -> Dict[str, Any]:
+        """
+        Validate skill dependencies.
+
+        Args:
+            skill_path: Path to the skill directory
+            metadata: Skill metadata object
+
+        Returns:
+            Validation result dict with valid, missing, and details keys
+        """
+        config_file = skill_path / 'skill.yaml'
+
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+
+        # Extract runtime requirements from skill.yaml
+        runtime_config = config.get('execution', {}).get('runtime', {})
+        metadata_dict = config.get('metadata', {})
+
+        # Build skill metadata dict for validation
+        skill_metadata = {
+            'runtime': runtime_config,
+            'myagent': metadata_dict.get('myagent', {})
+        }
+
+        # Get config env overrides for env validation
+        config_env = None
+        if self.myagent_config:
+            skills_config = self.myagent_config.get('skills', {})
+            entries = skills_config.get('entries', {})
+            if metadata.name in entries:
+                config_env = entries[metadata.name].get('env')
+
+        # Validate dependencies
+        return self.dependency_checker.validate_skill(
+            skill_metadata=skill_metadata,
+            config_env=config_env,
+            myagent_config=self.myagent_config
         )
 
     async def load_full(self, skill_name: str) -> SkillDefinition:
