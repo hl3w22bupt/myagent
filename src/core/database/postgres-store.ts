@@ -225,21 +225,6 @@ export class PostgresDataStore implements Database {
         )
       `);
 
-      // Messages table
-      await safeQuery(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id TEXT PRIMARY KEY,
-          task_id TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
-          content TEXT NOT NULL,
-          metadata JSONB,
-          compressed BOOLEAN DEFAULT FALSE,
-          created_at BIGINT NOT NULL
-        )
-      `);
-
-      await safeQuery('CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id)');
-
       // Artifacts table
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS artifacts (
@@ -782,13 +767,7 @@ export class PostgresDataStore implements Database {
         [sortedTaskIds]
       );
 
-      // 4. 删除 messages (通过 task_id)
-      await client.query(
-        'DELETE FROM messages WHERE task_id = ANY($1)',
-        [sortedTaskIds]
-      );
-
-      // 5. 删除 outputs (通过 task_id)
+      // 4. 删除 outputs (通过 task_id)
       await client.query(
         'DELETE FROM outputs WHERE task_id = ANY($1)',
         [sortedTaskIds]
@@ -923,14 +902,6 @@ export class PostgresDataStore implements Database {
         ]
       );
 
-      // Create initial user message
-      const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      await client.query(
-        `INSERT INTO messages (id, task_id, role, content, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [messageId, taskId, 'user', input, now]
-      );
-
       return {
         taskId,
         sessionId,
@@ -1046,36 +1017,6 @@ export class PostgresDataStore implements Database {
   async saveContext(context: TaskContext): Promise<void> {
     // Alias for updateContext - saves the entire context
     await this.updateContext(context.taskId, context);
-  }
-
-  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext> {
-    const client = await this.pool.connect();
-
-    try {
-      // Add message to the messages table
-      await client.query(
-        `INSERT INTO messages (id, task_id, role, content, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          message.id,
-          taskId,
-          message.role,
-          message.content,
-          message.metadata,  // 直接传入对象，自动处理为 JSONB
-          message.metadata.timestamp.getTime(), // Convert Date to BIGINT (milliseconds)
-        ]
-      );
-
-      // Get the current context
-      const context = await this.getContext(taskId);
-      if (!context) {
-        throw new Error(`Context not found for task: ${taskId}`);
-      }
-
-      return context;
-    } finally {
-      client.release();
-    }
   }
 
   async addConversationRound(taskId: string, round: ConversationRound): Promise<TaskContext> {

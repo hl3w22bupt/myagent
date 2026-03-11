@@ -29,6 +29,9 @@
     "node_modules",
     "dist",
     "outputs",
+    "examples",
+    "tests",
+    "**/__tests__",
     "skills/remotion-generator/template",
     "skills/remotion-generator/template/**"
   ],

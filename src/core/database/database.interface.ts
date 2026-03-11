@@ -44,7 +44,6 @@ export interface Database {
   createTaskContext(taskId: string, sessionId: string, input: string): Promise<TaskContext>;
   getContext(taskId: string): Promise<TaskContext | null>;
   saveContext(context: TaskContext): Promise<void>;
-  addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext>;
 
   /**
    * Artifact operations

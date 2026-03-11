@@ -156,60 +156,6 @@ export class ContextManager {
   }
 
   /**
-   * 添加消息到上下文
-   * @deprecated 使用 addConversationRound 代替
-   */
-  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any }): Promise<TaskContext> {
-    // 1. 获取当前上下文，如果不存在则创建一个新的
-    let context = await this.store.getContext(taskId);
-    if (!context) {
-      console.warn(`[ContextManager] Context not found for task ${taskId}, creating new context`);
-      // 创建一个新的任务上下文（使用默认值）
-      context = await this.store.createTaskContext(taskId, message.metadata?.sessionId || 'default-session', '');
-    }
-
-    // 2. 添加消息
-    const updatedContext = await this.store.addMessage(taskId, message);
-
-    // 3. 提取并保存Artifacts
-    // DISABLED: ArtifactExtractor 从消息中提取文件路径和函数调用，产生大量垃圾数据
-    // 前端只使用 video 和 code 类型的 artifacts，不使用 file 和 function 类型
-    // 真正的 artifacts 由 result-logger.step.ts 从 skill 的统一格式返回值中提取
-    //
-    // const artifacts = this.artifactExtractor.extractFromMessage({
-    //   ...message,
-    //   taskId,
-    // });
-    //
-    // for (const artifact of artifacts) {
-    //   await this.store.addArtifact({ ...artifact, taskId });
-    // }
-
-    // 4. 压缩逻辑由 compressor 内部处理
-    // compressor.compress() 方法内部会自动判断是否需要压缩
-    const compressed = await this.compressor.compress(updatedContext, async (rounds: ConversationRound[]) => {
-      if (this.summarizer) {
-        return await this.summarizer.summarizeFromRounds(rounds);
-      } else {
-        // Fallback: 简单摘要
-        return {
-          sessionIntent: '会话意图',
-          currentTask: context.summary.currentTask,
-          completedSteps: rounds.map(r => r.userMessage).slice(0, 5),
-          filesModified: [],
-          decisionsMade: [],
-          currentStatus: 'compressed',
-          nextSteps: [],
-          errorsAndSolutions: [],
-          technicalDetails: {},
-        };
-      }
-    });
-
-    return compressed;
-  }
-
-  /**
    * 保存上下文
    */
   async saveContext(context: TaskContext): Promise<void> {

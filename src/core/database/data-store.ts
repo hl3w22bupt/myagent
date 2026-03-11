@@ -996,48 +996,6 @@ export class DataStore {
     await this.save();
   }
 
-  async addMessage(taskId: string, message: { id: string; role: string; content: string; metadata?: any; compressed?: boolean }): Promise<TaskContext> {
-    await this.ensureInitialized();
-    if (!this.db) throw new Error('Database not initialized');
-
-    const messageId = message.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // 先获取当前 context
-    const context = await this.getContext(taskId);
-    if (!context) {
-      throw new Error(`Task context not found: ${taskId}`);
-    }
-
-    // 插入消息
-    this.db.run(
-      `INSERT INTO messages (id, task_id, role, content, metadata, compressed, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        messageId,
-        taskId,
-        message.role,
-        message.content,
-        message.metadata ? JSON.stringify(message.metadata) : null,
-        message.compressed ? 1 : 0,
-        Date.now(),
-      ]
-    );
-
-    this.db.run(
-      `UPDATE task_contexts
-       SET metadata = ?, updated_at = ?
-       WHERE task_id = ?`,
-      [
-        JSON.stringify(context.metadata),
-        Date.now(),
-        taskId,
-      ]
-    );
-
-    await this.save();
-    return (await this.getContext(taskId))!;
-  }
-
   async addArtifact(artifact: Omit<ArtifactIndex, 'taskId' | 'id'> & { taskId?: string; id?: string }): Promise<void> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
