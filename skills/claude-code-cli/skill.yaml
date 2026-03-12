@@ -1,0 +1,39 @@
+name: claude-code-cli
+description: Execute Claude Code CLI for advanced coding tasks using --print flag. Ideal for complex refactoring, code generation, multi-file edits, and architecture work.
+version: 1.0.0
+
+type: pure-prompt
+
+prompt_template: |
+  You need to execute Claude Code CLI for the following coding task:
+
+  Task: {task}
+
+  Additional parameters:
+  - Model: {model|claude-sonnet-4-5}
+  - Timeout: {timeout|300} seconds
+  - Working directory: {working_dir|/tmp}
+
+  **IMPORTANT**: You must use the tool-bash skill to execute the Claude Code CLI command.
+
+  Execute this command using tool-bash:
+  ```bash
+  claude --print "{task}" --model {model|claude-sonnet-4-5}
+  ```
+
+  Parameters for tool-bash:
+  - command: "claude"
+  - args: ["--print", "{task}", "--model", "{model|claude-sonnet-4-5}"]
+  - timeout: {timeout|300}
+  - working_dir: {working_dir|/tmp}
+
+  After execution, return the output from Claude Code CLI.
+
+tags:
+  - tool
+  - coding
+  - claude-code
+  - cli
+  - refactoring
+  - code-generation
+  - ai-assistant
