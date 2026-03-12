@@ -94,6 +94,80 @@ def write_structured_output(result: Dict[str, Any], session_id: str = None) -> N
     print(f"[STRUCTURED_OUTPUT] {output_file}")
 
 
+def copy_files_to_outputs(workspace_artifacts: Dict[str, Any], task_id: str) -> list:
+    """
+    Copy workspace files to persistent outputs/ directory.
+
+    Returns list of copied file info with output paths.
+    """
+    import shutil
+
+    copied_files = []
+
+    if not workspace_artifacts.get("exists") or not workspace_artifacts.get("files"):
+        return copied_files
+
+    # Create outputs/codes directory
+    project_root = os.getcwd()
+    outputs_dir = os.path.join(project_root, 'outputs', 'codes')
+    os.makedirs(outputs_dir, exist_ok=True)
+
+    for file_info in workspace_artifacts["files"]:
+        src_path = file_info["absolute_path"]
+        filename = file_info["path"]
+        extension = file_info["extension"]
+
+        # Generate output filename: {task_id}_skill_{filename}
+        # Use task_id without the full prefix for shorter names
+        short_task_id = task_id.split('-')[-1] if '-' in task_id else task_id
+        output_filename = f"{task_id}_claude-code-cli_{filename}"
+        output_path = os.path.join(outputs_dir, output_filename)
+
+        try:
+            shutil.copy2(src_path, output_path)
+
+            # Get file stats
+            stat = os.stat(output_path)
+
+            # Determine file type from extension
+            ext = file_info["extension"]
+            type_map = {
+                ".py": "code",
+                ".js": "code",
+                ".ts": "code",
+                ".tsx": "code",
+                ".jsx": "code",
+                ".java": "code",
+                ".cpp": "code",
+                ".c": "code",
+                ".go": "code",
+                ".rs": "code",
+                ".rb": "code",
+                ".php": "code",
+                ".html": "html",
+                ".css": "code",
+                ".json": "json",
+                ".md": "markdown",
+                ".txt": "text",
+            }
+            file_type = type_map.get(ext, "file")
+
+            copied_files.append({
+                "path": f"outputs/codes/{output_filename}",  # Relative path for artifact
+                "absolute_path": output_path,
+                "type": file_type,
+                "file-type": extension.replace(".", "") if extension else "unknown",
+                "size": stat.st_size,
+                "original_filename": filename
+            })
+
+            print(f"[COPY] {filename} -> outputs/codes/{output_filename}")
+        except Exception as e:
+            print(f"[ERROR] Failed to copy {filename}: {e}")
+
+    return copied_files
+
+
 def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Execute Claude Code CLI with stdin input.
@@ -222,39 +296,10 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             print(f"[WORKSPACE] Directory does not exist: {workspace_artifacts['directory']}")
 
-        # Convert workspace_artifacts to output_files format for task-result-handler
-        output_files = []
-        if workspace_artifacts["exists"] and workspace_artifacts["files"]:
-            for file_info in workspace_artifacts["files"]:
-                # Determine file type from extension
-                ext = file_info["extension"]
-                type_map = {
-                    ".py": "code",
-                    ".js": "code",
-                    ".ts": "code",
-                    ".tsx": "code",
-                    ".jsx": "code",
-                    ".java": "code",
-                    ".cpp": "code",
-                    ".c": "code",
-                    ".go": "code",
-                    ".rs": "code",
-                    ".rb": "code",
-                    ".php": "code",
-                    ".html": "html",
-                    ".css": "code",
-                    ".json": "json",
-                    ".md": "markdown",
-                    ".txt": "text",
-                }
-                file_type = type_map.get(ext, "file")
+        # Copy files to persistent outputs/ directory
+        output_files = copy_files_to_outputs(workspace_artifacts, task_id)
 
-                output_files.append({
-                    "path": file_info["absolute_path"],
-                    "type": file_type,
-                    "file-type": ext.replace(".", ""),
-                    "size": file_info["size_bytes"]
-                })
+        print(f"[COPIED] {len(output_files)} files to outputs/codes/")
 
         # Check if command succeeded
         if exit_code == 0:
