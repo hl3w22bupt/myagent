@@ -30,7 +30,7 @@ class SecurityValidator:
         'curl', 'wget', 'ping', 'ssh', 'scp', 'rsync',
 
         # Development tools
-        'git', 'npm', 'python', 'python3', 'node', 'npm',
+        'git', 'npm', 'python', 'python3', 'node', 'npm', 'claude',
 
         # File operations (safe ones)
         'cp', 'mv', 'mkdir', 'touch', 'chmod', 'chown',
