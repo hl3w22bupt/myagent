@@ -87,4 +87,4 @@ agent:
 
   constraints:
     max_iterations: 10
-    timeout: 120000
+    timeout: 600000
