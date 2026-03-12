@@ -330,6 +330,7 @@ function TaskDetail() {
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true) // 首次加载状态
   const hasInitialData = useRef(false) // 追踪是否已成功获取过首次数据
+  const hasReceivedTaskResult = useRef(false) // 🔥 新增：追踪是否已收到 taskResult stream 的数据
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('visual') // 'visual' or 'text' or 'stream'
@@ -501,16 +502,17 @@ function TaskDetail() {
 
   // 监听 stream 可用性并订阅
   useEffect(() => {
-    console.log('[🟡 useEffect 执行]', { id, streamVersion, hasStream: !!stream })
+    console.log('[🔍 Stream订阅] id:', id, 'hasStream:', !!stream, 'isSubscribed:', isSubscribedRef.current)
 
     // 如果 id 不存在，直接返回
     if (!id) {
+      console.warn('[⚠️ Stream订阅] id 为空，跳过订阅')
       return
     }
 
     // 如果已经订阅过，直接返回（避免重复订阅）
     if (isSubscribedRef.current) {
-      console.log('[✅ 已订阅，跳过重复订阅]')
+      console.log('[✅ Stream订阅] 已订阅，跳过重复订阅')
       return
     }
 
@@ -529,7 +531,52 @@ function TaskDetail() {
     }
 
     // stream 可用，进行订阅
-    console.log('[🟢 Stream 可用，开始订阅...', { stream: 'taskExecution', groupId: id })
+    console.log('[🟢 Stream] 开始订阅，groupId:', id)
+
+    /**
+     * 🔥 关键修复：防止页面卡在加载状态的解决方案
+     *
+     * 问题：stream 初始订阅时数据为空数组，addChangeListener 不会触发
+     * 结果：页面永远显示"加载中..."，因为 initialLoading 永远是 true
+     *
+     * 解决：在订阅 stream 之前，先调用 /agent/result API 获取初始数据
+     * 效果：页面可以立即渲染，然后通过 stream 接收实时更新
+     */
+    const fetchInitialData = async () => {
+      try {
+        console.log('[📡 API] 获取任务初始数据:', id)
+        const initialTask = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
+
+        if (initialTask) {
+          console.log('[✅ API] 任务数据加载成功:', {
+            taskId: initialTask.taskId,
+            status: initialTask.status,
+            artifactsCount: initialTask.artifacts?.length || 0
+          })
+
+          setTask(initialTask)
+          setLoading(false)
+
+          // 只有在首次成功获取数据时才结束 initialLoading
+          if (!hasInitialData.current) {
+            hasInitialData.current = true
+            setInitialLoading(false)
+            console.log('[✅ 页面] initialLoading → false，页面将开始渲染')
+          }
+
+          // 检查 artifacts 的收藏状态
+          if (initialTask.artifacts && initialTask.artifacts.length > 0) {
+            checkFavoritesStatus(initialTask.artifacts)
+          }
+        }
+      } catch (error) {
+        console.error('[❌ API] 获取任务数据失败:', error.message)
+        // 不设置 initialLoading 为 false，让 stream 订阅继续尝试
+      }
+    }
+
+    // 立即调用初始数据加载（不等待，异步执行）
+    fetchInitialData()
 
     // 用于保存所有订阅，便于统一清理
     const subscriptions = []
@@ -538,32 +585,46 @@ function TaskDetail() {
       // 订阅 taskExecution stream（统一处理所有事件：task、skill、agent）
       subscriptionRef.current = stream.subscribeGroup('taskExecution', id)
       subscriptions.push(subscriptionRef.current)
-      console.log('[✅ taskExecution 订阅成功]', subscriptionRef.current)
+      console.log('[✅ Stream] taskExecution 订阅成功')
     } catch (error) {
-      console.error('[❌ taskExecution 订阅失败]', error)
+      console.error('[❌ Stream] taskExecution 订阅失败:', error)
       return
     }
 
     // 订阅 taskResult stream（获取最终任务结果）
     let taskResultSubscription = null
     try {
-      console.log('[🟢 开始订阅 taskResult stream...', { taskId: id })
       taskResultSubscription = stream.subscribeGroup('taskResult', id)
       subscriptions.push(taskResultSubscription)
-      console.log('[✅ taskResult 订阅成功]', taskResultSubscription)
+      console.log('[✅ Stream] taskResult 订阅成功')
 
       // 监听任务结果更新
       taskResultSubscription.addChangeListener((taskResult) => {
-        console.log('[🎉 taskResult] 收到任务完成结果')
+        console.log('[📥 Stream] taskResult 收到数据')
 
         // 🔧 fix: taskResult 可能是数组，取第一个元素
         const data = Array.isArray(taskResult) ? taskResult[0] : taskResult
 
-        console.log('[🔍 taskResult] taskId:', data.taskId)
-        console.log('[🔍 taskResult] status:', data.status)
-        console.log('[🔍 taskResult] artifacts 数量:', data.artifacts?.length || 0)
-        console.log('[🔍 taskResult] 完整 artifacts 数据:', JSON.stringify(data.artifacts, null, 2))
-        console.log('[🔍 taskResult] 完整 taskResult 数据:', JSON.stringify(data, null, 2))
+        /**
+         * 关键防护：防止空值导致页面崩溃
+         *
+         * 问题：stream 初始数据可能为空数组 []
+         * 结果：taskResult[0] 返回 undefined，访问 data.taskId 会报错
+         * 防护：检查 data 是否存在，避免崩溃并提前 return
+         */
+        if (!data) {
+          console.warn('[⚠️ Stream] taskResult 数据为空，跳过处理')
+          return
+        }
+
+        console.log('[✅ Stream] taskResult 更新:', {
+          taskId: data.taskId,
+          status: data.status,
+          artifactsCount: data.artifacts?.length || 0
+        })
+
+        // 🔥 标记已收到 taskResult 数据
+        hasReceivedTaskResult.current = true
 
         // ✨ 数据格式与 /agent/result API 完全相同，直接使用
         setTask(data)
@@ -708,15 +769,30 @@ function TaskDetail() {
       console.log('✅ 检测到任务完成事件:', {
         status: lastEntry?.status,
         type: lastEntry?.type,
-        eventType: lastEntry?.originalEvent?.type,
-        message: '，重新获取任务详情'
+        eventType: lastEntry?.originalEvent?.type
       })
 
-      // 重新获取任务详情
+      // 🔥 优化：如果已经通过 taskResult stream 收到数据，就不需要再调用 API
+      if (hasReceivedTaskResult.current) {
+        console.log('[✅ 优化] 已通过 taskResult stream 收到数据，跳过 API 调用')
+        setPolling(false)
+
+        // 清除轮询
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
+        return
+      }
+
+      console.log('[📡 API] taskResult stream 未推送数据，调用 API 获取详情')
+
+      // 重新获取任务详情（taskResult stream 未推送数据时的兜底方案）
       const fetchUpdatedDetails = async () => {
         try {
-          const updatedTask = await tasksAPI.getTaskDetails(id)
-          console.log('✅ 已获取更新后的任务详情:', updatedTask)
+          // 使用较短的超时时间（5秒），避免长时间等待
+          const updatedTask = await tasksAPI.getTaskDetails(id, 5000)
+          console.log('✅ 已获取更新后的任务详情:', updatedTask?.taskId, updatedTask?.status)
           setTask(updatedTask)
           setLoading(false)
           // 只有在首次成功获取数据时才结束 initialLoading
@@ -749,19 +825,24 @@ function TaskDetail() {
 
     // ✨ 优化：如果 stream 可用，就不启动轮询，完全依赖 stream
     if (stream) {
-      console.log('[✨ Stream 可用，跳过轮询，完全依赖 stream 推送]')
+      console.log('[✨ Stream] 可用，跳过轮询，完全依赖 stream 推送')
       return
     }
 
-    // ⚠️ Stream 不可用时，才启用轮询作为兜底机制
-    console.log('[⚠️ Stream 不可用，启用轮询兜底机制]')
+    // ✨ 如果已经有 task 数据了，不需要轮询（说明已经通过初始加载获取了数据）
+    if (task) {
+      console.log('[✨ 数据] 已有任务数据，跳过轮询')
+      return
+    }
+
+    // ⚠️ Stream 不可用且没有数据时，才启用轮询作为兜底机制
+    console.log('[⚠️ Stream] 不可用且无数据，启用轮询兜底机制')
 
     const fetchTaskDetails = async () => {
       try {
-        console.log('[轮询] 正在查询任务详情:', id)
-        const task = await tasksAPI.getTaskDetails(id)
-        console.log('[轮询] 任务详情查询成功:', task)
-        console.log('[TaskDetail] pinned status:', task?.pinned, 'for task:', task?.taskId)
+        // 轮询时使用较短的超时时间（5秒），避免长时间等待
+        const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
+        console.log('[📡 轮询] 任务查询成功:', task?.taskId, task?.status)
         setTask(task)
         setError('')
         setLoading(false)
@@ -777,13 +858,13 @@ function TaskDetail() {
         }
         return { found: true, error: null }
       } catch (error) {
-        console.error('[轮询] 查询任务详情失败:', error)
+        console.error('[❌ 轮询] 查询失败:', error.message)
         setLoading(false)
         // 不要在失败时结束 initialLoading，让用户看到"加载中..."而不是"执行中"
 
         // 处理 404 错误：404 = Not Found，直接停止轮询
         if (error.response?.status === 404) {
-          console.error('[轮询] 任务不存在:', id)
+          console.error('[❌ 轮询] 任务不存在:', id)
           setError('任务不存在')
           setInitialLoading(false) // 404时结束加载，显示错误
           return { found: false, error: true, taskNotFound: true }
@@ -804,7 +885,9 @@ function TaskDetail() {
 
       const poll = async () => {
         pollCount++
-        console.log('[轮询] 次数:', pollCount, '任务ID:', id)
+        if (pollCount % 10 === 0) {
+          console.log(`[📡 轮询] 第 ${pollCount} 次，任务ID: ${id}`)
+        }
         const result = await fetchTaskDetails()
 
         // 如果找到任务、出错、任务不存在或达到最大轮询次数，停止轮询
@@ -816,7 +899,7 @@ function TaskDetail() {
           }
           if (result.taskNotFound) {
             // 任务不存在，停止轮询，不设置额外错误
-            console.log('[轮询] 任务不存在，停止轮询')
+            console.log('[🛑 轮询] 任务不存在，停止')
           } else if (result.error && !result.taskNotFound) {
             setError('获取任务详情失败')
           } else if (!result.found && pollCount >= maxPolls) {
@@ -842,7 +925,7 @@ function TaskDetail() {
         pollIntervalRef.current = null
       }
     }
-  }, [id, stream]) // 依赖 stream，当 stream 变为可用时会重新执行并停止轮询
+  }, [id, stream, task]) // 依赖 stream 和 task，当任何变化时重新评估
 
   // 重置版本选择当任务更新时
   useEffect(() => {
@@ -2903,7 +2986,7 @@ function TaskDetail() {
       // 用户取消删除，恢复轮询（只需获取一次数据，不需要持续轮询）
       const fetchOnce = async () => {
         try {
-          const task = await tasksAPI.getTaskDetails(id)
+          const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
           setTask(task)
         } catch (err) {
           console.error('获取任务详情失败:', err)
@@ -2962,7 +3045,7 @@ function TaskDetail() {
       // useEffect 中的轮询会自动继续（因为组件没有卸载）
       const fetchOnce = async () => {
         try {
-          const task = await tasksAPI.getTaskDetails(id)
+          const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
           setTask(task)
         } catch (err) {
           console.error('获取任务详情失败:', err)
@@ -2978,7 +3061,7 @@ function TaskDetail() {
     try {
       await tasksAPI.pinTask(task.taskId)
       // 刷新任务详情
-      const updatedTask = await tasksAPI.getTaskDetails(id)
+      const updatedTask = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
       setTask(updatedTask)
     } catch (error) {
       console.error('置顶失败:', error)
@@ -2993,7 +3076,7 @@ function TaskDetail() {
     try {
       await tasksAPI.unpinTask(task.taskId)
       // 刷新任务详情
-      const updatedTask = await tasksAPI.getTaskDetails(id)
+      const updatedTask = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
       setTask(updatedTask)
     } catch (error) {
       console.error('取消置顶失败:', error)
@@ -3029,7 +3112,7 @@ function TaskDetail() {
       setRetrying(false)
 
       // 立即获取一次最新状态并更新页面
-      const updatedTask = await tasksAPI.getTaskDetails(id)
+      const updatedTask = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
       setTask(updatedTask)
       setError('')
 
@@ -3054,7 +3137,7 @@ function TaskDetail() {
           }
 
           try {
-            const task = await tasksAPI.getTaskDetails(id)
+            const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
             setTask(task)
             setError('')
 
