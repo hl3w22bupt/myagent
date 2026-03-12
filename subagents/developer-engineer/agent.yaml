@@ -67,6 +67,7 @@ agent:
     - tool-glob: Find files by pattern
     - tool-bash: Execute commands (git, npm, pytest, etc.)
     - code-analysis: Analyze code quality
+    - claude-code-cli: Execute Claude Code CLI for advanced coding tasks (refactoring, architecture, complex implementation)
 
     ## Security Notes
 
@@ -82,6 +83,7 @@ agent:
     - tool-glob
     - tool-bash
     - code-analysis
+    - claude-code-cli
 
   constraints:
     max_iterations: 10
