@@ -222,6 +222,40 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             print(f"[WORKSPACE] Directory does not exist: {workspace_artifacts['directory']}")
 
+        # Convert workspace_artifacts to output_files format for task-result-handler
+        output_files = []
+        if workspace_artifacts["exists"] and workspace_artifacts["files"]:
+            for file_info in workspace_artifacts["files"]:
+                # Determine file type from extension
+                ext = file_info["extension"]
+                type_map = {
+                    ".py": "code",
+                    ".js": "code",
+                    ".ts": "code",
+                    ".tsx": "code",
+                    ".jsx": "code",
+                    ".java": "code",
+                    ".cpp": "code",
+                    ".c": "code",
+                    ".go": "code",
+                    ".rs": "code",
+                    ".rb": "code",
+                    ".php": "code",
+                    ".html": "html",
+                    ".css": "code",
+                    ".json": "json",
+                    ".md": "markdown",
+                    ".txt": "text",
+                }
+                file_type = type_map.get(ext, "file")
+
+                output_files.append({
+                    "path": file_info["absolute_path"],
+                    "type": file_type,
+                    "file-type": ext.replace(".", ""),
+                    "size": file_info["size_bytes"]
+                })
+
         # Check if command succeeded
         if exit_code == 0:
             # Try to parse JSON output
@@ -238,6 +272,10 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     builder.add_standard_metadata("execution_time", execution_time)
                     builder.add_standard_metadata("working_dir", working_dir)
                     builder.add_standard_metadata("workspace_artifacts", workspace_artifacts)
+
+                    # Add output_files for task-result-handler to create artifacts
+                    if output_files:
+                        builder.add_standard_metadata("output_files", output_files)
 
                     # Set content based on output format
                     if isinstance(output_data, dict):
@@ -261,7 +299,7 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     write_structured_output(result, session_id)
                     return result
                 else:
-                    return {
+                    result_data = {
                         "success": True,
                         "result_type": "code",
                         "content": output_data,
@@ -272,6 +310,9 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                             "workspace_artifacts": workspace_artifacts
                         }
                     }
+                    if output_files:
+                        result_data["metadata"]["output_files"] = output_files
+                    return result_data
             except json.JSONDecodeError:
                 # Not JSON, return as text
                 if OUTPUT_BUILDER_AVAILABLE:
@@ -282,13 +323,18 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     builder.add_standard_metadata("execution_time", execution_time)
                     builder.add_standard_metadata("working_dir", working_dir)
                     builder.add_standard_metadata("workspace_artifacts", workspace_artifacts)
+
+                    # Add output_files for task-result-handler to create artifacts
+                    if output_files:
+                        builder.add_standard_metadata("output_files", output_files)
+
                     builder.set_text(stdout)
 
                     result = builder.build()
                     write_structured_output(result, session_id)
                     return result
                 else:
-                    return {
+                    result_data = {
                         "success": True,
                         "result_type": "text",
                         "content": stdout,
@@ -299,6 +345,9 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                             "workspace_artifacts": workspace_artifacts
                         }
                     }
+                    if output_files:
+                        result_data["metadata"]["output_files"] = output_files
+                    return result_data
         else:
             # Command failed
             error_message = stderr or stdout or "Command failed with no output"
