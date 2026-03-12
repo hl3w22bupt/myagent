@@ -111,8 +111,11 @@ export const tasksAPI = {
       total: response.data.total || 0,
       hasMore: response.data.hasMore || false
     })),
-  getTaskDetails: (id) =>
-    apiClient.get('/agent/result', { params: { id } }).then(response => response.data.result),
+  getTaskDetails: (id, timeout = 30000) =>
+    apiClient.get('/agent/result', {
+      params: { id },
+      timeout // 支持自定义超时时间
+    }).then(response => response.data.result),
   submitTask: (task, sessionId, delegateTo) => {
     const requestKey = `submit_${task}_${sessionId}`
 
