@@ -84,7 +84,10 @@ class CommandExecutor:
         safe_env = self.validator.sanitize_environment(env or {})
 
         # Merge with current environment (but don't override)
-        full_env = {**os.environ, **safe_env}
+        # Filter out CLAUDECODE environment variables to avoid nested session detection
+        filtered_environ = {k: v for k, v in os.environ.items()
+                           if not k.startswith('CLAUDE') and k != 'CLAUDECODE'}
+        full_env = {**filtered_environ, **safe_env}
 
         # Validate working directory
         if working_dir:

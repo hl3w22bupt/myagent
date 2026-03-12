@@ -2319,14 +2319,46 @@ function TaskDetail() {
     // 新增：JSON 渲染（作为代码显示）
     if (resultType === 'json') {
       let jsonContent = ''
-      if (typeof result === 'object') {
+
+      // 优先使用 parsedResult（即 structuredOutput），因为 result 可能是 combinedResult
+      if (typeof parsedResult === 'object' && parsedResult !== null && parsedResult.content) {
+        jsonContent = parsedResult.content
+      } else if (typeof result === 'object') {
         jsonContent = result.content || result.data || result.json || JSON.stringify(result, null, 2)
       } else {
         jsonContent = result
       }
 
+      console.log('[JSON Debug] Initial jsonContent type:', typeof jsonContent)
+      console.log('[JSON Debug] First 200 chars:', String(jsonContent).substring(0, 200))
+
+      // 智能处理 JSON 内容：如果内容是字符串，尝试解析后重新格式化
+      if (typeof jsonContent === 'string') {
+        try {
+          // 尝试解析 JSON（处理可能存在的转义字符）
+          const parsed = JSON.parse(jsonContent)
+          console.log('[JSON Debug] Successfully parsed JSON')
+          // 重新格式化，确保正确的缩进和换行
+          jsonContent = JSON.stringify(parsed, null, 2)
+          console.log('[JSON Debug] Formatted JSON, first 200 chars:', jsonContent.substring(0, 200))
+        } catch (e) {
+          console.log('[JSON Debug] Failed to parse JSON, cleaning escape sequences:', e.message)
+          // 如果不是有效的 JSON，保持原样
+          // 但仍然尝试清理常见的转义序列
+          jsonContent = jsonContent
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\t/g, '  ')
+          console.log('[JSON Debug] Cleaned content, first 200 chars:', jsonContent.substring(0, 200))
+        }
+      } else if (typeof jsonContent === 'object') {
+        // 如果是对象，直接格式化
+        console.log('[JSON Debug] Content is object, stringifying')
+        jsonContent = JSON.stringify(jsonContent, null, 2)
+      }
+
       return (
-        <div className="result-visual">
+        <div className="result-visual result-visual-code">
           <CodePlayer code={jsonContent} language="json" filename="result.json" />
         </div>
       )
@@ -2353,8 +2385,18 @@ function TaskDetail() {
         textContent = String(result)
       }
 
-      // 确保 textContent 是字符串
-      const safeTextContent = typeof textContent === 'string' ? textContent : JSON.stringify(textContent)
+      // 确保 textContent 是字符串，并处理转义字符
+      let safeTextContent
+      if (typeof textContent === 'string') {
+        // 对于字符串，尝试清理常见的转义序列
+        safeTextContent = textContent
+          .replace(/\\n/g, '\n')
+          .replace(/\\"/g, '"')
+          .replace(/\\t/g, '  ')
+      } else {
+        // 对于非字符串，使用 JSON.stringify 格式化
+        safeTextContent = JSON.stringify(textContent, null, 2)
+      }
 
       return (
         <div className="result-visual result-visual-text">

@@ -1067,7 +1067,8 @@
   max-width: none;
   min-width: 100%;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
@@ -1079,7 +1080,9 @@
   box-shadow: none !important;
   padding: 0 !important;
   gap: 0.5rem;
-  /* 不要设置 overflow: visible，让外层 tab-panel 控制滚动 */
+  /* 允许横向滚动以支持宽内容 */
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .result-visual-with-code .code-player-container {
@@ -1948,6 +1951,7 @@
   flex-direction: column;
   /* 关键：添加 overflow: hidden 以限制高度 */
   overflow: hidden;
+  overflow-x: auto;
   min-height: 0;
 }
 
