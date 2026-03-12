@@ -1,33 +1,49 @@
 name: claude-code-cli
 description: Execute Claude Code CLI for advanced coding tasks using --print flag. Ideal for complex refactoring, code generation, multi-file edits, and architecture work.
-version: 1.0.0
+version: 1.1.0
 
-type: pure-prompt
+type: hybrid
+
+input_schema:
+  type: object
+  required: []
+  properties:
+    task:
+      type: string
+      description: "Coding task description (e.g., 'Create a function that sorts an array')"
+    model:
+      type: string
+      description: "Claude model to use (default: claude-sonnet-4-5)"
+      default: "claude-sonnet-4-5"
+    timeout:
+      type: integer
+      description: "Command timeout in seconds (default: 300)"
+      default: 300
+    working_dir:
+      type: string
+      description: "Working directory for execution (default: /tmp)"
+      default: "/tmp"
 
 prompt_template: |
-  You need to execute Claude Code CLI for the following coding task:
+  You need to execute Claude Code CLI for the following coding task.
 
   Task: {task}
 
-  Additional parameters:
-  - Model: {model|claude-sonnet-4-5}
-  - Timeout: {timeout|300} seconds
-  - Working directory: {working_dir|/tmp}
+  The claude-code-cli skill will directly execute the Claude Code CLI with the --print flag
+  to ensure non-interactive execution and prevent timeouts.
 
-  **IMPORTANT**: You must use the tool-bash skill to execute the Claude Code CLI command.
-
-  Execute this command using tool-bash:
-  ```bash
-  claude --print "{task}" --model {model|claude-sonnet-4-5}
-  ```
-
-  Parameters for tool-bash:
-  - command: "claude"
-  - args: ["--print", "{task}", "--model", "{model|claude-sonnet-4-5}"]
-  - timeout: {timeout|300}
+  Available parameters:
+  - model: {model|claude-sonnet-4-5}
+  - timeout: {timeout|300} seconds
   - working_dir: {working_dir|/tmp}
 
-  After execution, return the output from Claude Code CLI.
+execution:
+  runtime:
+    requires:
+      bins: ["claude"]
+  handler: handler.py
+  function: execute_claude_code_cli
+  timeout: 360000
 
 tags:
   - tool
