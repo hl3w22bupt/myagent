@@ -1112,11 +1112,17 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           output: normalizedResult.output,
           error: normalizedResult.error,
           executionTime: normalizedResult.executionTime,
-          // Merge metadata to preserve outputHistory from output-history-tracker
-          // Use latestTask metadata which may have been updated by other steps
+          // CRITICAL FIX: Don't overwrite metadata that was saved by master-agent
+          // Only merge in fields from normalizedResult.metadata, don't use latestTask.metadata
           metadata: {
+            // Preserve existing metadata from master-agent (conversationRounds, etc.)
             ...(latestTask?.metadata || {}),
-            ...normalizedResult.metadata,
+            // Only overwrite with specific fields from normalizedResult
+            ...(normalizedResult.metadata ? {
+              ...normalizedResult.metadata,
+              // Don't let these fields override existing ones
+              conversationRounds: latestTask?.metadata?.conversationRounds || undefined,
+            } : {}),
           },
           // Store structuredOutput at root level (not in metadata)
           // For backward compatibility, also check old location in metadata
@@ -1276,8 +1282,16 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
       // Get all artifacts for this task
       const finalArtifacts = await unifiedStore.getArtifacts(taskId);
 
-      // Map artifacts to match API format
-      const artifactsForStream = finalArtifacts.map((artifact: any) => ({
+      // CRITICAL FIX: Sort artifacts by timestamp ascending (old→new)
+      // This preserves the append order (earlier artifacts first, newer ones last)
+      const sortedArtifacts = finalArtifacts.sort((a: any, b: any) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeA - timeB; // Ascending order (旧的在前，新的在后)
+      });
+
+      // Map artifacts to match API format (sorted order preserved)
+      const artifactsForStream = sortedArtifacts.map((artifact: any) => ({
         id: artifact.id,
         type: artifact.artifactType,
         action: artifact.action,
