@@ -22,7 +22,9 @@
   align-items: center;
   gap: 12px;
   flex: 1;
-  min-width: 0;
+  min-width: 200px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .code-player-filename {
@@ -32,9 +34,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
+  flex-shrink: 0;
+  min-width: fit-content;
 }
 
 .filename-icon {
