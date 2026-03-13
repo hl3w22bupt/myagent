@@ -64,10 +64,19 @@ class OpenClawMetadataMapper:
         # Build base metadata
         metadata = {
             'name': skill_info.name,
+            'version': skill_info.frontmatter.get('version', '1.0.0'),  # Required field
             'description': skill_info.description,
             'type': self._map_type(skill_info),
             'handler': handler_path,
         }
+
+        # Add required schemas
+        metadata['input_schema'] = self._build_input_schema(skill_info)
+        metadata['output_schema'] = self._build_output_schema(skill_info)
+
+        # Add prompt_template for pure-prompt skills
+        if skill_info.is_pure_prompt and skill_info.prompt_template:
+            metadata['prompt_template'] = skill_info.prompt_template
 
         # Add top-level requires (Phase 2 key improvement)
         # This works for ALL skill types, including pure-prompt
@@ -77,7 +86,7 @@ class OpenClawMetadataMapper:
 
         # Add execution section for non-pure-prompt skills
         if not skill_info.is_pure_prompt:
-            metadata['execution'] = self._build_execution(skill_info)
+            metadata['execution'] = self._build_execution(skill_info, handler_path)
 
         # Add tags
         metadata['tags'] = self._build_tags(skill_info)
@@ -158,17 +167,21 @@ class OpenClawMetadataMapper:
 
         return requires
 
-    def _build_execution(self, skill_info: OpenClawSkillInfo) -> Dict[str, Any]:
+    def _build_execution(self, skill_info: OpenClawSkillInfo, handler_path: str) -> Dict[str, Any]:
         """
         Build execution section for non-pure-prompt skills.
 
         Args:
             skill_info: Parsed OpenClawSkillInfo
+            handler_path: Handler path for the skill
 
         Returns:
             Execution configuration dictionary
         """
         execution = {
+            'handler': handler_path,
+            'function': 'execute',
+            'timeout': 30000,
             'runtime': {
                 'resources': {},
                 'platform': {}
@@ -202,6 +215,63 @@ class OpenClawMetadataMapper:
             tags.append('pure-prompt')
 
         return tags
+
+    def _build_input_schema(self, skill_info: OpenClawSkillInfo) -> Dict[str, Any]:
+        """
+        Build input schema for the skill.
+
+        Args:
+            skill_info: Parsed OpenClawSkillInfo
+
+        Returns:
+            Input schema dictionary
+        """
+        # Default input schema - accepts any object
+        schema = {
+            'type': 'object',
+            'properties': {},
+            'required': []
+        }
+
+        # Try to extract input schema from frontmatter if present
+        frontmatter = skill_info.frontmatter
+        if 'input_schema' in frontmatter:
+            schema.update(frontmatter['input_schema'])
+
+        return schema
+
+    def _build_output_schema(self, skill_info: OpenClawSkillInfo) -> Dict[str, Any]:
+        """
+        Build output schema for the skill.
+
+        Args:
+            skill_info: Parsed OpenClawSkillInfo
+
+        Returns:
+            Output schema dictionary
+        """
+        # Default output schema - returns text result
+        schema = {
+            'type': 'object',
+            'properties': {
+                'result': {
+                    'type': 'string',
+                    'description': 'Skill execution result'
+                },
+                'result_type': {
+                    'type': 'string',
+                    'enum': ['text', 'error'],
+                    'description': 'Type of result'
+                }
+            }
+        }
+
+        # Try to extract output schema from frontmatter if present
+        frontmatter = skill_info.frontmatter
+        if 'output_schema' in frontmatter:
+            schema.update(frontmatter['output_schema'])
+
+        return schema
 
 
 # Convenience function for quick mapping

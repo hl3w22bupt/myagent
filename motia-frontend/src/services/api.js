@@ -62,6 +62,7 @@ export const skillsAPI = {
       data: response.data.skills || [],
       nativeCount: response.data.nativeCount || 0,
       claudeCount: response.data.claudeCount || 0,
+      openclawCount: response.data.openclawCount || 0,
       count: response.data.count || 0
     })),
   getSkillDetails: (id) => apiClient.get(`/api/skills/${id}`)

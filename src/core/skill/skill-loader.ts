@@ -24,7 +24,7 @@ export interface UnifiedSkillMetadata {
   description: string;
   tags: string[];
   type: string;
-  source: 'native' | 'claude';
+  source: 'native' | 'claude' | 'openclaw';
   path?: string; // Optional: for internal use
   metadata?: Record<string, any>; // Optional: full YAML data
 }
@@ -111,13 +111,16 @@ export function loadClaudeSkills(): UnifiedSkillMetadata[] {
               const frontmatterText = frontmatterMatch[1];
               const frontmatter: any = yaml.load(frontmatterText);
 
+              // Extract body content as prompt_template (everything after frontmatter)
+              const bodyContent = content.substring(frontmatterMatch[0].length).trim();
+
               // Determine if skill has scripts
               const hasScript = existsSync(join(claudeSkillsDir, folder.name, 'main.py')) ||
                                existsSync(join(claudeSkillsDir, folder.name, `${folder.name}.py`));
 
               skills.push({
                 name: frontmatter.name || folder.name,
-                version: '1.0.0',
+                version: frontmatter.version || '1.0.0',
                 description: frontmatter.description || '',
                 tags: [
                   ...(frontmatter.tags || []),
@@ -127,6 +130,7 @@ export function loadClaudeSkills(): UnifiedSkillMetadata[] {
                 type: hasScript ? 'hybrid' : 'pure-prompt',
                 source: 'claude',
                 path: join(claudeSkillsDir, folder.name),
+                prompt_template: bodyContent, // Add body content as prompt_template
                 metadata: frontmatter, // Keep full frontmatter data
               });
             }
@@ -176,6 +180,9 @@ export function loadOpenClawSkills(): UnifiedSkillMetadata[] {
               const frontmatterText = frontmatterMatch[1];
               const frontmatter: any = yaml.load(frontmatterText);
 
+              // Extract body content as prompt_template (everything after frontmatter)
+              const bodyContent = content.substring(frontmatterMatch[0].length).trim();
+
               // Determine skill type based on OpenClaw frontmatter
               let skillType = 'pure-prompt'; // Default
               if (frontmatter['command-dispatch'] === 'tool') {
@@ -191,7 +198,7 @@ export function loadOpenClawSkills(): UnifiedSkillMetadata[] {
 
               skills.push({
                 name: frontmatter.name || folder.name,
-                version: '1.0.0',
+                version: frontmatter.version || '1.0.0',
                 description: frontmatter.description || '',
                 tags: [
                   ...(frontmatter.tags || []),
@@ -199,8 +206,9 @@ export function loadOpenClawSkills(): UnifiedSkillMetadata[] {
                   'adapted'
                 ],
                 type: skillType,
-                source: 'claude', // OpenClaw skills use 'claude' source
+                source: 'openclaw', // OpenClaw skills use 'openclaw' source
                 path: join(openclawSkillsDir, folder.name),
+                prompt_template: bodyContent, // Add body content as prompt_template
                 metadata: frontmatter, // Keep full frontmatter data
               });
             }

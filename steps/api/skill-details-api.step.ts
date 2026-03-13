@@ -2,6 +2,7 @@
  * Skill Details API Step.
  *
  * Provides endpoint to get detailed information about a specific skill.
+ * Supports native skills, Claude Skills, and OpenClaw Skills.
  */
 
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import { ApiRouteConfig } from 'motia';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
+import { loadAllSkills } from '../../src/core/skill/skill-loader';
 
 /**
  * Path parameters schema for skill details API.
@@ -54,6 +56,7 @@ export const config: ApiRouteConfig = {
  * Skill Details API handler.
  *
  * Returns detailed information about a specific skill.
+ * Supports native skills, Claude Skills, and OpenClaw Skills.
  */
 export const handler = async (request: any, { logger }: any) => {
   // Extract skill name from path parameters
@@ -72,37 +75,29 @@ export const handler = async (request: any, { logger }: any) => {
   logger.info('Skill Details API: Received request', { skillName });
 
   try {
-    const skillYamlPath = join(process.cwd(), 'skills', skillName, 'skill.yaml');
+    // Load all skills using unified skill-loader
+    const allSkills = loadAllSkills();
 
-    if (!existsSync(skillYamlPath)) {
+    // Find the skill by name
+    const skill = allSkills.find((s) => s.name === skillName);
+
+    if (!skill) {
       return {
         status: 404,
         body: {
           success: false,
           message: `Skill '${skillName}' not found`,
-          availableSkills: ['web-search', 'code-analysis', 'summarize'],
+          availableSkills: allSkills.map((s) => s.name),
         },
       };
     }
 
-    const content = readFileSync(skillYamlPath, 'utf-8');
-    const skillConfig: any = yaml.load(content);
-
+    // Return the skill details
     return {
       status: 200,
       body: {
         success: true,
-        skill: {
-          name: skillConfig.name || skillName,
-          version: skillConfig.version || '1.0.0',
-          description: skillConfig.description || '',
-          tags: skillConfig.tags || [],
-          type: skillConfig.type || 'unknown',
-          input_schema: skillConfig.input_schema || null,
-          output_schema: skillConfig.output_schema || null,
-          prompt_template: skillConfig.prompt_template || null,
-          execution: skillConfig.execution || null,
-        },
+        data: skill,
       },
     };
   } catch (error: any) {

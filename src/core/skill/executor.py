@@ -458,8 +458,8 @@ class SkillExecutor:
                 script_path_obj = Path(skill.execution.script_path)
                 skill_root = script_path_obj.parent
         else:
-            # No execution config - this is a pure Claude Skill (from claude_skills/ directory)
-            # Find the SKILL.md file
+            # No execution config - this is a pure Claude Skill or OpenClaw Skill
+            # First try to find in claude_skills/ directory
             scanner = ClaudeSkillScanner()
             skill_files = scanner.scan()
             for skill_file in skill_files:
@@ -469,6 +469,22 @@ class SkillExecutor:
                     skill_root = skill_file.root_dir / skill.name
                     # print(f"[DEBUG] Auto-detected skill_root for {skill.name}: {skill_root}")
                     break
+
+            # If not found in claude_skills/, try openclaw_skills/
+            if skill_root is None and self._virtual_registry:
+                try:
+                    from .adapters.openclaw_skill_scanner import OpenClawSkillScanner
+                    openclaw_scanner = OpenClawSkillScanner()
+                    openclaw_files = openclaw_scanner.scan()
+                    for skill_file in openclaw_files:
+                        if skill_file.skill_name == skill.name:
+                            # skill_file.root_dir 指向 openclaw_skills/
+                            # SKILL.md 在 openclaw_skills/{skill_name}/SKILL.md
+                            skill_root = skill_file.root_dir / skill.name
+                            # print(f"[DEBUG] Auto-detected OpenClaw skill_root for {skill.name}: {skill_root}")
+                            break
+                except ImportError:
+                    pass  # OpenClaw not available
 
         # print(f"[DEBUG] Creating ClaudeSkillHandler for {skill.name}:")
         # print(f"[DEBUG]   skill_root: {skill_root}")

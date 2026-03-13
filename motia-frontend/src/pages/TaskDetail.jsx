@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { tasksAPI, agentsAPI, favoritesAPI } from '../services/api'
 import { useStreamGroup, useMotiaStream } from '@motiadev/stream-client-react'
@@ -325,6 +325,7 @@ const formatSkillMessage = (message) => {
 
 function TaskDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [task, setTask] = useState(null)
   const [sessionId, setSessionId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -3457,7 +3458,13 @@ function TaskDetail() {
                     <span className="info-label">技能:</span>
                     <div className="skill-badges">
                       {task.metadata.skillNames.map((skill, index) => (
-                        <span key={index} className="skill-badge">
+                        <span
+                          key={index}
+                          className="skill-badge"
+                          onClick={() => navigate(`/skills/${skill}`)}
+                          style={{ cursor: 'pointer' }}
+                          title={`Click to view ${skill} details`}
+                        >
                           {skill}
                         </span>
                       ))}
