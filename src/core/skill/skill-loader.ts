@@ -26,6 +26,7 @@ export interface UnifiedSkillMetadata {
   type: string;
   source: 'native' | 'claude' | 'openclaw';
   path?: string; // Optional: for internal use
+  prompt_template?: string; // Optional: prompt template for Claude/OpenClaw skills
   metadata?: Record<string, any>; // Optional: full YAML data
 }
 

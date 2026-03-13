@@ -7,9 +7,6 @@
 
 import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-import * as yaml from 'js-yaml';
 import { loadAllSkills } from '../../src/core/skill/skill-loader';
 
 /**

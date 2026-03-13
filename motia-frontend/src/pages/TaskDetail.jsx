@@ -3607,7 +3607,8 @@ function TaskDetail() {
                     const combinedResult = {
                       outputHistory: task.metadata.outputHistory,
                       structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                      metadata: task.metadata
+                      metadata: task.metadata,
+                      artifacts: task.artifacts  // 修复：添加 artifacts 字段
                     };
                     return renderResult(combinedResult);
                   } else if (typeof resultData === 'string' && hasStructuredOutput) {
@@ -3615,7 +3616,8 @@ function TaskDetail() {
                     const combinedResult = {
                       output: resultData,
                       structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                      metadata: task.metadata
+                      metadata: task.metadata,
+                      artifacts: task.artifacts  // 修复：添加 artifacts 字段
                     };
                     return renderResult(combinedResult);
                   } else if (hasStructuredOutput) {
@@ -3623,7 +3625,8 @@ function TaskDetail() {
                     const combinedResult = {
                       output: resultData,
                       structuredOutput: task.structuredOutput || task.metadata?.structuredOutput,
-                      metadata: task.metadata
+                      metadata: task.metadata,
+                      artifacts: task.artifacts  // 修复：添加 artifacts 字段
                     };
                     return renderResult(combinedResult);
                   }
