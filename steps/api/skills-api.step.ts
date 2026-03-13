@@ -24,9 +24,9 @@ export const querySchema = z.object({
   tags: z.string().optional().describe('Comma-separated tags to filter skills'),
 
   /**
-   * Filter skills by source (native or claude).
+   * Filter skills by source (native, claude, or openclaw).
    */
-  source: z.enum(['native', 'claude']).optional().describe('Filter by skill source'),
+  source: z.enum(['native', 'claude', 'openclaw']).optional().describe('Filter by skill source'),
 });
 
 /**
@@ -95,6 +95,7 @@ export const handler = async (request: any, { logger }: any) => {
     // Count by source
     const nativeCount = skills.filter((s) => s.source === 'native').length;
     const claudeCount = skills.filter((s) => s.source === 'claude').length;
+    const openclawCount = skills.filter((s) => s.source === 'openclaw').length;
 
     return {
       status: 200,
@@ -103,6 +104,7 @@ export const handler = async (request: any, { logger }: any) => {
         count: skills.length,
         nativeCount,
         claudeCount,
+        openclawCount,
         skills,
       },
     };

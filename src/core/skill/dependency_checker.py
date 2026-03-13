@@ -137,8 +137,12 @@ class DependencyChecker:
         """
         Validate all dependencies for a skill.
 
+        🆕 Phase 2 Enhancement: Supports two levels of requires:
+        1. Top-level requires (compatible with all skill types, including pure-prompt)
+        2. execution.runtime.requires (backward compatible with legacy skills)
+
         Args:
-            skill_metadata: Skill metadata dictionary (from skill.yaml)
+            skill_metadata: Skill metadata dictionary (from skill.yaml or OpenClaw mapping)
             config_env: Optional injected environment variables
             myagent_config: MyAgent configuration dictionary
 
@@ -148,14 +152,84 @@ class DependencyChecker:
             - missing: List[str] - List of missing dependencies
             - details: Dict - Detailed check results
         """
-        requires = skill_metadata.get("execution", {}).get("runtime", {}).get("requires", {})
-
         result = {
             "valid": True,
             "missing": [],
             "details": {}
         }
 
+        # 🆕 Phase 2: Check top-level requires first (works for all skill types)
+        requires = skill_metadata.get("requires", {})
+
+        # Fallback to execution.runtime.requires for backward compatibility
+        if not requires:
+            requires = skill_metadata.get("execution", {}).get("runtime", {}).get("requires", {})
+
+        # Use the helper method to check the requires dict
+        self._check_requires_dict(requires, result, config_env, myagent_config)
+
+        # Check resources (Phase 3)
+        runtime = skill_metadata.get("execution", {}).get("runtime", {})
+        if "resources" in runtime:
+            resource_validator = ResourceValidator()
+            resource_validation = resource_validator.validate(runtime["resources"])
+
+            if resource_validation["valid"]:
+                resource_req = resource_validation["requirements"]
+                capability = resource_validator.check_local_capability(resource_req)
+
+                result["details"]["resources"] = capability
+
+                # Warn if resources not met
+                if capability["warnings"]:
+                    result["details"]["resource_warnings"] = capability["warnings"]
+
+                # Don't fail validation, just mark as needs_remote
+                if not capability["can_run_locally"]:
+                    result["needs_remote"] = True
+                    result["missing_resources"] = capability["missing"]
+            else:
+                result["details"]["resources"] = resource_validation
+
+        # Check platform (Phase 3)
+        if "platform" in runtime:
+            platform_validator = PlatformValidator()
+            platform_validation = platform_validator.validate(runtime["platform"])
+
+            if platform_validation["valid"]:
+                platform_req = platform_validation["requirements"]
+                capability = platform_validator.check_local_capability(platform_req)
+
+                result["details"]["platform"] = capability
+
+                # Fail if platform doesn't match
+                if not capability["can_run_locally"]:
+                    result["valid"] = False
+                    result["missing"].extend(capability["missing"])
+            else:
+                result["details"]["platform"] = platform_validation
+
+        return result
+
+    def _check_requires_dict(
+        self,
+        requires: Dict[str, Any],
+        result: Dict[str, Any],
+        config_env: Optional[Dict[str, str]] = None,
+        myagent_config: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Helper method to check a requires dictionary.
+
+        This method encapsulates the dependency checking logic for a single
+        requires dict, making it reusable for both top-level and nested requires.
+
+        Args:
+            requires: Dependencies dictionary to check
+            result: Result dictionary to update (modified in place)
+            config_env: Optional injected environment variables
+            myagent_config: MyAgent configuration dictionary
+        """
         # Check bins
         if "bins" in requires:
             bin_results = self.check_bins(requires["bins"])
@@ -199,46 +273,3 @@ class DependencyChecker:
             if missing_pkgs:
                 result["valid"] = False
                 result["missing"].extend(missing_pkgs)
-
-        # 🆕 Check resources (Phase 3)
-        runtime = skill_metadata.get("execution", {}).get("runtime", {})
-        if "resources" in runtime:
-            resource_validator = ResourceValidator()
-            resource_validation = resource_validator.validate(runtime["resources"])
-
-            if resource_validation["valid"]:
-                resource_req = resource_validation["requirements"]
-                capability = resource_validator.check_local_capability(resource_req)
-
-                result["details"]["resources"] = capability
-
-                # Warn if resources not met
-                if capability["warnings"]:
-                    result["details"]["resource_warnings"] = capability["warnings"]
-
-                # Don't fail validation, just mark as needs_remote
-                if not capability["can_run_locally"]:
-                    result["needs_remote"] = True
-                    result["missing_resources"] = capability["missing"]
-            else:
-                result["details"]["resources"] = resource_validation
-
-        # 🆕 Check platform (Phase 3)
-        if "platform" in runtime:
-            platform_validator = PlatformValidator()
-            platform_validation = platform_validator.validate(runtime["platform"])
-
-            if platform_validation["valid"]:
-                platform_req = platform_validation["requirements"]
-                capability = platform_validator.check_local_capability(platform_req)
-
-                result["details"]["platform"] = capability
-
-                # Fail if platform doesn't match
-                if not capability["can_run_locally"]:
-                    result["valid"] = False
-                    result["missing"].extend(capability["missing"])
-            else:
-                result["details"]["platform"] = platform_validation
-
-        return result

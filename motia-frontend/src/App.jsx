@@ -6,6 +6,7 @@ import Tasks from './pages/Tasks'
 import TaskDetail from './pages/TaskDetail'
 import Submit from './pages/Submit'
 import Skills from './pages/Skills'
+import SkillDetail from './pages/SkillDetail'
 import Agents from './pages/Agents'
 import Settings from './pages/Settings'
 import { SettingsProvider } from './contexts/SettingsContext'
@@ -28,6 +29,7 @@ function App() {
               <Route path="/tasks/:id" element={<TaskDetail />} />
               <Route path="/submit" element={<Submit />} />
               <Route path="/skills" element={<Skills />} />
+              <Route path="/skills/:skillName" element={<SkillDetail />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
