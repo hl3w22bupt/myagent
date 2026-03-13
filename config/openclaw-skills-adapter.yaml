@@ -1,0 +1,68 @@
+# OpenClaw Skills Adapter Configuration
+# This adapter enables Motia to discover and execute OpenClaw Skills (SKILL.md files)
+
+# Directory paths for OpenClaw Skills discovery
+openclaw_skills:
+  # Root directories to scan for OpenClaw Skills (SKILL.md files)
+  # These will be searched recursively
+  scan_paths:
+    - openclaw_skills
+
+  # File name pattern for OpenClaw Skills definition
+  skill_file_pattern: "SKILL.md"
+
+# Adapter behavior settings
+adapter:
+  # Strategy for analyzing OpenClaw Skills
+  # Options:
+  #   - smart: Auto-analyze SKILL.md content to detect type and dependencies
+  #   - manual: Require explicit configuration in skill mapping
+  analysis_strategy: smart
+
+  # Default tags to add to all adapted OpenClaw Skills
+  default_tags:
+    - openclaw-skill
+    - adapted
+
+# Execution settings
+execution:
+  # Handlers for different OpenClaw skill types
+  handlers:
+    pure_prompt: "src/core/skill/handlers/claude_skill_handler.py"
+    scripts: "src/core/skill/handlers/openclaw_scripts_handler.py"
+    command_dispatch: "src/core/skill/handlers/openclaw_command_dispatch_handler.py"
+
+  # Script discovery strategy
+  # Options:
+  #   - auto: Detect scripts/ directory automatically
+  script_discovery: auto
+
+  # Timeout for script execution (milliseconds)
+  timeout: 30000
+
+# Virtual skill registry settings
+registry:
+  # Enable in-memory skill mapping (no skill.yaml files generated)
+  # This is faster and recommended for development
+  use_virtual_registry: true
+
+  # If disabled, skill.yaml files will be generated in a temporary directory
+  # Not recommended for production
+  generate_yaml_files: false
+
+# Hot reload settings (not implemented in MVP)
+hot_reload:
+  enabled: false
+  # Watch for changes in SKILL.md files
+  watch_files: false
+
+# Feature flags
+features:
+  # Python script support (MVP only supports Python)
+  python_scripts: true
+
+  # JavaScript/TypeScript script support (not implemented)
+  js_scripts: false
+
+  # Command-dispatch tool support
+  command_dispatch: true
