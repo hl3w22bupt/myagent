@@ -1,13 +1,14 @@
 /**
  * Unified Skill Loader
  *
- * Provides centralized skill discovery logic for both:
+ * Provides centralized skill discovery logic for:
  * - TypeScript Agent layer (SkillDiscovery)
  * - API layer (skills-api)
  *
  * Loads skills from multiple sources:
  * 1. myagent native skills (/skills directory with skill.yaml)
  * 2. Claude Skills (/claude_skills directory with SKILL.md)
+ * 3. OpenClaw Skills (/openclaw_skills directory with SKILL.md)
  */
 
 import { readdirSync, readFileSync, existsSync } from 'fs';
@@ -143,17 +144,92 @@ export function loadClaudeSkills(): UnifiedSkillMetadata[] {
 }
 
 /**
+ * Load OpenClaw Skills from openclaw_skills directory.
+ *
+ * Scans the /openclaw_skills directory for subdirectories containing SKILL.md files.
+ * Extracts metadata from YAML frontmatter in SKILL.md.
+ * Detects skill type: pure-prompt, hybrid (with scripts/), command-dispatch
+ */
+export function loadOpenClawSkills(): UnifiedSkillMetadata[] {
+  const openclawSkillsDir = join(process.cwd(), 'openclaw_skills');
+
+  if (!existsSync(openclawSkillsDir)) {
+    console.warn('[SkillLoader] /openclaw_skills directory not found');
+    return [];
+  }
+
+  const skills: UnifiedSkillMetadata[] = [];
+
+  try {
+    const skillFolders = readdirSync(openclawSkillsDir, { withFileTypes: true });
+
+    for (const folder of skillFolders) {
+      if (folder.isDirectory()) {
+        const skillMdPath = join(openclawSkillsDir, folder.name, 'SKILL.md');
+
+        if (existsSync(skillMdPath)) {
+          try {
+            const content = readFileSync(skillMdPath, 'utf-8');
+            const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+
+            if (frontmatterMatch) {
+              const frontmatterText = frontmatterMatch[1];
+              const frontmatter: any = yaml.load(frontmatterText);
+
+              // Determine skill type based on OpenClaw frontmatter
+              let skillType = 'pure-prompt'; // Default
+              if (frontmatter['command-dispatch'] === 'tool') {
+                skillType = 'command-dispatch';
+              }
+
+              // Check for scripts/ directory (hybrid type)
+              const hasScriptsDir = existsSync(join(openclawSkillsDir, folder.name, 'scripts'));
+
+              if (hasScriptsDir && skillType !== 'command-dispatch') {
+                skillType = 'hybrid';
+              }
+
+              skills.push({
+                name: frontmatter.name || folder.name,
+                version: '1.0.0',
+                description: frontmatter.description || '',
+                tags: [
+                  ...(frontmatter.tags || []),
+                  'openclaw-skill',
+                  'adapted'
+                ],
+                type: skillType,
+                source: 'claude', // OpenClaw skills use 'claude' source
+                path: join(openclawSkillsDir, folder.name),
+                metadata: frontmatter, // Keep full frontmatter data
+              });
+            }
+          } catch (error) {
+            console.warn(`[SkillLoader] Failed to load SKILL.md for ${folder.name}:`, error);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SkillLoader] Error reading /openclaw_skills directory:', error);
+  }
+
+  return skills;
+}
+
+/**
  * Load all skills from all sources.
  *
- * Returns both myagent native skills and Claude Skills in a unified format.
+ * Returns myagent native skills, Claude Skills, and OpenClaw Skills in a unified format.
  */
 export function loadAllSkills(): UnifiedSkillMetadata[] {
   const nativeSkills = loadNativeSkills();
   const claudeSkills = loadClaudeSkills();
+  const openclawSkills = loadOpenClawSkills();
 
-  console.log(`[SkillLoader] Loaded ${nativeSkills.length} native skills and ${claudeSkills.length} Claude Skills`);
+  console.log(`[SkillLoader] Loaded ${nativeSkills.length} native skills, ${claudeSkills.length} Claude Skills, and ${openclawSkills.length} OpenClaw Skills`);
 
-  return [...nativeSkills, ...claudeSkills];
+  return [...nativeSkills, ...claudeSkills, ...openclawSkills];
 }
 
 /**
