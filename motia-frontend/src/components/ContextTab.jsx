@@ -249,6 +249,8 @@ function TaskContextContent({ context, loading }) {
   const stats = {
     rounds: context.conversationRounds?.length || 0,
     artifacts: context.artifactIndex?.length || 0,
+    skillExecutions: context.skillExecutionHistory?.length || 0,
+    toolUsages: context.toolUsageHistory?.length || 0,
     hasSummary: context.summary && Object.keys(context.summary).length > 0,
     status: context.summary?.currentStatus || 'pending',
   }
@@ -276,6 +278,14 @@ function TaskContextContent({ context, loading }) {
           <div className="ctx-stat-item">
             <span className="ctx-stat-label">产物</span>
             <span className="ctx-stat-value">{stats.artifacts}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">技能执行</span>
+            <span className="ctx-stat-value">{stats.skillExecutions}</span>
+          </div>
+          <div className="ctx-stat-item">
+            <span className="ctx-stat-label">工具使用</span>
+            <span className="ctx-stat-value">{stats.toolUsages}</span>
           </div>
         </div>
       </div>
@@ -314,6 +324,30 @@ function TaskContextContent({ context, loading }) {
             onToggle={() => toggleCard('artifacts')}
           >
             <ArtifactsContent items={context.artifactIndex} />
+          </ContextCard>
+        )}
+
+        {context.skillExecutionHistory?.length > 0 && (
+          <ContextCard
+            title="技能执行历史"
+            iconType="memory"
+            count={context.skillExecutionHistory.length}
+            expanded={expandedCards.has('skillExecutions')}
+            onToggle={() => toggleCard('skillExecutions')}
+          >
+            <SkillExecutionContent executions={context.skillExecutionHistory} />
+          </ContextCard>
+        )}
+
+        {context.toolUsageHistory?.length > 0 && (
+          <ContextCard
+            title="工具使用历史"
+            iconType="behavior"
+            count={context.toolUsageHistory.length}
+            expanded={expandedCards.has('toolUsages')}
+            onToggle={() => toggleCard('toolUsages')}
+          >
+            <ToolUsageContent usages={context.toolUsageHistory} />
           </ContextCard>
         )}
 
@@ -1014,6 +1048,76 @@ function MemoryContent({ data }) {
   )
 }
 
+function SkillExecutionContent({ executions }) {
+  return (
+    <div className="ctx-execution-list">
+      {executions.map((exec, i) => (
+        <div key={i} className="ctx-execution-item">
+          <div className="ctx-execution-header">
+            <span className={`ctx-execution-status ${exec.success ? 'success' : 'failed'}`}>
+              {exec.success ? '✓' : '✗'}
+            </span>
+            <span className="ctx-execution-skill">{exec.skillName}</span>
+            <span className="ctx-execution-time">
+              {formatTime(exec.startedAt)} - {formatDuration(exec.duration)}
+            </span>
+          </div>
+          {exec.inputSummary && (
+            <div className="ctx-execution-details">
+              <span className="ctx-execution-label">输入:</span>
+              <span className="ctx-execution-value">{exec.inputSummary}</span>
+            </div>
+          )}
+          {exec.scenario && (
+            <div className="ctx-execution-details">
+              <span className="ctx-execution-label">场景:</span>
+              <span className="ctx-execution-value">{exec.scenario}</span>
+            </div>
+          )}
+          {exec.error && (
+            <div className="ctx-execution-error">
+              <span className="ctx-execution-label">错误:</span>
+              <span className="ctx-execution-error-text">{exec.error}</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ToolUsageContent({ usages }) {
+  return (
+    <div className="ctx-execution-list">
+      {usages.map((usage, i) => (
+        <div key={i} className="ctx-execution-item">
+          <div className="ctx-execution-header">
+            <span className={`ctx-execution-status ${usage.success ? 'success' : 'failed'}`}>
+              {usage.success ? '✓' : '✗'}
+            </span>
+            <span className="ctx-execution-tool">{usage.toolName}</span>
+            <span className="ctx-execution-time">
+              {formatTime(usage.timestamp)}
+            </span>
+          </div>
+          {usage.summary && (
+            <div className="ctx-execution-details">
+              <span className="ctx-execution-label">摘要:</span>
+              <span className="ctx-execution-value">{usage.summary}</span>
+            </div>
+          )}
+          {usage.error && (
+            <div className="ctx-execution-error">
+              <span className="ctx-execution-label">错误:</span>
+              <span className="ctx-execution-error-text">{usage.error}</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function formatTime(ts) {
   const d = ts instanceof Date ? ts : new Date(ts)
   return d.toLocaleTimeString('zh-CN', {
@@ -1021,4 +1125,12 @@ function formatTime(ts) {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+function formatDuration(ms) {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ${seconds % 60}s`
 }
