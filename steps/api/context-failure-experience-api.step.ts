@@ -3,8 +3,6 @@ import { ApiRouteConfig } from 'motia';
 import { ContextManager } from '../../src/core/context/manager';
 import { getDataStore } from '../../src/core/database/data-store';
 
-const contextManager = new ContextManager(getDataStore());
-
 export const config: ApiRouteConfig = {
   type: 'api',
   name: 'context-failure-experience-api',
@@ -67,7 +65,7 @@ export const handler = async (request: any, { logger }: any) => {
       if (isNaN(timestamp.getTime())) {
         throw new Error('Invalid timestamp format');
       }
-    } catch (e) {
+    } catch {
       logger.warn('Invalid timestamp in failure experience', {
         timestamp: body.timestamp,
         taskId: body.taskId,

@@ -202,7 +202,7 @@ export class DefaultContextOrchestrator implements ContextOrchestrator {
 
     // 分词（按空格、常见分隔符）
     const words = cleaned
-      .split(/[\s\-_\/\.]+/)
+      .split(/[\s\-_/.]+/)
       .filter((word) => word.length > 2); // 过滤短词
 
     // 去重
@@ -264,7 +264,7 @@ export class DefaultContextOrchestrator implements ContextOrchestrator {
     return error
       .toLowerCase()
       .replace(/\d+/g, 'N') // 数字替换为 N
-      .replace(/[\/\\]/g, '/') // 路径分隔符统一
+      .replace(/[/\\]/g, '/') // 路径分隔符统一
       .replace(/\s+/g, ' ') // 多个空格合并
       .trim();
   }
