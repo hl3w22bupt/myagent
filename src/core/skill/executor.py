@@ -79,12 +79,15 @@ class SkillExecutor:
         # Get default hook configuration
         from config.hooks import get_default_hooks
 
+        # Get context API URL from environment
+        context_hook_api_url = os.getenv('MOTIA_CONTEXT_API_URL')
+
         # Hook configuration logic:
         # - hooks=None (default): Auto-register default hooks (ProgressNotificationHook if notify_api_url is set)
         # - hooks=[] (explicit empty): Disable all hooks
         # - hooks=[...]: Use custom hooks
         if hooks is None:
-            default_hooks = get_default_hooks(notify_hook_api_url, trace_hook_api_url)
+            default_hooks = get_default_hooks(notify_hook_api_url, trace_hook_api_url, context_hook_api_url)
         elif hooks == []:  # Explicitly empty list - disable all hooks
             default_hooks = []
         else:  # User provided custom hooks
