@@ -85,6 +85,68 @@ export interface HITLState {
 }
 
 /**
+ * Skill 执行记录
+ *
+ * 记录每次 Skill 的执行（成功或失败）
+ */
+export interface SkillExecutionRecord {
+  /** 执行 ID（唯一标识） */
+  id: string;
+
+  /** 技能名称 */
+  skillName: string;
+
+  /** 执行是否成功 */
+  success: boolean;
+
+  /** 执行开始时间 */
+  startedAt: Date;
+
+  /** 执行结束时间 */
+  completedAt: Date;
+
+  /** 执行耗时（毫秒） */
+  duration: number;
+
+  /** 输入摘要（前 100 字符） */
+  inputSummary: string;
+
+  /** 输出类型（成功时） */
+  outputType?: string;
+
+  /** 错误信息（失败时） */
+  error?: string;
+
+  /** 场景描述（从输入提取或人工标注） */
+  scenario?: string;
+}
+
+/**
+ * Tool 使用记录
+ *
+ * 记录每次 Tool 的使用（成功或失败）
+ */
+export interface ToolUsageRecord {
+  /** 执行 ID（唯一标识） */
+  id: string;
+
+  /** 工具名称（Bash, Read, Write, Grep, Glob 等） */
+  toolName: string;
+
+  /** 执行是否成功 */
+  success: boolean;
+
+  /** 执行时间 */
+  timestamp: Date;
+
+  /** 操作摘要（简要描述做了什么） */
+  summary: string;
+
+  /** 错误信息（失败时） */
+  error?: string;
+}
+
+/**
  * 任务上下文结构
  */
 export interface TaskContext {
@@ -103,6 +165,18 @@ export interface TaskContext {
 
   // Artifact索引
   artifactIndex: ArtifactIndex[];
+
+  // 新增：Skill 执行历史（所有执行，成功+失败）
+  skillExecutionHistory: SkillExecutionRecord[];
+
+  // 新增：Tool 使用历史（所有使用，成功+失败）
+  toolUsageHistory: ToolUsageRecord[];
+
+  // 新增：保留策略配置
+  executionHistoryConfig?: {
+    maxSkillRecords: number;      // 最多保留多少条 Skill 记录（默认 200）
+    maxToolRecords: number;       // 最多保留多少条 Tool 记录（默认 500）
+  };
 
   // 临时工作内存
   workingMemory: Record<string, any>;

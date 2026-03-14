@@ -218,11 +218,33 @@ export class PostgresDataStore implements Database {
           conversation_rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
           messages_count INTEGER DEFAULT 0,
           summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+          skill_execution_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+          tool_usage_history JSONB NOT NULL DEFAULT '[]'::jsonb,
           working_memory JSONB NOT NULL DEFAULT '{}'::jsonb,
           metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL
         )
+      `);
+
+      // Migration: Add execution history columns if they don't exist
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'task_contexts' AND column_name = 'skill_execution_history'
+          ) THEN
+            ALTER TABLE task_contexts ADD COLUMN skill_execution_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'task_contexts' AND column_name = 'tool_usage_history'
+          ) THEN
+            ALTER TABLE task_contexts ADD COLUMN tool_usage_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+          END IF;
+        END $$;
       `);
 
       // Artifacts table
@@ -888,13 +910,15 @@ export class PostgresDataStore implements Database {
       const now = Date.now();
 
       await client.query(
-        `INSERT INTO task_contexts (task_id, session_id, current_turn, summary, working_memory, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO task_contexts (task_id, session_id, current_turn, summary, skill_execution_history, tool_usage_history, working_memory, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           taskId,
           sessionId,
           1,
           JSON.stringify({}),
+          JSON.stringify([]),
+          JSON.stringify([]),
           JSON.stringify({}),
           JSON.stringify({}),
           now,
@@ -922,6 +946,8 @@ export class PostgresDataStore implements Database {
           },
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {},
       };
@@ -970,6 +996,8 @@ export class PostgresDataStore implements Database {
         conversationRounds: contextRow.conversation_rounds || [],
         summary: contextRow.summary,
         artifactIndex: artifacts,
+        skillExecutionHistory: contextRow.skill_execution_history || [],
+        toolUsageHistory: contextRow.tool_usage_history || [],
         workingMemory: contextRow.working_memory,
         metadata: contextRow.metadata,
       };
@@ -989,6 +1017,14 @@ export class PostgresDataStore implements Database {
       if (updates.summary !== undefined) {
         fields.push(`summary = $${paramIndex++}`);
         values.push(JSON.stringify(updates.summary));
+      }
+      if (updates.skillExecutionHistory !== undefined) {
+        fields.push(`skill_execution_history = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.skillExecutionHistory));
+      }
+      if (updates.toolUsageHistory !== undefined) {
+        fields.push(`tool_usage_history = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.toolUsageHistory));
       }
       if (updates.workingMemory !== undefined) {
         fields.push(`working_memory = $${paramIndex++}`);

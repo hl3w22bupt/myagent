@@ -7,6 +7,7 @@ import pytest
 import asyncio
 from core.skill.executor import SkillExecutor
 from core.skill.hooks.system.progress_notification_hook import ProgressNotificationHook
+from core.skill.hooks.context_hook import ContextHook
 
 
 class HookExecutionTracker:
@@ -76,6 +77,17 @@ async def test_duplicate_hooks_are_deduplicated():
 
 
 @pytest.mark.asyncio
+async def test_context_hook_is_registered():
+    """Test that ContextHook is automatically registered."""
+    executor = SkillExecutor()
+
+    # Check if ContextHook is registered
+    context_hooks = [h for h in executor.hook_executor.hook_manager.hooks
+                     if isinstance(h, ContextHook)]
+    assert len(context_hooks) == 1
+
+
+@pytest.mark.asyncio
 async def test_all_hooks_are_executed():
     """Test that all registered hooks are executed."""
     tracker = HookExecutionTracker()
@@ -110,5 +122,8 @@ if __name__ == "__main__":
 
     asyncio.run(test_duplicate_hooks_are_deduplicated())
     print("✓ test_duplicate_hooks_are_deduplicated passed")
+
+    asyncio.run(test_context_hook_is_registered())
+    print("✓ test_context_hook_is_registered passed")
 
     print("All tests passed!")

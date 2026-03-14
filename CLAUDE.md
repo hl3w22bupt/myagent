@@ -65,3 +65,54 @@ npx motia generate-types # Regenerate TypeScript types
 ---
 
 **Remember**: The `.cursor/rules/` directory is your primary reference. Read the relevant guide before implementing any Motia pattern.
+
+## Skill & Tool Execution History System
+
+The system tracks all skill and tool executions to help the Agent learn from past executions and make better decisions.
+
+### Features
+
+1. **Execution History Tracking**
+   - Records all skill executions (success + failure)
+   - Records all tool usage (success + failure)
+   - Stores in TaskContext with retention policies (200 skills, 500 tools)
+
+2. **Failure Experience Extraction**
+   - Automatically extracts lessons from failed executions
+   - Stores in TaskContext.summary.errorsAndSolutions
+   - Retrieval based on keyword matching and frequency
+
+3. **LLM Prompt Injection**
+   - Recent executions shown to Agent before code generation
+   - Failure experiences injected to help avoid repeating mistakes
+   - Helps Agent make better decisions based on past context
+
+### Configuration
+
+**Environment Variables:**
+```bash
+# Context API URL for execution history tracking
+MOTIA_CONTEXT_API_URL=http://localhost:3000/api/context
+
+# Enable/disable features (via orchestrator config)
+enableRecentSkillExecutions=true
+enableFailureExperiences=true
+```
+
+**Retention Policies:**
+- Skill executions: 200 records (FIFO)
+- Tool usage: 500 records (FIFO)
+- Failure experiences: 100 records (FIFO)
+
+### API Endpoints
+
+- `POST /api/context/skill-execution` - Receive skill execution records
+- `POST /api/context/tool-usage` - Receive tool usage records
+- `POST /api/context/failure-experience` - Receive failure experiences
+
+### Monitoring
+
+The system logs all executions and failures:
+- `[ContextHook] ✓/✗ Skill execution recorded: {skillName} ({duration}ms)`
+- `[ContextHook] ✓ Failure experience collected: {skillName}`
+- `[Agent] Injecting recent skill executions into PTC generation`

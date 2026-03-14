@@ -13,7 +13,13 @@ describe('DefaultContextOrchestrator', () => {
   let orchestrator: DefaultContextOrchestrator;
 
   beforeEach(() => {
-    orchestrator = new DefaultContextOrchestrator();
+    orchestrator = new DefaultContextOrchestrator({
+      enableUserProfile: true,
+      enableRecentSkillExecutions: true,
+      enableFailureExperiences: true,
+      maxRecentExecutions: 5,
+      maxFailureExperiences: 3,
+    });
   });
 
   describe('getContext', () => {
@@ -286,6 +292,81 @@ describe('DefaultContextOrchestrator', () => {
 
       expect(result.userProfile?.userId).toBe('from-nested');
       expect(result.userProfile?.preferences).toEqual(['Nested profile']);
+    });
+  });
+
+  describe('execution tracking features', () => {
+    it('should include recent skill executions when enabled', async () => {
+      const context = {};
+
+      const state: SessionState = {
+        sessionId: 'test-session',
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        conversationHistory: [],
+        executionHistory: [],
+        variables: new Map(),
+      };
+
+      const result: OrchestratedContext = await orchestrator.getContext(context, state);
+
+      expect(result.recentSkillExecutions).toBeUndefined();
+    });
+
+    it('should include failure experiences when enabled', async () => {
+      const context = {
+        summary: {
+          errorsAndSolutions: [
+            {
+              error: 'Authentication failed',
+              solution: 'Check API key',
+              frequency: 2,
+              skills: ['login', 'auth'],
+            }
+          ]
+        }
+      };
+
+      const state: SessionState = {
+        sessionId: 'test-session',
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        conversationHistory: [],
+        executionHistory: [],
+        variables: new Map(),
+      };
+
+      const result: OrchestratedContext = await orchestrator.getContext(context, state);
+
+      expect(result.failureExperiences).toBeDefined();
+      expect(result.failureExperiences!).toHaveLength(1);
+      expect(result.failureExperiences![0].error).toBe('Authentication failed');
+      expect(result.failureExperiences![0].solution).toBe('Check API key');
+    });
+
+    it('should limit recent skill executions to maxRecentExecutions', async () => {
+      const orchestrator = new DefaultContextOrchestrator({
+        enableUserProfile: true,
+        enableRecentSkillExecutions: true,
+        enableFailureExperiences: true,
+        maxRecentExecutions: 1,
+        maxFailureExperiences: 3,
+      });
+
+      const context = {};
+
+      const state: SessionState = {
+        sessionId: 'test-session',
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        conversationHistory: [],
+        executionHistory: [],
+        variables: new Map(),
+      };
+
+      const result: OrchestratedContext = await orchestrator.getContext(context, state);
+
+      expect(result.recentSkillExecutions).toBeUndefined();
     });
   });
 });

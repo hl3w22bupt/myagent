@@ -72,6 +72,8 @@ describe('ContextManagerTaskHook', () => {
         sessionId: 'session-1',
         conversationRounds: [],
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
         },
@@ -119,6 +121,8 @@ describe('ContextManagerTaskHook', () => {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
           lastCompressedAt: new Date(),
@@ -141,6 +145,8 @@ describe('ContextManagerTaskHook', () => {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
           lastCompressedAt: new Date(),
@@ -205,6 +211,8 @@ describe('ContextManagerTaskHook', () => {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
         },
@@ -264,6 +272,8 @@ describe('ContextManagerTaskHook', () => {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
         },
@@ -321,6 +331,8 @@ describe('ContextManagerTaskHook', () => {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {
         },

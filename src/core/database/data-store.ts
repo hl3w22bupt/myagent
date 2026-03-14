@@ -401,6 +401,8 @@ export class DataStore {
         conversation_rounds TEXT,
         messages_count INTEGER DEFAULT 0,
         summary TEXT,
+        skill_execution_history TEXT,
+        tool_usage_history TEXT,
         working_memory TEXT,
         metadata TEXT,
         created_at INTEGER NOT NULL,
@@ -408,6 +410,23 @@ export class DataStore {
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
       )
     `);
+
+    // Migration: Add execution history columns if they don't exist (SQLite)
+    try {
+      this.db.run(`ALTER TABLE task_contexts ADD COLUMN skill_execution_history TEXT DEFAULT '[]'`);
+    } catch (err: any) {
+      if (!err.message.includes('duplicate column')) {
+        console.error('[DataStore] Failed to add skill_execution_history column:', err);
+      }
+    }
+
+    try {
+      this.db.run(`ALTER TABLE task_contexts ADD COLUMN tool_usage_history TEXT DEFAULT '[]'`);
+    } catch (err: any) {
+      if (!err.message.includes('duplicate column')) {
+        console.error('[DataStore] Failed to add tool_usage_history column:', err);
+      }
+    }
 
     // 4. 消息表 (依赖于 tasks)
     this.db.run(`
@@ -855,17 +874,21 @@ export class DataStore {
         technicalDetails: {},
       },
       artifactIndex: [],
+      skillExecutionHistory: [],
+      toolUsageHistory: [],
       workingMemory: {},
       metadata: {},
     };
 
     this.db.run(
-      `INSERT INTO task_contexts (task_id, session_id, summary, working_memory, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO task_contexts (task_id, session_id, summary, skill_execution_history, tool_usage_history, working_memory, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         context.taskId,
         context.sessionId,
         JSON.stringify(context.summary),
+        JSON.stringify(context.skillExecutionHistory || []),
+        JSON.stringify(context.toolUsageHistory || []),
         JSON.stringify(context.workingMemory),
         JSON.stringify(context.metadata),
         now,
@@ -916,6 +939,8 @@ export class DataStore {
       conversationRounds: JSON.parse(contextRow.conversation_rounds || '[]'),
       summary: JSON.parse(contextRow.summary),
       artifactIndex: artifacts,
+      skillExecutionHistory: JSON.parse(contextRow.skill_execution_history || '[]'),
+      toolUsageHistory: JSON.parse(contextRow.tool_usage_history || '[]'),
       workingMemory: JSON.parse(contextRow.working_memory),
       metadata: JSON.parse(contextRow.metadata),
     };
@@ -980,12 +1005,14 @@ export class DataStore {
 
     this.db.run(
       `UPDATE task_contexts
-       SET conversation_rounds = ?, messages_count = ?, summary = ?, working_memory = ?, metadata = ?, updated_at = ?
+       SET conversation_rounds = ?, messages_count = ?, summary = ?, skill_execution_history = ?, tool_usage_history = ?, working_memory = ?, metadata = ?, updated_at = ?
        WHERE task_id = ?`,
       [
         JSON.stringify(context.conversationRounds || []),
         (context.conversationRounds || []).length,
         JSON.stringify(context.summary),
+        JSON.stringify(context.skillExecutionHistory || []),
+        JSON.stringify(context.toolUsageHistory || []),
         JSON.stringify(context.workingMemory),
         JSON.stringify(context.metadata),
         now,

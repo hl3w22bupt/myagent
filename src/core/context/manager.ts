@@ -341,4 +341,130 @@ ${rounds}
       return entries;
     });
   }
+
+  /**
+   * 添加 Skill 执行记录到 TaskContext
+   */
+  async addSkillExecution(record: {
+    id: string;
+    taskId: string;
+    skillName: string;
+    success: boolean;
+    startedAt: Date;
+    completedAt: Date;
+    duration: number;
+    inputSummary: string;
+    outputType?: string;
+    scenario?: string;
+    error?: string;
+  }): Promise<void> {
+    const context = await this.getContext(record.taskId);
+    if (!context) {
+      throw new Error(`Task context not found: ${record.taskId}`);
+    }
+
+    if (!context.skillExecutionHistory) {
+      context.skillExecutionHistory = [];
+    }
+
+    // 保留策略：最多 200 条
+    const maxRecords = context.executionHistoryConfig?.maxSkillRecords || 200;
+    if (context.skillExecutionHistory.length >= maxRecords) {
+      context.skillExecutionHistory.sort((a: any, b: any) =>
+        new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()
+      );
+      context.skillExecutionHistory = context.skillExecutionHistory.slice(1);
+    }
+
+    context.skillExecutionHistory.push(record);
+    await this.store.saveContext(context);
+  }
+
+  /**
+   * 添加 Tool 使用记录到 TaskContext
+   */
+  async addToolUsage(record: {
+    id: string;
+    taskId: string;
+    toolName: string;
+    success: boolean;
+    timestamp: Date;
+    summary: string;
+    error?: string;
+  }): Promise<void> {
+    const context = await this.getContext(record.taskId);
+    if (!context) {
+      throw new Error(`Task context not found: ${record.taskId}`);
+    }
+
+    if (!context.toolUsageHistory) {
+      context.toolUsageHistory = [];
+    }
+
+    // 保留策略：最多 500 条
+    const maxRecords = context.executionHistoryConfig?.maxToolRecords || 500;
+    if (context.toolUsageHistory.length >= maxRecords) {
+      context.toolUsageHistory.sort((a: any, b: any) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      context.toolUsageHistory = context.toolUsageHistory.slice(1);
+    }
+
+    context.toolUsageHistory.push(record);
+    await this.store.saveContext(context);
+  }
+
+  /**
+   * 添加失败经验到 TaskContext.summary.errorsAndSolutions
+   */
+  async addFailureExperience(
+    taskId: string,
+    experience: {
+      error: string;
+      solution: string;
+      timestamp: Date;
+      skillName?: string;
+      scenario?: string;
+    }
+  ): Promise<void> {
+    const context = await this.getContext(taskId);
+    if (!context) {
+      throw new Error(`Task context not found: ${taskId}`);
+    }
+
+    if (!context.summary) {
+      context.summary = {
+        sessionIntent: '',
+        currentTask: '',
+        completedSteps: [],
+        filesModified: [],
+        decisionsMade: [],
+        currentStatus: 'pending',
+        nextSteps: [],
+        errorsAndSolutions: [],
+        technicalDetails: {},
+      };
+    }
+
+    if (!context.summary.errorsAndSolutions) {
+      context.summary.errorsAndSolutions = [];
+    }
+
+    // 保留策略：最多 100 条失败经验
+    const maxRecords = 100;
+    if (context.summary.errorsAndSolutions.length >= maxRecords) {
+      context.summary.errorsAndSolutions.sort((a: any, b: any) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      context.summary.errorsAndSolutions = context.summary.errorsAndSolutions.slice(1);
+    }
+
+    context.summary.errorsAndSolutions.push({
+      error: experience.error,
+      solution: experience.solution,
+      timestamp: experience.timestamp,
+    });
+
+    await this.store.saveContext(context);
+  }
 }

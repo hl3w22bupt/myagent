@@ -106,7 +106,13 @@ export class Agent {
 
     // Initialize context orchestrator
     // Default orchestrator extracts: history from state, userProfile from context.workingMemory
-    this.orchestrator = new DefaultContextOrchestrator();
+    this.orchestrator = new DefaultContextOrchestrator({
+      enableUserProfile: true,
+      enableRecentSkillExecutions: true,  // Enable skill execution history tracking
+      enableFailureExperiences: true,     // Enable failure experience tracking
+      maxRecentExecutions: 5,
+      maxFailureExperiences: 3,
+    });
 
     // Initialize clarification flag from config (default: true)
     // Use underscore naming to match YAML convention (enable_clarification)
@@ -637,6 +643,21 @@ export class Agent {
               console.log('[Agent] Injecting userContext into PTC generation', {
                 hasName: !!orchestratedContext.userContext.name,
                 hasPersonality: !!orchestratedContext.userContext.personality,
+              });
+            }
+
+            // Add execution history from orchestrator
+            if (orchestratedContext.recentSkillExecutions) {
+              ptcOptions.recentSkillExecutions = orchestratedContext.recentSkillExecutions;
+              console.log('[Agent] Injecting recent skill executions into PTC generation', {
+                count: orchestratedContext.recentSkillExecutions.length,
+              });
+            }
+
+            if (orchestratedContext.failureExperiences) {
+              ptcOptions.failureExperiences = orchestratedContext.failureExperiences;
+              console.log('[Agent] Injecting failure experiences into PTC generation', {
+                count: orchestratedContext.failureExperiences.length,
               });
             }
 

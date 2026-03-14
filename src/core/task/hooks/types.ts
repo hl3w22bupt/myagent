@@ -21,6 +21,8 @@ export interface TaskContext {
     conversationRounds: any[];
     summary: any;
     artifactIndex: any[];
+    skillExecutionHistory: any[];
+    toolUsageHistory: any[];
     workingMemory: Record<string, any>;
     metadata: {
       lastCompressedAt?: Date;
