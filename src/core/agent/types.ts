@@ -237,6 +237,25 @@ export interface PTCGenerationOptions {
 
   /** 应用特定上下文（如 AI 女友的角色设定） */
   userContext?: any;
+
+  /** 最近的技能执行记录（用于避免重复错误） */
+  recentSkillExecutions?: Array<{
+    skillName: string;
+    success: boolean;
+    timestamp: Date;
+    error?: string;
+    scenario?: string;
+  }>;
+
+  /** 失败经验（用于学习避免重复错误） */
+  failureExperiences?: Array<{
+    skillName: string;
+    scenario: string;
+    error: string;
+    solution: string;
+    frequency: number;
+    lastOccurred: Date;
+  }>;
 }
 
 /**

@@ -824,6 +824,22 @@ You MUST follow these guidelines when generating code:
       }
     }
 
+    // Format execution history if available
+    let executionHistorySection = '';
+    if (options?.recentSkillExecutions && options.recentSkillExecutions.length > 0) {
+      executionHistorySection += this.formatRecentSkillExecutions(options.recentSkillExecutions);
+      console.log('[PTC Generator] Including recent skill executions in prompt', {
+        count: options.recentSkillExecutions.length,
+      });
+    }
+
+    if (options?.failureExperiences && options.failureExperiences.length > 0) {
+      executionHistorySection += this.formatFailureExperiences(options.failureExperiences);
+      console.log('[PTC Generator] Including failure experiences in prompt', {
+        count: options.failureExperiences.length,
+      });
+    }
+
     // Define firstSkillParam for use in the prompt template below
     // This is the parameter name for the main input of the first selected skill
     const firstSkillParam = selectedSkills.length > 0
@@ -1262,7 +1278,7 @@ TIPS FOR FILE/VIDEO GENERATION:
   - MOTIA_SESSION_ID: Current session ID for multi-turn conversations
   - MOTIA_TRACE_ID: Trace ID for debugging
 
-=== TASK CONTEXT ===
+${executionHistorySection}=== TASK CONTEXT ===
 <context>
 ${contextSection}
 </context>
@@ -1475,5 +1491,96 @@ Generate production-ready code with proper error handling and async patterns.`;
     }
 
     return null;
+  }
+
+  /**
+   * 格式化最近的技能执行记录为提示词片段
+   */
+  private formatRecentSkillExecutions(executions: Array<{
+    skillName: string;
+    success: boolean;
+    timestamp: Date;
+    error?: string;
+    scenario?: string;
+  }>): string {
+    let section = '\n\n## 📋 Recent Skill Executions\n\n';
+    section += 'Recent skill executions in this session (most recent first):\n\n';
+
+    for (let i = 0; i < executions.length; i++) {
+      const exec = executions[i];
+      const statusIcon = exec.success ? '✓' : '✗';
+      const timeAgo = this.formatTimeAgo(exec.timestamp);
+
+      section += `- **${exec.skillName}**: ${statusIcon} ${exec.success ? 'Success' : 'Failed'}`;
+
+      if (exec.error) {
+        section += ` - ${exec.error}`;
+      }
+
+      section += ` (${timeAgo})\n`;
+    }
+
+    section += '---\n';
+
+    return section;
+  }
+
+  /**
+   * 格式化失败经验为提示词片段
+   */
+  private formatFailureExperiences(experiences: Array<{
+    skillName: string;
+    scenario: string;
+    error: string;
+    solution: string;
+    frequency: number;
+    lastOccurred: Date;
+  }>): string {
+    let section = '\n\n## ⚠️ Relevant Failure Experiences\n\n';
+    section += 'The following failures occurred in similar scenarios. Consider these lessons to avoid repeating mistakes:\n\n';
+
+    for (let i = 0; i < experiences.length; i++) {
+      const exp = experiences[i];
+      section += `### Experience ${i + 1}\n`;
+
+      if (exp.skillName) {
+        section += `- **Skill**: ${exp.skillName}\n`;
+      }
+
+      section += `- **Scenario**: ${exp.scenario}\n`;
+      section += `- **Error**: ${exp.error}\n`;
+      section += `- **Solution**: ${exp.solution}\n`;
+
+      if (exp.frequency > 1) {
+        section += `- **Frequency**: Occurred ${exp.frequency} times\n`;
+      }
+
+      section += `- **Last Occurred**: ${exp.lastOccurred.toISOString()}\n\n`;
+    }
+
+    section += '---\n';
+
+    return section;
+  }
+
+  /**
+   * 格式化时间戳为相对时间描述
+   */
+  private formatTimeAgo(timestamp: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - timestamp.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) {
+      return 'just now';
+    } else if (diffMins < 60) {
+      return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    }
   }
 }

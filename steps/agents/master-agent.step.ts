@@ -239,6 +239,8 @@ export const handler = async (
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {},
       };
@@ -670,6 +672,8 @@ export const handler = async (
         conversationRounds: [],
         summary: null,
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {},
       };
@@ -738,7 +742,9 @@ export const handler = async (
     // conversationHistory 存储在 taskContext.conversationHistory（不是 taskContext.context.conversationHistory）
     if (!(taskContext as any).conversationHistory) {
       const contextManager = new ContextManager();
-      const conversationHistory = contextManager.getConversationHistoryForAgent(taskContext.context);
+      const conversationHistory = taskContext.context
+        ? contextManager.getConversationHistoryForAgent(taskContext.context)
+        : [];
       (taskContext as any).conversationHistory = conversationHistory;
       logger.debug('[master-agent] Loaded conversationHistory from ContextManager:', {
         taskId,
