@@ -77,6 +77,8 @@ export class ContextManagerTaskHook extends BaseTaskHook {
           technicalDetails: {},
         },
         artifactIndex: [],
+        skillExecutionHistory: [],
+        toolUsageHistory: [],
         workingMemory: {},
         metadata: {},
       };

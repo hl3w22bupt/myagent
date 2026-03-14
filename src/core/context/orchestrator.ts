@@ -13,6 +13,32 @@ import type { UserProfile } from '../database/data-store';
 import type { SessionState } from '../agent/types';
 
 /**
+ * 失败经验 - 从历史执行中提取的教训
+ */
+export interface FailureExperience {
+  /** 相关的技能名称（可选） */
+  skillName?: string;
+
+  /** 相关的工具名称（可选） */
+  toolName?: string;
+
+  /** 触发场景描述（用于匹配当前任务） */
+  scenario: string;
+
+  /** 错误信息 */
+  error: string;
+
+  /** 解决方案 */
+  solution: string;
+
+  /** 出现频率（用于排序和优先级） */
+  frequency: number;
+
+  /** 最后发生时间（用于时效性判断） */
+  lastOccurred: Date;
+}
+
+/**
  * 编排层返回的上下文
  *
  * 包含 Agent 执行所需的各种上下文信息
@@ -32,6 +58,18 @@ export interface OrchestratedContext {
 
   /** 应用特定上下文（如 AI 女友的角色设定） */
   userContext?: any;
+
+  // 新增：最近的技能执行记录（原始数据，最近 5 条）
+  recentSkillExecutions?: {
+    skillName: string;
+    success: boolean;
+    timestamp: Date;
+    error?: string;
+    scenario?: string;
+  }[];
+
+  // 新增：失败经验（用于 LLM 决策）
+  failureExperiences?: FailureExperience[];
 }
 
 /**
@@ -56,4 +94,16 @@ export interface ContextOrchestrator {
 export interface OrchestratorConfig {
   /** 是否启用用户画像注入 */
   enableUserProfile?: boolean;
+
+  // 新增：是否启用技能执行历史检索
+  enableRecentSkillExecutions?: boolean;
+
+  // 新增：是否启用失败经验检索
+  enableFailureExperiences?: boolean;
+
+  // 新增：失败经验最大返回数量
+  maxFailureExperiences?: number;
+
+  // 新增：最近执行记录最大返回数量
+  maxRecentExecutions?: number;
 }
