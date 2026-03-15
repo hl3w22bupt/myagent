@@ -174,6 +174,19 @@ export class PTCGenerator {
     // Build context section
     let contextSection = '';
 
+    // IMPORTANT: Environment configuration comes FIRST (before original_task)
+    // This provides structured context like workspace, gitUrl, language, etc.
+    if (options?.environment && Object.keys(options.environment).length > 0) {
+      contextSection += '<environment>\n';
+      for (const [key, value] of Object.entries(options.environment)) {
+        // Format the value nicely
+        const formattedValue = typeof value === 'string' ? value : JSON.stringify(value);
+        contextSection += `${key}: ${formattedValue}\n`;
+      }
+      contextSection += '</environment>\n\n';
+      console.log('[PTC Generator] Using environment config:', Object.keys(options.environment));
+    }
+
     // IMPORTANT: If originalTask is provided (from MasterAgent), use it as the primary task
     // This ensures the PTC code generator respects the original user request
     const originalTask = options?.variables?.originalTask || options?.originalTask;
@@ -698,6 +711,19 @@ Always prioritize available skills over direct computation or common knowledge.`
 
     // Build context section
     let contextSection = '';
+
+    // IMPORTANT: Environment configuration comes FIRST (before original_task)
+    // This provides structured context like workspace, gitUrl, language, etc.
+    if (options?.environment && Object.keys(options.environment).length > 0) {
+      contextSection += '<environment>\n';
+      for (const [key, value] of Object.entries(options.environment)) {
+        // Format the value nicely
+        const formattedValue = typeof value === 'string' ? value : JSON.stringify(value);
+        contextSection += `${key}: ${formattedValue}\n`;
+      }
+      contextSection += '</environment>\n\n';
+      console.log('[PTC Generator] Using environment config:', Object.keys(options.environment));
+    }
 
     // IMPORTANT: If originalTask is provided (from MasterAgent), use it as the primary task
     // This ensures the PTC code generator respects the original user request

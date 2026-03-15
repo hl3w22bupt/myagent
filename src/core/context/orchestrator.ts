@@ -59,6 +59,9 @@ export interface OrchestratedContext {
   /** 应用特定上下文（如 AI 女友的角色设定） */
   userContext?: any;
 
+  /** 环境配置（workspace, gitUrl, language 等） */
+  environment?: Record<string, any>;
+
   // 新增：最近的技能执行记录（原始数据，最近 5 条）
   recentSkillExecutions?: {
     skillName: string;

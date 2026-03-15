@@ -54,17 +54,27 @@ export const bodySchema = z.object({
   useDelegation: z.boolean().optional().describe('Enable MasterAgent delegation'),
 
   /**
-   * Optional: List of subagents to use for delegation (requires useDelegation=true).
-   * If not provided, uses default subagents.
-   */
-  subagents: z.array(z.string()).optional().describe('List of subagent names for delegation'),
-
-  /**
    * Optional: Explicitly delegate to specific subagents without LLM planning.
    * When specified, MasterAgent will skip intelligent analysis and delegate directly.
-   * This is more efficient than useDelegation+subagents which uses LLM planning.
+   * This is more efficient than useDelegation which uses LLM planning.
    */
   delegateTo: z.array(z.string()).optional().describe('Explicit subagent delegation (bypasses LLM planning)'),
+
+  /**
+   * Optional: Environment configuration for task execution.
+   * Key-value pairs that provide additional context for the task.
+   * Common examples:
+   * - workspace: "/path/to/project"
+   * - gitUrl: "https://github.com/user/repo"
+   * - language: "typescript" | "python" | "java"
+   * - branch: "main" | "develop"
+   * - framework: "react" | "nextjs" | "vue"
+   * - Any other custom context needed for the task
+   *
+   * These environment variables are formatted and prepended to the user request
+   * in the prompt, providing structured context without cluttering the task description.
+   */
+  environment: z.record(z.string(), z.any()).optional().describe('Environment configuration (workspace, gitUrl, language, etc.)'),
 
   /**
    * Optional: User ID for MyEcho integration (e.g., echo-abc123 for AI girlfriend).
@@ -163,7 +173,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, subagents, delegateTo, userId, userContext, subagent, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
+  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, delegateTo, environment, userId, userContext, subagent, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -186,8 +196,9 @@ export const handler = async (request: any, { emit, logger }: any) => {
     app: appIdentifier,
     skills: availableSkills,
     useDelegation,
-    subagents,
     delegateTo,
+    hasEnvironment: !!environment,
+    environmentKeys: environment ? Object.keys(environment) : [],
     userId,
     hasUserContext: !!userContext,
     subagent,
@@ -215,9 +226,10 @@ export const handler = async (request: any, { emit, logger }: any) => {
     metadata: {
       subagent, // 保存 subagent 信息用于后续多轮对话
       workflow, // 保存 workflow 信息
+      environment, // 保存 environment 信息用于后续多轮对话
     },
   });
-  logger.info('Task record created in database', { taskId, app: appIdentifier, status: 'PENDING', subagent, workflow });
+  logger.info('Task record created in database', { taskId, app: appIdentifier, status: 'PENDING', subagent, workflow, hasEnvironment: !!environment });
 
   // Emit agent task execution event
   // This will be picked up by the master-agent step
@@ -231,8 +243,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
       systemPrompt,
       availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
       useDelegation,
-      subagents,
       delegateTo, // Pass explicit delegation to MasterAgent
+      environment, // Environment configuration for task context
       userId, // MyEcho: User ID for profile accumulation
       userContext, // MyEcho: User configuration bundle
       subagent, // MyEcho: Direct subagent selection

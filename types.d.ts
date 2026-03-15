@@ -37,7 +37,10 @@ declare module 'motia' {
     'favorites-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'favorites-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'context-tool-usage-api': ApiRouteHandler<{ taskId: string; toolName: string; success: boolean; timestamp: string; summary: string; error?: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<500, { error: string }>, never>
+    'context-skill-execution-api': ApiRouteHandler<{ taskId: string; skillName: string; success: boolean; startedAt: string; completedAt: string; duration: number; inputSummary: string; outputType?: string; scenario?: string; error?: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<500, { error: string }>, never>
     'context-outputs-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'context-failure-experience-api': ApiRouteHandler<{ taskId: string; skillName: string; error: string; scenario: string; solution: string; timestamp: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
     'context-compression-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -50,9 +53,6 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
-    'context-failure-experience-api': ApiRouteHandler<{ taskId: string; skillName: string; error: string; scenario: string; solution: string; timestamp: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
-    'context-skill-execution-api': ApiRouteHandler<{ taskId: string; skillName: string; success: boolean; startedAt: string; completedAt: string; duration: number; inputSummary: string; outputType?: string; scenario?: string; error?: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<500, { error: string }>, never>
-    'context-tool-usage-api': ApiRouteHandler<{ taskId: string; toolName: string; success: boolean; timestamp: string; summary: string; error?: string }, ApiResponse<200, { success: boolean }> | ApiResponse<400, { error: string; details?: Array<unknown> }> | ApiResponse<500, { error: string }>, never>
   }
     
 }

@@ -646,6 +646,14 @@ export class Agent {
               });
             }
 
+            // Add environment if present (for task-specific configuration)
+            if (orchestratedContext.environment) {
+              ptcOptions.environment = orchestratedContext.environment;
+              console.log('[Agent] Injecting environment into PTC generation', {
+                keys: Object.keys(orchestratedContext.environment),
+              });
+            }
+
             // Add execution history from orchestrator
             if (orchestratedContext.recentSkillExecutions) {
               ptcOptions.recentSkillExecutions = orchestratedContext.recentSkillExecutions;

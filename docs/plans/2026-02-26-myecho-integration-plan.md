@@ -50,7 +50,6 @@ bodySchema = z.object({
   systemPrompt: z.string().optional(),
   availableSkills: z.array(z.string()).optional(),
   useDelegation: z.boolean().optional(),
-  subagents: z.array(z.string()).optional(),
   delegateTo: z.array(z.string()).optional(),
 })
 ```

@@ -73,7 +73,12 @@ export class DefaultContextOrchestrator implements ContextOrchestrator {
       result.userContext = userContext;
     }
 
-    // 6. 最近技能执行记录（可选）
+    // 6. 环境配置：从 context 取（workspace, gitUrl, language 等）
+    if (context?.environment) {
+      result.environment = context.environment;
+    }
+
+    // 7. 最近技能执行记录（可选）
     if (this.config.enableRecentSkillExecutions) {
       const recentExecutions = this.retrieveRecentSkillExecutions(context);
       if (recentExecutions.length > 0) {
@@ -81,7 +86,7 @@ export class DefaultContextOrchestrator implements ContextOrchestrator {
       }
     }
 
-    // 7. 失败经验（可选）
+    // 8. 失败经验（可选）
     if (this.config.enableFailureExperiences) {
       const failureExperiences = this.retrieveFailureExperiences(context, state);
       if (failureExperiences.length > 0) {

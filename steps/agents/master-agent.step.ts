@@ -104,6 +104,13 @@ export const inputSchema = _z.object({
   userContext: _z.record(_z.string(), _z.any()).optional(),
 
   /**
+   * Optional: Environment configuration for task execution.
+   * Key-value pairs providing additional context (workspace, gitUrl, language, etc.).
+   * These are formatted and prepended to the user request in the prompt.
+   */
+  environment: _z.record(_z.string(), _z.any()).optional(),
+
+  /**
    * Optional: Direct subagent selection for MyEcho.
    * When specified, uses this subagent directly.
    */
@@ -506,6 +513,7 @@ export const handler = async (
       totalTokens: 0,
       userId: input.userId, // MyEcho: Pass userId for profile accumulation
       userContext: input.userContext, // MyEcho: Pass userContext
+      environment: input.environment, // Environment configuration for task context
       subagent: input.subagent, // MyEcho: Pass subagent selection
       rewriteRequest: input.rewriteRequest !== undefined ? input.rewriteRequest : true, // Request rewriting control (default: true)
     },
@@ -535,6 +543,15 @@ export const handler = async (
         subagent: input.subagent,
       });
     }
+    // 如果任务已存在且没有提供 environment，从 metadata 中恢复 environment
+    // 这确保多轮对话使用相同的 environment
+    if (!input.environment && existingTask.metadata?.environment) {
+      input.environment = existingTask.metadata.environment as Record<string, any>;
+      logger.info('Master Agent: Restored environment from task metadata', {
+        taskId,
+        environmentKeys: Object.keys(input.environment),
+      });
+    }
   } else {
     await store.createTask({
       id: taskId,
@@ -543,9 +560,15 @@ export const handler = async (
       status: TaskStatus.PENDING,
       metadata: {
         subagent: input.subagent, // 保存 subagent 信息用于后续多轮对话
+        environment: input.environment, // 保存 environment 信息用于后续多轮对话
       },
     });
-    logger.info('Task record created in database', { taskId, status: 'PENDING', subagent: input.subagent });
+    logger.info('Task record created in database', {
+      taskId,
+      status: 'PENDING',
+      subagent: input.subagent,
+      hasEnvironment: !!input.environment,
+    });
   }
 
   // Helper function to update stream
@@ -689,6 +712,15 @@ export const handler = async (
       logger.info('[master-agent.step] userContext copied to workingMemory', {
         hasName: !!input.userContext.name,
         hasPersonality: !!input.userContext.personality,
+      });
+    }
+
+    // ⭐ 将 environment 从 input 复制到 context
+    // 这样 Orchestrator 能够找到它并传递给 PTCGenerator
+    if (input.environment) {
+      (taskContext.context as any).environment = input.environment;
+      logger.info('[master-agent.step] environment copied to context', {
+        keys: Object.keys(input.environment),
       });
     }
 

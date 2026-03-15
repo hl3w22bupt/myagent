@@ -238,6 +238,9 @@ export interface PTCGenerationOptions {
   /** 应用特定上下文（如 AI 女友的角色设定） */
   userContext?: any;
 
+  /** 环境配置（workspace, gitUrl, language 等） */
+  environment?: Record<string, any>;
+
   /** 最近的技能执行记录（用于避免重复错误） */
   recentSkillExecutions?: Array<{
     skillName: string;

@@ -198,10 +198,11 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
       };
     }
 
-    // 获取或生成 sessionId，并从数据库获取任务信息（包括 subagent）
+    // 获取或生成 sessionId，并从数据库获取任务信息（包括 subagent 和 environment）
     let sessionId = request.body?.sessionId;
     let taskStatus: string | undefined;
     let subagent: string | undefined; // 保存 subagent 用于后续委派
+    let environment: Record<string, any> | undefined; // 保存 environment 用于后续对话
 
     // 从数据库中获取任务信息（无论前端是否提供 sessionId）
     // 因为需要获取 subagent 信息用于多轮对话委派
@@ -217,11 +218,14 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         }
         taskStatus = taskResult.status;
         subagent = taskResult.metadata?.subagent as string; // 获取 subagent
+        environment = taskResult.metadata?.environment as Record<string, any>; // 获取 environment
         logger.info('Task Chat API: Retrieved task info from database', {
           taskId,
           sessionId,
           status: taskStatus,
-          subagent
+          subagent,
+          hasEnvironment: !!environment,
+          environmentKeys: environment ? Object.keys(environment) : [],
         });
       } else {
         logger.warn('Task Chat API: Task not found in database', { taskId });
@@ -392,6 +396,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         taskId, // Use same taskId to update the same task record
         continue: true, // Indicate this is a continuation
         subagent, // 传递 subagent 用于委派，保持多轮对话使用同一 subagent
+        environment, // 传递 environment 用于多轮对话，保持相同的环境配置
         userId: requestUserId, // Pass userId for MyEcho
         rewriteRequest, // Pass through rewriteRequest flag
       },
