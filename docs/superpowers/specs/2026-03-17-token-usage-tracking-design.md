@@ -1,12 +1,13 @@
 # Token Usage Tracking & Dashboard Design
 
 **Date:** 2026-03-17
-**Status:** Design (Revision 2)
+**Status:** Design (Revision 3)
 **Branch:** `feature/token-usage-tracking`
 **Revision History:**
 - v1.0: Initial design
 - v1.1: Fixed event filtering, stream integration, state management, added error handling
 - v1.2: Fixed SQL dialect compatibility, added timezone handling, clarified timeline implementation, added transaction support
+- v1.3: Architecture redesign - use independent workflow (zero changes to agent core)
 
 ---
 
@@ -23,6 +24,44 @@ Build a comprehensive token usage tracking and analytics system for the MyAgent 
 ---
 
 ## Architecture
+
+### ⭐ 独立 Workflow 设计（零侵入主 Agent Runtime）
+
+**重要架构决策：** Token usage tracking 作为**独立 Workflow** 运行，不修改主 agent core 库。
+
+**优势：**
+- ✅ **零改动** - 不需要修改 `src/core/agent/` 下的任何代码
+- ✅ **完全解耦** - 与主 agent runtime 独立运行
+- ✅ **独立部署** - 可以单独启动、停止、扩展
+- ✅ **只读集成** - 通过订阅 execution-traces stream 获取数据（无侵入）
+- ✅ **故障隔离** - Token tracking 系统故障不影响主 agent
+
+**Workflow 配置：**
+```yaml
+# workflows/token-usage-tracking.workflow.ts
+export default createWorkflow({
+  workflowId: 'token-usage-tracking',
+
+  // Workflow 内的 Step 只监听 stream，不修改 agent 行为
+  steps: [
+    tokenUsageExtractor,  // Event Step
+    tokenUsageWriter,     // Event Step
+    tokenUsageAggregator  // Cron Step
+  ],
+
+  // 独立的 execution context
+  context: {
+    database: getDatabase(),
+    streams: {
+      executionTraces: getStream('execution-traces')
+    }
+  }
+});
+```
+
+---
+
+### System Design
 
 ### System Design
 
@@ -83,24 +122,31 @@ Build a comprehensive token usage tracking and analytics system for the MyAgent 
 
 ### Key Design Decisions
 
-**1. Stream-to-Event Bridge Pattern**
+**1. 独立 Workflow 架构（零改动主 Agent Runtime）** ⭐
+- Token usage tracking 作为独立 workflow 运行
+- **不修改主 agent core 库**（`src/core/agent/` 完全不动）
+- 通过订阅 execution-traces stream 获取数据（只读，无侵入）
+- 可独立部署、扩展、重启
+- 与主 agent runtime 完全解耦
+
+**2. Stream-to-Event Bridge Pattern**
 - Subscribe to `execution-traces` stream changes
 - Emit `token_usage_recorded` event for downstream processing
 - Language-agnostic (works for TS and Python LLM calls)
 - Decoupled from LLM Client implementation
 
-**2. Storage Abstraction with Existing Integration**
+**3. Storage Abstraction with Existing Integration**
 - Interface-based design for easy migration
 - Integrate with existing `DatabaseFactory` pattern
 - Support both SQLite (dev) and PostgreSQL (production)
 - Future: Data lake (Snowflake, Databricks, ClickHouse)
 
-**3. Idempotency and Error Handling**
+**4. Idempotency and Error Handling**
 - Use `traceId` as idempotency key
 - Track processed hours to avoid duplicate aggregation
 - Graceful degradation if writer fails
 
-**4. No Cost Calculation**
+**5. No Cost Calculation**
 - Track raw token counts only
 - Cost estimation deferred to future iteration
 
@@ -934,6 +980,8 @@ function Analytics() {
 
 ```
 myagent/
+├── workflows/
+│   └── token-usage-tracking.workflow.ts     ← 新建：独立 workflow 定义
 ├── src/
 │   └── steps/
 │       └── token-usage/
@@ -955,6 +1003,8 @@ myagent/
 └── scripts/
     └── init-token-tables.ts
 ```
+
+**注意：** `workflows/` 是新建目录，与现有的 `src/` 和 `steps/` 目录平行，体现完全解耦的设计。
 
 ---
 
