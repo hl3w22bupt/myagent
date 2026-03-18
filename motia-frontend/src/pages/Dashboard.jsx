@@ -74,7 +74,7 @@ function Dashboard() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>用量统计</h1>
+        <h1 className={styles.title}>Token用量统计</h1>
         <div className={styles.timeRangeSelector}>
           {timeRangeOptions.map(option => (
             <button
@@ -154,102 +154,105 @@ function Dashboard() {
             <div className={styles.trendsSection}>
               <h2 className={styles.sectionTitle}>Token 使用趋势</h2>
 
-              {/* 折线图 - 总Token趋势 */}
-              <div className={styles.chartContainer}>
-                <h3 className={styles.chartTitle}>总Token使用趋势</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#64748B"
-                      fontSize={12}
-                      tick={{ fill: '#64748B' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#64748B"
-                      fontSize={12}
-                      tick={{ fill: '#64748B' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1E293B',
-                        border: 'none',
-                        borderRadius: '8px',
-                        color: '#F8FAFC',
-                        fontSize: '12',
-                        fontFamily: 'DM Sans, sans-serif'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="totalTokens"
-                      stroke="#2563EB"
-                      name="总Token"
-                      strokeWidth={2.5}
-                      dot={{ fill: '#2563EB', strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6, stroke: '#2563EB', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              {/* Charts Row - 总Token趋势 and Prompt vs Completion */}
+              <div className={styles.chartsRow}>
+                {/* 折线图 - 总Token趋势 */}
+                <div className={styles.chartContainer}>
+                  <h3 className={styles.chartTitle}>总Token使用趋势</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#64748B"
+                        fontSize={12}
+                        tick={{ fill: '#64748B' }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="#64748B"
+                        fontSize={12}
+                        tick={{ fill: '#64748B' }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1E293B',
+                          border: 'none',
+                          borderRadius: '8px',
+                          color: '#F8FAFC',
+                          fontSize: '12',
+                          fontFamily: 'DM Sans, sans-serif'
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="totalTokens"
+                        stroke="#2563EB"
+                        name="总Token"
+                        strokeWidth={2.5}
+                        dot={{ fill: '#2563EB', strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 6, stroke: '#2563EB', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
 
-              {/* 柱状图 - Prompt vs Completion */}
-              <div className={styles.chartContainer}>
-                <h3 className={styles.chartTitle}>Prompt vs Completion Token</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#64748B"
-                      fontSize={12}
-                      tick={{ fill: '#64748B' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#64748B"
-                      fontSize={12}
-                      tick={{ fill: '#64748B' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1E293B',
-                        border: 'none',
-                        borderRadius: '8px',
-                        color: '#F8FAFC',
-                        fontSize: '12',
-                        fontFamily: 'DM Sans, sans-serif'
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{
-                        paddingTop: '1rem',
-                        fontSize: '12',
-                        fontFamily: 'DM Sans, sans-serif'
-                      }}
-                    />
-                    <Bar
-                      dataKey="promptTokens"
-                      fill="#2563EB"
-                      name="Prompt Tokens"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="completionTokens"
-                      fill="#F97316"
-                      name="Completion Tokens"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                {/* 柱状图 - Prompt vs Completion */}
+                <div className={styles.chartContainer}>
+                  <h3 className={styles.chartTitle}>Prompt vs Completion Token</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#64748B"
+                        fontSize={12}
+                        tick={{ fill: '#64748B' }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="#64748B"
+                        fontSize={12}
+                        tick={{ fill: '#64748B' }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#1E293B',
+                          border: 'none',
+                          borderRadius: '8px',
+                          color: '#F8FAFC',
+                          fontSize: '12',
+                          fontFamily: 'DM Sans, sans-serif'
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{
+                          paddingTop: '1rem',
+                          fontSize: '12',
+                          fontFamily: 'DM Sans, sans-serif'
+                        }}
+                      />
+                      <Bar
+                        dataKey="promptTokens"
+                        fill="#2563EB"
+                        name="Prompt Tokens"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="completionTokens"
+                        fill="#F97316"
+                        name="Completion Tokens"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           )}

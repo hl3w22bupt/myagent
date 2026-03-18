@@ -11,6 +11,7 @@ import SandboxLogsTab from '../components/SandboxLogsTab'
 import PtcCodeTab from '../components/PtcCodeTab'
 import ArtifactsTab from '../components/ArtifactsTab'
 import ContextTab from '../components/ContextTab'
+import TokenUsageTab from '../components/TokenUsageTab'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -2642,6 +2643,16 @@ function TaskDetail() {
             </svg>
             Context
           </button>
+          <button
+            className={`tab-button ${activeTab === 'token-usage' ? 'active' : ''}`}
+            onClick={() => setActiveTab('token-usage')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+              <path d="M3 3v18h18" />
+              <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+            </svg>
+            Token Usage
+          </button>
         </div>
 
         {/* 内容区域 - 所有 Tab 始终渲染，通过 CSS 控制显示隐藏 */}
@@ -2667,6 +2678,9 @@ function TaskDetail() {
           </div>
           <div className={`tab-panel ${activeTab === 'context' ? 'active' : ''}`}>
             <ContextTab taskId={id} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'token-usage' ? 'active' : ''}`}>
+            <TokenUsageTab taskId={id} />
           </div>
         </div>
       </div>
