@@ -9,7 +9,7 @@ import type { ApiRouteConfig } from 'motia';
 import { z as _z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage';
-import type { TaskTokenUsage, TimeRange } from '../token-usage/types';
+import type { TimeRange } from '../token-usage/types';
 
 /**
  * Parse time range into start and end dates

@@ -68,14 +68,11 @@ export const handler = async (event: TokenUsageRecordedEvent, { logger }: any) =
   const {
     traceId,
     taskId,
-    agentId,
-    skillName,
     model,
     provider,
     promptTokens,
     completionTokens,
     totalTokens,
-    timestamp,
   } = event;
 
   logger.info('[Token Usage Writer] Received token usage event', {
