@@ -66,7 +66,7 @@ export type TimeRange = '1h' | '24h' | '7d' | '30d' | 'custom';
 /**
  * Total usage statistics
  */
-export interface TotalUsage extends TokenUsage {}
+export type TotalUsage = TokenUsage;
 
 /**
  * Usage trend data point
@@ -76,19 +76,4 @@ export interface UsageTrend {
   totalTokens: number;
   promptTokens?: number;
   completionTokens?: number;
-}
-
-/**
- * Database interface for token usage storage
- * Provides SQL-level operations for token usage queries
- */
-export interface Database {
-  exec(sql: string, params?: any[]): Promise<void>;
-  run(sql: string, params?: any[]): Promise<void>;
-  get(sql: string, params?: any[]): Promise<any>;
-  all(sql: string, params?: any[]): Promise<any[]>;
-  config?: {
-    dialect?: string;
-    client?: string;
-  };
 }
