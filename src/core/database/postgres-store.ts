@@ -1893,4 +1893,14 @@ export class PostgresDataStore implements Database {
       lastSessionId: row.last_session_id || undefined,
     };
   }
+
+  /**
+   * Get the PostgreSQL connection pool
+   *
+   * Exposes the underlying pg.Pool for use by components that need direct database access.
+   * This is useful for specialized storage implementations that need the pool directly.
+   */
+  getPool(): Pool {
+    return this.pool;
+  }
 }
