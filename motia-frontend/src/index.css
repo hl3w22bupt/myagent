@@ -1,7 +1,8 @@
 /* Motia Agent Dashboard - Design System */
 /* 优化的现代 SaaS UI 设计系统 */
 
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+/* 暂时禁用 Google Fonts 测试是否是字体加载导致的问题 */
+/* @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap'); */
 
 :root {
   /* 设计系统 - SaaS 配色方案 */
@@ -75,11 +76,16 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 16px; /* 显式设置根元素字体大小 */
+}
+
 body {
-  font-family: 'Open Sans', system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
   line-height: 1.6;
   font-weight: 400;
-  background-color: var(--bg-primary);
+  font-size: 1rem; /* 基于 html 的 16px */
+  background-color: var(--bg-primary); /* 从 bg-secondary 改回 bg-primary */
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -90,16 +96,16 @@ body {
 
 /* 标题字体 */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Poppins', sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
   font-weight: 600;
   line-height: 1.3;
   color: var(--text-primary);
 }
 
-h1 { font-size: 2.5rem; }
-h2 { font-size: 1.875rem; }
-h3 { font-size: 1.5rem; }
-h4 { font-size: 1.25rem; }
+h1 { font-size: 2rem; }  /* 从 2.5rem 降到 2rem */
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.125rem; }
 
 /* 链接样式 */
 a {

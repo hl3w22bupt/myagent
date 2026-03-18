@@ -1,10 +1,10 @@
-/* Analytics Page Styles */
-.analytics {
+/* Analytics Page Styles - CSS Modules for isolation */
+.container {
   padding: 2rem 0;
   min-height: 100vh;
 }
 
-.analytics-header {
+.header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -13,7 +13,7 @@
   gap: 1rem;
 }
 
-.analytics-header h1 {
+.title {
   font-size: 2rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -23,7 +23,7 @@
   gap: 0.75rem;
 }
 
-.analytics-header h1::before {
+.title::before {
   content: '';
   width: 4px;
   height: 2rem;
@@ -31,7 +31,7 @@
   border-radius: 2px;
 }
 
-.time-range-selector {
+.timeRangeSelector {
   display: flex;
   gap: 0.5rem;
   background: var(--bg-secondary);
@@ -40,7 +40,7 @@
   border: 1px solid var(--border-color);
 }
 
-.time-range-button {
+.timeRangeButton {
   padding: 0.5rem 1rem;
   background: transparent;
   border: none;
@@ -52,30 +52,30 @@
   transition: all 0.2s;
 }
 
-.time-range-button:hover {
+.timeRangeButton:hover {
   color: var(--text-primary);
   background: var(--bg-tertiary);
 }
 
-.time-range-button.active {
+.timeRangeButtonActive {
   background: var(--primary);
   color: white;
 }
 
-.analytics-content {
+.content {
   display: flex;
   flex-direction: column;
   gap: 2rem;
 }
 
 /* Summary Cards */
-.summary-cards {
+.summaryCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.5rem;
 }
 
-.summary-card {
+.summaryCard {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 1rem;
@@ -86,13 +86,13 @@
   transition: all 0.2s;
 }
 
-.summary-card:hover {
+.summaryCard:hover {
   border-color: var(--border-hover);
   box-shadow: var(--shadow);
   transform: translateY(-2px);
 }
 
-.summary-card-icon {
+.summaryCardIcon {
   width: 48px;
   height: 48px;
   display: flex;
@@ -104,18 +104,18 @@
   flex-shrink: 0;
 }
 
-.summary-card-content {
+.summaryCardContent {
   flex: 1;
 }
 
-.summary-card-label {
+.summaryCardLabel {
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
 
-.summary-card-value {
+.summaryCardValue {
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -123,14 +123,14 @@
 }
 
 /* Details Section */
-.details-section {
+.detailsSection {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 1rem;
   padding: 2rem;
 }
 
-.details-section h2 {
+.sectionTitle {
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -140,7 +140,7 @@
   gap: 0.75rem;
 }
 
-.details-section h2::before {
+.sectionTitle::before {
   content: '';
   width: 4px;
   height: 1.5rem;
@@ -148,89 +148,71 @@
   border-radius: 2px;
 }
 
-.details-grid {
+.detailsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
 }
 
-.detail-item {
+.detailItem {
   background: var(--bg-tertiary);
   border-radius: 0.75rem;
   padding: 1.25rem;
 }
 
-.detail-label {
+.detailLabel {
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
 
-.detail-value {
+.detailValue {
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 /* Skills Section */
-.skills-section {
+.skillsSection {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 1rem;
   padding: 2rem;
 }
 
-.skills-section h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 1.5rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.skills-section h2::before {
-  content: '';
-  width: 4px;
-  height: 1.5rem;
-  background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%);
-  border-radius: 2px;
-}
-
-.skills-list {
+.skillsList {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.skill-item {
+.skillItem {
   background: var(--bg-tertiary);
   border-radius: 0.75rem;
   padding: 1.25rem;
 }
 
-.skill-info {
+.skillInfo {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.75rem;
 }
 
-.skill-name {
+.skillName {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.skill-tokens {
+.skillTokens {
   font-size: 0.875rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
 
-.skill-bar {
+.skillBar {
   height: 8px;
   background: var(--bg-secondary);
   border-radius: 4px;
@@ -238,13 +220,13 @@
   margin-bottom: 0.75rem;
 }
 
-.skill-bar-fill {
+.skillBarFill {
   height: 100%;
   background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
   transition: width 0.3s ease;
 }
 
-.skill-details {
+.skillDetails {
   display: flex;
   gap: 1rem;
   font-size: 0.8125rem;
@@ -252,7 +234,7 @@
   flex-wrap: wrap;
 }
 
-.skill-details span {
+.skillDetails span {
   padding: 0.25rem 0.5rem;
   background: var(--bg-secondary);
   border-radius: 0.25rem;
@@ -285,7 +267,7 @@
   }
 }
 
-.error-message {
+.errorMessage {
   background-color: rgba(254, 226, 226, 0.9);
   backdrop-filter: blur(8px);
   color: #991b1b;
@@ -300,24 +282,24 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .analytics-header {
+  .header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .analytics-header h1 {
+  .title {
     font-size: 1.5rem;
   }
 
-  .summary-cards {
+  .summaryCards {
     grid-template-columns: 1fr;
   }
 
-  .details-grid {
+  .detailsGrid {
     grid-template-columns: 1fr;
   }
 
-  .time-range-selector {
+  .timeRangeSelector {
     width: 100%;
     overflow-x: auto;
   }
