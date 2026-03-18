@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { tokenUsageAPI } from '../services/api'
-import styles from './Analytics.module.css'
+import styles from './Dashboard.module.css'
 
-function Analytics() {
-  const [timeRange, setTimeRange] = useState('24h')
+function Dashboard() {
+  const [timeRange, setTimeRange] = useState('30d')
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -37,7 +37,6 @@ function Analytics() {
   }
 
   const timeRangeOptions = [
-    { value: '1h', label: '1小时' },
     { value: '24h', label: '24小时' },
     { value: '7d', label: '7天' },
     { value: '30d', label: '30天' }
@@ -46,7 +45,7 @@ function Analytics() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>大盘dashboard</h1>
+        <h1 className={styles.title}>用量统计</h1>
         <div className={styles.timeRangeSelector}>
           {timeRangeOptions.map(option => (
             <button
@@ -159,4 +158,4 @@ function Analytics() {
   )
 }
 
-export default Analytics
+export default Dashboard

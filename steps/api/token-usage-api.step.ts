@@ -97,7 +97,7 @@ export const handler = async (
   input: any,
   { logger }: any
 ) => {
-  const { action, taskId, timeRange = '24h' } = {
+  const { action, taskId, timeRange = '30d' } = {
     ...input.pathParams,
     ...input.queryParams,
   };
