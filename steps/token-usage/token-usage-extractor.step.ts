@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { EventConfig, emit } from 'motia';
+import type { EventConfig } from 'motia';
 import { executionTraceSchema, ExecutionTrace } from '../streams/execution-traces.stream';
 import { TokenUsageRecordedEvent } from './types';
 
@@ -49,7 +49,7 @@ export const config: EventConfig = {
  * Filters for llm_call stage and validates token data before emitting.
  */
 export const handler = async (trace: ExecutionTrace, { logger }: any) => {
-  const { traceId, taskId, agentId, skillName, stage, metadata, timestamp } = trace;
+  const { traceId, taskId, agentId, stage, metadata } = trace;
 
   logger.info('[Token Usage Extractor] Received trace', {
     traceId,
@@ -128,7 +128,7 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     return { extracted: false, reason: 'missing_provider_or_model' };
   }
 
-  // Prepare token usage recorded event
+  // Prepare token usage recorded event to be emitted
   const tokenUsageEvent: TokenUsageRecordedEvent = {
     traceId,           // Idempotency key
     taskId,
@@ -142,13 +142,7 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     timestamp,
   };
 
-  // Emit token usage recorded event
-  await emit({
-    topic: 'token_usage_recorded',
-    data: tokenUsageEvent,
-  });
-
-  logger.info('[Token Usage Extractor] Token usage extracted and emitted', {
+  logger.info('[Token Usage Extractor] Token usage extracted', {
     traceId,
     taskId,
     model: llmModel,
@@ -158,12 +152,6 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     totalTokens,
   });
 
-  return {
-    extracted: true,
-    traceId,
-    taskId,
-    model: llmModel,
-    provider: llmProvider,
-    totalTokens,
-  };
+  // Event Step automatically emits the return value as 'token_usage_recorded' event
+  return tokenUsageEvent;
 };
