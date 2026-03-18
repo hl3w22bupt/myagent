@@ -241,7 +241,7 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
           COALESCE(SUM(total_tokens), 0) as total_tokens,
           COUNT(*) as task_count
          FROM token_usage_task
-         WHERE updated_at >= $1 AND updated_at <= $2`,
+         WHERE first_call_at >= $1 AND first_call_at <= $2`,
         [startDate.toISOString(), endDate.toISOString()]
       );
 
