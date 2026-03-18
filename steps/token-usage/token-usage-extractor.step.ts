@@ -6,7 +6,6 @@
  * to extract token usage information from LLM responses.
  */
 
-import { z } from 'zod';
 import type { EventConfig } from 'motia';
 import { executionTraceSchema, ExecutionTrace } from '../streams/execution-traces.stream';
 import { TokenUsageRecordedEvent } from './types';
@@ -139,7 +138,7 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     promptTokens,
     completionTokens,
     totalTokens,
-    timestamp,
+    timestamp: trace.timestamp,
   };
 
   logger.info('[Token Usage Extractor] Token usage extracted', {
