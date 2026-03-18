@@ -9,6 +9,7 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  taskCount?: number;  // Optional: number of tasks included in the aggregation
 }
 
 /**

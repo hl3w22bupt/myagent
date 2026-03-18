@@ -238,7 +238,8 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
         `SELECT
           COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
           COALESCE(SUM(completion_tokens), 0) as completion_tokens,
-          COALESCE(SUM(total_tokens), 0) as total_tokens
+          COALESCE(SUM(total_tokens), 0) as total_tokens,
+          COUNT(*) as task_count
          FROM token_usage_task
          WHERE updated_at >= $1 AND updated_at <= $2`,
         [startDate.toISOString(), endDate.toISOString()]
@@ -249,6 +250,7 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
         promptTokens: parseInt(row.prompt_tokens) || 0,
         completionTokens: parseInt(row.completion_tokens) || 0,
         totalTokens: parseInt(row.total_tokens) || 0,
+        taskCount: parseInt(row.task_count) || 0,
       };
     } catch (error: any) {
       console.error('[PostgresTokenUsageStorage] Failed to get total usage:', {

@@ -15,7 +15,7 @@ function Dashboard() {
 
       try {
         const response = await tokenUsageAPI.getSummary(timeRange)
-        setSummary(response.data)
+        setSummary(response.data.data)
       } catch (err) {
         console.error('Error fetching token usage summary:', err)
         setError('获取用量数据失败，请稍后重试')
