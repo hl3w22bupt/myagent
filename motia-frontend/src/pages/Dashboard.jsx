@@ -1,30 +1,38 @@
 import { useState, useEffect } from 'react'
 import { tokenUsageAPI } from '../services/api'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import styles from './Dashboard.module.css'
 
 function Dashboard() {
   const [timeRange, setTimeRange] = useState('30d')
   const [summary, setSummary] = useState(null)
+  const [trends, setTrends] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const fetchSummary = async () => {
+    const fetchData = async () => {
       setLoading(true)
       setError('')
 
       try {
-        const response = await tokenUsageAPI.getSummary(timeRange)
-        setSummary(response.data.data)
+        // Fetch summary and trends in parallel
+        const [summaryResponse, trendsResponse] = await Promise.all([
+          tokenUsageAPI.getSummary(timeRange),
+          tokenUsageAPI.getTrends(timeRange)
+        ])
+
+        setSummary(summaryResponse.data.data)
+        setTrends(trendsResponse.data.data.trends || [])
       } catch (err) {
-        console.error('Error fetching token usage summary:', err)
+        console.error('Error fetching token usage data:', err)
         setError('获取用量数据失败，请稍后重试')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchSummary()
+    fetchData()
   }, [timeRange])
 
   const formatNumber = (num) => {
@@ -35,6 +43,27 @@ function Dashboard() {
     }
     return num.toLocaleString()
   }
+
+  const formatDate = (timestamp) => {
+    const date = new Date(timestamp)
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${month}-${day}`
+  }
+
+  const formatHour = (timestamp) => {
+    const date = new Date(timestamp)
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hour = String(date.getHours()).padStart(2, '0')
+    return `${month}-${day} ${hour}:00`
+  }
+
+  // Prepare chart data
+  const chartData = trends.map(trend => ({
+    ...trend,
+    date: timeRange === '24h' ? formatHour(trend.timestamp) : formatDate(trend.timestamp)
+  }))
 
   const timeRangeOptions = [
     { value: '24h', label: '24小时' },
@@ -119,6 +148,44 @@ function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* 趋势图表 */}
+          {trends.length > 0 && (
+            <div className={styles.trendsSection}>
+              <h2 className={styles.sectionTitle}>Token 使用趋势</h2>
+
+              {/* 折线图 - 总Token趋势 */}
+              <div className={styles.chartContainer}>
+                <h3 className={styles.chartTitle}>总Token使用趋势</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="totalTokens" stroke="#8884d8" name="总Token" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* 柱状图 - Prompt vs Completion */}
+              <div className={styles.chartContainer}>
+                <h3 className={styles.chartTitle}>Prompt vs Completion Token</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="promptTokens" fill="#82ca9d" name="Prompt Tokens" />
+                    <Bar dataKey="completionTokens" fill="#ffc658" name="Completion Tokens" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
           {/* 详细统计 */}
           {summary.topSkills && summary.topSkills.length > 0 && (

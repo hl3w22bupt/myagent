@@ -304,3 +304,28 @@
     overflow-x: auto;
   }
 }
+
+/* Trends Section */
+.trendsSection {
+  margin-top: 2rem;
+}
+
+.trendsSection > .sectionTitle {
+  margin-bottom: 1rem;
+}
+
+.chartContainer {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.chartTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 1rem 0;
+}
+

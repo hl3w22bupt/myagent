@@ -202,9 +202,7 @@ async function handleTrends(
   const { startDate, endDate } = parseTimeRange(timeRange);
   const granularity = getGranularity(timeRange);
 
-  // TODO: Implement getUsageTrends() in PostgresTokenUsageStorage
-  // For now, return empty trends
-  const trends: any[] = [];
+  const trends = await storage.getUsageTrends(startDate, endDate, granularity);
 
   logger.info('Token Usage API: Trends retrieved', {
     timeRange,

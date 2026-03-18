@@ -48,6 +48,20 @@ export interface TokenUsageStorage {
   getTotalUsage(startDate: Date, endDate: Date): Promise<TotalUsage>;
 
   /**
+   * Get usage trends over time with specified granularity
+   * @param startDate Start of time range
+   * @param endDate End of time range
+   * @param granularity Time granularity: 'hour' or 'day'
+   */
+  getUsageTrends(startDate: Date, endDate: Date, granularity: 'hour' | 'day'): Promise<Array<{
+    timestamp: string;
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    taskCount: number;
+  }>>;
+
+  /**
    * Execute operations in a transaction
    */
   withTransaction<T>(fn: () => Promise<T>): Promise<T>;

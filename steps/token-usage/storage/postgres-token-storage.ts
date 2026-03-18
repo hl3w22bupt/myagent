@@ -264,6 +264,56 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
   }
 
   /**
+   * Get usage trends over time with specified granularity
+   */
+  async getUsageTrends(
+    startDate: Date,
+    endDate: Date,
+    granularity: 'hour' | 'day'
+  ): Promise<Array<{
+    timestamp: string;
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    taskCount: number;
+  }>> {
+    try {
+      const truncateUnit = granularity === 'hour' ? 'hour' : 'day';
+
+      const result = await this.pool.query(
+        `SELECT
+          DATE_TRUNC('${truncateUnit}', first_call_at) as timestamp,
+          COALESCE(SUM(total_tokens), 0) as total_tokens,
+          COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+          COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+          COUNT(*) as task_count
+         FROM token_usage_task
+         WHERE first_call_at >= $1 AND first_call_at <= $2
+         GROUP BY DATE_TRUNC('${truncateUnit}', first_call_at)
+         ORDER BY timestamp ASC`,
+        [startDate.toISOString(), endDate.toISOString()]
+      );
+
+      return result.rows.map(row => ({
+        timestamp: row.timestamp,
+        totalTokens: parseInt(row.total_tokens) || 0,
+        promptTokens: parseInt(row.prompt_tokens) || 0,
+        completionTokens: parseInt(row.completion_tokens) || 0,
+        taskCount: parseInt(row.task_count) || 0,
+      }));
+    } catch (error: any) {
+      console.error('[PostgresTokenUsageStorage] Failed to get usage trends:', {
+        startDate,
+        endDate,
+        granularity,
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Execute operations in a transaction
    * Provides atomicity for multi-step operations
    */
