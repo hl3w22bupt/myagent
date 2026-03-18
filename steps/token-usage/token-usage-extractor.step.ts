@@ -131,8 +131,8 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
   const tokenUsageEvent: TokenUsageRecordedEvent = {
     traceId,           // Idempotency key
     taskId,
-    agentId,
-    skillName,
+    agentId: agentId || undefined,
+    skillName: undefined, // TODO: Extract from trace when available
     model: llmModel,
     provider: llmProvider,
     promptTokens,
