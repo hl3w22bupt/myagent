@@ -233,4 +233,26 @@ export const favoritesAPI = {
   }
 }
 
+// Token Usage APIs
+export const tokenUsageAPI = {
+  // Get task token usage
+  getTaskTokenUsage: (taskId) => {
+    return apiClient.get(`/api/tasks/${taskId}/token-usage`)
+  },
+
+  // Get global summary
+  getSummary: (timeRange = '24h') => {
+    return apiClient.get('/api/token-usage/summary', {
+      params: { timeRange }
+    })
+  },
+
+  // Get trends
+  getTrends: (timeRange = '7d') => {
+    return apiClient.get('/api/token-usage/trends', {
+      params: { timeRange }
+    })
+  }
+}
+
 export default apiClient

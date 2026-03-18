@@ -8,6 +8,7 @@ import Submit from './pages/Submit'
 import Skills from './pages/Skills'
 import SkillDetail from './pages/SkillDetail'
 import Agents from './pages/Agents'
+import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { MotiaStreamProvider } from '@motiadev/stream-client-react'
@@ -31,6 +32,7 @@ function App() {
               <Route path="/skills" element={<Skills />} />
               <Route path="/skills/:skillName" element={<SkillDetail />} />
               <Route path="/agents" element={<Agents />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
