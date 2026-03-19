@@ -65,9 +65,11 @@ async function main() {
 
         console.log(`[BackfillTokenUsage] Processing ${traces.length} traces for ${taskId}...`);
 
-        // Process llm_call traces
+        // Process traces with LLM response data
+        // Note: LLM calls may have various stage names (e.g., 'llm_call', 'llm_call - tool_use_continuation')
+        // We check for llmResponse in metadata instead of strict stage matching
         for (const trace of traces) {
-          if (trace.stage !== 'llm_call' || !trace.metadata) {
+          if (!trace.metadata) {
             continue;
           }
 

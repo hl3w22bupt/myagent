@@ -127,7 +127,7 @@ export const handler = async (
         });
 
         detailedTimeline = traces
-          .filter((trace: any) => trace.stage === 'llm_call' && trace.metadata?.llmResponse)
+          .filter((trace: any) => trace.metadata?.llmResponse)
           .map((trace: any) => ({
             timestamp: trace.timestamp,
             skillName: trace.skillName,
