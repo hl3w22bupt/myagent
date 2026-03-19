@@ -137,7 +137,7 @@ function TokenUsageTab({ taskId }) {
 
             <div className={styles.summaryCard}>
               <div className={`${styles.summaryIcon} ${styles.summaryIconCalls}`}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path d="M3 3v18h18" />
                   <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
                 </svg>
@@ -201,7 +201,7 @@ function TokenUsageTab({ taskId }) {
             <div className={styles.breakdownSection}>
               <h3 className={styles.sectionTitle}>按技能分组</h3>
               <div className={styles.breakdownList}>
-                {breakdownData.bySkill.map((item, index) => (
+                {[...breakdownData.bySkill].sort((a, b) => b.totalTokens - a.totalTokens).map((item, index) => (
                   <div key={index} className={styles.breakdownItem}>
                     <div className={styles.breakdownHeader}>
                       <span className={styles.breakdownName}>{item.skillName || '未知'}</span>
@@ -231,7 +231,7 @@ function TokenUsageTab({ taskId }) {
             <div className={styles.breakdownSection}>
               <h3 className={styles.sectionTitle}>按模型分组</h3>
               <div className={styles.breakdownList}>
-                {breakdownData.byModel.map((item, index) => (
+                {[...breakdownData.byModel].sort((a, b) => b.totalTokens - a.totalTokens).map((item, index) => (
                   <div key={index} className={styles.breakdownItem}>
                     <div className={styles.breakdownHeader}>
                       <span className={styles.breakdownName}>{item.model || '未知模型'}</span>
