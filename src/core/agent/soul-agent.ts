@@ -12,6 +12,7 @@ import { AgentConfig } from './types';
 import { SoulConfig, SoulState, SoulInput, PrimitiveTool } from './soul-types';
 import { soulConfigLoader } from '../config/soul-config-loader';
 import { subagentConfigLoader } from '../config/subagent-config-loader';
+import { SoulContextManager } from '../context/soul-context-manager';
 
 /**
  * SoulAgent - Autonomous agent with hibernation capabilities
@@ -361,12 +362,12 @@ ${(appContext.recentConversations || []).map((c: any) => `- ${c.role}: ${c.conte
    * @returns Application context
    */
   private async loadContext(): Promise<any> {
-    // TODO: Load from database when schema is ready
-    // For now, return empty context
+    const contextManager = new SoulContextManager();
+
     return {
-      userProfile: {},
-      recentConversations: await this.getRecentConversations(10),
-      relationship: {}
+      userProfile: await contextManager.getUserProfile(this.sessionId),
+      recentConversations: await contextManager.getRecentConversations(this.sessionId, 10),
+      relationship: await contextManager.getRelationshipState(this.sessionId)
     };
   }
 
@@ -376,8 +377,8 @@ ${(appContext.recentConversations || []).map((c: any) => `- ${c.role}: ${c.conte
    * @param context - Context to save
    */
   private async saveContext(context: any): Promise<void> {
-    // TODO: Save to database when schema is ready
-    console.log(`[SoulAgent] ${this.sessionId} saving context (not implemented yet)`);
+    const contextManager = new SoulContextManager();
+    await contextManager.updateContext(this.sessionId, context);
   }
 
   /**
@@ -400,12 +401,12 @@ ${(appContext.recentConversations || []).map((c: any) => `- ${c.role}: ${c.conte
   private async sendMessage(message: string): Promise<any> {
     console.log(`[SoulAgent] ${this.sessionId} sending message: ${message}`);
 
-    // TODO: Implement actual message sending logic
-    // await getDataStore().saveMessage(this.sessionId, {
-    //   role: 'assistant',
-    //   content: message,
-    //   timestamp: Date.now()
-    // });
+    const contextManager = new SoulContextManager();
+
+    // Add to conversation history
+    await contextManager.addConversationMessage(this.sessionId, 'assistant', message);
+
+    // TODO: Implement actual message sending logic (e.g., push notification, WebSocket)
 
     return { success: true, message };
   }
