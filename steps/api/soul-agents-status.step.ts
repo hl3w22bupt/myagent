@@ -84,6 +84,7 @@ export const handler = async (request: any, { logger }: any) => {
               activeInstances.map(async (instance: any) => {
                 const instanceData: any = {
                   sessionId: instance.sessionId,
+                  soulId: soulId,  // ✅ 添加 soulId 字段
                   userId: instance.sessionId.replace(`soul-${soulId}-`, ''),
                   status: instance.state.status,
                   currentTask: instance.state.currentTask,
