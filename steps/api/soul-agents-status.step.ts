@@ -140,10 +140,19 @@ export const handler = async (request: any, { logger }: any) => {
       })
     );
 
+    // 计算实际的总统计（从数据库中的实例统计）
+    const actualSummary = {
+      totalSoulTypes: availableSouls.length,
+      totalActiveSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.active, 0),
+      totalHibernatedSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.hibernated, 0),
+      totalSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.totalInstances, 0)
+    };
+
     logger.info('Soul agents status fetched', {
-      totalSouls: availableSouls.length,
-      totalActive: schedulerStats.activeSouls,
-      totalHibernated: schedulerStats.hibernatedSouls
+      totalSoulTypes: availableSouls.length,
+      totalActive: actualSummary.totalActiveSouls,
+      totalHibernated: actualSummary.totalHibernatedSouls,
+      totalSouls: actualSummary.totalSouls
     });
 
     return {
@@ -153,12 +162,7 @@ export const handler = async (request: any, { logger }: any) => {
         data: {
           souls: soulDetails,
           scheduler: schedulerStats,
-          summary: {
-            totalSoulTypes: availableSouls.length,
-            totalActiveSouls: schedulerStats.activeSouls,
-            totalHibernatedSouls: schedulerStats.hibernatedSouls,
-            totalSouls: schedulerStats.totalSouls
-          }
+          summary: actualSummary
         }
       }
     };
