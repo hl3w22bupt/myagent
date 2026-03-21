@@ -111,40 +111,41 @@ function AutonomousAgents() {
     return `${seconds}秒`
   }
 
-  const filteredSouls = souls.filter(soul => {
+  // 收集所有 instances（扁平化）
+  const allInstances = souls.flatMap(soul =>
+    soul.instances.map(instance => ({
+      ...instance,
+      soulDisplayName: soul.displayName,
+      soulId: soul.soulId,
+      soulDescription: soul.description,
+      soulPrimitives: soul.primitives
+    }))
+  )
+
+  // 过滤 instances（基于状态）
+  const filteredInstances = allInstances.filter(instance => {
     // Filter by status
     if (filter === 'all') {
-      // No filter
-    } else if (filter === 'active' && soul.stats.active === 0) {
-      return false
-    } else if (filter === 'hibernated' && (soul.stats.hibernated + soul.stats.idle) === 0) {
-      return false
+      return true
+    } else if (filter === 'active') {
+      return instance.status === 'ACTIVE'
+    } else if (filter === 'hibernated') {
+      return instance.status === 'HIBERNATED' || instance.status === 'IDLE'
     }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-
-      // Check if soulId matches
-      if (soul.soulId.toLowerCase().includes(query)) {
-        return true
-      }
-
-      // Check if displayName matches
-      if (soul.displayName.toLowerCase().includes(query)) {
-        return true
-      }
-
-      // Check if any instance's sessionId or userId matches
-      return soul.instances.some(instance => {
-        const sessionIdMatch = instance.sessionId.toLowerCase().includes(query)
-        const userIdMatch = instance.userId?.toLowerCase().includes(query)
-
-        return sessionIdMatch || userIdMatch
-      })
-    }
-
     return true
+  })
+
+  // 搜索过滤
+  const searchedInstances = filteredInstances.filter(instance => {
+    if (!searchQuery.trim()) return true
+
+    const query = searchQuery.toLowerCase()
+    const sessionIdMatch = instance.sessionId.toLowerCase().includes(query)
+    const userIdMatch = instance.userId?.toLowerCase().includes(query)
+    const soulNameMatch = instance.soulDisplayName?.toLowerCase().includes(query)
+    const soulIdMatch = instance.soulId?.toLowerCase().includes(query)
+
+    return sessionIdMatch || userIdMatch || soulNameMatch || soulIdMatch
   })
 
   const totalActive = souls.reduce((sum, soul) => sum + soul.stats.active, 0)
@@ -302,291 +303,242 @@ function AutonomousAgents() {
           <div className="spinner"></div>
           <p>加载自主智能体...</p>
         </div>
-      ) : filteredSouls.length === 0 ? (
+      ) : searchedInstances.length === 0 ? (
         <div className="empty-state">
           <svg style={{ width: '64px', height: '64px', margin: '0 auto 1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
-          <h3>暂无自主智能体</h3>
-          <p>没有找到任何自主智能体配置</p>
+          <h3>暂无自主智能体实例</h3>
+          <p>{filter === 'all' ? '没有找到任何自主智能体实例' : `没有找到${filter === 'active' ? '运行中' : '休眠中'}的实例`}</p>
         </div>
       ) : (
-        <div className="souls-grid">
-          {filteredSouls.map((soul) => (
-            <div key={soul.soulId} className="soul-card">
-              {/* Card Header */}
-              <div
-                className="soul-card-header"
-                onClick={() => setSelectedSoul(selectedSoul === soul ? null : soul)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="soul-info">
-                  <div className="soul-avatar">
-                    {soul.displayName?.charAt(0)?.toUpperCase() || soul.soulId.charAt(0)?.toUpperCase()}
+        <div className="instances-grid">
+          {searchedInstances.map((instance) => {
+            const statusInfo = getStatusInfo(instance.status)
+            return (
+              <div key={instance.sessionId} className={`instance-card instance-${statusInfo.className}`}>
+                {/* Instance Header - Primary Info */}
+                <div className="instance-card-header">
+                  <div className="instance-main-info">
+                    <div className={`instance-status-badge status-${statusInfo.className}`}>
+                      {statusInfo.icon}
+                      <span>{statusInfo.label}</span>
+                    </div>
+                    <div className="instance-identity">
+                      <div className="session-id">{instance.sessionId}</div>
+                      <div className="user-id">{instance.userId}</div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="soul-name">{soul.displayName}</h3>
-                    <span className="soul-id-badge">{soul.soulId}</span>
-                  </div>
-                </div>
-                <div className="header-action">
                   <button
-                    className="header-config-button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleViewConfig(soul.soulId)
-                    }}
-                    title="查看配置"
+                    className="expand-soul-type-btn"
+                    onClick={() => setSelectedSoul(selectedSoul === instance.sessionId ? null : instance.sessionId)}
+                    title="查看 Soul 类型信息"
                   >
-                    配置
+                    <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Soul 类型
+                    <svg
+                      className="expand-icon"
+                      style={{
+                        width: '16px',
+                        height: '16px',
+                        transform: selectedSoul === instance.sessionId ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease'
+                      }}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
-                  <span className="instance-count">{soul.stats.totalInstances} 实例</span>
-                  <svg
-                    className="expand-icon"
-                    style={{
-                      width: '20px',
-                      height: '20px',
-                      transform: selectedSoul === soul ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s ease'
-                    }}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
                 </div>
-              </div>
 
-              {/* Card Content */}
-              <div className="soul-card-content">
-                {soul.description && (
-                  <p className="soul-description">{soul.description}</p>
-                )}
-
-                {/* Stats */}
-                <div className="soul-stats">
-                  {soul.stats.active > 0 && (
-                    <div className="soul-stat-badge stat-active">
-                      <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <span>{soul.stats.active} 运行中</span>
+                {/* Instance Body - Details */}
+                <div className="instance-card-body">
+                  {/* Current Task - Enhanced Display */}
+                  {instance.status === 'ACTIVE' && instance.currentTask && (
+                    <div className="current-task-section">
+                      <div className="current-task-header">
+                        <div className="current-task-indicator">
+                          <span className="pulse-dot"></span>
+                          <span className="current-task-label">正在执行</span>
+                        </div>
+                        <span className="current-task-duration">
+                          已运行 {formatUptime(Date.now() - instance.lastActivity)}
+                        </span>
+                      </div>
+                      <div className="current-task-name">
+                        {instance.currentTask}
+                      </div>
+                      {instance.currentTaskDescription && (
+                        <div className="current-task-description">
+                          {instance.currentTaskDescription}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {soul.stats.hibernated + soul.stats.idle > 0 && (
-                    <div className="soul-stat-badge stat-hibernated">
-                      <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-9a1 1 0 10-2 1 1 0 002zM9 10a1 1 0 012 1v4a1 1 0 102 0v-4a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      <span>{soul.stats.hibernated + soul.stats.idle} 休眠中</span>
+
+                  <div className="instance-detail-row">
+                    <span className="detail-label">最后活动</span>
+                    <span className="detail-value">{formatTimestamp(instance.lastActivity)}</span>
+                  </div>
+
+                  {instance.scheduledWakeup && (
+                    <div className="instance-detail-row">
+                      <span className="detail-label">计划唤醒</span>
+                      <span className="detail-value">
+                        {new Date(instance.scheduledWakeup).toLocaleString()}
+                      </span>
                     </div>
                   )}
-                  {soul.stats.totalInstances === 0 && (
-                    <div className="soul-stat-badge stat-inactive">
+
+                  {instance.statistics && (
+                    <div className="instance-stats-row">
+                      <div className="instance-stat-mini">
+                        <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <span>{instance.statistics.totalTasks || 0}</span>
+                      </div>
+                      <div className="instance-stat-mini">
+                        <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{formatUptime(instance.statistics.uptime || 0)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Execution History Toggle */}
+                  <div className="instance-history">
+                    <button
+                      className="history-toggle"
+                      onClick={() => loadExecutionHistory(instance.soulId, instance.sessionId)}
+                    >
                       <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span>无实例</span>
-                    </div>
-                  )}
+                      执行历史
+                    </button>
+
+                    {historyLoading[instance.sessionId] && (
+                      <div className="history-loading">加载中...</div>
+                    )}
+
+                    {executionHistory[instance.sessionId] && !historyLoading[instance.sessionId] && (
+                      <div className="history-list">
+                        {executionHistory[instance.sessionId].length === 0 ? (
+                          <div className="no-history">暂无执行记录</div>
+                        ) : (
+                          executionHistory[instance.sessionId].map((record) => (
+                            <div key={record.id} className="history-item">
+                              <div className="history-header">
+                                <div className={`history-status status-${record.status.toLowerCase()}`}>
+                                  {record.status === 'completed' && '✓'}
+                                  {record.status === 'failed' && '✗'}
+                                  {record.status === 'running' && '→'}
+                                  {record.status === 'hibernated' && '💤'}
+                                </div>
+                                <span className="history-time">
+                                  {formatExecutionTime(record.triggeredAt)}
+                                </span>
+                                {record.duration && (
+                                  <span className="history-duration">
+                                    ({record.duration}ms)
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="history-content">
+                                <div className="history-task">{record.currentTask}</div>
+
+                                {record.triggerSource && (
+                                  <div className="history-trigger">
+                                    触发: {record.triggerSource}
+                                  </div>
+                                )}
+
+                                {record.primitiveCalls && record.primitiveCalls.length > 0 && (
+                                  <div className="history-primitives">
+                                    {record.primitiveCalls.map((call, idx) => (
+                                      <span key={idx} className={`primitive-call ${call.success ? 'success' : 'failed'}`}>
+                                        {call.name}
+                                        {!call.success && ' ❌'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {record.llmDecision && (
+                                  <div className="history-decision">
+                                    {record.llmDecision}
+                                  </div>
+                                )}
+
+                                {record.error && (
+                                  <div className="history-error">
+                                    错误: {record.error}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Primitives */}
-                {soul.primitives && soul.primitives.length > 0 && (
-                  <div className="soul-primitives">
-                    <span className="primitives-label">可用原语</span>
-                    <div className="primitives-list">
-                      {soul.primitives.map((primitive) => (
-                        <span key={primitive} className="primitive-tag">{primitive}</span>
-                      ))}
+                {/* Soul Type Info - Expandable */}
+                {selectedSoul === instance.sessionId && (
+                  <div className="soul-type-info">
+                    <div className="soul-type-header">
+                      <div className="soul-type-title">
+                        <div className="soul-avatar-small">
+                          {instance.soulDisplayName?.charAt(0)?.toUpperCase() || instance.soulId?.charAt(0)?.toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 className="soul-type-name">{instance.soulDisplayName}</h4>
+                          <span className="soul-type-id">{instance.soulId}</span>
+                        </div>
+                      </div>
+                      <button
+                        className="view-config-button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleViewConfig(instance.soulId)
+                        }}
+                        title="查看配置"
+                      >
+                        <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        配置
+                      </button>
                     </div>
+
+                    {instance.soulDescription && (
+                      <p className="soul-type-description">{instance.soulDescription}</p>
+                    )}
+
+                    {instance.soulPrimitives && instance.soulPrimitives.length > 0 && (
+                      <div className="soul-type-primitives">
+                        <span className="primitives-label">可用原语</span>
+                        <div className="primitives-list">
+                          {instance.soulPrimitives.map((primitive) => (
+                            <span key={primitive} className="primitive-tag">{primitive}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-
-              {/* Instances (Expanded) */}
-              {selectedSoul === soul && (
-                <div className="soul-instances">
-                  <div className="instances-header">
-                    <h4>实例列表 ({soul.instances.length})</h4>
-                  </div>
-                  {soul.instances.length === 0 ? (
-                    <div className="no-instances">
-                      <svg style={{ width: '48px', height: '48px', margin: '0 auto 1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                      </svg>
-                      <p>暂无实例</p>
-                    </div>
-                  ) : (
-                    <div className="instances-list">
-                      {soul.instances
-                        .filter((instance) => {
-                          // Filter instances by status
-                          if (filter === 'all') {
-                            return true
-                          } else if (filter === 'active') {
-                            return instance.status === 'ACTIVE'
-                          } else if (filter === 'hibernated') {
-                            return instance.status === 'HIBERNATED' || instance.status === 'IDLE'
-                          }
-                          return true
-                        })
-                        .map((instance) => {
-                          const statusInfo = getStatusInfo(instance.status)
-                        return (
-                          <div key={instance.sessionId} className={`instance-item instance-${statusInfo.className}`}>
-                            <div className="instance-header">
-                              <div className={`instance-status status-${statusInfo.className}`}>
-                                {statusInfo.icon}
-                                <span>{statusInfo.label}</span>
-                              </div>
-                              <span className="instance-user">{instance.userId}</span>
-                            </div>
-
-                            <div className="instance-details">
-                              {/* Current Task - Enhanced Display */}
-                              {instance.status === 'ACTIVE' && instance.currentTask && (
-                                <div className="current-task-section">
-                                  <div className="current-task-header">
-                                    <div className="current-task-indicator">
-                                      <span className="pulse-dot"></span>
-                                      <span className="current-task-label">正在执行</span>
-                                    </div>
-                                    <span className="current-task-duration">
-                                      已运行 {formatUptime(Date.now() - instance.lastActivity)}
-                                    </span>
-                                  </div>
-                                  <div className="current-task-name">
-                                    {instance.currentTask}
-                                  </div>
-                                  {instance.currentTaskDescription && (
-                                    <div className="current-task-description">
-                                      {instance.currentTaskDescription}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              <div className="instance-detail">
-                                <span className="detail-label">最后活动</span>
-                                <span className="detail-value">{formatTimestamp(instance.lastActivity)}</span>
-                              </div>
-
-                              {instance.scheduledWakeup && (
-                                <div className="instance-detail">
-                                  <span className="detail-label">计划唤醒</span>
-                                  <span className="detail-value">
-                                    {new Date(instance.scheduledWakeup).toLocaleString()}
-                                  </span>
-                                </div>
-                              )}
-
-                              {instance.statistics && (
-                                <div className="instance-stats">
-                                  <div className="instance-stat">
-                                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                    </svg>
-                                    <span>{instance.statistics.totalTasks || 0} 任务</span>
-                                  </div>
-                                  <div className="instance-stat">
-                                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span>{formatUptime(instance.statistics.uptime || 0)}</span>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Execution History */}
-                              <div className="instance-history">
-                                <button
-                                  className="history-toggle"
-                                  onClick={() => loadExecutionHistory(soul.soulId, instance.sessionId)}
-                                >
-                                  <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  执行历史
-                                </button>
-
-                                {historyLoading[instance.sessionId] && (
-                                  <div className="history-loading">加载中...</div>
-                                )}
-
-                                {executionHistory[instance.sessionId] && !historyLoading[instance.sessionId] && (
-                                  <div className="history-list">
-                                    {executionHistory[instance.sessionId].length === 0 ? (
-                                      <div className="no-history">暂无执行记录</div>
-                                    ) : (
-                                      executionHistory[instance.sessionId].map((record) => (
-                                        <div key={record.id} className="history-item">
-                                          <div className="history-header">
-                                            <div className={`history-status status-${record.status.toLowerCase()}`}>
-                                              {record.status === 'completed' && '✓'}
-                                              {record.status === 'failed' && '✗'}
-                                              {record.status === 'running' && '→'}
-                                              {record.status === 'hibernated' && '💤'}
-                                            </div>
-                                            <span className="history-time">
-                                              {formatExecutionTime(record.triggeredAt)}
-                                            </span>
-                                            {record.duration && (
-                                              <span className="history-duration">
-                                                ({record.duration}ms)
-                                              </span>
-                                            )}
-                                          </div>
-
-                                          <div className="history-content">
-                                            <div className="history-task">{record.currentTask}</div>
-
-                                            {record.triggerSource && (
-                                              <div className="history-trigger">
-                                                触发: {record.triggerSource}
-                                              </div>
-                                            )}
-
-                                            {record.primitiveCalls && record.primitiveCalls.length > 0 && (
-                                              <div className="history-primitives">
-                                                {record.primitiveCalls.map((call, idx) => (
-                                                  <span key={idx} className={`primitive-call ${call.success ? 'success' : 'failed'}`}>
-                                                    {call.name}
-                                                    {!call.success && ' ❌'}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            )}
-
-                                            {record.llmDecision && (
-                                              <div className="history-decision">
-                                                {record.llmDecision}
-                                              </div>
-                                            )}
-
-                                            {record.error && (
-                                              <div className="history-error">
-                                                错误: {record.error}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
