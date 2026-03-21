@@ -316,16 +316,65 @@ ${soulGoal}
       }
 
       // 4. === 核心：调用父类的 run()，复用现有执行流程 ===
+
+      // ✅ 加载对话历史（参考 master-agent 的实现）
+      let conversationHistory: any[] = [];
+      try {
+        const taskContext = await dataStore.getContext(this.taskId);
+        if (taskContext && taskContext.conversationRounds) {
+          // 转换 conversationRounds 为 Agent 期望的格式
+          conversationHistory = [];
+
+          for (const round of taskContext.conversationRounds) {
+            // 添加用户消息
+            if (round.userMessage) {
+              conversationHistory.push({
+                role: 'user',
+                content: round.userMessage,
+                timestamp: round.timestamp,
+              });
+            }
+            // 添加助手响应（如果存在）
+            if (round.assistantOutput) {
+              conversationHistory.push({
+                role: 'assistant',
+                content: round.assistantOutput,
+                timestamp: round.timestamp,
+              });
+            }
+          }
+
+          console.log(`[SoulAgent] ✅ Loaded ${conversationHistory.length} messages from conversation history`);
+        }
+      } catch (error) {
+        console.error(`[SoulAgent] Failed to load conversation history:`, error);
+      }
+
       const result = await this.run(
         taskPrompt,
         this.taskId,  // ✅ 使用主任务 ID，确保 stream 推送到正确的任务
         {
+          // ✅ 传递对话历史（参考 master-agent）
+          conversationHistory: conversationHistory,
           // 注入原语工具
           tools: this.getPrimitiveTools(),
           // ✅ 传递 streams，让 Agent.run() 能够推送 stream 更新
           streams: streams
         }
       );
+
+      // 🔍 DIAGNOSTIC: 打印 result 对象的详细信息
+      console.log(`[SoulAgent] 🔍 Result from Agent.run():`, {
+        success: result.success,
+        hasOutput: !!result.output,
+        outputLength: result.output?.length || 0,
+        outputPreview: result.output?.substring(0, 100) || '(no output)',
+        hasError: !!result.error,
+        error: result.error,
+        executionTime: result.executionTime,
+        stepsCount: result.steps?.length || 0,
+        hasClarification: !!result.clarification,
+      });
 
       // 5. 记录执行结果
       if (result.output) {
