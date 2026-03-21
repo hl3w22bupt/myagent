@@ -45,8 +45,8 @@ export const handler = async (request: any, { logger }: any) => {
           // 加载 Soul 配置
           const soulConfig = await soulConfigLoader.loadSoulConfig(soulId);
 
-          // 获取该 Soul 的所有活动实例
-          const activeInstances = await soulStateDataService.getActiveSoulStates(soulId);
+          // 获取该 Soul 的所有实例（包括 IDLE、HIBERNATED、ACTIVE）
+          const activeInstances = await soulStateDataService.getAllSoulStates(soulId);
 
           // 获取休眠实例数量
           const hibernatedCount = activeInstances.filter(

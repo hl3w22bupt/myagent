@@ -169,6 +169,53 @@ export class SoulStateDataService {
   }
 
   /**
+   * Get all Soul Agent states (including IDLE, HIBERNATED, ACTIVE)
+   * Used by soul-agents-status API to show all instances
+   */
+  async getAllSoulStates(soulId?: string): Promise<Array<{ sessionId: string; soulId: string; state: SoulState }>> {
+    const store = getPostgresStore();
+    await store.initialize();
+
+    const pool = store.getPool();
+    const client = await pool.connect();
+
+    try {
+      let query = `
+        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, statistics
+        FROM soul_states
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+
+      if (soulId) {
+        query += ` AND soul_id = $1`;
+        params.push(soulId);
+      }
+
+      query += ` ORDER BY last_activity DESC`;
+
+      const result = await client.query(query, params);
+
+      return result.rows.map((row: any) => ({
+        sessionId: row.session_id,
+        soulId: row.soul_id,
+        state: {
+          status: row.status,
+          currentTask: row.current_task_id,
+          lastActivity: row.last_activity ? new Date(row.last_activity).getTime() : null,
+          scheduledWakeup: row.scheduled_wakeup ? new Date(row.scheduled_wakeup).getTime() : null,
+          statistics: row.statistics || { totalTasks: 0, uptime: 0 }
+        }
+      }));
+    } catch (error: any) {
+      console.error(`[SoulStateDataService] Failed to get all soul states: ${error.message}`);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Delete soul state
    *
    * @param sessionId - Session ID
