@@ -420,8 +420,20 @@ function AutonomousAgents() {
                     </div>
                   ) : (
                     <div className="instances-list">
-                      {soul.instances.map((instance) => {
-                        const statusInfo = getStatusInfo(instance.status)
+                      {soul.instances
+                        .filter((instance) => {
+                          // Filter instances by status
+                          if (filter === 'all') {
+                            return true
+                          } else if (filter === 'active') {
+                            return instance.status === 'ACTIVE'
+                          } else if (filter === 'hibernated') {
+                            return instance.status === 'HIBERNATED' || instance.status === 'IDLE'
+                          }
+                          return true
+                        })
+                        .map((instance) => {
+                          const statusInfo = getStatusInfo(instance.status)
                         return (
                           <div key={instance.sessionId} className={`instance-item instance-${statusInfo.className}`}>
                             <div className="instance-header">
