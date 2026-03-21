@@ -289,7 +289,17 @@ export const soulAgentsAPI = {
   hibernate: (soulId, userId, reason) =>
     apiClient.post(`/api/soul/${soulId}/hibernate/${userId}`, {
       reason: reason || 'Manual hibernation'
-    }).then(response => response.data)
+    }).then(response => response.data),
+
+  // 停止 Soul Agent 实例
+  stopSession: (soulId, sessionId) =>
+    apiClient.post(`/api/soul/${soulId}/session/${sessionId}/stop`)
+      .then(response => response.data),
+
+  // 删除 Soul Agent 实例
+  deleteSession: (soulId, sessionId) =>
+    apiClient.delete(`/api/soul/${soulId}/session/${sessionId}`)
+      .then(response => response.data)
 }
 
 export default apiClient

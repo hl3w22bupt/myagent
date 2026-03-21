@@ -13,6 +13,7 @@ function AutonomousAgents() {
   const [executionHistory, setExecutionHistory] = useState({})
   const [historyLoading, setHistoryLoading] = useState({})
   const [expandedHistory, setExpandedHistory] = useState({})
+  const [actionLoading, setActionLoading] = useState({})
 
   useEffect(() => {
     const fetchSouls = async () => {
@@ -236,6 +237,87 @@ function AutonomousAgents() {
     // 如果还没有加载过数据，加载它
     if (!executionHistory[sessionId]) {
       await loadExecutionHistory(soulId, sessionId)
+    }
+  }
+
+  // 停止 Soul Agent 实例
+  const stopInstance = async (soulId, sessionId) => {
+    if (!confirm('确定要停止这个 Soul Agent 实例吗？')) {
+      return
+    }
+
+    setActionLoading(prev => ({ ...prev, [sessionId]: true }))
+
+    try {
+      console.log('[stopInstance] Stopping:', { soulId, sessionId })
+
+      const response = await soulAgentsAPI.stopSession(soulId, sessionId)
+
+      if (response.success) {
+        // 刷新数据
+        const statusResponse = await soulAgentsAPI.getStatus()
+        if (statusResponse.success) {
+          setSouls(statusResponse.data.souls)
+          setSummary(statusResponse.data.summary)
+        }
+
+        alert('Soul Agent 实例已停止')
+      } else {
+        alert(`停止失败: ${response.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to stop instance:', error)
+      alert(`停止失败: ${error.message}`)
+    } finally {
+      setActionLoading(prev => ({ ...prev, [sessionId]: false }))
+    }
+  }
+
+  // 删除 Soul Agent 实例
+  const deleteInstance = async (soulId, sessionId) => {
+    if (!confirm('确定要删除这个 Soul Agent 实例吗？此操作不可恢复！')) {
+      return
+    }
+
+    setActionLoading(prev => ({ ...prev, [sessionId]: true }))
+
+    try {
+      console.log('[deleteInstance] Deleting:', { soulId, sessionId })
+
+      const response = await soulAgentsAPI.deleteSession(soulId, sessionId)
+
+      if (response.success) {
+        // 从本地状态中移除该实例
+        setSouls(prevSouls =>
+          prevSouls.map(soul => ({
+            ...soul,
+            instances: soul.instances.filter(instance => instance.sessionId !== sessionId),
+            stats: {
+              ...soul.stats,
+              totalInstances: soul.stats.totalInstances - 1,
+              active: instance.status === 'ACTIVE' ? soul.stats.active - 1 : soul.stats.active,
+              hibernated: instance.status === 'HIBERNATED' ? soul.stats.hibernated - 1 : soul.stats.hibernated,
+              idle: instance.status === 'IDLE' ? soul.stats.idle - 1 : soul.stats.idle
+            }
+          }))
+        )
+
+        // 刷新数据
+        const statusResponse = await soulAgentsAPI.getStatus()
+        if (statusResponse.success) {
+          setSouls(statusResponse.data.souls)
+          setSummary(statusResponse.data.summary)
+        }
+
+        alert('Soul Agent 实例已删除')
+      } else {
+        alert(`删除失败: ${response.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete instance:', error)
+      alert(`删除失败: ${error.message}`)
+    } finally {
+      setActionLoading(prev => ({ ...prev, [sessionId]: false }))
     }
   }
 
@@ -546,6 +628,30 @@ function AutonomousAgents() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Instance Actions - Stop/Delete */}
+                <div className="instance-actions">
+                  <button
+                    className="instance-action-btn stop-btn"
+                    onClick={() => stopInstance(instance.soulId, instance.sessionId)}
+                    disabled={actionLoading[instance.sessionId] || instance.status === 'STOPPED'}
+                  >
+                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m5-3H9a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {actionLoading[instance.sessionId] ? '处理中...' : instance.status === 'STOPPED' ? '已停止' : '停止'}
+                  </button>
+                  <button
+                    className="instance-action-btn delete-btn"
+                    onClick={() => deleteInstance(instance.soulId, instance.sessionId)}
+                    disabled={actionLoading[instance.sessionId]}
+                  >
+                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 011-1h1m3-4a1 1 0 011-1V7a1 1 0 00-1-1V2a1 1 0 011-1h1m3 4a1 1 0 001 1v1m0-6V3a1 1 0 011-1V2a1 1 0 011-1H8a1 1 0 01-1 1v14a1 1 0 001 1h3a1 1 0 001 1V7" />
+                    </svg>
+                    {actionLoading[instance.sessionId] ? '处理中...' : '删除'}
+                  </button>
                 </div>
               </div>
             )

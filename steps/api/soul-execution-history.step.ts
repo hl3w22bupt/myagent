@@ -37,13 +37,13 @@ export type RequestSchema = z.infer<typeof requestSchema>;
  */
 export const handler = async (request: any, { logger }: any) => {
   const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const query = request.query || {};
+  const queryParams: Record<string, any> = request.queryParams || {};
 
-  logger.info('Fetching soul execution history', { soulId, query });
+  logger.info('Fetching soul execution history', { soulId, queryParams });
 
   try {
     // Validate and parse query parameters
-    const validatedQuery = requestSchema.parse(query);
+    const validatedQuery = requestSchema.parse(queryParams);
 
     logger.info('Validated query parameters', {
       soulId,
