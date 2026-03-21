@@ -1,13 +1,17 @@
 /**
  * Soul API - Execute Soul Trigger
  *
- * 简化版本：直接调用 Soul Agent，复用现有执行流程
- * - 自动推送 taskExecution stream（由 Agent.run() 处理）
- * - 自动推送 taskResult stream（由 Agent.run() 处理）
+ * 遵循 Master Agent 的相同模式：
+ * 1. 创建 task 记录（status: PENDING）
+ * 2. 直接执行 Soul Agent（设置 streams）
+ * 3. 发送 agent.task.completed 事件
+ * 4. task-result-handler 等订阅者处理并保存所有数据
  */
 
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
 import { ApiRouteConfig } from 'motia';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
 
 /**
  * Soul Execute API configuration.
@@ -20,14 +24,21 @@ export const config: ApiRouteConfig = {
   path: '/api/soul/:soulId/execute',
   method: 'POST',
 
-  emits: [],
+  // ✅ 发送 completion 事件
+  emits: ['agent.task.completed', 'agent.task.failed'],
   flows: ['agent-workflow'],
 };
 
 /**
  * Soul Execute handler.
+ *
+ * 直接执行 Soul Agent 并发送 completion 事件：
+ * 1. 验证请求参数
+ * 2. 创建 task 记录（status: PENDING）
+ * 3. 设置 streams 并执行 Soul Agent
+ * 4. 发送 agent.task.completed 事件
  */
-export const handler = async (request: any, { logger, streams }: any) => {
+export const handler = async (request: any, { emit, logger, streams }: any) => {
   // Get soulId from path parameters (support both pathParams and params)
   const soulId = request.pathParams?.soulId || request.params?.soulId;
   const { userId, trigger_time, context: triggerContext } = request.body;
@@ -43,51 +54,139 @@ export const handler = async (request: any, { logger, streams }: any) => {
   }
 
   const sessionId = `soul-${soulId}-${userId}`;
+  const taskId = `task-${sessionId}`;
 
-  logger.info('Executing soul', {
+  // Extract messageId from trigger context (used by myecho to match responses)
+  const messageId = triggerContext.data?.messageId;
+
+  logger.info('Soul Execute API: Received trigger request', {
     soulId,
     userId,
     sessionId,
-    triggerSource: triggerContext.source
+    triggerSource: triggerContext.source,
+    messageId
   });
 
   try {
-    // 1. 激活 Soul Agent（获取或创建实例）
+    const dataStore = getDataStore();
+    await dataStore.initialize();
+
+    // ✅ 检查 task 是否已存在（多轮对话场景）
+    const existingTask = await dataStore.getTask(taskId).catch(() => null);
+    if (existingTask) {
+      logger.info('Soul Execute API: Task already exists, reusing for multi-turn conversation', {
+        taskId,
+        existingStatus: existingTask.status
+      });
+    } else {
+      // ✅ 创建 task 记录，状态为 PENDING
+      await dataStore.createTask({
+        id: taskId,
+        task: '对话',
+        app: 'myagent',
+        sessionId: sessionId,
+        status: TaskStatus.PENDING,
+        metadata: {
+          type: 'soul_agent',
+          soulId: soulId,
+          userId: userId,
+          characterId: soulId,
+          deviceId: 'unknown',
+          triggerSource: triggerContext.source
+        }
+      });
+
+      logger.info('Soul Execute API: Task created', { taskId, status: 'PENDING' });
+    }
+
+    // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作
+    setAgentStreams(streams);
+
+    // ✅ 激活并执行 Soul Agent
     const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
 
-    // 2. 执行 Soul Agent
-    // 内部会调用 Agent.run()，自动推送 stream
-    const input = {
+    const result = await soulAgent.execute({
       trigger_time: trigger_time || new Date().toISOString(),
       context: triggerContext,
-      streams: streams  // ✅ 传递 streams 给 Soul Agent
-    };
+      streams: streams,
+    });
 
-    const result = await soulAgent.execute(input);
-
-    logger.info('Soul executed successfully', {
+    logger.info('Soul Execute API: Execution completed', {
       sessionId,
-      result
+      result: {
+        success: result.success,
+        executionTime: result.executionTime
+      }
+    });
+
+    // ✅ 解析 Soul Agent 的 JSON output，提取 message 字段作为纯文本 output
+    let parsedOutput;
+    let textOutput = result.output;  // 默认使用原始 output
+    try {
+      parsedOutput = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+      // 提取 message 字段作为纯文本输出
+      if (parsedOutput.message) {
+        textOutput = parsedOutput.message;
+      }
+    } catch (e) {
+      // 如果不是 JSON，保持原样
+      parsedOutput = null;
+    }
+
+    // ✅ 发送 agent.task.completed 事件，触发所有 subscribers
+    // 重要：将 output 从 JSON 字符串改为纯文本，这样 MyEcho 可以直接使用
+    await emit({
+      topic: 'agent.task.completed',
+      data: {
+        taskId,
+        sessionId,
+        messageId,  // ✅ 添加 messageId，让 myecho 可以匹配响应
+        result: {
+          success: result.success,
+          // ✅ 使用纯文本作为 output（MyEcho 会保存这个到 messages.content）
+          output: textOutput,
+          executionTime: result.executionTime,
+          metadata: result.metadata || {},
+          // ✅ 保留完整的解析后数据作为 structuredOutput
+          structuredOutput: parsedOutput,
+        }
+      }
+    } as any);
+
+    logger.info('Soul Execute API: Emitted agent.task.completed', {
+      taskId,
+      soulId,
+      messageId,
+      outputType: typeof textOutput
     });
 
     return {
       status: 200,
       body: {
         success: true,
+        message: 'Soul agent executed successfully',
+        taskId,
         sessionId,
         soulId,
-        userId,
-        result: {
-          executed: true,
-          output: result.output
-        }
+        output: textOutput  // ✅ 返回纯文本
       }
     };
   } catch (error: any) {
-    logger.error('Failed to execute soul', {
+    logger.error('Soul Execute API: Execution failed', {
       error: error.message,
       stack: error.stack
     });
+
+    // ✅ 失败时也发送事件
+    await emit({
+      topic: 'agent.task.failed',
+      data: {
+        taskId,
+        sessionId,
+        messageId,  // ✅ 添加 messageId
+        error: error.message
+      }
+    } as any);
 
     return {
       status: 500,

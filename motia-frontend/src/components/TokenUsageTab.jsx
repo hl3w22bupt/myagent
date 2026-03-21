@@ -72,7 +72,8 @@ function TokenUsageTab({ taskId }) {
         ) : (
           <div className={styles.tokenUsageEmpty}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.emptyIcon}>
-              <path d="M9 12h.01M12 9h.01M15 12h.01M12 15h.01M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 0a9 9 0 1 0-9-9 9 9 0 0 0 9 9" />
+              <path d="M3 3v18h18" />
+              <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
             </svg>
             <p>该任务暂无 Token 使用记录</p>
           </div>

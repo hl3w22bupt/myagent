@@ -248,6 +248,18 @@ const getStatusConfig = (status) => {
           </svg>
         )
       }
+    case 'idle':
+      return {
+        label: '空闲中',
+        color: '#6B7280',
+        bgColor: '#F3F4F6',
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      }
     case 'completed':
       return {
         label: '已完成',

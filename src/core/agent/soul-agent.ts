@@ -249,16 +249,11 @@ ${soulGoal}
 
       await soulExecutionHistoryService.saveExecution(executionRecord);
 
-      // 7. === 执行完成后回到 idle 状态（等待下次触发）===
-      // 更新主任务状态回 'idle'
-      try {
-        await dataStore.updateTask(this.taskId, {
-          status: 'idle'
-        });
-        console.log(`[SoulAgent] Updated main task status back to idle: ${this.taskId}`);
-      } catch (error) {
-        console.error(`[SoulAgent] Failed to update main task status to idle:`, error);
-      }
+      // 7. === 执行完成后休眠，等待下次触发 ===
+      // 数据保存通过 soul-api 发送 agent.task.completed 事件处理
+      // Soul Agent 的特殊性是执行完成后回到 IDLE 状态，等待下次触发
+      // 但数据保存流程和 Master Agent 完全一样
+      await this.hibernate('执行完成，等待下次触发');
 
       // ✅ 推送执行完成的 stream 更新
       if (streams?.taskExecution) {
@@ -297,16 +292,7 @@ ${soulGoal}
       await soulExecutionHistoryService.saveExecution(executionRecord);
 
       // 失败后也要休眠，避免持续重试
-      // 更新主任务状态回 'idle'
-      try {
-        await dataStore.updateTask(this.taskId, {
-          status: 'idle'
-        });
-        console.log(`[SoulAgent] Updated main task status back to idle after error: ${this.taskId}`);
-      } catch (err) {
-        console.error(`[SoulAgent] Failed to update main task status to idle:`, err);
-      }
-
+      // 数据保存通过 soul-api 发送 agent.task.failed 事件处理
       await this.hibernate(`执行失败: ${error.message}`);
 
       throw error;

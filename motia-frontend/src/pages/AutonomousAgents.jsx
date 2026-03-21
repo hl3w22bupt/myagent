@@ -637,8 +637,8 @@ function AutonomousAgents() {
                     onClick={() => stopInstance(instance.soulId, instance.sessionId)}
                     disabled={actionLoading[instance.sessionId] || instance.status === 'STOPPED'}
                   >
-                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m5-3H9a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="1" />
                     </svg>
                     {actionLoading[instance.sessionId] ? '处理中...' : instance.status === 'STOPPED' ? '已停止' : '停止'}
                   </button>
@@ -647,8 +647,8 @@ function AutonomousAgents() {
                     onClick={() => deleteInstance(instance.soulId, instance.sessionId)}
                     disabled={actionLoading[instance.sessionId]}
                   >
-                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 011-1h1m3-4a1 1 0 011-1V7a1 1 0 00-1-1V2a1 1 0 011-1h1m3 4a1 1 0 001 1v1m0-6V3a1 1 0 011-1V2a1 1 0 011-1H8a1 1 0 01-1 1v14a1 1 0 001 1h3a1 1 0 001 1V7" />
+                    <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
                     </svg>
                     {actionLoading[instance.sessionId] ? '处理中...' : '删除'}
                   </button>
