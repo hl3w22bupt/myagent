@@ -1,13 +1,15 @@
 /**
  * Soul Context Manager
  *
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * Soul Agent now uses the standard task_contexts table instead of soul_contexts.
+ * Use ContextManager from './manager' instead.
+ *
  * Extends ContextManager with Soul-specific context management
  * Handles user profiles, relationship states, and conversation history for Soul agents
  */
 
 import { ContextManager } from './manager';
-import { getDataStore } from '../database/data-store';
-import { soulContextDataService } from '../database/soul-data-service';
 
 export interface UserProfile {
   name?: string;
@@ -37,180 +39,102 @@ export interface SoulContext {
 
 /**
  * SoulContextManager - Manages context for autonomous Soul agents
+ *
+ * @deprecated Use ContextManager from './manager' instead.
+ * Soul Agent now saves conversations to task_contexts table.
  */
 export class SoulContextManager extends ContextManager {
   /**
    * Get user profile for a session
    *
-   * @param sessionId - Session ID (format: soul-{soulId}-{userId})
-   * @returns User profile
+   * @deprecated Soul Agent now uses standard user profiles
    */
   async getUserProfile(sessionId: string): Promise<UserProfile> {
-    try {
-      // Extract userId from sessionId
-      const userId = this.extractUserId(sessionId);
-
-      // Query from soul_contexts table
-      const context = await soulContextDataService.getSoulContext(sessionId);
-
-      if (context) {
-        return context.userProfile;
-      }
-
-      // Return default profile if not found
-      return {
-        name: '用户',
-        interests: [],
-        preferences: {}
-      };
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to get user profile: ${error.message}`);
-      return {};
-    }
+    console.warn('[SoulContextManager] getUserProfile is deprecated');
+    return {
+      name: '用户',
+      interests: [],
+      preferences: {}
+    };
   }
 
   /**
    * Get relationship state for a session
    *
-   * @param sessionId - Session ID
-   * @returns Relationship state
+   * @deprecated Soul Agent now uses standard context metadata
    */
   async getRelationshipState(sessionId: string): Promise<RelationshipState> {
-    try {
-      // Query from soul_contexts table
-      const context = await soulContextDataService.getSoulContext(sessionId);
-
-      if (context) {
-        return context.relationshipState;
-      }
-
-      // Return default state if not found
-      return {
-        intimacy: 50, // Default intimacy
-        chatDays: 0,
-        lastInteraction: undefined
-      };
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to get relationship state: ${error.message}`);
-      return {
-        intimacy: 0
-      };
-    }
+    console.warn('[SoulContextManager] getRelationshipState is deprecated');
+    return {
+      intimacy: 50,
+      chatDays: 0,
+      lastInteraction: undefined
+    };
   }
 
   /**
    * Get recent conversations for a session
    *
-   * @param sessionId - Session ID
-   * @param limit - Maximum number of conversations to return
-   * @returns Recent conversations
+   * @deprecated Use ContextManager.getContext() to get conversation history from task_contexts
    */
   async getRecentConversations(sessionId: string, limit: number = 10): Promise<Array<{
     role: 'user' | 'assistant';
     content: string;
     timestamp: number;
   }>> {
-    try {
-      // Query from soul_contexts table
-      const conversations = await soulContextDataService.getRecentConversations(sessionId, limit);
-
-      return conversations;
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to get recent conversations: ${error.message}`);
-      return [];
-    }
+    console.warn('[SoulContextManager] getRecentConversations is deprecated');
+    return [];
   }
 
   /**
    * Get complete soul context
    *
-   * @param sessionId - Session ID
-   * @returns Complete soul context
+   * @deprecated Use ContextManager.getContext() instead
    */
   async getSoulContext(sessionId: string): Promise<SoulContext> {
-    const [userProfile, recentConversations, relationship] = await Promise.all([
-      this.getUserProfile(sessionId),
-      this.getRecentConversations(sessionId, 10),
-      this.getRelationshipState(sessionId)
-    ]);
-
+    console.warn('[SoulContextManager] getSoulContext is deprecated');
     return {
-      userProfile,
-      recentConversations,
-      relationship
+      userProfile: {},
+      recentConversations: [],
+      relationship: { intimacy: 50 }
     };
   }
 
   /**
    * Update soul context
    *
-   * @param sessionId - Session ID
-   * @param context - Context to update
+   * @deprecated Updates are now handled through standard context operations
    */
   async updateContext(sessionId: string, context: Partial<SoulContext>): Promise<void> {
-    try {
-      console.log(`[SoulContextManager] Updating context for: ${sessionId}`);
-
-      // TODO: Update soul_contexts table
-      // For now, just log
-      if (context.userProfile) {
-        console.log(`[SoulContextManager] Updating user profile`);
-      }
-      if (context.relationship) {
-        console.log(`[SoulContextManager] Updating relationship state`);
-      }
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to update context: ${error.message}`);
-    }
+    console.warn('[SoulContextManager] updateContext is deprecated - no-op');
   }
 
   /**
    * Update relationship state
    *
-   * @param sessionId - Session ID
-   * @param relationship - Relationship state to update
+   * @deprecated Use standard context updates instead
    */
   async updateRelationshipState(sessionId: string, relationship: Partial<RelationshipState>): Promise<void> {
-    try {
-      const userId = this.extractUserId(sessionId);
-
-      console.log(`[SoulContextManager] Updating relationship state for: ${userId}`);
-
-      // Update in database
-      await soulContextDataService.updateRelationshipState(sessionId, relationship);
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to update relationship state: ${error.message}`);
-    }
+    console.warn('[SoulContextManager] updateRelationshipState is deprecated - no-op');
   }
 
   /**
    * Add conversation message
    *
-   * @param sessionId - Session ID
-   * @param role - Message role
-   * @param content - Message content
+   * @deprecated Soul Agent now saves conversations to task_contexts automatically
    */
   async addConversationMessage(sessionId: string, role: 'user' | 'assistant', content: string): Promise<void> {
-    try {
-      // Insert to soul_contexts.conversation_rounds
-      await soulContextDataService.addConversationMessage(sessionId, role, content);
-
-      console.log(`[SoulContextManager] Added conversation message: ${role}`);
-    } catch (error: any) {
-      console.error(`[SoulContextManager] Failed to add conversation message: ${error.message}`);
-    }
+    console.warn('[SoulContextManager] addConversationMessage is deprecated - no-op');
   }
 
   /**
    * Extract user ID from session ID
    *
-   * @param sessionId - Session ID (format: soul-{soulId}-{userId})
-   * @returns User ID
+   * @deprecated Internal helper method
    */
   private extractUserId(sessionId: string): string {
     const parts = sessionId.split('-');
     if (parts.length >= 3 && parts[0] === 'soul') {
-      // Remove 'soul-' prefix and soul ID to get user ID
       return parts.slice(2).join('-');
     }
     return sessionId;

@@ -65,12 +65,17 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
   // Extract messageId from trigger context (used by myecho to match responses)
   const messageId = triggerContext.data?.messageId;
 
+  // Extract user message from trigger context
+  const userRequest = triggerContext.data?.userRequest || triggerContext.data?.message || '';
+  const taskDescription = userRequest ? userRequest : 'Unknown';
+
   logger.info('Soul Execute API: Received trigger request', {
     soulId,
     userId,
     sessionId,
     triggerSource: triggerContext.source,
-    messageId
+    messageId,
+    userRequest
   });
 
   try {
@@ -88,8 +93,8 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
       // ✅ 创建 task 记录，状态为 PENDING
       await dataStore.createTask({
         id: taskId,
-        task: '对话',
-        app: 'myagent',
+        task: taskDescription,  // ✅ 使用真实的任务描述
+        app: request.body.app || request.body.appId || 'myagent',  // ✅ 从请求中获取 app 参数
         sessionId: sessionId,
         status: TaskStatus.PENDING,
         metadata: {
@@ -102,7 +107,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
         }
       });
 
-      logger.info('Soul Execute API: Task created', { taskId, status: 'PENDING' });
+      logger.info('Soul Execute API: Task created', { taskId, status: 'PENDING', task: taskDescription, app: request.body.app || 'myagent' });
     }
 
     // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作
@@ -147,6 +152,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
         taskId,
         sessionId,
         messageId,  // ✅ 添加 messageId，让 myecho 可以匹配响应
+        task: taskDescription,  // ✅ 添加 task 字段，让前端可以显示任务描述
         result: {
           success: result.success,
           // ✅ 使用纯文本作为 output（MyEcho 会保存这个到 messages.content）

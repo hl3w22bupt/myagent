@@ -12,7 +12,6 @@ import { AgentConfig } from './types';
 import { SoulConfig, SoulState, SoulInput, PrimitiveTool } from './soul-types';
 import { soulConfigLoader } from '../config/soul-config-loader';
 import { subagentConfigLoader } from '../config/subagent-config-loader';
-import { SoulContextManager } from '../context/soul-context-manager';
 import { soulStateDataService } from '../database/soul-data-service';
 import { soulExecutionHistoryService } from '../database/soul-data-service';
 import { soulNotificationDataService } from '../database/soul-notification-service';
@@ -96,6 +95,17 @@ export class SoulAgent extends Agent {
     this.lastTriggerTime = '';
 
     console.log(`[SoulAgent] Created soul agent: ${soulConfig.soul_id} (${soulConfig.display_name}) with task: ${this.taskId}`);
+  }
+
+  /**
+   * Get subject info for trace display
+   * Returns "Auto-Agent/${soul_id}" format for proper identification
+   */
+  getSubjectInfo(): { subjectTitle: string; subjectSubTitle?: string } {
+    return {
+      subjectTitle: `Auto-Agent/${this.soulConfig.soul_id}`,
+      subjectSubTitle: this.soulConfig.display_name
+    };
   }
 
   /**
@@ -197,6 +207,32 @@ ${soulGoal}
       // Update execution record with task info
       executionRecord.currentTask = `Execute soul: ${context.source}`;
 
+      // ✅ 保存用户消息到对话历史（使用标准 task_contexts）
+      if (context.source === 'user_message' && context.data?.userRequest) {
+        try {
+          const dataStore = getDataStore();
+          await dataStore.initialize();
+
+          // 确保 task context 存在
+          const existingContext = await dataStore.getContext(this.taskId);
+          if (!existingContext) {
+            await dataStore.createTaskContext(this.taskId, this.sessionId, context.data.userRequest);
+          }
+
+          // 添加对话轮次（使用扁平化的 ConversationRound 结构）
+          await dataStore.addConversationRound(this.taskId, {
+            round: Date.now(),
+            timestamp: Date.now(),
+            userMessage: context.data.userRequest,
+            assistantOutput: null,
+            summary: '',
+          });
+          console.log(`[SoulAgent] ✅ Saved user message to task_contexts`);
+        } catch (error) {
+          console.error(`[SoulAgent] Failed to save user message:`, error);
+        }
+      }
+
       // ✅ 直接推送 stream 更新（不依赖 Agent.run()）
       if (streams?.taskExecution) {
         const startUniqueId = `${this.taskId}-start-${Date.now()}`;
@@ -220,6 +256,65 @@ ${soulGoal}
         console.log(`[SoulAgent] Pushed execution start to stream: ${this.taskId}`);
       }
 
+      // ✅ 发送 Task 层级的 execution trace
+      if (streams?.executionTraces) {
+        const taskTraceId = `task-start-${this.taskId}-${Date.now()}`;
+        await streams.executionTraces.set(this.taskId, taskTraceId, {
+          id: taskTraceId,
+          level: 'task',  // ✅ Task 层级
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'task_start',
+          status: 'running',
+          inputData: JSON.stringify({
+            triggerSource: context.source,
+            triggerData: context.data,
+            task: taskPrompt
+          }),
+          outputData: JSON.stringify({
+            message: 'Soul Agent task started'
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            soulId: this.soulConfig.soul_id,
+            data: {
+              triggerSource: context.source,
+              taskType: 'soul_execution'
+            }
+          }
+        });
+        console.log(`[SoulAgent] ✅ Task-level trace sent`);
+      }
+
+      // ✅ 发送 Agent 层级的 pre execution trace
+      if (streams?.executionTraces) {
+        const agentPreTraceId = `agent-${this.sessionId}-pre-${Date.now()}`;
+        const subjectInfo = this.getSubjectInfo();
+        await streams.executionTraces.set(this.taskId, agentPreTraceId, {
+          id: agentPreTraceId,
+          level: 'agent',  // ✅ Agent 层级
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'pre',
+          status: 'started',
+          inputData: JSON.stringify({
+            task: taskPrompt,
+            agentType: 'SoulAgent',
+            soulId: this.soulConfig.soul_id,
+            triggerSource: context.source
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: subjectInfo.subjectSubTitle,
+            soulId: this.soulConfig.soul_id
+          }
+        });
+        console.log(`[SoulAgent] ✅ Agent pre-trace sent`);
+      }
+
       // 4. === 核心：调用父类的 run()，复用现有执行流程 ===
       const result = await this.run(
         taskPrompt,
@@ -236,6 +331,79 @@ ${soulGoal}
       if (result.output) {
         executionRecord.llmThoughtProcess = 'Soul decided on action based on goal and context';
         executionRecord.llmDecision = result.output.substring(0, MAX_DECISION_LENGTH);
+      }
+
+      // ✅ 保存助手响应到对话历史（使用标准 task_contexts）
+      if (result.output && context.source === 'user_message') {
+        try {
+          // 解析 JSON output，提取 message 字段
+          let assistantMessage = result.output;
+          try {
+            const parsed = JSON.parse(result.output);
+            if (parsed.message) {
+              assistantMessage = parsed.message;
+            }
+          } catch (e) {
+            // 不是 JSON，使用原始 output
+          }
+
+          const dataStore = getDataStore();
+          await dataStore.initialize();
+
+          // 获取当前 context
+          const currentContext = await dataStore.getContext(this.taskId);
+          if (currentContext && currentContext.conversationRounds && currentContext.conversationRounds.length > 0) {
+            // 更新最新的对话轮次的助手响应
+            const rounds = currentContext.conversationRounds;
+            const lastRound = rounds[rounds.length - 1];
+            lastRound.assistantOutput = assistantMessage;
+
+            // 使用原始 SQL 更新，因为 addConversationRound 会添加新轮次
+            const pool = (dataStore as any).pool;
+            const client = await pool.connect();
+            try {
+              await client.query(
+                `UPDATE task_contexts
+                 SET conversation_rounds = $1, updated_at = $2
+                 WHERE task_id = $3`,
+                [JSON.stringify(rounds), Date.now(), this.taskId]
+              );
+              console.log(`[SoulAgent] ✅ Saved assistant response to task_contexts`);
+            } finally {
+              client.release();
+            }
+          }
+        } catch (error) {
+          console.error(`[SoulAgent] Failed to save assistant response:`, error);
+        }
+      }
+
+      // ✅ 发送 Agent 层级的 post execution trace
+      if (streams?.executionTraces) {
+        const agentPostTraceId = `agent-${this.sessionId}-post-${Date.now()}`;
+        const subjectInfo = this.getSubjectInfo();
+        const status = result.success !== false ? 'completed' : 'failed';
+        await streams.executionTraces.set(this.taskId, agentPostTraceId, {
+          id: agentPostTraceId,
+          level: 'agent',  // ✅ Agent 层级
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'post',
+          status: status,
+          outputData: result.output ? JSON.stringify({ output: result.output }) : undefined,
+          error: result.error,
+          executionTime: result.executionTime,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: subjectInfo.subjectSubTitle,
+            soulId: this.soulConfig.soul_id,
+            success: result.success !== false,
+            steps: result.steps?.length || 0
+          }
+        });
+        console.log(`[SoulAgent] ✅ Agent post-trace sent`);
       }
 
       // 6. 更新执行记录
@@ -277,6 +445,40 @@ ${soulGoal}
           }
         });
         console.log(`[SoulAgent] Pushed execution completion to stream: ${this.taskId}`);
+      }
+
+      // ✅ 发送 Task 完成的 execution trace
+      if (streams?.executionTraces) {
+        const taskTraceId = `task-complete-${this.taskId}-${Date.now()}`;
+        await streams.executionTraces.set(this.taskId, taskTraceId, {
+          id: taskTraceId,
+          level: 'task',  // ✅ Task 层级
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'task_complete',
+          status: 'completed',
+          inputData: JSON.stringify({
+            triggerSource: context.source,
+            task: taskPrompt
+          }),
+          outputData: JSON.stringify({
+            output: result.output,
+            steps: result.steps?.length || 0,
+            duration: executionRecord.duration,
+            success: result.success
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            soulId: this.soulConfig.soul_id,
+            data: {
+              triggerSource: context.source,
+              taskType: 'soul_execution',
+              executionStatus: 'completed'
+            }
+          }
+        });
+        console.log(`[SoulAgent] ✅ Task completion trace sent`);
       }
 
       await this.hibernate('执行完成，等待下次触发');
@@ -540,31 +742,6 @@ ${soulGoal}
   }
 
   /**
-   * Load context (user profile, conversations, relationship state)
-   *
-   * @returns Application context
-   */
-  private async loadContext(): Promise<any> {
-    const contextManager = new SoulContextManager();
-
-    return {
-      userProfile: await contextManager.getUserProfile(this.sessionId),
-      recentConversations: await contextManager.getRecentConversations(this.sessionId, 10),
-      relationship: await contextManager.getRelationshipState(this.sessionId)
-    };
-  }
-
-  /**
-   * Save context updates
-   *
-   * @param context - Context to save
-   */
-  private async saveContext(context: any): Promise<void> {
-    const contextManager = new SoulContextManager();
-    await contextManager.updateContext(this.sessionId, context);
-  }
-
-  /**
    * Get recent conversations from session state
    *
    * @param limit - Maximum number of conversations to return
@@ -588,18 +765,28 @@ ${soulGoal}
   private async sendMessage(message: string): Promise<any> {
     console.log(`[SoulAgent] ${this.sessionId} sending message: ${message}`);
 
-    const contextManager = new SoulContextManager();
+    try {
+      const dataStore = getDataStore();
+      await dataStore.initialize();
 
-    // 1. Add to Soul's own conversation history (保持现有逻辑)
-    await contextManager.addConversationMessage(this.sessionId, 'assistant', message);
+      // 确保 task context 存在
+      const existingContext = await dataStore.getContext(this.taskId);
+      if (!existingContext) {
+        await dataStore.createTaskContext(this.taskId, this.sessionId, 'Soul Agent initiated message');
+      }
 
-    // 2. Add to associated task's conversation history
-    // 这里需要访问 streams 和 DataStore
-    // 注意：这个方法需要接收 streams 参数，或者从其他地方获取
-    // 暂时先返回成功，具体的 task 集成在 execute 方法中处理
-
-    // TODO: 通过 taskExecution stream 推送消息
-    // TODO: 添加到 task 的对话历史数据库
+      // 添加对话轮次
+      await dataStore.addConversationRound(this.taskId, {
+        round: Date.now(),
+        timestamp: Date.now(),
+        userMessage: null,  // Soul Agent 主动发起，没有用户消息
+        assistantOutput: message,
+        summary: '',
+      });
+      console.log(`[SoulAgent] ✅ Saved initiated message to task_contexts`);
+    } catch (error) {
+      console.error(`[SoulAgent] Failed to save message:`, error);
+    }
 
     return {
       success: true,

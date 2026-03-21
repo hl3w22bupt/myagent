@@ -408,20 +408,6 @@ export class PostgresDataStore implements Database {
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_states_status ON soul_states(status)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_states_last_activity ON soul_states(last_activity DESC)');
 
-      // soul_contexts table (business data, heavier)
-      await safeQuery(`
-        CREATE TABLE IF NOT EXISTS soul_contexts (
-          session_id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          conversation_rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
-          user_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
-          relationship_state JSONB NOT NULL DEFAULT '{}'::jsonb,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
-      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_contexts_user_id ON soul_contexts(user_id)');
-
       // soul_execution_history table (execution records)
       await safeQuery(`
         CREATE TABLE IF NOT EXISTS soul_execution_history (

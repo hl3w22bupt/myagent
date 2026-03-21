@@ -5,7 +5,6 @@
  */
 
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { soulContextDataService } from '../../src/core/database/soul-data-service';
 import { ApiRouteConfig } from 'motia';
 
 /**
@@ -56,11 +55,8 @@ export const handler = async (request: any, { logger }: any) => {
     const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
 
     // 2. 添加用户消息到对话历史
-    await soulContextDataService.addConversationMessage(
-      sessionId,
-      'user',
-      message
-    );
+    // Note: Soul Agent now saves to task_contexts automatically via execute()
+    // await soulContextDataService.addConversationMessage(sessionId, 'user', message);
 
     // 3. 执行 Soul Agent
     const result = await soulAgent.execute({
@@ -79,7 +75,9 @@ export const handler = async (request: any, { logger }: any) => {
     });
 
     // 4. 获取最近的对话（包括 AI 的回复）
-    const recentConversations = await soulContextDataService.getRecentConversations(sessionId, 5);
+    // Note: Use Context API instead to fetch conversation history
+    // const recentConversations = await soulContextDataService.getRecentConversations(sessionId, 5);
+    const recentConversations = [];
 
     const executionTime = Date.now() - startTime;
 

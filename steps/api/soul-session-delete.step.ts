@@ -6,7 +6,6 @@
 
 import { z } from 'zod';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { soulContextDataService } from '../../src/core/database/soul-data-service';
 import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
 
 /**
@@ -37,21 +36,8 @@ export const handler = async (request: any, { logger }: any) => {
     // 1. 删除 soul_state
     await soulStateDataService.deleteSoulState(sessionId);
 
-    // 2. 删除 soul_context (如果有)
-    try {
-      const context = await soulContextDataService.getSoulContext(sessionId);
-      if (context) {
-        // 删除 conversation rounds 但保留上下文数据用于分析？
-        // 暂时完全删除
-        logger.info('Soul context found, deleting...', { sessionId });
-      }
-    } catch (error) {
-      // Context 不存在或删除失败，继续
-      logger.warn('No soul context to delete or failed to delete', {
-        sessionId,
-        error: error.message
-      });
-    }
+    // 2. soul_contexts 已废弃，无需删除
+    // Note: Soul Agent 现在使用 task_contexts 表
 
     logger.info('Soul session deleted successfully', { soulId, sessionId });
 

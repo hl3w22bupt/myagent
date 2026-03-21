@@ -76,6 +76,21 @@ export const handler = async (
       }
     });
 
+    // ✅ 解析 Soul Agent 的 JSON output，提取 message 字段作为纯文本 output
+    // 与 soul-api.step.ts 的处理逻辑一致
+    let parsedOutput;
+    let textOutput = result.output;  // 默认使用原始 output
+    try {
+      parsedOutput = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+      // 提取 message 字段作为纯文本输出
+      if (parsedOutput.message) {
+        textOutput = parsedOutput.message;
+      }
+    } catch (e) {
+      // 如果不是 JSON，保持原样
+      parsedOutput = null;
+    }
+
     // ✅ 发送 agent.task.completed 事件，触发所有 subscribers
     // 与 master-agent 的模式完全一致
     await emit({
@@ -83,11 +98,13 @@ export const handler = async (
       data: {
         taskId,
         sessionId,
+        task: input.task,  // ✅ 添加 task 字段
         result: {
           success: result.success,
-          output: result.output,
+          output: textOutput,  // ✅ 使用纯文本（与其他 agent 一致）
           executionTime: result.executionTime,
-          metadata: result.metadata || {}
+          metadata: result.metadata || {},
+          structuredOutput: parsedOutput,  // ✅ 保留完整的解析后数据
         }
       }
     } as any);
