@@ -9,7 +9,6 @@ function AutonomousAgents() {
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedSoul, setSelectedSoul] = useState(null)
   const [configModal, setConfigModal] = useState({ show: false, soulId: null, config: null, loading: false })
   const [executionHistory, setExecutionHistory] = useState({})
   const [historyLoading, setHistoryLoading] = useState({})
@@ -329,30 +328,22 @@ function AutonomousAgents() {
                       <div className="user-id">{instance.userId}</div>
                     </div>
                   </div>
-                  <button
-                    className="expand-soul-type-btn"
-                    onClick={() => setSelectedSoul(selectedSoul === instance.sessionId ? null : instance.sessionId)}
-                    title="查看 Soul 类型信息"
-                  >
-                    <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Soul 类型
-                    <svg
-                      className="expand-icon"
-                      style={{
-                        width: '16px',
-                        height: '16px',
-                        transform: selectedSoul === instance.sessionId ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease'
-                      }}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                </div>
+
+                {/* Soul Type Info - Always Visible */}
+                <div className="soul-type-info-compact">
+                  <div className="soul-type-compact">
+                    <div className="soul-avatar-small">
+                      {instance.soulDisplayName?.charAt(0)?.toUpperCase() || instance.soulId?.charAt(0)?.toUpperCase()}
+                    </div>
+                    <div className="soul-type-meta">
+                      <div className="soul-type-name">{instance.soulDisplayName}</div>
+                      <div className="soul-type-id">{instance.soulId}</div>
+                    </div>
+                  </div>
+                  {instance.soulDescription && (
+                    <div className="soul-type-description">{instance.soulDescription}</div>
+                  )}
                 </div>
 
                 {/* Instance Body - Details */}
@@ -490,52 +481,6 @@ function AutonomousAgents() {
                     )}
                   </div>
                 </div>
-
-                {/* Soul Type Info - Expandable */}
-                {selectedSoul === instance.sessionId && (
-                  <div className="soul-type-info">
-                    <div className="soul-type-header">
-                      <div className="soul-type-title">
-                        <div className="soul-avatar-small">
-                          {instance.soulDisplayName?.charAt(0)?.toUpperCase() || instance.soulId?.charAt(0)?.toUpperCase()}
-                        </div>
-                        <div>
-                          <h4 className="soul-type-name">{instance.soulDisplayName}</h4>
-                          <span className="soul-type-id">{instance.soulId}</span>
-                        </div>
-                      </div>
-                      <button
-                        className="view-config-button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleViewConfig(instance.soulId)
-                        }}
-                        title="查看配置"
-                      >
-                        <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        配置
-                      </button>
-                    </div>
-
-                    {instance.soulDescription && (
-                      <p className="soul-type-description">{instance.soulDescription}</p>
-                    )}
-
-                    {instance.soulPrimitives && instance.soulPrimitives.length > 0 && (
-                      <div className="soul-type-primitives">
-                        <span className="primitives-label">可用原语</span>
-                        <div className="primitives-list">
-                          {instance.soulPrimitives.map((primitive) => (
-                            <span key={primitive} className="primitive-tag">{primitive}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )
           })}
