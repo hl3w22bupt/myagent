@@ -1,226 +1,100 @@
-import { z } from 'zod';
-import { Step, StepOutput } from '@motiadev/core';
-import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { getDataStore } from '../../src/core/database/data-store';
-
 /**
- * Soul API - Autonomous Agent Trigger API
+ * Soul API - Execute Soul Trigger
  *
- * Provides universal API endpoints for triggering Soul agents
+ * 简化版本：直接调用 Soul Agent，复用现有执行流程
+ * - 自动推送 taskExecution stream（由 Agent.run() 处理）
+ * - 自动推送 taskResult stream（由 Agent.run() 处理）
  */
 
-// ============================================================
-// API: Execute Soul (通用接口)
-// ============================================================
+import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
+import { ApiRouteConfig } from 'motia';
 
-export const executeSoulTrigger: Step = {
+/**
+ * Soul Execute API configuration.
+ */
+export const config: ApiRouteConfig = {
   type: 'api',
-  method: 'POST',
+  name: 'soul-execute',
+  description: 'Execute Soul Agent with trigger context',
+
   path: '/api/soul/:soulId/execute',
-  schema: z.object({
-    soulId: z.string(),
-    userId: z.string(),
-    trigger_time: z.string().optional(),
-    context: z.object({
-      source: z.string(),
-      data: z.any()
-    })
-  }),
-  handler: async (request, context): Promise<StepOutput> => {
-    const { soulId, userId, trigger_time, context: triggerContext } = request.body;
-
-    console.log(`[SoulAPI] Executing soul: ${soulId} for user: ${userId}`);
-
-    try {
-      // Create session ID
-      const sessionId = `soul-${soulId}-${userId}`;
-
-      // Activate soul through scheduler
-      const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
-
-      // Execute soul with trigger context
-      const input = {
-        trigger_time: trigger_time || new Date().toISOString(),
-        context: triggerContext
-      };
-
-      const result = await soulAgent.execute(input);
-
-      return {
-        status: 200,
-        body: {
-          success: true,
-          sessionId,
-          soulId,
-          result: {
-            executed: true,
-            hibernated: false // TODO: Track if soul hibernated
-          }
-        }
-      };
-    } catch (error: any) {
-      console.error(`[SoulAPI] Failed to execute soul: ${error.message}`);
-
-      return {
-        status: 500,
-        body: {
-          success: false,
-          error: error.message
-        }
-      };
-    }
-  }
-};
-
-// ============================================================
-// API: Get Soul Status
-// ============================================================
-
-export const getSoulStatusTrigger: Step = {
-  type: 'api',
-  method: 'GET',
-  path: '/api/soul/:soulId/status/:userId',
-  schema: z.object({
-    soulId: z.string(),
-    userId: z.string()
-  }),
-  handler: async (request, context): Promise<StepOutput> => {
-    const { soulId, userId } = request.params;
-    const sessionId = `soul-${soulId}-${userId}`;
-
-    console.log(`[SoulAPI] Getting soul status: ${sessionId}`);
-
-    try {
-      const isActive = soulScheduler.isSoulActive(sessionId);
-      const isHibernated = soulScheduler.isSoulHibernated(sessionId);
-
-      let status = 'IDLE';
-      if (isActive) {
-        status = 'ACTIVE';
-      } else if (isHibernated) {
-        status = 'HIBERNATED';
-      }
-
-      // Get soul agent if active
-      let soulState = null;
-      if (isActive) {
-        const soulAgent = soulScheduler.getActiveSoul(sessionId);
-        if (soulAgent) {
-          soulState = soulAgent.getSoulState();
-        }
-      }
-
-      return {
-        status: 200,
-        body: {
-          sessionId,
-          soulId,
-          status,
-          isActive,
-          isHibernated,
-          state: soulState
-        }
-      };
-    } catch (error: any) {
-      console.error(`[SoulAPI] Failed to get soul status: ${error.message}`);
-
-      return {
-        status: 500,
-        body: {
-          error: error.message
-        }
-      };
-    }
-  }
-};
-
-// ============================================================
-// API: List Active Souls
-// ============================================================
-
-export const listActiveSoulsTrigger: Step = {
-  type: 'api',
-  method: 'GET',
-  path: '/api/souls/active',
-  schema: z.object({}),
-  handler: async (request, context): Promise<StepOutput> => {
-    console.log('[SoulAPI] Listing active souls');
-
-    try {
-      const stats = soulScheduler.getStats();
-
-      return {
-        status: 200,
-        body: {
-          stats
-        }
-      };
-    } catch (error: any) {
-      console.error(`[SoulAPI] Failed to list active souls: ${error.message}`);
-
-      return {
-        status: 500,
-        body: {
-          error: error.message
-        }
-      };
-    }
-  }
-};
-
-// ============================================================
-// API: Hibernate Soul (手动休眠)
-// ============================================================
-
-export const hibernateSoulTrigger: Step = {
-  type: 'api',
   method: 'POST',
-  path: '/api/soul/:soulId/hibernate/:userId',
-  schema: z.object({
-    soulId: z.string(),
-    userId: z.string(),
-    reason: z.string().optional()
-  }),
-  handler: async (request, context): Promise<StepOutput> => {
-    const { soulId, userId } = request.params;
-    const { reason = 'Manual hibernation' } = request.body;
-    const sessionId = `soul-${soulId}-${userId}`;
 
-    console.log(`[SoulAPI] Hibernating soul: ${sessionId}`);
+  emits: [],
+  flows: ['agent-workflow'],
+};
 
-    try {
-      const soulAgent = soulScheduler.getActiveSoul(sessionId);
+/**
+ * Soul Execute handler.
+ */
+export const handler = async (request: any, { logger, streams }: any) => {
+  // Get soulId from path parameters (support both pathParams and params)
+  const soulId = request.pathParams?.soulId || request.params?.soulId;
+  const { userId, trigger_time, context: triggerContext } = request.body;
 
-      if (!soulAgent) {
-        return {
-          status: 404,
-          body: {
-            success: false,
-            error: 'Soul not found or not active'
-          }
-        };
+  if (!userId || !triggerContext) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        error: 'Missing required fields: userId, context'
       }
+    };
+  }
 
-      await soulScheduler.hibernateSoul(soulAgent);
+  const sessionId = `soul-${soulId}-${userId}`;
 
-      return {
-        status: 200,
-        body: {
-          success: true,
-          sessionId,
-          reason
+  logger.info('Executing soul', {
+    soulId,
+    userId,
+    sessionId,
+    triggerSource: triggerContext.source
+  });
+
+  try {
+    // 1. 激活 Soul Agent（获取或创建实例）
+    const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
+
+    // 2. 执行 Soul Agent
+    // 内部会调用 Agent.run()，自动推送 stream
+    const input = {
+      trigger_time: trigger_time || new Date().toISOString(),
+      context: triggerContext,
+      streams: streams  // ✅ 传递 streams 给 Soul Agent
+    };
+
+    const result = await soulAgent.execute(input);
+
+    logger.info('Soul executed successfully', {
+      sessionId,
+      result
+    });
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        sessionId,
+        soulId,
+        userId,
+        result: {
+          executed: true,
+          output: result.output
         }
-      };
-    } catch (error: any) {
-      console.error(`[SoulAPI] Failed to hibernate soul: ${error.message}`);
+      }
+    };
+  } catch (error: any) {
+    logger.error('Failed to execute soul', {
+      error: error.message,
+      stack: error.stack
+    });
 
-      return {
-        status: 500,
-        body: {
-          success: false,
-          error: error.message
-        }
-      };
-    }
+    return {
+      status: 500,
+      body: {
+        success: false,
+        error: error.message
+      }
+    };
   }
 };

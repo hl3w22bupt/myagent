@@ -12,6 +12,7 @@ import { SoulAgent } from '../agent/soul-agent';
 import { SoulState } from '../agent/soul-types';
 import { soulConfigLoader } from '../config/soul-config-loader';
 import { subagentConfigLoader } from '../config/subagent-config-loader';
+import { soulStateDataService } from '../database/soul-data-service';
 
 /**
  * Scheduler instance manager
@@ -87,8 +88,11 @@ export class SoulScheduler {
       // Load subagent configuration
       const subagentConfig = await subagentConfigLoader.loadSubagentConfig(soulConfig.subagent);
 
+      // Extract userId from sessionId
+      const userId = this.extractUserId(sessionId, soulId);
+
       // Create soul agent instance
-      const soulAgent = new SoulAgent(soulConfig, subagentConfig, sessionId);
+      const soulAgent = new SoulAgent(soulConfig, subagentConfig, sessionId, userId);
 
       // Store in active souls
       this.activeSouls.set(sessionId, {
@@ -104,6 +108,64 @@ export class SoulScheduler {
       return soulAgent;
     } catch (error: any) {
       console.error(`[SoulScheduler] Failed to activate soul: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Create new soul instance with task (用于 MyEcho 初始化)
+   *
+   * 与 activateSoul 的区别：
+   * - createSoul：创建新实例，接收 taskId 等额外参数
+   * - activateSoul：获取或创建（自动判断），不接收 taskId
+   *
+   * @param soulId - Soul identifier
+   * @param sessionId - Session identifier
+   * @param options - Additional options (taskId, userId, characterId, deviceId)
+   * @returns SoulAgent instance
+   */
+  async createSoul(
+    soulId: string,
+    sessionId: string,
+    options: {
+      taskId: string;
+      userId: string;
+      characterId?: string;
+      deviceId?: string;
+    }
+  ): Promise<SoulAgent> {
+    console.log(`[SoulScheduler] Creating soul with task: ${soulId}, sessionId: ${sessionId}, taskId: ${options.taskId}`);
+
+    try {
+      // Load soul configuration
+      const soulConfig = await soulConfigLoader.loadSoulConfig(soulId);
+
+      // Load subagent configuration
+      const subagentConfig = await subagentConfigLoader.loadSubagentConfig(soulConfig.subagent);
+
+      // Create soul agent instance with taskId
+      const soulAgent = new SoulAgent(
+        soulConfig,
+        subagentConfig,
+        sessionId,
+        options.userId,
+        options.taskId  // ← 传递 taskId
+      );
+
+      // Store in active souls
+      this.activeSouls.set(sessionId, {
+        soulAgent,
+        sessionId: soulAgent.getSessionId(),
+        createdAt: Date.now(),
+        lastActivityAt: Date.now()
+      });
+
+      console.log(`[SoulScheduler] Soul created with task: ${sessionId}`);
+      console.log(`[SoulScheduler] Active souls count: ${this.activeSouls.size}`);
+
+      return soulAgent;
+    } catch (error: any) {
+      console.error(`[SoulScheduler] Failed to create soul with task: ${error.message}`);
       throw error;
     }
   }
@@ -154,22 +216,19 @@ export class SoulScheduler {
     console.log(`[SoulScheduler] Waking up soul: ${sessionId}`);
 
     try {
-      // TODO: Load state from database
-      // const soulState = await getDataStore().getSoulState(sessionId);
-
       // Load soul configuration
       const soulConfig = await soulConfigLoader.loadSoulConfig(soulId);
 
       // Load subagent configuration
       const subagentConfig = await subagentConfigLoader.loadSubagentConfig(soulConfig.subagent);
 
+      // Extract userId from sessionId
+      const userId = this.extractUserId(sessionId, soulId);
+
       // Create soul agent instance
-      const soulAgent = new SoulAgent(soulConfig, subagentConfig, sessionId);
+      const soulAgent = new SoulAgent(soulConfig, subagentConfig, sessionId, userId);
 
-      // TODO: Restore state
-      // soulAgent.restoreState(soulState);
-
-      // Wakeup soul
+      // Wakeup soul (will restore state from database)
       await soulAgent.wakeup();
 
       // Remove from hibernated souls
@@ -293,6 +352,23 @@ export class SoulScheduler {
     if (this.hibernatedSouls.size > 0) {
       console.log(`[SoulScheduler] Cleanup completed. Hibernated souls: ${this.hibernatedSouls.size}`);
     }
+  }
+
+  /**
+   * Extract user ID from session ID
+   *
+   * @param sessionId - Session ID (format: soul-{soulId}-{userId})
+   * @param soulId - Soul ID (used to correctly extract userId)
+   * @returns User ID
+   */
+  private extractUserId(sessionId: string, soulId: string): string {
+    // Remove 'soul-' prefix and soulId to get userId
+    const prefix = `soul-${soulId}-`;
+    if (sessionId.startsWith(prefix)) {
+      return sessionId.substring(prefix.length);
+    }
+    // Fallback: return sessionId as-is
+    return sessionId;
   }
 
   /**

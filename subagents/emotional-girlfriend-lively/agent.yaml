@@ -62,3 +62,9 @@ agent:
     max_iterations: 5
     timeout: 60000
     enable_clarification: false  # 情感陪伴角色不需要澄清机制
+
+  sandbox:
+    type: local
+    local:
+      pythonPath: python3
+      timeout: 5000

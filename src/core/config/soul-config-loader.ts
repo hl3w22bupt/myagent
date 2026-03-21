@@ -113,6 +113,31 @@ export class SoulConfigLoader {
   getCachedConfig(soulId: string): SoulConfig | undefined {
     return this.configCache.get(soulId);
   }
+
+  /**
+   * List all available soul configurations
+   *
+   * @returns Array of soul IDs
+   */
+  async listAvailableSouls(): Promise<string[]> {
+    const autonomousPath = path.resolve(process.cwd(), 'autonomous');
+
+    try {
+      const entries = await fs.readdir(autonomousPath, { withFileTypes: true });
+      const soulDirs = entries
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map(entry => entry.name);
+
+      console.log(`[SoulConfigLoader] Found ${soulDirs.length} available souls:`, soulDirs);
+      return soulDirs;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        console.warn(`[SoulConfigLoader] Autonomous directory not found: ${autonomousPath}`);
+        return [];
+      }
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

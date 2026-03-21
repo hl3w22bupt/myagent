@@ -178,7 +178,7 @@ export class PostgresDataStore implements Database {
           id TEXT PRIMARY KEY,
           task TEXT NOT NULL,
           session_id TEXT NOT NULL,
-          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'awaiting_clarification', 'idle')),
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL,
           completed_at BIGINT,
@@ -388,6 +388,69 @@ export class PostgresDataStore implements Database {
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_type ON favorites(artifact_type)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_task_id ON favorites(task_id)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_favorites_artifact_id ON favorites(artifact_id)');
+
+      // Soul tables
+      // soul_states table (runtime state, lightweight)
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS soul_states (
+          session_id TEXT PRIMARY KEY,
+          soul_id TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'HIBERNATED', 'IDLE', 'STOPPED')),
+          current_task_id TEXT,
+          last_activity TIMESTAMP,
+          scheduled_wakeup TIMESTAMP,
+          statistics JSONB NOT NULL DEFAULT '{}'::jsonb,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_states_soul_id ON soul_states(soul_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_states_status ON soul_states(status)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_states_last_activity ON soul_states(last_activity DESC)');
+
+      // soul_contexts table (business data, heavier)
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS soul_contexts (
+          session_id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          conversation_rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
+          user_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+          relationship_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_contexts_user_id ON soul_contexts(user_id)');
+
+      // soul_execution_history table (execution records)
+      await safeQuery(`
+        CREATE TABLE IF NOT EXISTS soul_execution_history (
+          id TEXT PRIMARY KEY,
+          soul_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          triggered_at TIMESTAMP NOT NULL,
+          trigger_source TEXT NOT NULL,
+          trigger_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+          started_at TIMESTAMP NOT NULL,
+          completed_at TIMESTAMP,
+          status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed', 'hibernated')),
+          current_task TEXT NOT NULL,
+          llm_thought_process TEXT,
+          llm_decision TEXT,
+          primitive_calls JSONB NOT NULL DEFAULT '[]'::jsonb,
+          output JSONB,
+          error TEXT,
+          duration INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_execution_history_soul_id ON soul_execution_history(soul_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_execution_history_session_id ON soul_execution_history(session_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_execution_history_user_id ON soul_execution_history(user_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_execution_history_status ON soul_execution_history(status)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_soul_execution_history_triggered_at ON soul_execution_history(triggered_at DESC)');
 
       // 迁移：移除所有遗留的外键约束
       await safeQuery(`

@@ -7,6 +7,7 @@
 
 import { ContextManager } from './manager';
 import { getDataStore } from '../database/data-store';
+import { soulContextDataService } from '../database/soul-data-service';
 
 export interface UserProfile {
   name?: string;
@@ -49,10 +50,14 @@ export class SoulContextManager extends ContextManager {
       // Extract userId from sessionId
       const userId = this.extractUserId(sessionId);
 
-      // TODO: Query from soul_contexts table
-      // For now, return empty profile
-      console.log(`[SoulContextManager] Getting user profile for: ${userId}`);
+      // Query from soul_contexts table
+      const context = await soulContextDataService.getSoulContext(sessionId);
 
+      if (context) {
+        return context.userProfile;
+      }
+
+      // Return default profile if not found
       return {
         name: '用户',
         interests: [],
@@ -72,11 +77,14 @@ export class SoulContextManager extends ContextManager {
    */
   async getRelationshipState(sessionId: string): Promise<RelationshipState> {
     try {
-      const userId = this.extractUserId(sessionId);
+      // Query from soul_contexts table
+      const context = await soulContextDataService.getSoulContext(sessionId);
 
-      // TODO: Query from soul_contexts table
-      console.log(`[SoulContextManager] Getting relationship state for: ${userId}`);
+      if (context) {
+        return context.relationshipState;
+      }
 
+      // Return default state if not found
       return {
         intimacy: 50, // Default intimacy
         chatDays: 0,
@@ -103,11 +111,10 @@ export class SoulContextManager extends ContextManager {
     timestamp: number;
   }>> {
     try {
-      // TODO: Query from messages or conversation history
-      console.log(`[SoulContextManager] Getting recent conversations for: ${sessionId}, limit: ${limit}`);
+      // Query from soul_contexts table
+      const conversations = await soulContextDataService.getRecentConversations(sessionId, limit);
 
-      // For now, return empty array
-      return [];
+      return conversations;
     } catch (error: any) {
       console.error(`[SoulContextManager] Failed to get recent conversations: ${error.message}`);
       return [];
@@ -169,12 +176,8 @@ export class SoulContextManager extends ContextManager {
 
       console.log(`[SoulContextManager] Updating relationship state for: ${userId}`);
 
-      // Merge with existing relationship state
-      const existingRelationship = await this.getRelationshipState(sessionId);
-      const mergedRelationship = { ...existingRelationship, ...relationship };
-
-      // TODO: Update soul_contexts table
-      await this.updateContext(sessionId, { relationship: mergedRelationship });
+      // Update in database
+      await soulContextDataService.updateRelationshipState(sessionId, relationship);
     } catch (error: any) {
       console.error(`[SoulContextManager] Failed to update relationship state: ${error.message}`);
     }
@@ -189,9 +192,10 @@ export class SoulContextManager extends ContextManager {
    */
   async addConversationMessage(sessionId: string, role: 'user' | 'assistant', content: string): Promise<void> {
     try {
-      console.log(`[SoulContextManager] Adding conversation message: ${role}`);
+      // Insert to soul_contexts.conversation_rounds
+      await soulContextDataService.addConversationMessage(sessionId, role, content);
 
-      // TODO: Insert to soul_contexts.conversation_rounds or messages table
+      console.log(`[SoulContextManager] Added conversation message: ${role}`);
     } catch (error: any) {
       console.error(`[SoulContextManager] Failed to add conversation message: ${error.message}`);
     }

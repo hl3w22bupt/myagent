@@ -23,6 +23,7 @@ export enum TaskStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
   AWAITING_CLARIFICATION = 'awaiting_clarification', // HITL: 等待用户澄清
+  IDLE = 'idle',  // Soul Agent: 空闲，等待触发
 }
 
 /**

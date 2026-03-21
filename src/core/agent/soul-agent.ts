@@ -135,8 +135,8 @@ ${soulGoal}
    * @param input - Soul execution input
    * @returns Execution result
    */
-  async execute(input: SoulInput): Promise<any> {
-    const { trigger_time, context } = input;
+  async execute(input: SoulInput & { streams?: any }): Promise<any> {
+    const { trigger_time, context, streams } = input;
 
     // 记录触发源和时间
     this.lastTriggerSource = context.source;
@@ -203,7 +203,9 @@ ${soulGoal}
         this.taskId,  // ✅ 使用主任务 ID，确保 stream 推送到正确的任务
         {
           // 注入原语工具
-          tools: this.getPrimitiveTools()
+          tools: this.getPrimitiveTools(),
+          // ✅ 传递 streams，让 Agent.run() 能够推送 stream 更新
+          streams: streams
         }
       );
 

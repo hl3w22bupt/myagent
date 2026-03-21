@@ -255,4 +255,41 @@ export const tokenUsageAPI = {
   }
 }
 
+// Soul Agents 相关 API
+export const soulAgentsAPI = {
+  // 获取所有自主智能体状态
+  getStatus: () =>
+    apiClient.get('/api/soul-agents/status').then(response => response.data),
+
+  // 获取 Soul 完整配置
+  getConfig: (soulId) =>
+    apiClient.get(`/api/soul/${soulId}/config`).then(response => response.data),
+
+  // 获取 Soul 执行历史
+  getExecutionHistory: (soulId, params = {}) =>
+    apiClient.get(`/api/soul/${soulId}/execution-history`, { params }).then(response => response.data),
+
+  // 调用 Soul Agent
+  executeSoul: (soulId, userId, context) =>
+    apiClient.post(`/api/soul/${soulId}/execute`, {
+      userId,
+      trigger_time: new Date().toISOString(),
+      context
+    }).then(response => response.data),
+
+  // Soul 聊天接口
+  chat: (soulId, userId, message) =>
+    apiClient.post('/api/demo/soul/chat', {
+      soulId,
+      userId,
+      message
+    }).then(response => response.data),
+
+  // 休眠 Soul
+  hibernate: (soulId, userId, reason) =>
+    apiClient.post(`/api/soul/${soulId}/hibernate/${userId}`, {
+      reason: reason || 'Manual hibernation'
+    }).then(response => response.data)
+}
+
 export default apiClient

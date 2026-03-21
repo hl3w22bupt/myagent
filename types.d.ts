@@ -20,6 +20,7 @@ declare module 'motia' {
     'output-history-tracker': EventHandler<never, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-demo-chat': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'UserProfileAnalysis': CronHandler<never>
     'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -33,6 +34,11 @@ declare module 'motia' {
     'task-chat-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'system-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'stream-history-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-initialize': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-execution-history': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-config': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-execute': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'soul-agents-status': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user': ApiRouteHandler<Record<string, unknown>, unknown, never>
