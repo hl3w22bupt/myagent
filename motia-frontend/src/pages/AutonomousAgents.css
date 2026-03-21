@@ -173,6 +173,7 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .instance-card:hover {
@@ -197,6 +198,33 @@
   border-top: 3px solid #94A3B8;
 }
 
+/* Add left border accent for visual clarity */
+.instance-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+}
+
+.instance-card.instance-active::before {
+  background: #16A34A;
+}
+
+.instance-card.instance-hibernated::before {
+  background: #D97706;
+}
+
+.instance-card.instance-idle::before {
+  background: #2563EB;
+}
+
+.instance-card.instance-stopped::before {
+  background: #94A3B8;
+}
+
 /* ==============================
    Instance Card Header
    ============================== */
@@ -205,9 +233,10 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: #FFFFFF;
+  color: #1E293B;
   gap: 1rem;
+  border-bottom: 1px solid #E2E8F0;
 }
 
 .instance-main-info {
@@ -222,33 +251,35 @@
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
+  padding: 0.5rem 0.875rem;
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.4);
   flex-shrink: 0;
 }
 
 .instance-status-badge.status-active {
-  background: rgba(22, 163, 74, 0.9);
-  border-color: rgba(22, 163, 74, 1);
+  background: #F0FDF4;
+  color: #16A34A;
+  border: 1px solid #BBF7D0;
 }
 
 .instance-status-badge.status-hibernated {
-  background: rgba(217, 119, 6, 0.9);
-  border-color: rgba(217, 119, 6, 1);
+  background: #FEF3C7;
+  color: #D97706;
+  border: 1px solid #FDE68A;
 }
 
 .instance-status-badge.status-idle {
-  background: rgba(37, 99, 235, 0.9);
-  border-color: rgba(37, 99, 235, 1);
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
 }
 
 .instance-status-badge.status-stopped {
-  background: rgba(148, 163, 184, 0.9);
-  border-color: rgba(148, 163, 184, 1);
+  background: #F1F5F9;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
 }
 
 .instance-identity {
@@ -262,7 +293,7 @@
 .session-id {
   font-size: 0.875rem;
   font-weight: 700;
-  color: white;
+  color: #1E293B;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -270,7 +301,7 @@
 
 .user-id {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: #64748B;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -281,10 +312,10 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
   border-radius: 6px;
-  color: white;
+  color: #475569;
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
@@ -294,8 +325,9 @@
 }
 
 .expand-soul-type-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #1E293B;
 }
 
 .expand-soul-type-btn svg:first-child {
@@ -371,7 +403,7 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #3B82F6;
   color: white;
   font-size: 0.875rem;
   font-weight: 700;
@@ -1033,7 +1065,7 @@
 }
 
 .expand-soul-type-btn:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline: 2px solid #3B82F6;
   outline-offset: 2px;
 }
 
