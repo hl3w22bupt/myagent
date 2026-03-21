@@ -22,9 +22,9 @@ function AutonomousAgents() {
           console.log('[API Response] Souls data:', response.data.souls)
 
           // 检查每个实例是否有 soulId
-          response.data.souls.forEach((soul: any) => {
+          response.data.souls.forEach((soul) => {
             console.log(`[API Response] Soul ${soul.soulId} has ${soul.instances?.length || 0} instances`)
-            soul.instances?.forEach((instance: any, idx: number) => {
+            soul.instances?.forEach((instance, idx) => {
               console.log(`[API Response] Instance ${idx}:`, {
                 sessionId: instance.sessionId,
                 soulId: instance.soulId,
