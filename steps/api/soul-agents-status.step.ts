@@ -143,7 +143,8 @@ export const handler = async (request: any, { logger }: any) => {
     // 计算实际的总统计（从数据库中的实例统计）
     const actualSummary = {
       totalSoulTypes: availableSouls.length,
-      totalActiveSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.active, 0),
+      // Active = ACTIVE + IDLE（非休眠的实例）
+      totalActiveSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.active + soul.stats.idle, 0),
       totalHibernatedSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.hibernated, 0),
       totalSouls: soulDetails.reduce((sum, soul) => sum + soul.stats.totalInstances, 0)
     };
