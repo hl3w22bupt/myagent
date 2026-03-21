@@ -20,6 +20,7 @@ import { SoulExecutionRecord } from './soul-execution-types';
 import { extractUserId } from '../utils/session-utils';
 import { createExecutionId, calculateDuration } from '../utils/date-utils';
 import { MAX_DECISION_LENGTH, DEFAULT_TASK_NAME } from '../constants/execution';
+import { getDataStore } from '../database/data-store';
 
 /**
  * SoulAgent - Autonomous agent with hibernation capabilities
@@ -164,8 +165,7 @@ ${soulGoal}
     // Save initial execution record
     await soulExecutionHistoryService.saveExecution(executionRecord);
 
-    // Import dataStore for task status updates
-    const { getDataStore } = await import('../database/data-store');
+    // Get dataStore for task status updates
     const dataStore = getDataStore();
 
     try {
