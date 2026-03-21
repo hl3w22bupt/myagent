@@ -200,7 +200,7 @@ ${soulGoal}
       // 4. === 核心：调用父类的 run()，复用现有执行流程 ===
       const result = await this.run(
         taskPrompt,
-        `soul-execution-${Date.now()}`,
+        this.taskId,  // ✅ 使用主任务 ID，确保 stream 推送到正确的任务
         {
           // 注入原语工具
           tools: this.getPrimitiveTools()
