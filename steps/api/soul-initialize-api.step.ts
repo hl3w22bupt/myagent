@@ -87,7 +87,10 @@ export const handler = async (request: any, { logger, streams }: any) => {
   }
 
   try {
-    const sessionId = `soul-${soulId}-${userId}`;
+    // Include threadId in sessionId to ensure unique taskId per thread
+    const sessionId = threadId
+      ? `soul-${soulId}-${userId}-${threadId}`
+      : `soul-${soulId}-${userId}`;
     const taskId = `task-${sessionId}`;
 
     // 1. Create idle task in database

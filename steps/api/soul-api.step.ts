@@ -53,7 +53,13 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
     };
   }
 
-  const sessionId = `soul-${soulId}-${userId}`;
+  // Extract threadId from trigger context to match with initialize session
+  const threadId = triggerContext.data?.threadId;
+
+  // Include threadId in sessionId to ensure unique taskId per thread
+  const sessionId = threadId
+    ? `soul-${soulId}-${userId}-${threadId}`
+    : `soul-${soulId}-${userId}`;
   const taskId = `task-${sessionId}`;
 
   // Extract messageId from trigger context (used by myecho to match responses)
