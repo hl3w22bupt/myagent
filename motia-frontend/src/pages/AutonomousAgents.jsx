@@ -117,7 +117,7 @@ function AutonomousAgents() {
       // No filter
     } else if (filter === 'active' && soul.stats.active === 0) {
       return false
-    } else if (filter === 'hibernated' && soul.stats.hibernated === 0) {
+    } else if (filter === 'hibernated' && (soul.stats.hibernated + soul.stats.idle) === 0) {
       return false
     }
 
@@ -150,6 +150,7 @@ function AutonomousAgents() {
   const totalActive = souls.reduce((sum, soul) => sum + soul.stats.active, 0)
   const totalHibernated = souls.reduce((sum, soul) => sum + soul.stats.hibernated, 0)
   const totalIdle = souls.reduce((sum, soul) => sum + soul.stats.idle, 0)
+  const totalInstances = souls.reduce((sum, soul) => sum + soul.stats.totalInstances, 0)
 
   // 查看配置
   const handleViewConfig = async (soulId) => {
@@ -246,7 +247,7 @@ function AutonomousAgents() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             全部
-            <span className="filter-count">{souls.length}</span>
+            <span className="filter-count">{totalInstances}</span>
           </button>
           <button
             className={`filter-tab ${filter === 'active' ? 'active' : ''}`}
@@ -266,7 +267,7 @@ function AutonomousAgents() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
             休眠中
-            <span className="filter-count">{totalHibernated}</span>
+            <span className="filter-count">{totalHibernated + totalIdle}</span>
           </button>
         </div>
 
@@ -373,20 +374,12 @@ function AutonomousAgents() {
                       <span>{soul.stats.active} 运行中</span>
                     </div>
                   )}
-                  {soul.stats.hibernated > 0 && (
+                  {soul.stats.hibernated + soul.stats.idle > 0 && (
                     <div className="soul-stat-badge stat-hibernated">
                       <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-9a1 1 0 10-2 1 1 0 002zM9 10a1 1 0 012 1v4a1 1 0 102 0v-4a1 1 0 00-1-1H9z" clipRule="evenodd" />
                       </svg>
-                      <span>{soul.stats.hibernated} 休眠中</span>
-                    </div>
-                  )}
-                  {soul.stats.idle > 0 && (
-                    <div className="soul-stat-badge stat-idle">
-                      <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 000 2v3a1 1 0 001 1h4a1 1 0 001-1V9a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      <span>{soul.stats.idle} 空闲</span>
+                      <span>{soul.stats.hibernated + soul.stats.idle} 休眠中</span>
                     </div>
                   )}
                   {soul.stats.totalInstances === 0 && (
