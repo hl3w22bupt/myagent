@@ -168,29 +168,6 @@ ${soulGoal}
     // Get dataStore for task status updates
     const dataStore = getDataStore();
 
-    // ✅ 直接推送 stream 更新（不依赖 Agent.run()）
-    if (streams?.taskExecution) {
-      const startUniqueId = `${this.taskId}-start-${Date.now()}`;
-      await streams.taskExecution.set(this.taskId, startUniqueId, {
-        taskId: this.taskId,
-        task: taskPrompt.substring(0, 100),
-        status: 'running',
-        sessionId: this.sessionId,
-        timestamp: new Date().toISOString(),
-        type: 'soul_execution',
-        stage: 'executing',
-        progressType: 'soul_trigger',
-        metadata: {
-          data: {
-            triggerSource: context.source,
-            triggerData: context.data,
-            message: `Soul Agent triggered by: ${context.source}`
-          }
-        }
-      });
-      console.log(`[SoulAgent] Pushed execution start to stream: ${this.taskId}`);
-    }
-
     try {
       // 1. 更新主任务状态为 'running'
       try {
@@ -219,6 +196,29 @@ ${soulGoal}
 
       // Update execution record with task info
       executionRecord.currentTask = `Execute soul: ${context.source}`;
+
+      // ✅ 直接推送 stream 更新（不依赖 Agent.run()）
+      if (streams?.taskExecution) {
+        const startUniqueId = `${this.taskId}-start-${Date.now()}`;
+        await streams.taskExecution.set(this.taskId, startUniqueId, {
+          taskId: this.taskId,
+          task: taskPrompt.substring(0, 100),
+          status: 'running',
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          type: 'soul_execution',
+          stage: 'executing',
+          progressType: 'soul_trigger',
+          metadata: {
+            data: {
+              triggerSource: context.source,
+              triggerData: context.data,
+              message: `Soul Agent triggered by: ${context.source}`
+            }
+          }
+        });
+        console.log(`[SoulAgent] Pushed execution start to stream: ${this.taskId}`);
+      }
 
       // 4. === 核心：调用父类的 run()，复用现有执行流程 ===
       const result = await this.run(
