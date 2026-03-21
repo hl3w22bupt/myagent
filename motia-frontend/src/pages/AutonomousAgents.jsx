@@ -12,6 +12,7 @@ function AutonomousAgents() {
   const [configModal, setConfigModal] = useState({ show: false, soulId: null, config: null, loading: false })
   const [executionHistory, setExecutionHistory] = useState({})
   const [historyLoading, setHistoryLoading] = useState({})
+  const [expandedHistory, setExpandedHistory] = useState({})
 
   useEffect(() => {
     const fetchSouls = async () => {
@@ -173,10 +174,6 @@ function AutonomousAgents() {
 
   // 加载执行历史
   const loadExecutionHistory = async (soulId, sessionId) => {
-    if (executionHistory[sessionId]) {
-      return // Already loaded
-    }
-
     setHistoryLoading(prev => ({ ...prev, [sessionId]: true }))
 
     try {
@@ -195,6 +192,25 @@ function AutonomousAgents() {
       console.error('Failed to load execution history:', error)
     } finally {
       setHistoryLoading(prev => ({ ...prev, [sessionId]: false }))
+    }
+  }
+
+  // 切换执行历史展开/折叠
+  const toggleHistory = async (soulId, sessionId) => {
+    const isCurrentlyExpanded = expandedHistory[sessionId]
+
+    // 如果当前是展开的，折叠它
+    if (isCurrentlyExpanded) {
+      setExpandedHistory(prev => ({ ...prev, [sessionId]: false }))
+      return
+    }
+
+    // 如果当前是折叠的，展开它并加载数据
+    setExpandedHistory(prev => ({ ...prev, [sessionId]: true }))
+
+    // 如果还没有加载过数据，加载它
+    if (!executionHistory[sessionId]) {
+      await loadExecutionHistory(soulId, sessionId)
     }
   }
 
@@ -416,19 +432,34 @@ function AutonomousAgents() {
                   <div className="instance-history">
                     <button
                       className="history-toggle"
-                      onClick={() => loadExecutionHistory(instance.soulId, instance.sessionId)}
+                      onClick={() => toggleHistory(instance.soulId, instance.sessionId)}
                     >
-                      <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg
+                        className="history-chevron"
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          transform: expandedHistory[instance.sessionId] ? 'rotate(90deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease',
+                          marginRight: '0.5rem'
+                        }}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                       执行历史
+                      {executionHistory[instance.sessionId] && (
+                        <span className="history-count">({executionHistory[instance.sessionId].length})</span>
+                      )}
                     </button>
 
-                    {historyLoading[instance.sessionId] && (
+                    {historyLoading[instance.sessionId] && expandedHistory[instance.sessionId] && (
                       <div className="history-loading">加载中...</div>
                     )}
 
-                    {executionHistory[instance.sessionId] && !historyLoading[instance.sessionId] && (
+                    {expandedHistory[instance.sessionId] && executionHistory[instance.sessionId] && !historyLoading[instance.sessionId] && (
                       <div className="history-list">
                         {executionHistory[instance.sessionId].length === 0 ? (
                           <div className="no-history">暂无执行记录</div>

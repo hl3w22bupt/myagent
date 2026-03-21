@@ -1429,6 +1429,22 @@
   color: #64748B;
 }
 
+.history-toggle .history-chevron {
+  flex-shrink: 0;
+  color: #64748B;
+  transition: transform 0.2s ease;
+}
+
+.history-count {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  color: #64748B;
+  background: #F1F5F9;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
 .history-loading {
   text-align: center;
   padding: 1.5rem;
