@@ -19,6 +19,20 @@ function AutonomousAgents() {
       try {
         const response = await soulAgentsAPI.getStatus()
         if (response.success) {
+          console.log('[API Response] Souls data:', response.data.souls)
+
+          // 检查每个实例是否有 soulId
+          response.data.souls.forEach((soul: any) => {
+            console.log(`[API Response] Soul ${soul.soulId} has ${soul.instances?.length || 0} instances`)
+            soul.instances?.forEach((instance: any, idx: number) => {
+              console.log(`[API Response] Instance ${idx}:`, {
+                sessionId: instance.sessionId,
+                soulId: instance.soulId,
+                hasSoulId: !!instance.soulId
+              })
+            })
+          })
+
           setSouls(response.data.souls)
           setSummary(response.data.summary)
         } else {
@@ -206,6 +220,8 @@ function AutonomousAgents() {
 
   // 切换执行历史展开/折叠
   const toggleHistory = async (soulId, sessionId) => {
+    console.log('[toggleHistory] Called with:', { soulId, sessionId })
+
     const isCurrentlyExpanded = expandedHistory[sessionId]
 
     // 如果当前是展开的，折叠它
