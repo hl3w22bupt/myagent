@@ -45,6 +45,14 @@ export const handler = async (request: any, { logger }: any) => {
     // Validate and parse query parameters
     const validatedQuery = requestSchema.parse(query);
 
+    logger.info('Validated query parameters', {
+      soulId,
+      sessionId: validatedQuery.sessionId,
+      limit: validatedQuery.limit,
+      offset: validatedQuery.offset,
+      status: validatedQuery.status
+    });
+
     // Build query object
     const historyQuery: any = {
       soulId,
@@ -60,12 +68,16 @@ export const handler = async (request: any, { logger }: any) => {
       historyQuery.sessionId = validatedQuery.sessionId;
     }
 
+    logger.info('Database query', { historyQuery });
+
     // Get execution history
     const history = await soulExecutionHistoryService.getExecutionHistory(historyQuery);
 
     logger.info('Soul execution history fetched successfully', {
       soulId,
-      count: history.length
+      sessionId: validatedQuery.sessionId,
+      count: history.length,
+      firstSessionId: history[0]?.sessionId
     });
 
     return {

@@ -177,9 +177,18 @@ function AutonomousAgents() {
     setHistoryLoading(prev => ({ ...prev, [sessionId]: true }))
 
     try {
+      console.log('[ExecutionHistory] Loading for:', { soulId, sessionId })
+
       const response = await soulAgentsAPI.getExecutionHistory(soulId, {
         sessionId,
         limit: 10
+      })
+
+      console.log('[ExecutionHistory] Response:', {
+        soulId,
+        sessionId,
+        count: response.data?.history?.length,
+        firstRecord: response.data?.history?.[0]
       })
 
       if (response.success) {
