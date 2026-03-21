@@ -168,6 +168,29 @@ ${soulGoal}
     // Get dataStore for task status updates
     const dataStore = getDataStore();
 
+    // ✅ 直接推送 stream 更新（不依赖 Agent.run()）
+    if (streams?.taskExecution) {
+      const startUniqueId = `${this.taskId}-start-${Date.now()}`;
+      await streams.taskExecution.set(this.taskId, startUniqueId, {
+        taskId: this.taskId,
+        task: taskPrompt.substring(0, 100),
+        status: 'running',
+        sessionId: this.sessionId,
+        timestamp: new Date().toISOString(),
+        type: 'soul_execution',
+        stage: 'executing',
+        progressType: 'soul_trigger',
+        metadata: {
+          data: {
+            triggerSource: context.source,
+            triggerData: context.data,
+            message: `Soul Agent triggered by: ${context.source}`
+          }
+        }
+      });
+      console.log(`[SoulAgent] Pushed execution start to stream: ${this.taskId}`);
+    }
+
     try {
       // 1. 更新主任务状态为 'running'
       try {
@@ -235,6 +258,30 @@ ${soulGoal}
         console.log(`[SoulAgent] Updated main task status back to idle: ${this.taskId}`);
       } catch (error) {
         console.error(`[SoulAgent] Failed to update main task status to idle:`, error);
+      }
+
+      // ✅ 推送执行完成的 stream 更新
+      if (streams?.taskExecution) {
+        const completeUniqueId = `${this.taskId}-complete-${Date.now()}`;
+        await streams.taskExecution.set(this.taskId, completeUniqueId, {
+          taskId: this.taskId,
+          task: result.output || '执行完成',
+          status: 'completed',
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          type: 'soul_execution',
+          stage: 'completed',
+          progressType: 'soul_completion',
+          metadata: {
+            data: {
+              output: result.output,
+              steps: result.steps?.length || 0,
+              duration: executionRecord.duration,
+              message: 'Soul Agent execution completed'
+            }
+          }
+        });
+        console.log(`[SoulAgent] Pushed execution completion to stream: ${this.taskId}`);
       }
 
       await this.hibernate('执行完成，等待下次触发');
