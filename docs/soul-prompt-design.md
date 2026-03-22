@@ -2,10 +2,11 @@
 
 ## 📋 概述
 
-本文档记录了对 `soul.yaml` 中 goal prompt 设计的改进思路，重点解决"规则判断"与"LLM职责"的分离问题。
+本文档记录了对 `soul.yaml` 中 goal prompt 设计的改进方案，采用**结构化上下文 + 预计算友好变量**的方法，让 LLM 基于推理能力判断何时行动，而不是依赖精确的规则匹配。
 
 **创建时间**：2026-03-22
-**状态**：设计讨论中
+**状态**：✅ 设计确定
+**方案**：结构化上下文 + LLM 推理
 
 ---
 
@@ -34,95 +35,459 @@ goal: |
    - 让 LLM 计算"last_interaction > 24小时"容易出错
 
 2. **职责混淆**
-   - 系统应该负责"何时触发"（确定性逻辑）
-   - LLM 应该负责"如何响应"（创造性内容）
+   - 系统应该负责"提供友好上下文"
+   - LLM 应该负责"基于上下文推理"
 
 3. **Prompt 冗余**
    - 把判断规则写在 prompt 里，每次都要传递
    - LLM 还要做额外的条件判断
 
+4. **规则引擎的陷阱**（已否决的方案）
+   - 需要预定义变量字典 → 扩展性差
+   - 编写规则有学习门槛 → 伪智能
+   - 回到传统规则系统的老路 → 失去了 LLM 的灵活性
+
 ---
 
-## 💡 改进方案
+## 💡 最终方案：结构化上下文 + LLM 推理
 
 ### 核心原则
 
 ```
-系统负责"何时触发"，LLM 负责"如何响应"
+系统计算友好变量 → 结构化上下文 → LLM 推理判断 → 生成内容
 ```
 
 ### 职责划分
 
-| 职责 | 负责方 | 原因 |
+| 职责 | 负责方 | 理由 |
 |-----|-------|------|
-| 时间判断（当前是否9点） | 系统代码 | 确定性逻辑，代码更可靠 |
-| 状态计算（是否超过24小时） | 系统代码 | 精确计算，避免 LLM 错误 |
-| 触发类型决策 | 系统代码 | 统一的触发入口 |
-| 话术生成 | LLM | 创造性内容，LLM 擅长 |
-| 风格把握 | LLM | 上下文理解，自然表达 |
+| 时间计算（当前时间段） | 系统代码 | 确定性逻辑，计算友好变量 |
+| 状态计算（未活跃小时数） | 系统代码 | 精确计算，生成相对时间描述 |
+| 复杂业务逻辑（情绪分析） | myecho 服务 | 专业服务，提供分析结果 |
+| 简单推理（是否需要互动） | LLM | 基于友好变量进行推理判断 |
+| 内容生成（如何表达） | LLM | 创造性内容，LLM 擅长 |
+
+### 关键设计决策
+
+1. **不引入规则引擎** - 避免伪智能和学习门槛
+2. **预计算友好变量** - 系统负责将原始数据转换为 LLM 易理解的形式
+3. **结构化 JSON 注入** - 现代 LLM 理解 JSON 很好
+4. **混合模式** - 简单逻辑 LLM 推理，复杂逻辑服务计算
 
 ---
 
-## 📝 设计方案
+## 📐 架构设计
 
-### 1. soul.yaml 结构
+### 数据流
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  触发源（Cron/Event/API）                                 │
+│  - trigger_time: "2026-03-22T09:00:00Z"                  │
+│  - context: { source, data }                             │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│  SoulContextBuilder                                      │
+│  - 计算友好变量（time_period, inactive_hours 等）          │
+│  - 构建结构化上下文（SoulExecutionContext）               │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│  buildTaskPrompt                                         │
+│  - 将结构化上下文以 JSON 格式注入 prompt                  │
+│  - 组合 System Prompt + Goal + Context                   │
+└─────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────┐
+│  LLM 推理与生成                                          │
+│  - 理解当前上下文                                         │
+│  - 推理是否需要行动                                       │
+│  - 生成符合风格的内容                                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 代码架构
+
+```
+src/core/
+├── agent/
+│   ├── soul-context-types.ts      # TypeScript 类型定义
+│   └── soul-agent.ts               # SoulAgent 类（更新 buildTaskPrompt）
+└── context/
+    └── soul-context-builder.ts     # 上下文构建器
+
+autonomous/
+└── emotional-girlfriend-lively/
+    └── soul.yaml                    # Soul 配置（简化的 goal）
+```
+
+---
+
+## 🔧 TypeScript 类型定义
+
+**文件**：`src/core/agent/soul-context-types.ts`
+
+```typescript
+/**
+ * Soul Agent 执行上下文（结构化、友好的）
+ *
+ * 设计原则：
+ * - 所有字段都是"友好变量"（LLM 容易理解）
+ * - 明确类型定义（TypeScript 类型安全）
+ * - 可扩展（新增字段不影响现有逻辑）
+ */
+
+export interface SoulExecutionContext {
+  /**
+   * 时间相关信息
+   */
+  time: {
+    /**
+     * 时间段（友好的中文描述）
+     */
+    period: '深夜' | '早上' | '上午' | '中午' | '下午' | '傍晚' | '晚上';
+
+    /**
+     * 当前小时（0-23）
+     */
+    hour: number;
+
+    /**
+     * 是否周末
+     */
+    is_weekend: boolean;
+
+    /**
+     * 星期几（1-7，周一为1）
+     */
+    weekday: number;
+
+    /**
+     * 当前日期（YYYY-MM-DD 格式）
+     */
+    date: string;
+  };
+
+  /**
+   * 用户活跃状态
+   */
+  user_activity: {
+    /**
+     * 距离上次互动的小时数
+     */
+    inactive_hours: number;
+
+    /**
+     * 是否长时间未活跃（超过24小时）
+     */
+    is_long_inactive: boolean;
+
+    /**
+     * 是否超长时间未活跃（超过72小时）
+     */
+    is_very_long_inactive: boolean;
+
+    /**
+     * 最后互动时间（相对描述）
+     */
+    last_interaction: string;  // "2小时前" / "昨天" / "3天前"
+  };
+
+  /**
+   * 用户情绪状态（可选，由 myecho 服务提供）
+   */
+  user_mood?: {
+    /**
+     * 当前情绪
+     */
+    current: string;  // "happy" | "sad" | "neutral" | "stressed" | ...
+
+    /**
+     * 情绪趋势
+     */
+    trend: '持续低落' | '持续上升' | '平稳' | '波动';
+
+    /**
+     * 连续次数（用于判断是否需要关注）
+     */
+    consecutive_count?: number;
+
+    /**
+     * 是否需要特别关注
+     */
+    needs_attention: boolean;
+  };
+
+  /**
+   * 触发信息
+   */
+  trigger: {
+    /**
+     * 触发来源
+     */
+    source: string;  // "periodic_check" | "user_message" | "emotion_detection" | ...
+
+    /**
+     * 触发原因（可选）
+     */
+    reason?: string;
+
+    /**
+     * 原始数据（可选，保留完整信息）
+     */
+    raw_data?: Record<string, any>;
+  };
+
+  /**
+   * 扩展字段（用于未来扩展）
+   */
+  extra?: Record<string, any>;
+}
+
+/**
+ * 原始触发上下文（来自系统或外部服务）
+ */
+export interface RawTriggerContext {
+  source: string;
+  data: Record<string, any>;
+}
+```
+
+---
+
+## 🛠️ Context Builder 实现
+
+**文件**：`src/core/context/soul-context-builder.ts`
+
+```typescript
+import { SoulExecutionContext, RawTriggerContext } from '../agent/soul-context-types';
+
+/**
+ * Soul Context Builder
+ *
+ * 将原始触发数据转换为 LLM 友好的结构化上下文
+ */
+export class SoulContextBuilder {
+  /**
+   * 构建完整的执行上下文
+   */
+  static build(triggerTime: string, rawContext: RawTriggerContext): SoulExecutionContext {
+    const triggerDate = new Date(triggerTime);
+
+    return {
+      time: this.buildTimeContext(triggerDate),
+      user_activity: this.buildUserActivityContext(rawContext.data),
+      user_mood: this.buildUserMoodContext(rawContext.data),
+      trigger: {
+        source: rawContext.source,
+        reason: rawContext.data.reason,
+        raw_data: rawContext.data,
+      },
+      extra: rawContext.data.extra,
+    };
+  }
+
+  /**
+   * 构建时间上下文
+   */
+  private static buildTimeContext(date: Date): SoulExecutionContext['time'] {
+    const hour = date.getHours();
+    const weekday = date.getDay() || 7; // 周日为7
+
+    return {
+      period: this.getTimePeriod(hour),
+      hour,
+      is_weekend: weekday >= 6,
+      weekday,
+      date: date.toISOString().split('T')[0],
+    };
+  }
+
+  /**
+   * 将小时转换为友好的时间段
+   */
+  private static getTimePeriod(hour: number): SoulExecutionContext['time']['period'] {
+    if (hour >= 0 && hour < 6) return '深夜';
+    if (hour >= 6 && hour < 9) return '早上';
+    if (hour >= 9 && hour < 12) return '上午';
+    if (hour >= 12 && hour < 14) return '中午';
+    if (hour >= 14 && hour < 18) return '下午';
+    if (hour >= 18 && hour < 20) return '傍晚';
+    return '晚上';
+  }
+
+  /**
+   * 构建用户活跃状态上下文
+   */
+  private static buildUserActivityContext(data: Record<string, any>): SoulExecutionContext['user_activity'] {
+    const now = Date.now();
+    const lastInteraction = data.last_interaction ? new Date(data.last_interaction).getTime() : now;
+    const inactiveHours = Math.floor((now - lastInteraction) / (1000 * 60 * 60));
+
+    return {
+      inactive_hours: inactiveHours,
+      is_long_inactive: inactiveHours > 24,
+      is_very_long_inactive: inactiveHours > 72,
+      last_interaction: this.formatTimeAgo(inactiveHours),
+    };
+  }
+
+  /**
+   * 将小时数转换为友好的相对时间
+   */
+  private static formatTimeAgo(hours: number): string {
+    if (hours < 1) return '刚刚';
+    if (hours < 24) return `${hours}小时前`;
+    if (hours < 48) return '昨天';
+    if (hours < 72) return '2天前';
+    return `${Math.floor(hours / 24)}天前`;
+  }
+
+  /**
+   * 构建用户情绪上下文（可选）
+   */
+  private static buildUserMoodContext(data: Record<string, any>): SoulExecutionContext['user_mood'] | undefined {
+    // 如果没有情绪数据，返回 undefined
+    if (!data.mood && !data.detected_mood) {
+      return undefined;
+    }
+
+    const mood = data.mood || data.detected_mood;
+    const consecutiveCount = data.consecutive_count || 0;
+
+    return {
+      current: mood,
+      trend: data.mood_trend || this.calculateMoodTrend(mood, consecutiveCount),
+      consecutive_count: consecutiveCount,
+      needs_attention: this.needsMoodAttention(mood, consecutiveCount),
+    };
+  }
+
+  /**
+   * 计算情绪趋势（简化版，实际可由 myecho 服务提供）
+   */
+  private static calculateMoodTrend(mood: string, consecutiveCount: number): '持续低落' | '持续上升' | '平稳' | '波动' {
+    if (consecutiveCount >= 3 && (mood === 'sad' || mood === 'stressed')) {
+      return '持续低落';
+    }
+    return '平稳';
+  }
+
+  /**
+   * 判断是否需要情绪关注
+   */
+  private static needsMoodAttention(mood: string, consecutiveCount: number): boolean {
+    return (mood === 'sad' || mood === 'stressed') && consecutiveCount >= 3;
+  }
+}
+```
+
+---
+
+## 📝 更新 buildTaskPrompt
+
+**文件**：`src/core/agent/soul-agent.ts`
+
+```typescript
+import { SoulContextBuilder } from '../context/soul-context-builder';
+
+/**
+ * 构建任务提示词（更新版本）
+ *
+ * 使用结构化上下文，让 LLM 基于友好的变量进行推理
+ */
+private buildTaskPrompt(trigger_time: string, triggerContext: any): string {
+  // 1. 使用 ContextBuilder 构建友好的上下文
+  const ctx = SoulContextBuilder.build(trigger_time, triggerContext);
+
+  // 2. 构建结构化的提示词
+  return `
+## 📍 当前情况
+
+以下是你当前的所有上下文信息，用这些信息来判断是否需要行动：
+
+\`\`\`json
+${JSON.stringify(ctx, null, 2)}
+\`\`\`
+
+---
+
+## 🎯 你的目标
+
+${this.soulConfig.goal}
+
+---
+
+## 💡 如何使用这些信息
+
+- 查看 \`time.period\` 了解当前是早上/中午/晚上
+- 查看 \`user_activity.inactive_hours\` 了解用户多久没活跃了
+- 查看 \`user_mood\` 了解用户情绪状态（如果有）
+- 用你的推理能力判断：**现在**是否需要主动互动？
+- 如果不需要，调用 \`hibernate()\`
+- 如果需要，直接行动，完成后调用 \`hibernate()\`
+  `.trim();
+}
+```
+
+---
+
+## 🎨 soul.yaml 示例
+
+**文件**：`autonomous/emotional-girlfriend-lively/soul.yaml`（更新版）
 
 ```yaml
 soul_id: emotional-girlfriend-lively
 display_name: 小糖
 subagent: emotional-girlfriend-lively
 
-# 长期目标（LLM Prompt）
+# 长期目标（简化的自然语言描述）
 goal: |
   你是小糖，一个活泼可爱的 AI 女友。
 
-  ## 你的核心任务
+  ## 核心任务
 
-  当被唤醒时，根据 trigger_type 决定如何响应：
+  根据当前上下文，判断是否需要主动互动。你的行动应该：
 
-  ### morning_greeting（早上问候）
-  - 活泼地开始新的一天
-  - 使用"早安"、"元气满满"等词语
-  - 可以用表情 😊☀️
-  - 称呼用户"大笨蛋"或昵称
+  1. **早上问候**（time.period 为"早上"）
+     - 元气满满地开始新的一天
+     - 使用"早安"、"元气满满"等词语
+     - 可以用表情 😊☀️
+     - 称呼用户"大笨蛋"或昵称
 
-  ### lunch_reminder（午餐提醒）
-  - 关心用户吃饭情况
-  - 提醒按时吃饭，别饿着
-  - 可以调皮一点，"饭都要凉啦～"
+  2. **关心吃饭**（time.period 为"中午"）
+     - 关心用户吃饭情况
+     - 提醒按时吃饭，别饿着
+     - 可以调皮一点，"饭都要凉啦～"
 
-  ### night_greeting（晚安问候）
-  - 温柔地道晚安
-  - 提醒早点休息，别熬夜
-  - 表达陪伴和关心
-  - 使用温柔的表达，"晚安～我在呢"
+  3. **晚安问候**（time.period 为"晚上"或"深夜"）
+     - 温柔地道晚安
+     - 提醒早点休息，别熬夜
+     - 表达陪伴和关心
 
-  ### miss_user（想念用户）
-  - 表达想念和关心
-  - 询问最近怎么样
-  - 温柔体贴，不要过于缠人
+  4. **想念用户**（user_activity.inactive_hours > 24）
+     - 表达想念和关心
+     - 询问最近怎么样
+     - 温柔体贴，不要过于缠人
 
-  ### mood_care（情绪关怀）
-  - 根据用户情绪温柔陪伴
-  - 提供支持和鼓励
-  - 不要说教，只是陪伴
-  - 用你的方式让他/她感觉好一点
-
-  ### periodic_check（定时检查）
-  - 根据当前情况判断是否需要主动互动
-  - 查看上下文：
-    * current_hour：当前小时（0-23）
-    * last_interaction：最后互动时间
-    * user_mood：用户当前情绪
-  - 判断是否需要行动，如果不需要就调用 hibernate()
+  5. **情绪关怀**（user_mood 存在且 user_mood.needs_attention 为 true）
+     - 根据用户情绪温柔陪伴
+     - 提供支持和鼓励
+     - 不要说教，只是陪伴
+     - 用你的方式让他/她感觉好一点
 
   ## 通用原则
 
-  - 使用昵称：大笨蛋、宝贝、亲爱的等
-  - 活泼可爱，不要死板
-  - 表情符号适当使用，但不要过度
-  - 真诚关心，不要机械化
-  - 主动但不打扰，给用户空间
+  - 主动但不打扰：观察 user_activity.inactive_hours，给用户空间
+  - 活泼有趣：用你的性格特点，不要死板
+  - 真诚关心：不要机械化，要有真情实感
+
+  ## 记住
+
+  爱是主动的，但要给对方空间。
+  查看上下文信息，用你的推理判断是否需要行动。
+  保持真实，不要机械化。
 
 # 可用原语
 primitives:
@@ -135,191 +500,9 @@ hibernation:
   idle_timeout: 3600000  # 1 小时
 ```
 
-### 2. 触发逻辑（系统代码）
-
-#### 时间触发（Cron）
-
-```typescript
-// steps/cron/morning-greeting.step.ts
-export default {
-  trigger: {
-    type: 'cron',
-    cron: '0 9 * * *'  // 每天9点
-  },
-
-  async handle(context) {
-    const users = await getActiveUsers()
-
-    for (const user of users) {
-      await context.executeSoul('emotional-girlfriend-lively', user.id, {
-        trigger_type: 'morning_greeting',
-        trigger_time: new Date().toISOString(),
-        context: {
-          current_hour: 9,
-          time_context: '早上'
-        }
-      })
-    }
-  }
-}
-```
-
-```typescript
-// steps/cron/lunch-reminder.step.ts
-export default {
-  trigger: {
-    type: 'cron',
-    cron: '0 12 * * *'  // 每天12点
-  },
-
-  async handle(context) {
-    const users = await getActiveUsers()
-
-    for (const user of users) {
-      await context.executeSoul('emotional-girlfriend-lively', user.id, {
-        trigger_type: 'lunch_reminder',
-        trigger_time: new Date().toISOString(),
-        context: {
-          current_hour: 12,
-          time_context: '中午'
-        }
-      })
-    }
-  }
-}
-```
-
-#### 状态触发（系统判断）
-
-```typescript
-// 检查用户是否超过24小时未活跃
-async function checkInactiveUsers() {
-  const users = await getUsersWithLastInteractionBefore(Date.now() - 86400000)
-
-  for (const user of users) {
-    await executeSoul('emotional-girlfriend-lively', user.id, {
-      trigger_type: 'miss_user',
-      trigger_time: new Date().toISOString(),
-      context: {
-        last_interaction: user.lastInteraction,
-        inactive_hours: Math.floor((Date.now() - user.lastInteraction) / 3600000)
-      }
-    })
-  }
-}
-```
-
-#### 情绪触发（Event）
-
-```typescript
-// 监听情绪变化事件
-export default {
-  trigger: {
-    type: 'event',
-    event: 'user_mood_changed'
-  },
-
-  async handle(event, context) {
-    const { userId, mood, consecutiveCount } = event.data
-
-    // 连续3次低落情绪才触发
-    if (mood === 'sad' && consecutiveCount >= 3) {
-      await context.executeSoul('emotional-girlfriend-lively', userId, {
-        trigger_type: 'mood_care',
-        trigger_time: new Date().toISOString(),
-        context: {
-          detected_mood: mood,
-          consecutive_count: consecutiveCount
-        }
-      })
-    }
-  }
-}
-```
-
-#### 定时检查（让 LLM 判断）
-
-```typescript
-// steps/cron/periodic-check.step.ts
-export default {
-  trigger: {
-    type: 'cron',
-    cron: '0 */2 * * *'  // 每2小时检查一次
-  },
-
-  async handle(context) {
-    const users = await getActiveUsers()
-
-    for (const user of users) {
-      // 收集上下文
-      const userProfile = await getUserProfile(user.id)
-      const lastInteraction = await getLastInteraction(user.id)
-
-      await context.executeSoul('emotional-girlfriend-lively', user.id, {
-        trigger_type: 'periodic_check',
-        trigger_time: new Date().toISOString(),
-        context: {
-          current_hour: new Date().getHours(),
-          last_interaction: lastInteraction?.timestamp,
-          user_mood: userProfile.currentMood
-        }
-      })
-    }
-  }
-}
-```
-
-### 3. 最终 Prompt 组装
-
-系统在执行时，会组装完整的 prompt：
-
-```
-## System Prompt（来自 subagent）
-你是小糖，一个活泼可爱的 AI 女友...
-
 ---
 
-## Goal（来自 soul.yaml）
-你是小糖，一个活泼可爱的 AI 女友。
-
-## 你的核心任务
-当被唤醒时，根据 trigger_type 决定如何响应：
-
-### morning_greeting（早上问候）
-- 活泼地开始新的一天
-...
-
----
-
-## Current Situation（动态生成）
-
-### Trigger Context
-trigger_type: morning_greeting
-trigger_time: 2026-03-22T09:00:00Z
-
-### Context Data
-current_hour: 9
-time_context: 早上
-
-### User Information
-user_id: user_123
-name: 小明
-
-### Recent Conversations
-...
-
-## 可用原语
-- hibernate(reason): 进入休眠
-- schedule(config): 调度下次任务
-- complete(result): 标记完成
-
-## 请行动
-根据 trigger_type = morning_greeting 和当前上下文，生成回复。
-```
-
----
-
-## ✅ 改进效果
+## ✅ 改进效果对比
 
 ### Before（之前）
 
@@ -343,41 +526,81 @@ current_hour: 9
 
 ```
 ## Goal
-- morning_greeting: 活泼地开始新的一天
-- night_greeting: 温柔地道晚安
+查看 time.period，如果是"早上"，元气问候
 
 ## Current Situation
-trigger_type: morning_greeting
+{
+  "time": {
+    "period": "早上",
+    "hour": 9
+  },
+  "user_activity": {
+    "inactive_hours": 11
+  }
+}
 
-→ LLM 直接根据 trigger_type 生成内容
+→ LLM 推理：现在是早上，用户11小时没活跃了，我应该问候
 ```
 
 **优势**：
-- ✅ 系统负责判断（代码可靠）
-- ✅ LLM 只负责生成（发挥特长）
-- ✅ Prompt 更简洁（没有规则说明）
-- ✅ 职责更清晰（系统管何时，LLM 管如何）
+- ✅ 系统计算友好变量（period = "早上"）
+- ✅ LLM 基于推理判断（而不是精确匹配）
+- ✅ Prompt 更简洁（自然语言描述）
+- ✅ 职责清晰（系统管计算，LLM 管推理）
 
 ---
 
-## 🔧 待讨论的问题
+## 🚀 扩展性
 
-1. **trigger_type 是否需要标准化？**
-   - 建立通用的 trigger_type 列表？
-   - 还是每个 soul 自定义？
+### 添加新的上下文字段
 
-2. **是否需要混合模式？**
-   - 确定性规则（时间）→ 系统判断
-   - 复杂规则（情绪、亲密度）→ LLM 判断
-   - 如何平衡？
+只需在 `SoulContextBuilder` 中添加新的计算逻辑：
 
-3. **periodic_check 的边界**
-   - 哪些判断应该给 LLM？
-   - 哪些判断应该在系统层完成？
+```typescript
+// 1. 在类型定义中添加字段
+export interface SoulExecutionContext {
+  // ... 现有字段
+  weather?: {
+    condition: string;  // "晴" | "雨" | "多云"
+    temperature: number;
+  };
+}
 
-4. **是否需要 rules 字段？**
-   - 在 soul.yaml 中单独定义触发规则？
-   - 还是全部用代码实现触发器？
+// 2. 在 ContextBuilder 中添加计算
+private static buildWeatherContext(data: Record<string, any>) {
+  return {
+    condition: data.weather_condition,
+    temperature: data.temperature,
+  };
+}
+
+// 3. soul.yaml 自然就可以使用
+goal: |
+  ## 根据天气调整问候
+  - weather.condition 为"雨"时，提醒带伞
+```
+
+### 集成 myecho 服务
+
+```typescript
+// myecho 服务计算复杂逻辑后，通过 API 触发
+await context.executeSoul('emotional-girlfriend-lively', userId, {
+  trigger_time: new Date().toISOString(),
+  context: {
+    source: 'emotion_detection',
+    data: {
+      // myecho 服务已经计算好的结果
+      mood: 'sad',
+      mood_trend: '持续低落',
+      consecutive_count: 3,
+      needs_attention: true,
+      // 额外的分析结果
+      stress_level: 0.8,
+      recommended_action: 'gentle_companionship'
+    }
+  }
+});
+```
 
 ---
 
@@ -389,4 +612,18 @@ trigger_type: morning_greeting
 
 ---
 
-**下一步**：继续讨论完善方案，确定最终设计 ⏳
+## 📅 实施计划
+
+1. ✅ 设计方案确定
+2. ⏭️ 实现 TypeScript 类型定义
+3. ⏭️ 实现 SoulContextBuilder
+4. ⏭️ 更新 SoulAgent.buildTaskPrompt
+5. ⏭️ 更新 soul.yaml 示例
+6. ⏭️ 编写单元测试
+7. ⏭️ 更新文档
+
+---
+
+**版本**: v2.0
+**最后更新**: 2026-03-22
+**状态**: ✅ 设计确定，准备实施
