@@ -18,6 +18,7 @@ export const config = {
   cron: '0 * * * *', // Every hour at minute 0
   name: 'soul-cleanup-cron',
   description: 'Cleanup stopped Soul Agent instances older than 12 hours',
+  emits: [], // No events emitted
 };
 
 /**
