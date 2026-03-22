@@ -89,6 +89,15 @@ function AutonomousAgents() {
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
           </svg>
         )
+      },
+      STOPPED_FILTER: {
+        label: '已停止',
+        className: 'stopped-filter',
+        icon: (
+          <svg style={{ width: '14px', height: '14px' }} fill="currentColor" viewBox="0 0 20 20">
+            <rect x="6" y="6" width="12" height="12" rx="1" />
+          </svg>
+        )
       }
     }
     return statusMap[status] || statusMap.IDLE
@@ -146,6 +155,8 @@ function AutonomousAgents() {
       return instance.status === 'ACTIVE'
     } else if (filter === 'hibernated') {
       return instance.status === 'HIBERNATED' || instance.status === 'IDLE'
+    } else if (filter === 'stopped') {
+      return instance.status === 'STOPPED'
     }
     return true
   })
@@ -166,6 +177,11 @@ function AutonomousAgents() {
   const totalActive = souls.reduce((sum, soul) => sum + soul.stats.active, 0)
   const totalHibernated = souls.reduce((sum, soul) => sum + soul.stats.hibernated, 0)
   const totalIdle = souls.reduce((sum, soul) => sum + soul.stats.idle, 0)
+  // 计算已停止的实例数量（从实例列表中统计，因为后端 stats 没有 stopped 字段）
+  const totalStopped = souls.reduce((sum, soul) => {
+    const stoppedInSoul = soul.instances?.filter(instance => instance.status === 'STOPPED').length || 0
+    return sum + stoppedInSoul
+  }, 0)
   const totalInstances = souls.reduce((sum, soul) => sum + soul.stats.totalInstances, 0)
 
   // 查看配置
@@ -287,26 +303,22 @@ function AutonomousAgents() {
       const response = await soulAgentsAPI.deleteSession(soulId, sessionId)
 
       if (response.success) {
-        // 从本地状态中移除该实例
-        setSouls(prevSouls =>
-          prevSouls.map(soul => ({
-            ...soul,
-            instances: soul.instances.filter(instance => instance.sessionId !== sessionId),
-            stats: {
-              ...soul.stats,
-              totalInstances: soul.stats.totalInstances - 1,
-              active: instance.status === 'ACTIVE' ? soul.stats.active - 1 : soul.stats.active,
-              hibernated: instance.status === 'HIBERNATED' ? soul.stats.hibernated - 1 : soul.stats.hibernated,
-              idle: instance.status === 'IDLE' ? soul.stats.idle - 1 : soul.stats.idle
-            }
-          }))
-        )
-
-        // 刷新数据
-        const statusResponse = await soulAgentsAPI.getStatus()
-        if (statusResponse.success) {
-          setSouls(statusResponse.data.souls)
-          setSummary(statusResponse.data.summary)
+        // ✅ 直接刷新数据，而不是手动更新状态（避免引用错误）
+        try {
+          const statusResponse = await soulAgentsAPI.getStatus()
+          if (statusResponse.success) {
+            setSouls(statusResponse.data.souls || [])
+            setSummary(statusResponse.data.summary || null)
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh after delete:', refreshError)
+          // 即使刷新失败，也要移除本地状态中的实例（手动过滤）
+          setSouls(prevSouls =>
+            prevSouls.map(soul => ({
+              ...soul,
+              instances: soul.instances.filter(instance => instance.sessionId !== sessionId)
+            }))
+          )
         }
 
         alert('Soul Agent 实例已删除')
@@ -392,6 +404,16 @@ function AutonomousAgents() {
             休眠中
             <span className="filter-count">{totalHibernated + totalIdle}</span>
           </button>
+          <button
+            className={`filter-tab ${filter === 'stopped' ? 'active' : ''}`}
+            onClick={() => setFilter('stopped')}
+          >
+            <svg style={{ width: '16px', height: '16px' }} fill="currentColor" viewBox="0 0 20 20">
+              <rect x="6" y="6" width="12" height="12" rx="1" />
+            </svg>
+            已停止
+            <span className="filter-count">{totalStopped}</span>
+          </button>
         </div>
 
         {/* Search Box */}
@@ -431,7 +453,7 @@ function AutonomousAgents() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
           <h3>暂无自主智能体实例</h3>
-          <p>{filter === 'all' ? '没有找到任何自主智能体实例' : `没有找到${filter === 'active' ? '运行中' : '休眠中'}的实例`}</p>
+          <p>{filter === 'all' ? '没有找到任何自主智能体实例' : filter === 'active' ? '没有找到运行中的实例' : filter === 'hibernated' ? '没有找到休眠中的实例' : '没有找到已停止的实例'}</p>
         </div>
       ) : (
         <div className="instances-grid">

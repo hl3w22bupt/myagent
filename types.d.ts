@@ -22,6 +22,7 @@ declare module 'motia' {
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'soul-demo-chat': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'UserProfileAnalysis': CronHandler<never>
+    'soul-cleanup-cron': CronHandler<never>
     'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'execution-traces-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
