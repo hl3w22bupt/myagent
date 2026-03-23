@@ -34,7 +34,7 @@ export const handler = async (
     }
     const taskId = validationResult.data;
 
-    // 获取上下文
+    // 从 task_contexts 获取上下文
     const context = await contextManager.getContext(taskId);
 
     if (!context) {
@@ -54,6 +54,7 @@ export const handler = async (
 
     logger.info('Context retrieved', {
       taskId,
+      contextType: context.metadata?.type || 'standard',
       roundsCount: context.conversationRounds.length,
       historyCount: conversationHistory.length,
     });

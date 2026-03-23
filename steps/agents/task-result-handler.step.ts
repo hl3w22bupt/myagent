@@ -1007,7 +1007,10 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         if (isTextOutput) {
           // Generate a unique artifact ID for the text output
           const artifactId = `text_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-          const textContent = normalizedResult.output;
+          // ✅ 优先使用 structuredOutput（完整 JSON），如果没有则使用 output
+          const textContent = 'structuredOutput' in normalizedResult && normalizedResult.structuredOutput
+            ? JSON.stringify(normalizedResult.structuredOutput, null, 2)
+            : normalizedResult.output;
 
           // Only save if the output is not empty and not just a placeholder
           if (textContent.trim() && textContent !== 'AI is thinking...' && textContent.length > 0) {
@@ -1333,7 +1336,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
         metadata: parsedMetadata,
         artifacts: artifactsForStream,
         pinned: finalTask.pinned || false,
-        messageId: messageId,  // ← Include messageId in taskResult for MyEcho matching
+        messageId: messageId,
         timestamp: finalTask.createdAt instanceof Date
           ? finalTask.createdAt.toISOString()
           : new Date(finalTask.createdAt).toISOString(),

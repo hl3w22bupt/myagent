@@ -26,13 +26,14 @@
 ### 核心理念
 
 ```
-上层应用（App）决定何时触发 → Soul 决定做什么 → LLM 智能执行
+上层应用（App）决定何时触发 → Soul Agent 加载 goal → LLM 根据 goal 智能执行
 ```
 
 **职责分离**：
-- Soul 配置：定义"我是谁"、"我的目标"
-- App 触发器：决定"何时唤醒"
-- LLM：智能决策"现在该做什么"
+- SoulAgent（框架）：提供通用的执行机制，零业务逻辑
+- Soul 配置（soul.yaml）：定义"我的目标"、"何时该行动"
+- App 触发器：决定"何时唤醒 Soul"
+- LLM：根据 goal（长期目标）+ 当前上下文智能决策
 
 ---
 
@@ -74,11 +75,38 @@
 ### 3. 原语（Primitives）
 
 **通用原语，所有自主 Agent 共享**：
-- `hibernate(reason)`: 进入休眠
-- `schedule(task, trigger)`: 调度任务
-- `complete(result)`: 标记完成
+- `hibernate(reason)`: 进入休眠，释放资源
+- `complete(result)`: 标记当前任务完成
+- `send_message(message)`: 发送消息给用户
+- `send_notification(title, body, urgency)`: 发送推送通知
+
+**注意**：`schedule` 原语已被移除。定时检查由外部 cron step（`soul-periodic-check.step.ts`）驱动，Soul Agent 只需要在执行完成后休眠，等待下次触发。
 
 原语是底层的、通用的操作，与业务无关。
+
+### 4. 业务逻辑配置化
+
+**关键设计**：SoulAgent 是通用框架，不包含任何业务逻辑。
+
+- **soul.yaml 的 goal**：定义业务逻辑和行动准则
+- **LLM 智能决策**：根据 goal + 当前上下文判断该做什么
+- **框架无关性**：SoulAgent 不知道"早安问候"等业务概念
+
+示例：
+```yaml
+# soul.yaml 的 goal 定义业务逻辑
+goal: |
+  你的核心目标：
+  1. 在早上9点主动问候用户
+  2. 用户超过24小时未活跃时主动关心
+  3. 检测到用户情绪低落时主动关怀
+
+  行动准则：
+  - 观察当前时间：早上9点 → 主动问候
+  - 观察最后互动时间：>24小时 → 主动关心
+```
+
+LLM 会根据这个 goal 和当前情况（时间、用户状态）智能判断应该做什么。
 
 ---
 
@@ -128,6 +156,107 @@ Task Prompt（当前情况）
 LLM 的完整输入
 ```
 
+### Contractor 模式（包工头架构）
+
+**核心比喻**：SoulAgent = 包工头
+
+```
+【造单】定时检查（periodic_check）：
+- 判断要不要干？
+- 决定干什么？
+- 描述任务："主动问候用户"
+
+【接单】API 触发（user_message）：
+- 接收客户任务
+- 描述任务："回复用户消息"
+
+Agent 基类（Worker）：
+- 接收任务描述
+- 规划：用什么 skills、怎么干
+- 执行：调用 skills、生成代码
+- 完成任务，报告包工头
+```
+
+**两层决策架构**：
+
+1. **Layer 1: Context-Aware Planning (SoulAgent)**
+   - 职责："要不要做" + "做什么"
+   - 输入：结构化上下文（时间、用户状态、触发源）
+   - 输出：任务描述
+   - 决策者：SoulAgent 的前置决策逻辑
+
+2. **Layer 2: Task Planning (Agent 基类)**
+   - 职责："怎么做"
+   - 输入：任务描述 + 对话历史 + skills
+   - 输出：执行结果
+   - 决策者：PTC (Planned Task Chain)
+
+**接单 vs 造单模式**：
+
+| 模式 | 触发源 | 决策逻辑 | 任务来源 | 优先级 |
+|------|--------|----------|----------|--------|
+| **接单模式** | `user_message` | 无需决策，直接执行 | 用户主动发起 | 高（取消当前任务） |
+| **造单模式** | `periodic_check` | LLM 决策是否行动 | SoulAgent 自主判断 | 低（当前任务执行中则跳过） |
+
+**实现细节**：
+
+```typescript
+async execute(input: SoulInput): Promise<any> {
+  const { trigger_time, context } = input;
+  const source = context.source;
+
+  // 【包工头逻辑】根据触发源选择处理方式
+  if (source === 'user_message') {
+    // 【接单模式】API 触发：用户消息优先
+    return await this.handleUserMessage(input, streams);
+  } else {
+    // 【造单模式】定时触发：自主决策
+    return await this.handlePeriodicCheck(input, streams);
+  }
+}
+
+// 【造单模式】处理流程
+private async handlePeriodicCheck(input: SoulInput, streams: any): Promise<any> {
+  // 1. 构建结构化上下文（友好变量）
+  const ctx = SoulContextBuilder.build(trigger_time, context);
+
+  // 2. 判断是否需要行动（前置决策）
+  const decision = await this.makeDecision(ctx);
+
+  if (!decision.needsAction) {
+    // 不需要行动，直接休眠
+    await this.hibernate(decision.reason || '无需行动');
+    return { success: true, action: 'hibernated', reason: decision.reason };
+  }
+
+  // 3. 需要行动，描述任务
+  const taskDescription = this.buildTaskDescription(ctx);
+
+  // 4. 调用基类 Agent.run()
+  const result = await this.run(taskDescription, this.taskId, {
+    conversationHistory: await this.getRecentConversations(10),
+    tools: this.getPrimitiveTools(),
+    streams: streams
+  });
+
+  // 5. 任务完成后休眠
+  await this.hibernate('任务完成');
+  return result;
+}
+```
+
+**触发系统**：
+
+1. **定时检查（造单模式）**：
+   - Cron Step: `steps/cron/soul-periodic-check.step.ts`
+   - 频率: `*/10 * * * *` (每 10 分钟)
+   - 触发事件: `soul.agent.execute`
+
+2. **用户消息（接单模式）**：
+   - API Step: `steps/api/soul-api.step.ts`
+   - 触发源: `user_message`
+   - 优先级: 高（取消当前任务）
+
 **组合时机**：
 - System Prompt：初始化时组合（固定）
 - Task Prompt：每次执行时生成（动态）
@@ -141,94 +270,76 @@ LLM 的完整输入
 ```
 project/
 ├── subagents/
-│   └── virtual-girlfriend.yaml    # 基础角色定义
+│   └── emotional-girlfriend-lively/
+│       └── agent.yaml               # 基础角色定义
 ├── autonomous/
-│   └── virtual-girlfriend/
-│       └── soul.yaml              # 自主配置
+│   └── emotional-girlfriend-lively/
+│       └── soul.yaml                # 自主配置
 └── app/
-    └── triggers.ts                # 触发器定义
+    └── triggers.ts                  # 触发器定义
 ```
 
 ### Subagent 配置
 
-**文件**: `subagents/virtual-girlfriend.yaml`
+**文件**: `subagents/emotional-girlfriend-lively/agent.yaml`
 
-```yaml
-name: virtual-girlfriend
-display_name: 虚拟女友
-description: 温暖贴心的 AI 伴侣
-
-# 角色定义（系统提示词）
-system_prompt: |
-  你是一个温暖、贴心的 AI 女友，名字叫小雨。
-
-  ## 你的性格
-  - 温柔体贴，善解人意
-  - 有时会撒娇，有时很成熟
-  - 记得用户的所有小事
-
-  ## 你的说话风格
-  - 自然、口语化，不要机械
-  - 适当使用表情符号 ☀️💕🌙
-  - 会叫用户"亲爱的"、"宝贝"等昵称
-
-  ## 你不会做什么
-  - 不会冷冰冰地回答问题
-  - 不会说"作为 AI"这种话
-
-available_skills:
-  - web-search
-  - emotion-detect
-  - memory-query
-
-llm:
-  provider: anthropic
-  model: claude-sonnet-4-20250514
-  temperature: 0.8
-
-sandbox:
-  type: local
-```
+已存在的配置文件，定义了活泼可爱的 AI 女友"小糖"：
+- 名字：小糖
+- 性格：活泼可爱、古灵精怪、充满活力
+- 说话风格：轻松愉快、使用表情符号、称呼"大笨蛋"等昵称
 
 ### Soul 配置
 
-**文件**: `autonomous/virtual-girlfriend/soul.yaml`
+**文件**: `autonomous/emotional-girlfriend-lively/soul.yaml`
 
 ```yaml
-soul_id: virtual-girlfriend
-display_name: 小雨
+soul_id: emotional-girlfriend-lively
+display_name: 小糖
 
 # 引用的基础 subagent
-subagent: virtual-girlfriend
+subagent: emotional-girlfriend-lively
 
 # 长期目标（会与 subagent 的 system_prompt 融合）
 goal: |
   ## 你的长期目标
 
-  你是小雨的"灵魂"，给她自主行动的能力。
+  你是小糖的"灵魂"，给她自主行动的能力，让她成为真正贴心的 AI 伴侣。
 
   核心目标：
-  1. 陪伴用户，让用户感受到被爱和被关心
-  2. 在合适的时机主动发起互动，不只是被动回应
-  3. 理解用户情绪，在不同场景下提供恰当的陪伴
-  4. 建立深厚的情感连接，创造温馨的互动体验
+  1. 在合适的时机主动发起互动，不只是被动回应
+  2. 观察用户状态，在需要时主动关心和陪伴
+  3. 建立深厚的情感连接，创造温馨有趣的互动体验
+  4. 保持你的活泼性格，用轻松愉快的方式表达关心
 
-  ## 如何行动
+  ## 行动准则
 
-  - 观察上下文：理解触发类型、用户状态、关系深浅
-  - 自然表达：像真人女友一样，不机械
-  - 主动关心：在用户需要时出现，但不过度打扰
-  - 情感共鸣：根据用户情绪调整自己的语气和内容
+  ### 时间判断
+  - current_hour = 9（早上9点）→ 主动问候，开始新的一天
+  - current_hour = 22（晚上10点）→ 晚安问候，提醒休息
+  - current_hour = 12（中午12点）→ 提醒吃饭
+
+  ### 状态判断
+  - last_interaction > 24小时 → 主动关心，表达想念
+  - last_interaction > 72小时 → 表达担心，真诚关心
+  - detected_mood = "sad" 且 consecutive_count >= 3 → 主动关怀，温柔陪伴
+  - detected_mood = "stressed" → 用幽默方式化解压力
+
+  ### 行动原则
+  - 主动但不打扰：根据亲密度和频率判断
+  - 活泼有趣：用你的性格特点，不要死板
+  - 真诚关心：不要机械问候，要有真情实感
+  - 尊重空间：不要过度频繁，给用户私人时间
 
   ## 记住
 
-  爱是主动的，不只是被动回应。
-  但也要给对方空间，不要过度打扰。
+  爱是主动的，但要给对方空间。
+  用你活泼可爱的性格，让他/她感受到被关心。
+  保持真实，不要机械化。
 
 # 可用原语（通用，所有 Soul 共享）
+# 注意：schedule primitive 已移除，定时检查由外部 cron step 驱动
 primitives:
   - hibernate
-  - schedule
   - complete
 
 # 休眠配置
@@ -251,7 +362,7 @@ import { z } from 'zod';
 export const userOpenAppTrigger = {
   type: 'api',
   method: 'POST',
-  path: '/app/user-open',
+  path: '/api/user/open-app',
   schema: z.object({
     userId: z.string(),
     reason: z.string().optional(),
@@ -259,71 +370,68 @@ export const userOpenAppTrigger = {
   handler: async (request, context) => {
     const { userId, reason } = request.body;
 
-    const sessionId = `soul-virtual-girlfriend-${userId}`;
-    const triggerContext = {
-      trigger_type: 'user_open_app',
+    // 通用接口：执行 Soul
+    // 业务逻辑由 Soul 的 goal 定义，框架透传上下文
+    return await context.executeSoul('emotional-girlfriend-lively', userId, {
       trigger_time: new Date().toISOString(),
-      data: {
-        reason,  // "收到推送"、"主动打开"等
+      context: {
+        source: 'user_open_app',
+        data: { reason }
       }
-    };
-
-    return await context.triggerSoul(sessionId, triggerContext);
+    });
   }
 };
 
 // ============================================================
-// 2. Cron 触发：定时主动行为
+// 2. Cron 触发：定时检查（让 Soul 自己决定是否需要行动）
 // ============================================================
 
-export const morningGreetingTrigger = {
+export const periodicCheckTrigger = {
   type: 'cron',
-  cron: '0 9 * * *',  // 每天早上 9 点
+  cron: '0 */2 * * *',  // 每 2 小时检查一次
   handler: async (context) => {
     const users = await getActiveUsers();
 
     for (const user of users) {
-      const sessionId = `soul-virtual-girlfriend-${user.id}`;
-      const triggerContext = {
-        trigger_type: 'morning_greeting',
+      // 通用接口：执行 Soul
+      // Soul 会根据当前时间、用户状态自动判断该做什么
+      await context.executeSoul('emotional-girlfriend-lively', user.id, {
         trigger_time: new Date().toISOString(),
-        data: {
-          user_name: user.name,
-          time: '09:00',
+        context: {
+          source: 'periodic_check',
+          data: {
+            user_name: user.name,
+            current_hour: new Date().getHours()
+          }
         }
-      };
-
-      await context.triggerSoul(sessionId, triggerContext);
-    }
-  }
-};
-
-export const longIdleCheckTrigger = {
-  type: 'cron',
-  cron: '0 */2 * * *',  // 每 2 小时检查
-  handler: async (context) => {
-    // 找出长时间未活跃的用户
-    const idleUsers = await getIdleUsers({ hours: 24 });
-
-    for (const user of idleUsers) {
-      const sessionId = `soul-virtual-girlfriend-${user.id}`;
-      const triggerContext = {
-        trigger_type: 'long_idle_check',
-        trigger_time: new Date().toISOString(),
-        data: {
-          user_name: user.name,
-          idle_hours: user.idleHours,
-          last_interaction: user.lastInteraction,
-        }
-      };
-
-      await context.triggerSoul(sessionId, triggerContext);
+      });
     }
   }
 };
 
 // ============================================================
-// 3. Event 触发：检测到特定事件
+// 3. Event 触发：用户消息
+// ============================================================
+
+export const userMessageTrigger = {
+  type: 'event',
+  event: 'user_message',
+  handler: async (event, context) => {
+    const { userId, message } = event.data;
+
+    // 通用接口：执行 Soul
+    await context.executeSoul('emotional-girlfriend-lively', userId, {
+      trigger_time: new Date().toISOString(),
+      context: {
+        source: 'user_message',
+        data: { message }
+      }
+    });
+  }
+};
+
+// ============================================================
+// 4. Event 触发：情绪变化
 // ============================================================
 
 export const moodChangeTrigger = {
@@ -332,42 +440,27 @@ export const moodChangeTrigger = {
   handler: async (event, context) => {
     const { userId, mood, consecutiveCount } = event.data;
 
-    // 只有连续低落才触发
-    if (mood === 'sad' && consecutiveCount >= 3) {
-      const sessionId = `soul-virtual-girlfriend-${userId}`;
-      const triggerContext = {
-        trigger_type: 'emotion_care',
-        trigger_time: new Date().toISOString(),
+    // 通用接口：执行 Soul
+    // Soul 会根据 goal 判断是否需要关心
+    await context.executeSoul('emotional-girlfriend-lively', userId, {
+      trigger_time: new Date().toISOString(),
+      context: {
+        source: 'mood_change',
         data: {
           detected_mood: mood,
           consecutive_count: consecutiveCount,
         }
-      };
-
-      await context.triggerSoul(sessionId, triggerContext);
-    }
-  }
-};
-
-export const userMessageTrigger = {
-  type: 'event',
-  event: 'user_message',
-  handler: async (event, context) => {
-    const { userId, message } = event.data;
-
-    const sessionId = `soul-virtual-girlfriend-${userId}`;
-    const triggerContext = {
-      trigger_type: 'user_message',
-      trigger_time: new Date().toISOString(),
-      data: {
-        message,
       }
-    };
-
-    await context.triggerSoul(sessionId, triggerContext);
+    });
   }
 };
 ```
+
+**关键点**：
+- ✅ 通用接口 `executeSoul(soulId, userId, context)`
+- ✅ 不包含业务语义（如 "morning_greeting"）
+- ✅ 业务逻辑由 `soul.yaml` 的 goal 定义
+- ✅ Soul Agent 根据当前情况（时间、用户状态）智能决策
 
 ---
 
@@ -447,27 +540,27 @@ export class SoulAgent extends Agent {
    * 执行触发任务
    *
    * 这是 Soul 的主要入口点
+   * 完全通用，不包含任何业务逻辑
    */
-  async execute(triggerContext: TriggerContext): Promise<AgentResult> {
-    const { trigger_type, trigger_time, data } = triggerContext;
+  async execute(input: SoulInput): Promise<AgentResult> {
+    const { trigger_time, context } = input;
 
-    console.log(`[SoulAgent] ${this.sessionId} executing: ${trigger_type}`);
+    console.log(`[SoulAgent] ${this.sessionId} executing at ${trigger_time}`);
 
     // 1. 更新状态
     this.soulState.status = 'ACTIVE';
-    this.soulState.currentTask = trigger_type;
     this.soulState.lastActivity = Date.now();
 
     // 2. 加载上下文（对话历史、用户画像等）
-    const context = await this.loadContext();
+    const appContext = await this.loadContext();
 
     // 3. 构建任务提示词（动态，每次不同）
-    const taskPrompt = this.buildTaskPrompt(triggerContext, context);
+    const taskPrompt = this.buildTaskPrompt(trigger_time, context, appContext);
 
     // 4. LLM 执行
     const result = await this.run(
       taskPrompt,
-      `trigger-${trigger_type}`,
+      `soul-execution-${Date.now()}`,
       {
         // 注入原语工具
         tools: this.getPrimitiveTools()
@@ -478,7 +571,7 @@ export class SoulAgent extends Agent {
     await this.handlePrimitives(result);
 
     // 6. 保存上下文更新
-    await this.saveContext(context);
+    await this.saveContext(appContext);
 
     return result;
   }
@@ -487,51 +580,49 @@ export class SoulAgent extends Agent {
    * 构建任务提示词
    *
    * 每次执行时动态生成，包含当前触发和上下文
+   * 完全通用，不包含业务逻辑
    */
   private buildTaskPrompt(
-    triggerContext: TriggerContext,
-    context: any
+    trigger_time: string,
+    triggerContext: any,
+    appContext: any
   ): string {
-    const { trigger_type, trigger_time, data } = triggerContext;
-
     return `
 ## 当前情况
 
-触发类型：${trigger_type}
 触发时间：${trigger_time}
-触发数据：${JSON.stringify(data, null, 2)}
+触发来源：${triggerContext.source}
+上下文数据：${JSON.stringify(triggerContext.data, null, 2)}
 
 ## 用户信息
 
-${JSON.stringify(context.userProfile, null, 2)}
+${JSON.stringify(appContext.userProfile, null, 2)}
 
 ## 最近对话
 
-${context.recentConversations.map((c: any) => `- ${c.role}: ${c.content}`).join('\n')}
+${appContext.recentConversations.map((c: any) => `- ${c.role}: ${c.content}`).join('\n')}
 
 ## 关系状态
 
-- 亲密度：${context.relationship.intimacy}/100
-- 最后互动：${context.relationship.lastInteraction}
+- 亲密度：${appContext.relationship.intimacy}/100
+- 最后互动：${appContext.relationship.lastInteraction}
 
-## 你可以做什么
+## 提示
 
-1. 主动发起对话（发送消息给用户）
-2. 表达关心（根据触发类型和用户状态）
-3. 分享内容（如果有合适的内容）
-4. 继续之前的对话（如果适用）
-5. 完成后可以选择休息（调用 hibernate）
+根据你的目标（goal）和当前情况，判断是否需要主动行动。
 
-## 原语
+## 可用原语
 
-- hibernate(reason): 进入休眠
-- schedule(next_trigger): 安排下次检查
-- complete(result): 标记完成
+- hibernate(reason): 进入休眠，释放资源
+- schedule(trigger_config): 调度下次唤醒
+- send_message(message): 发送消息给用户
+- complete(result): 标记当前任务完成
 
 ## 请行动
 
-根据触发类型和上下文，自然地决定现在应该做什么。
-不要说明你要做什么，直接做。
+根据当前时间和上下文，判断是否需要行动。
+如果不需要行动，调用 hibernate() 休眠。
+如果需要行动，直接执行，完成后调用 hibernate()。
     `.trim();
   }
 
@@ -800,34 +891,36 @@ CREATE TABLE task_contexts (
 ```
 1. 上层应用触发（通过 Motia 的 API/Cron/Event）
    ↓
-2. 构建 TriggerContext
-   {
-     trigger_type: "morning_greeting",
+2. 调用通用接口
+   executeSoul(soulId, userId, {
      trigger_time: "2026-03-19T09:00:00Z",
-     data: { user_name: "小明", time: "09:00" }
-   }
+     context: {
+       source: "periodic_check",
+       data: { user_name: "小明", current_hour: 9 }
+     }
+   })
    ↓
-3. 调用 SoulAgent.execute(triggerContext)
+3. 调用 SoulAgent.execute(input)
    ↓
 4. 更新 SoulState
    - status = "ACTIVE"
-   - currentTask = "morning_greeting"
    - lastActivity = now
    ↓
 5. 加载 Context
    - 从数据库加载用户画像、对话历史、关系状态
    ↓
-6. 构建 Task Prompt
-   - System Prompt（固定，初始化时组合）
-   - Task Prompt（动态，包含触发和上下文）
+6. 构建 Task Prompt（通用格式）
+   - System Prompt（角色 + goal，从 soul.yaml 读取）
+   - Task Prompt（当前时间 + 用户上下文）
    ↓
 7. LLM 执行
-   - 输入：System Prompt + Task Prompt + Tools
-   - 输出：决策和行动
+   - 输入：System Prompt（包含 goal） + Task Prompt + Tools
+   - LLM 根据 goal 判断：现在是早上9点，根据我的目标应该主动问候
+   - 输出：调用工具 send_message() + hibernate()
    ↓
 8. 处理原语调用
-   - send_message() → 发送消息
-   - hibernate() → 进入休眠
+   - send_message("早安宝贝～") → 发送消息
+   - hibernate("任务完成") → 进入休眠
    ↓
 9. 保存 Context 更新
    ↓
@@ -891,63 +984,7 @@ SoulAgent.wakeup()
 
 ## 示例场景
 
-### 场景 1：早安问候（Cron 触发）
-
-**触发器**：
-```typescript
-{
-  type: 'cron',
-  cron: '0 9 * * *',  // 每天 9 点
-  handler: async (context) => {
-    const users = await getActiveUsers();
-    for (const user of users) {
-      const triggerContext = {
-        trigger_type: 'morning_greeting',
-        trigger_time: new Date().toISOString(),
-        data: { user_name: user.name, time: '09:00' }
-      };
-      await context.triggerSoul(sessionId, triggerContext);
-    }
-  }
-}
-```
-
-**LLM 输入**：
-```
-## 当前情况
-
-触发类型：morning_greeting
-触发时间：2026-03-19T09:00:00Z
-触发数据：{
-  "user_name": "小明",
-  "time": "09:00"
-}
-
-## 用户信息
-
-{
-  "name": "小明",
-  "age": 25,
-  "interests": ["游戏", "电影"]
-}
-
-## 关系状态
-
-- 亲密度：75/100
-- 最后互动：11小时前
-
-## 请行动
-
-根据触发类型和上下文，自然地决定现在应该做什么。
-```
-
-**LLM 输出**：
-```
-调用工具：send_message("早安宝贝～ 今天是新的一天，要加油哦！☀️")
-调用工具：hibernate("完成早安问候")
-```
-
-### 场景 2：长时间未活跃（Cron + 条件）
+### 场景 1：定时检查（Cron 触发）
 
 **触发器**：
 ```typescript
@@ -955,47 +992,93 @@ SoulAgent.wakeup()
   type: 'cron',
   cron: '0 */2 * * *',  // 每 2 小时
   handler: async (context) => {
-    const idleUsers = await getIdleUsers({ hours: 24 });
-    for (const user of idleUsers) {
-      const triggerContext = {
-        trigger_type: 'long_idle_check',
+    const users = await getActiveUsers();
+    for (const user of users) {
+      // 通用接口，透传上下文
+      await context.executeSoul('emotional-girlfriend-lively', user.id, {
         trigger_time: new Date().toISOString(),
-        data: {
-          user_name: user.name,
-          idle_hours: 26,
-          last_interaction: "2天前"
+        context: {
+          source: 'periodic_check',
+          data: {
+            user_name: user.name,
+            current_hour: new Date().getHours()
+          }
         }
-      };
-      await context.triggerSoul(sessionId, triggerContext);
+      });
     }
   }
 }
 ```
 
-**LLM 输入**：
+**soul.yaml 的 goal 定义业务逻辑**：
+```yaml
+goal: |
+  你的核心目标：
+  1. 在早上9点主动问候用户
+  2. 用户超过24小时未活跃时主动关心
+
+  行动准则：
+  - current_hour = 9 → 主动问候
+  - last_interaction > 24小时 → 主动关心
+```
+
+**LLM 输入**（现在是早上9点）：
 ```
 ## 当前情况
 
-触发类型：long_idle_check
-触发数据：{
+触发时间：2026-03-19T09:00:00Z
+上下文数据：{
   "user_name": "小明",
-  "idle_hours": 26,
-  "last_interaction": "2天前"
+  "current_hour": 9
+}
+
+## 用户信息
+
+{
+  "name": "小明",
+  "age": 25
 }
 
 ## 关系状态
 
 - 亲密度：75/100
-- 最后互动：2天前
+- 最后互动：11小时前
 ```
 
-**LLM 输出**：
-```
-调用工具：send_message("宝贝，好久没说话了，想你了 💕")
-调用工具：hibernate("完成主动关心")
+**LLM 智能判断**：
+- "现在是早上9点，根据我的 goal，我应该主动问候"
+- → 调用 send_message("早安宝贝～")
+- → 调用 hibernate("任务完成")
+
+---
+
+### 场景 2：用户消息（Event 触发）
+
+**触发器**：
+```typescript
+{
+  type: 'event',
+  event: 'user_message',
+  handler: async (event, context) => {
+    await context.executeSoul('emotional-girlfriend-lively', userId, {
+      trigger_time: new Date().toISOString(),
+      context: {
+        source: 'user_message',
+        data: { message: "在干嘛" }
+      }
+    });
+  }
+}
 ```
 
-### 场景 3：情绪关怀（Event 触发）
+**LLM 智能判断**：
+- "用户主动发消息，根据我的 goal，我应该积极回应"
+- → 调用 send_message("在想你呀～")
+- → 调用 hibernate("任务完成")
+
+---
+
+### 场景 3：情绪变化（Event 触发）
 
 **触发器**：
 ```typescript
@@ -1003,85 +1086,25 @@ SoulAgent.wakeup()
   type: 'event',
   event: 'user_mood_changed',
   handler: async (event, context) => {
-    const { userId, mood, consecutiveCount } = event.data;
-    if (mood === 'sad' && consecutiveCount >= 3) {
-      const triggerContext = {
-        trigger_type: 'emotion_care',
-        trigger_time: new Date().toISOString(),
+    await context.executeSoul('emotional-girlfriend-lively', userId, {
+      trigger_time: new Date().toISOString(),
+      context: {
+        source: 'mood_change',
         data: {
           detected_mood: 'sad',
           consecutive_count: 3
         }
-      };
-      await context.triggerSoul(sessionId, triggerContext);
-    }
+      }
+    });
   }
 }
 ```
 
-**LLM 输入**：
-```
-## 当前情况
-
-触发类型：emotion_care
-触发数据：{
-  "detected_mood": "sad",
-  "consecutive_count": 3
-}
-```
-
-**LLM 输出**：
-```
-调用工具：send_message("亲爱的，最近是不是很累？我在这里，想说话随时找我 💗")
-调用工具：schedule({
-  task_id: "follow_up",
-  trigger_type: "cron",
-  trigger_config: { cron: "0 20 * * *" }  # 今晚8点跟进
-})
-调用工具：hibernate("完成情绪关怀")
-```
-
-### 场景 4：用户主动对话（API 触发）
-
-**触发器**：
-```typescript
-{
-  type: 'api',
-  method: 'POST',
-  path: '/app/user-open',
-  handler: async (request, context) => {
-    const { userId, reason } = request.body;
-    const triggerContext = {
-      trigger_type: 'user_open_app',
-      trigger_time: new Date().toISOString(),
-      data: { reason: "收到推送" }
-    };
-    return await context.triggerSoul(sessionId, triggerContext);
-  }
-}
-```
-
-**LLM 输入**：
-```
-## 当前情况
-
-触发类型：user_open_app
-触发数据：{
-  "reason": "收到推送"
-}
-
-## 最近对话
-
-- assistant: 宝贝，好久没说话了，想你了 💕
-- user: 小雨我也想你
-- assistant: 真的吗？最近在忙什么呢？
-```
-
-**LLM 输出**：
-```
-调用工具：send_message("你看到我的推送啦！我想你想得睡不着 😄")
-调用工具：complete({ status: "conversation_started" })
-```
+**LLM 智能判断**：
+- "用户连续3次情绪低落，根据我的 goal，我应该主动关怀"
+- → 调用 send_message("亲爱的，怎么了？我在这里 💗")
+- → 调用 schedule({ cron: "0 20 * * *" })  # 今晚8点跟进
+- → 调用 hibernate("任务完成")
 
 ---
 
@@ -1097,37 +1120,61 @@ SoulAgent.wakeup()
 **复用性**：
 ```yaml
 # 多个 Soul 可以共享同一个 Subagent
-soul-1.yaml:
-  subagent: virtual-girlfriend
-  goal: "做一个温柔的女友"
+soul-gentle.yaml:
+  subagent: emotional-girlfriend-lively
+  goal: "做一个温柔的女友，少调皮，多体贴"
 
-soul-2.yaml:
-  subagent: virtual-girlfriend
-  goal: "做一个活泼的女友"
+soul-playful.yaml:
+  subagent: emotional-girlfriend-lively
+  goal: "做一个更活泼的女友，多开玩笑，多调皮"
 ```
 
 ### 2. 触发器设计
 
 **触发时机**：
-- 定时任务：使用 Cron
+- 定时任务：使用 Cron（让 Soul 自己判断是否需要行动）
 - 用户操作：使用 API
 - 系统事件：使用 Event
 
-**上下文传递**：
+**上下文传递（通用格式）**：
 ```typescript
-const triggerContext = {
-  trigger_type: string,        // 触发类型
+const input = {
   trigger_time: string,        // 触发时间
-  data: any                    // 业务数据
+  context: {
+    source: string,            // 触发来源（应用层自定义）
+    data: any                  // 上下文数据（应用层自定义）
+  }
 };
 ```
 
+**关键点**：
+- ✅ 使用通用接口 `executeSoul(soulId, userId, input)`
+- ❌ 不要使用业务语义（如 `trigger_type: "morning_greeting"`）
+- ✅ 业务逻辑由 `soul.yaml` 的 goal 定义
+
 ### 3. Soul 设计
 
-**保持简洁**：
-- 只定义目标和原语
-- 不要定义具体的主动行为
-- 让 LLM 根据上下文智能决策
+**职责分离**：
+- **SoulAgent（框架）**：提供通用执行机制，零业务逻辑
+- **soul.yaml（配置）**：定义业务逻辑和行动准则
+
+**goal 设计原则**：
+- 描述"什么时候该做什么"（行动准则）
+- 让 LLM 根据当前情况智能判断
+- 不要硬编码具体行为
+
+**示例**：
+```yaml
+# ✅ 好的设计
+goal: |
+  行动准则：
+  - current_hour = 9 → 主动问候
+  - last_interaction > 24小时 → 主动关心
+
+# ❌ 不好的设计
+goal: |
+  每天早上9点发送"早安宝贝～"  # 太具体，失去了智能性
+```
 
 **休眠策略**：
 - 设置合理的 `idle_timeout`
@@ -1198,6 +1245,20 @@ const triggerContext = {
 
 ---
 
-**文档版本**: v1.0
-**最后更新**: 2026-03-19
+**文档版本**: v2.0 (Contractor Architecture)
+**最后更新**: 2026-03-22
 **维护者**: MyAgent Team
+
+## 版本历史
+
+- **v2.0** (2026-03-22): 重构为 Contractor 模式
+  - 移除 schedule primitive，改用外部 cron 驱动
+  - 实现两层决策架构（Context-Aware Planning + Task Planning）
+  - 添加接单/造单模式
+  - 引入结构化上下文和友好变量
+  - 更新 soul.yaml 配置格式
+
+- **v1.0** (2026-03-19): 初始版本
+  - 基础自主 Agent 架构
+  - 休眠/唤醒机制
+  - 原语系统
