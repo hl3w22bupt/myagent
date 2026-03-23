@@ -240,6 +240,46 @@ export class SoulStateDataService {
       client.release();
     }
   }
+
+  /**
+   * Update scheduled wakeup time for a Soul Agent
+   *
+   * @param sessionId - Session ID
+   * @param delayMs - Delay in milliseconds from now, or null to clear
+   */
+  async updateScheduledWakeup(sessionId: string, delayMs: number | null): Promise<void> {
+    const store = getPostgresStore();
+    await store.initialize();
+
+    const pool = store.getPool();
+    const client = await pool.connect();
+
+    try {
+      const now = Date.now();
+      // 使用 toISOString() 确保 PostgreSQL 正确解析为 UTC
+      const scheduledWakeup = delayMs !== null
+        ? new Date(now + delayMs).toISOString()
+        : null;
+
+      await client.query(`
+        UPDATE soul_states
+        SET scheduled_wakeup = $1::timestamp with time zone,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $2
+      `, [scheduledWakeup, sessionId]);
+
+      if (delayMs !== null) {
+        console.log(`[SoulStateDataService] Scheduled wakeup for ${sessionId} in ${Math.round(delayMs / 1000)}s`);
+      } else {
+        console.log(`[SoulStateDataService] Cleared scheduled wakeup for ${sessionId}`);
+      }
+    } catch (error: any) {
+      console.error(`[SoulStateDataService] Failed to update scheduled wakeup: ${error.message}`);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 

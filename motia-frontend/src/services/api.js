@@ -277,14 +277,6 @@ export const soulAgentsAPI = {
       context
     }).then(response => response.data),
 
-  // Soul 聊天接口
-  chat: (soulId, userId, message) =>
-    apiClient.post('/api/demo/soul/chat', {
-      soulId,
-      userId,
-      message
-    }).then(response => response.data),
-
   // 休眠 Soul
   hibernate: (soulId, userId, reason) =>
     apiClient.post(`/api/soul/${soulId}/hibernate/${userId}`, {

@@ -1,18 +1,25 @@
 /**
  * SoulScheduler - Autonomous Agent Scheduler
  *
- * Manages Soul lifecycle:
- * - Activation: Create and initialize soul instances
- * - Hibernation: Remove from memory and save state
- * - Wakeup: Restore from database and resume execution
- * - Cleanup: Clean up long-hibernated souls
+ * Soul Agent 的统一调度器，负责：
+ * - 生命周期管理：激活、休眠、唤醒、清理
+ * - 状态管理：维护活跃和休眠的 Soul Agent 实例
+ *
+ * 心跳调度：
+ * - 改用数据库驱动（scheduled_wakeup 字段）
+ * - soul-periodic-check cron 负责触发到期的实例
+ * - 不再使用内存单例 MinHeap 方案
+ *
+ * 设计理念：
+ * - 类似操作系统的进程调度器，SoulAgent 是调度单元
+ * - 数据库持久化，避免 HMR 重置问题
+ * - 简化调度器职责，专注于生命周期管理
  */
 
 import { SoulAgent } from '../agent/soul-agent';
 import { SoulState } from '../agent/soul-types';
 import { soulConfigLoader } from '../config/soul-config-loader';
 import { subagentConfigLoader } from '../config/subagent-config-loader';
-import { soulStateDataService } from '../database/soul-data-service';
 
 /**
  * Scheduler instance manager
@@ -25,11 +32,9 @@ interface SoulInstance {
 }
 
 /**
- * SoulScheduler - Manages autonomous soul agent lifecycle
+ * SoulScheduler - Soul Agent 统一调度器
  */
 export class SoulScheduler {
-  private static instance: SoulScheduler;
-
   // Active soul instances in memory (sessionId -> instance)
   private activeSouls: Map<string, SoulInstance> = new Map();
 
@@ -49,10 +54,12 @@ export class SoulScheduler {
    * Get singleton instance
    */
   static getInstance(): SoulScheduler {
-    if (!SoulScheduler.instance) {
-      SoulScheduler.instance = new SoulScheduler();
+    // 使用真实的全局对象（不会被 HMR 重置）
+    if (!(globalThis as any).__soulSchedulerInstance) {
+      (globalThis as any).__soulSchedulerInstance = new SoulScheduler();
+      console.log(`[SoulScheduler] ✨ Created new SoulScheduler instance`);
     }
-    return SoulScheduler.instance;
+    return (globalThis as any).__soulSchedulerInstance;
   }
 
   /**
@@ -335,7 +342,7 @@ export class SoulScheduler {
     const now = Date.now();
     const maxHibernationTime = 7 * 24 * 3600000; // 7 days
 
-    for (const [sessionId, hibernatedAt] of this.hibernatedSouls.entries()) {
+    this.hibernatedSouls.forEach((hibernatedAt, sessionId) => {
       const hibernationDuration = now - hibernatedAt;
 
       if (hibernationDuration > maxHibernationTime) {
@@ -347,7 +354,7 @@ export class SoulScheduler {
         // TODO: Optionally archive to cold storage or delete from database
         // await getDataStore().archiveSoulState(sessionId);
       }
-    }
+    });
 
     if (this.hibernatedSouls.size > 0) {
       console.log(`[SoulScheduler] Cleanup completed. Hibernated souls: ${this.hibernatedSouls.size}`);
@@ -382,10 +389,10 @@ export class SoulScheduler {
     const hibernatePromises: Promise<void>[] = [];
 
     // Hibernate all active souls
-    for (const [sessionId, instance] of this.activeSouls.entries()) {
+    this.activeSouls.forEach((instance, sessionId) => {
       console.log(`[SoulScheduler] Hibernating soul before shutdown: ${sessionId}`);
       hibernatePromises.push(this.hibernateSoul(instance.soulAgent));
-    }
+    });
 
     await Promise.all(hibernatePromises);
 

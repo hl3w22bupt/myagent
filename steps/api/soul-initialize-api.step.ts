@@ -6,6 +6,7 @@
  */
 
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
+import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import { MessageIdGenerator } from '../../src/utils/message-id-generator';
@@ -87,10 +88,8 @@ export const handler = async (request: any, { logger, streams }: any) => {
   }
 
   try {
-    // Include threadId in sessionId to ensure unique taskId per thread
-    const sessionId = threadId
-      ? `soul-${soulId}-${userId}-${threadId}`
-      : `soul-${soulId}-${userId}`;
+    // Simplified: Use threadId as sessionId directly (thread already includes user association)
+    const sessionId = threadId || `soul-${soulId}-${userId}`;
     const taskId = `task-${sessionId}`;
 
     // 1. Create idle task in database
@@ -140,13 +139,21 @@ export const handler = async (request: any, { logger, streams }: any) => {
     // 2. Get or create Soul Agent (use activateSoul for idempotency)
     const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
 
+    // 3. 更新 soul_states 表的 current_task_id 字段
+    // 这样 periodic check 触发时可以获取到关联的 taskId
+    const soulState = soulAgent.getSoulState();
+    await soulStateDataService.saveSoulState(sessionId, soulId, {
+      ...soulState,
+      currentTask: taskId  // ← 关联 taskId
+    });
+
     logger.info('Soul Initialize API: Soul Agent ready', {
       sessionId,
       soulId,
       taskId
     });
 
-    // 3. Send initialization event to stream
+    // 4. Send initialization event to stream
     if (streams?.taskExecution) {
       const uniqueId = `${taskId}-init-${Date.now()}`;
       await streams.taskExecution.set(taskId, uniqueId, {

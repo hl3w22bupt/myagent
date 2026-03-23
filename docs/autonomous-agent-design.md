@@ -76,8 +76,11 @@
 
 **通用原语，所有自主 Agent 共享**：
 - `hibernate(reason)`: 进入休眠，释放资源
-- `schedule(trigger_config)`: 调度下次唤醒
 - `complete(result)`: 标记当前任务完成
+- `send_message(message)`: 发送消息给用户
+- `send_notification(title, body, urgency)`: 发送推送通知
+
+**注意**：`schedule` 原语已被移除。定时检查由外部 cron step（`soul-periodic-check.step.ts`）驱动，Soul Agent 只需要在执行完成后休眠，等待下次触发。
 
 原语是底层的、通用的操作，与业务无关。
 
@@ -152,6 +155,107 @@ Task Prompt（当前情况）
     ↓
 LLM 的完整输入
 ```
+
+### Contractor 模式（包工头架构）
+
+**核心比喻**：SoulAgent = 包工头
+
+```
+【造单】定时检查（periodic_check）：
+- 判断要不要干？
+- 决定干什么？
+- 描述任务："主动问候用户"
+
+【接单】API 触发（user_message）：
+- 接收客户任务
+- 描述任务："回复用户消息"
+
+Agent 基类（Worker）：
+- 接收任务描述
+- 规划：用什么 skills、怎么干
+- 执行：调用 skills、生成代码
+- 完成任务，报告包工头
+```
+
+**两层决策架构**：
+
+1. **Layer 1: Context-Aware Planning (SoulAgent)**
+   - 职责："要不要做" + "做什么"
+   - 输入：结构化上下文（时间、用户状态、触发源）
+   - 输出：任务描述
+   - 决策者：SoulAgent 的前置决策逻辑
+
+2. **Layer 2: Task Planning (Agent 基类)**
+   - 职责："怎么做"
+   - 输入：任务描述 + 对话历史 + skills
+   - 输出：执行结果
+   - 决策者：PTC (Planned Task Chain)
+
+**接单 vs 造单模式**：
+
+| 模式 | 触发源 | 决策逻辑 | 任务来源 | 优先级 |
+|------|--------|----------|----------|--------|
+| **接单模式** | `user_message` | 无需决策，直接执行 | 用户主动发起 | 高（取消当前任务） |
+| **造单模式** | `periodic_check` | LLM 决策是否行动 | SoulAgent 自主判断 | 低（当前任务执行中则跳过） |
+
+**实现细节**：
+
+```typescript
+async execute(input: SoulInput): Promise<any> {
+  const { trigger_time, context } = input;
+  const source = context.source;
+
+  // 【包工头逻辑】根据触发源选择处理方式
+  if (source === 'user_message') {
+    // 【接单模式】API 触发：用户消息优先
+    return await this.handleUserMessage(input, streams);
+  } else {
+    // 【造单模式】定时触发：自主决策
+    return await this.handlePeriodicCheck(input, streams);
+  }
+}
+
+// 【造单模式】处理流程
+private async handlePeriodicCheck(input: SoulInput, streams: any): Promise<any> {
+  // 1. 构建结构化上下文（友好变量）
+  const ctx = SoulContextBuilder.build(trigger_time, context);
+
+  // 2. 判断是否需要行动（前置决策）
+  const decision = await this.makeDecision(ctx);
+
+  if (!decision.needsAction) {
+    // 不需要行动，直接休眠
+    await this.hibernate(decision.reason || '无需行动');
+    return { success: true, action: 'hibernated', reason: decision.reason };
+  }
+
+  // 3. 需要行动，描述任务
+  const taskDescription = this.buildTaskDescription(ctx);
+
+  // 4. 调用基类 Agent.run()
+  const result = await this.run(taskDescription, this.taskId, {
+    conversationHistory: await this.getRecentConversations(10),
+    tools: this.getPrimitiveTools(),
+    streams: streams
+  });
+
+  // 5. 任务完成后休眠
+  await this.hibernate('任务完成');
+  return result;
+}
+```
+
+**触发系统**：
+
+1. **定时检查（造单模式）**：
+   - Cron Step: `steps/cron/soul-periodic-check.step.ts`
+   - 频率: `*/10 * * * *` (每 10 分钟)
+   - 触发事件: `soul.agent.execute`
+
+2. **用户消息（接单模式）**：
+   - API Step: `steps/api/soul-api.step.ts`
+   - 触发源: `user_message`
+   - 优先级: 高（取消当前任务）
 
 **组合时机**：
 - System Prompt：初始化时组合（固定）
@@ -233,9 +337,9 @@ goal: |
   保持真实，不要机械化。
 
 # 可用原语（通用，所有 Soul 共享）
+# 注意：schedule primitive 已移除，定时检查由外部 cron step 驱动
 primitives:
   - hibernate
-  - schedule
   - complete
 
 # 休眠配置
@@ -1141,6 +1245,20 @@ goal: |
 
 ---
 
-**文档版本**: v1.0
-**最后更新**: 2026-03-19
+**文档版本**: v2.0 (Contractor Architecture)
+**最后更新**: 2026-03-22
 **维护者**: MyAgent Team
+
+## 版本历史
+
+- **v2.0** (2026-03-22): 重构为 Contractor 模式
+  - 移除 schedule primitive，改用外部 cron 驱动
+  - 实现两层决策架构（Context-Aware Planning + Task Planning）
+  - 添加接单/造单模式
+  - 引入结构化上下文和友好变量
+  - 更新 soul.yaml 配置格式
+
+- **v1.0** (2026-03-19): 初始版本
+  - 基础自主 Agent 架构
+  - 休眠/唤醒机制
+  - 原语系统

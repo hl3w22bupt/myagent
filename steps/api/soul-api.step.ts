@@ -41,7 +41,7 @@ export const config: ApiRouteConfig = {
 export const handler = async (request: any, { emit, logger, streams }: any) => {
   // Get soulId from path parameters (support both pathParams and params)
   const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const { userId, trigger_time, context: triggerContext } = request.body;
+  const { userId, trigger_time, context: triggerContext, taskId: providedTaskId } = request.body;
 
   if (!userId || !triggerContext) {
     return {
@@ -53,26 +53,21 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
     };
   }
 
-  // Extract threadId from trigger context to match with initialize session
-  const threadId = triggerContext.data?.threadId;
-
-  // Include threadId in sessionId to ensure unique taskId per thread
-  const sessionId = threadId
-    ? `soul-${soulId}-${userId}-${threadId}`
-    : `soul-${soulId}-${userId}`;
-  const taskId = `task-${sessionId}`;
-
   // Extract messageId from trigger context (used by myecho to match responses)
   const messageId = triggerContext.data?.messageId;
 
   // Extract user message from trigger context
   const userRequest = triggerContext.data?.userRequest || triggerContext.data?.message || '';
-  const taskDescription = userRequest ? userRequest : 'Unknown';
+  const taskDescription = userRequest ? userRequest : 'Soul Agent execution';
+
+  let taskId: string;
+  let sessionId: string;
+  let existingTask: any = null;
 
   logger.info('Soul Execute API: Received trigger request', {
     soulId,
     userId,
-    sessionId,
+    providedTaskId,
     triggerSource: triggerContext.source,
     messageId,
     userRequest
@@ -82,32 +77,79 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
     const dataStore = getDataStore();
     await dataStore.initialize();
 
-    // ✅ 检查 task 是否已存在（多轮对话场景）
-    const existingTask = await dataStore.getTask(taskId).catch(() => null);
-    if (existingTask) {
-      logger.info('Soul Execute API: Task already exists, reusing for multi-turn conversation', {
+    // ✅ 方案 C: 如果提供了 taskId，直接使用
+    if (providedTaskId) {
+      taskId = providedTaskId;
+      logger.info('Soul Execute API: Using provided taskId', { taskId });
+
+      // 检查 task 是否存在
+      existingTask = await dataStore.getTask(taskId).catch(() => null);
+      if (!existingTask) {
+        logger.warn('Soul Execute API: Provided taskId not found', { taskId });
+        return {
+          status: 404,
+          body: {
+            success: false,
+            error: 'Task not found',
+            taskId
+          }
+        };
+      }
+
+      // 从 task 中提取 sessionId
+      sessionId = existingTask.sessionId;
+
+      logger.info('Soul Execute API: Reusing existing task', {
         taskId,
-        existingStatus: existingTask.status
+        sessionId,
+        existingStatus: existingTask.status,
+        triggerSource: triggerContext.source
       });
     } else {
-      // ✅ 创建 task 记录，状态为 PENDING
-      await dataStore.createTask({
-        id: taskId,
-        task: taskDescription,  // ✅ 使用真实的任务描述
-        app: request.body.app || request.body.appId || 'myagent',  // ✅ 从请求中获取 app 参数
-        sessionId: sessionId,
-        status: TaskStatus.PENDING,
-        metadata: {
-          type: 'soul_agent',
-          soulId: soulId,
-          userId: userId,
-          characterId: soulId,
-          deviceId: 'unknown',
-          triggerSource: triggerContext.source
-        }
+      // ✅ 简化逻辑：直接使用 threadId 作为 sessionId
+      const threadId = triggerContext.data?.threadId;
+
+      // 使用 threadId 作为 sessionId（thread 已经包含了 user 信息）
+      sessionId = threadId || `soul-${soulId}-${userId}`;
+      taskId = `task-${sessionId}`;
+
+      logger.info('Soul Execute API: Derived taskId from threadId', {
+        soulId,
+        userId,
+        threadId,
+        sessionId,
+        taskId,
+        triggerSource: triggerContext.source
       });
 
-      logger.info('Soul Execute API: Task created', { taskId, status: 'PENDING', task: taskDescription, app: request.body.app || 'myagent' });
+      // ✅ 检查 task 是否已存在（多轮对话场景）
+      existingTask = await dataStore.getTask(taskId).catch(() => null);
+      if (existingTask) {
+        logger.info('Soul Execute API: Task already exists, reusing for multi-turn conversation', {
+          taskId,
+          sessionId,
+          existingStatus: existingTask.status
+        });
+      } else {
+        // ✅ 创建 task 记录，状态为 PENDING
+        await dataStore.createTask({
+          id: taskId,
+          task: taskDescription,  // ✅ 使用真实的任务描述
+          app: request.body.app || request.body.appId || 'myagent',  // ✅ 从请求中获取 app 参数
+          sessionId: sessionId,
+          status: TaskStatus.PENDING,
+          metadata: {
+            type: 'soul_agent',
+            soulId: soulId,
+            userId: userId,
+            characterId: soulId,
+            deviceId: 'unknown',
+            triggerSource: triggerContext.source
+          }
+        });
+
+        logger.info('Soul Execute API: Task created', { taskId, sessionId, status: 'PENDING', task: taskDescription, app: request.body.app || 'myagent' });
+      }
     }
 
     // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作

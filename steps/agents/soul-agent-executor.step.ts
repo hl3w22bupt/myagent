@@ -12,10 +12,13 @@
  * 5. task-result-handler 等订阅者保存所有数据
  */
 
-import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
+import { SoulAgent } from '../../src/core/agent/soul-agent';
+import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
+import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader';
 import { EventConfig } from 'motia';
 import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
 import { getDataStore } from '../../src/core/database/data-store';
+import { soulStateDataService } from '../../src/core/database/soul-data-service';
 
 /**
  * Soul Agent Executor configuration.
@@ -55,8 +58,38 @@ export const handler = async (
     // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作
     setAgentStreams(streams);
 
-    // 激活 Soul Agent（获取或创建实例）
-    const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
+    // 🔄 数据库驱动：创建临时 SoulAgent 实例（不依赖内存单例）
+    // 直接加载配置，不使用 soulScheduler.activateSoul()
+    const soulConfig = await soulConfigLoader.loadSoulConfig(soulId);
+    const subagentConfig = await subagentConfigLoader.loadSubagentConfig(soulConfig.subagent);
+
+    // 创建临时 SoulAgent 实例用于本次执行
+    // taskId 可选：如果有 taskId 则传入（API 初始化场景），否则为 undefined（周期性检查场景）
+    const soulAgent = new SoulAgent(
+      soulConfig,
+      subagentConfig,
+      sessionId,
+      userId,
+      taskId  // 可选，API 初始化时会有 taskId
+    );
+
+    // 🔄 从数据库加载 Soul Agent 状态（确保 lastActivity 等字段正确）
+    try {
+      const existingState = await soulStateDataService.getSoulState(sessionId);
+      if (existingState && existingState.lastActivity) {
+        // 更新临时实例的 lastActivity，确保决策时使用正确的时间
+        soulAgent.setLastActivity(existingState.lastActivity);
+        logger.info('Soul Agent Executor: Loaded state from database', {
+          sessionId,
+          lastActivity: new Date(existingState.lastActivity).toISOString(),
+        });
+      }
+    } catch (error) {
+      logger.warn('Soul Agent Executor: Failed to load state from database, using defaults', {
+        sessionId,
+        error: (error as Error).message,
+      });
+    }
 
     // 执行 Soul Agent
     // 内部会调用 Agent.run()，自动推送 stream
@@ -80,6 +113,12 @@ export const handler = async (
     // 与 soul-api.step.ts 的处理逻辑一致
     let parsedOutput;
     let textOutput = result.output;  // 默认使用原始 output
+
+    // ✅ Soul Agent 特殊处理：如果是 hibernate 且没有 output，使用 reason 作为 output
+    if (!textOutput && result.action === 'hibernated' && result.reason) {
+      textOutput = result.reason;
+    }
+
     try {
       parsedOutput = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
       // 提取 message 字段作为纯文本输出
@@ -89,6 +128,25 @@ export const handler = async (
     } catch (e) {
       // 如果不是 JSON，保持原样
       parsedOutput = null;
+    }
+
+    // ✅ Soul Agent 特殊处理：如果是 hibernate，不发送 agent.task.completed 事件
+    // Hibernate 不应该生成任务结果，不应该显示在任务详情页
+    if (result.action === 'hibernated') {
+      logger.info('Soul Agent Executor: Soul Agent hibernated, skipping agent.task.completed event', {
+        sessionId,
+        soulId,
+        taskId,
+        reason: result.reason
+      });
+
+      // ✅ 仍然保存执行历史（但不作为任务完成）
+      // 执行历史可以记录"决策：不打扰"，但不应显示为任务执行结果
+      return {
+        success: true,
+        hibernated: true,
+        reason: result.reason
+      };
     }
 
     // ✅ 发送 agent.task.completed 事件，触发所有 subscribers

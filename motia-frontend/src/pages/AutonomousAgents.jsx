@@ -14,6 +14,9 @@ function AutonomousAgents() {
   const [historyLoading, setHistoryLoading] = useState({})
   const [expandedHistory, setExpandedHistory] = useState({})
   const [actionLoading, setActionLoading] = useState({})
+  const [copiedId, setCopiedId] = useState(null)
+  const [historyPagination, setHistoryPagination] = useState({})
+  const [pageInput, setPageInput] = useState({})
 
   useEffect(() => {
     const fetchSouls = async () => {
@@ -212,7 +215,8 @@ function AutonomousAgents() {
 
       const response = await soulAgentsAPI.getExecutionHistory(soulId, {
         sessionId,
-        limit: 10
+        limit: 30, // 一次加载更多数据，前端分页
+        offset: 0
       })
 
       console.log('[ExecutionHistory] Response:', {
@@ -223,10 +227,22 @@ function AutonomousAgents() {
       })
 
       if (response.success) {
+        const historyData = response.data.history || []
         setExecutionHistory(prev => ({
           ...prev,
-          [sessionId]: response.data.history
+          [sessionId]: historyData
         }))
+        // 初始化分页信息
+        setHistoryPagination(prev => ({
+          ...prev,
+          [sessionId]: {
+            currentPage: 1,
+            totalPages: Math.ceil(historyData.length / 3),
+            total: historyData.length
+          }
+        }))
+        // 初始化输入框值为1
+        setPageInput(prev => ({ ...prev, [sessionId]: '1' }))
       }
     } catch (error) {
       console.error('Failed to load execution history:', error)
@@ -250,9 +266,55 @@ function AutonomousAgents() {
     // 如果当前是折叠的，展开它并加载数据
     setExpandedHistory(prev => ({ ...prev, [sessionId]: true }))
 
-    // 如果还没有加载过数据，加载它
+    // 如果还没有加载过数据，加载第1页
     if (!executionHistory[sessionId]) {
-      await loadExecutionHistory(soulId, sessionId)
+      await loadExecutionHistory(soulId, sessionId, 1)
+    }
+  }
+
+  // 切换历史页码（客户端分页）
+  const changeHistoryPage = (sessionId, newPage) => {
+    setHistoryPagination(prev => ({
+      ...prev,
+      [sessionId]: {
+        ...prev[sessionId],
+        currentPage: newPage
+      }
+    }))
+    setPageInput(prev => ({ ...prev, [sessionId]: String(newPage) }))
+  }
+
+  // 跳转到指定页码
+  const jumpToPage = (sessionId) => {
+    const inputPage = pageInput[sessionId]
+    const pagination = historyPagination[sessionId]
+
+    if (!inputPage || !pagination) return
+
+    const pageNumber = parseInt(inputPage)
+    if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > pagination.totalPages) {
+      alert(`请输入 1 到 ${pagination.totalPages} 之间的页码`)
+      return
+    }
+
+    changeHistoryPage(sessionId, pageNumber)
+  }
+
+  // 处理输入框回车
+  const handlePageInputKeyDown = (e, sessionId) => {
+    if (e.key === 'Enter') {
+      jumpToPage(sessionId)
+    }
+  }
+
+  // 复制到剪贴板
+  const copyToClipboard = async (text, idType) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedId(`${idType}-${text}`)
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
     }
   }
 
@@ -469,8 +531,27 @@ function AutonomousAgents() {
                       <span>{statusInfo.label}</span>
                     </div>
                     <div className="instance-identity">
-                      <div className="session-id">{instance.sessionId}</div>
-                      <div className="user-id">{instance.userId}</div>
+                      <div
+                        className="session-id"
+                        title={instance.sessionId}
+                        onClick={() => copyToClipboard(instance.sessionId, 'session')}
+                      >
+                        {instance.sessionId}
+                        {copiedId === `session-${instance.sessionId}` && (
+                          <span className="copy-feedback">已复制!</span>
+                        )}
+                      </div>
+                      <div
+                        className="user-id"
+                        title={instance.userId || 'N/A'}
+                        onClick={() => instance.userId && copyToClipboard(instance.userId, 'user')}
+                        style={{ cursor: instance.userId ? 'pointer' : 'default' }}
+                      >
+                        {instance.userId || 'N/A'}
+                        {instance.userId && copiedId === `user-${instance.userId}` && (
+                          <span className="copy-feedback">已复制!</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -483,7 +564,7 @@ function AutonomousAgents() {
                     </div>
                     <div className="soul-type-meta">
                       <div className="soul-type-name">{instance.soulDisplayName}</div>
-                      <div className="soul-type-id">{instance.soulId}</div>
+                      <div className="soul-type-id" title={instance.soulId}>{instance.soulId}</div>
                     </div>
                     <button
                       className="view-config-btn-mini"
@@ -579,8 +660,8 @@ function AutonomousAgents() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                       执行历史
-                      {executionHistory[instance.sessionId] && (
-                        <span className="history-count">({executionHistory[instance.sessionId].length})</span>
+                      {historyPagination[instance.sessionId] && (
+                        <span className="history-count">({historyPagination[instance.sessionId].total})</span>
                       )}
                     </button>
 
@@ -589,65 +670,125 @@ function AutonomousAgents() {
                     )}
 
                     {expandedHistory[instance.sessionId] && executionHistory[instance.sessionId] && !historyLoading[instance.sessionId] && (
-                      <div className="history-list">
-                        {executionHistory[instance.sessionId].length === 0 ? (
-                          <div className="no-history">暂无执行记录</div>
-                        ) : (
-                          executionHistory[instance.sessionId].map((record) => (
-                            <div key={record.id} className="history-item">
-                              <div className="history-header">
-                                <div className={`history-status status-${record.status.toLowerCase()}`}>
-                                  {record.status === 'completed' && '✓'}
-                                  {record.status === 'failed' && '✗'}
-                                  {record.status === 'running' && '→'}
-                                  {record.status === 'hibernated' && '💤'}
-                                </div>
-                                <span className="history-time">
-                                  {formatExecutionTime(record.triggeredAt)}
-                                </span>
-                                {record.duration && (
-                                  <span className="history-duration">
-                                    ({record.duration}ms)
-                                  </span>
-                                )}
-                              </div>
+                      <>
+                        <div className="history-list">
+                          {executionHistory[instance.sessionId].length === 0 ? (
+                            <div className="no-history">暂无执行记录</div>
+                          ) : (
+                            (() => {
+                              // 客户端分页逻辑
+                              const currentPage = historyPagination[instance.sessionId]?.currentPage || 1
+                              const pageSize = 3
+                              const startIndex = (currentPage - 1) * pageSize
+                              const endIndex = startIndex + pageSize
+                              const pageData = executionHistory[instance.sessionId].slice(startIndex, endIndex)
 
-                              <div className="history-content">
-                                <div className="history-task">{record.currentTask}</div>
-
-                                {record.triggerSource && (
-                                  <div className="history-trigger">
-                                    触发: {record.triggerSource}
-                                  </div>
-                                )}
-
-                                {record.primitiveCalls && record.primitiveCalls.length > 0 && (
-                                  <div className="history-primitives">
-                                    {record.primitiveCalls.map((call, idx) => (
-                                      <span key={idx} className={`primitive-call ${call.success ? 'success' : 'failed'}`}>
-                                        {call.name}
-                                        {!call.success && ' ❌'}
+                              return pageData.map((record) => (
+                                <div key={record.id} className="history-item">
+                                  <div className="history-header">
+                                    <div className={`history-status status-${record.status.toLowerCase()}`}>
+                                      {record.status === 'completed' && '✓'}
+                                      {record.status === 'failed' && '✗'}
+                                      {record.status === 'running' && '→'}
+                                      {record.status === 'hibernated' && '💤'}
+                                    </div>
+                                    <span className="history-time">
+                                      {formatExecutionTime(record.triggeredAt)}
+                                    </span>
+                                    {record.duration && (
+                                      <span className="history-duration">
+                                        ({record.duration}ms)
                                       </span>
-                                    ))}
+                                    )}
                                   </div>
-                                )}
 
-                                {record.llmDecision && (
-                                  <div className="history-decision">
-                                    {record.llmDecision}
-                                  </div>
-                                )}
+                                  <div className="history-content">
+                                    <div className="history-task">{record.currentTask}</div>
 
-                                {record.error && (
-                                  <div className="history-error">
-                                    错误: {record.error}
+                                    {record.triggerSource && (
+                                      <div className="history-trigger">
+                                        触发: {record.triggerSource}
+                                      </div>
+                                    )}
+
+                                    {record.primitiveCalls && record.primitiveCalls.length > 0 && (
+                                      <div className="history-primitives">
+                                        {record.primitiveCalls.map((call, idx) => (
+                                          <span key={idx} className={`primitive-call ${call.success ? 'success' : 'failed'}`}>
+                                            {call.name}
+                                            {!call.success && ' ❌'}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {record.llmDecision && (
+                                      <div className="history-decision">
+                                        {record.llmDecision}
+                                      </div>
+                                    )}
+
+                                    {record.error && (
+                                      <div className="history-error">
+                                        错误: {record.error}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
+                                </div>
+                              ))
+                            })()
+                          )}
+                        </div>
+
+                        {/* 分页控制 */}
+                        {historyPagination[instance.sessionId] && historyPagination[instance.sessionId].totalPages > 1 && (
+                          <div className="history-pagination">
+                            <button
+                              className="pagination-btn"
+                              onClick={() => changeHistoryPage(instance.sessionId, historyPagination[instance.sessionId].currentPage - 1)}
+                              disabled={historyPagination[instance.sessionId].currentPage === 1}
+                            >
+                              <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                              </svg>
+                            </button>
+
+                            <span className="pagination-info">
+                              {historyPagination[instance.sessionId].currentPage} / {historyPagination[instance.sessionId].totalPages}
+                            </span>
+
+                            <button
+                              className="pagination-btn"
+                              onClick={() => changeHistoryPage(instance.sessionId, historyPagination[instance.sessionId].currentPage + 1)}
+                              disabled={historyPagination[instance.sessionId].currentPage === historyPagination[instance.sessionId].totalPages}
+                            >
+                              <svg style={{ width: '14px', height: '14px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+
+                            {/* 页码跳转 */}
+                            <div className="pagination-jump">
+                              <input
+                                type="number"
+                                min="1"
+                                max={historyPagination[instance.sessionId].totalPages}
+                                className="pagination-input"
+                                placeholder="页码"
+                                value={pageInput[instance.sessionId] || ''}
+                                onChange={(e) => setPageInput(prev => ({ ...prev, [instance.sessionId]: e.target.value }))}
+                                onKeyDown={(e) => handlePageInputKeyDown(e, instance.sessionId)}
+                              />
+                              <button
+                                className="pagination-jump-btn"
+                                onClick={() => jumpToPage(instance.sessionId)}
+                              >
+                                跳转
+                              </button>
                             </div>
-                          ))
+                          </div>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>

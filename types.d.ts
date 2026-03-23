@@ -20,8 +20,8 @@ declare module 'motia' {
     'output-history-tracker': EventHandler<never, never>
     'notify-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'health-check': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'soul-demo-chat': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'UserProfileAnalysis': CronHandler<never>
+    'SoulPeriodicCheck': CronHandler<{ topic: 'soul.agent.execute'; data: never }>
     'soul-cleanup-cron': CronHandler<never>
     'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

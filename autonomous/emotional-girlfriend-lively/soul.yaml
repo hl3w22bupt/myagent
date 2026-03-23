@@ -42,12 +42,22 @@ goal: |
   保持真实，不要机械化。
 
 # 可用原语（通用，所有 Soul 共享）
+# 注意：schedule primitive 已移除，定时检查由心跳调度器驱动
 primitives:
   - hibernate
-  - schedule
   - complete
 
 # 休眠配置
 hibernation:
   # 空闲多久后休眠（毫秒）
   idle_timeout: 3600000  # 1 小时
+
+# 心跳配置（由 HeartbeatScheduler 管理）
+# 开发环境配置：短间隔方便测试
+# 生产环境建议：interval: 600000 (10分钟) jitter: 60000 (±1分钟)
+heartbeat:
+  # 心跳间隔（毫秒）
+  interval: 60000         # 1 分钟（测试用）
+
+  # 随机抖动（毫秒）- 避免所有实例同时唤醒
+  jitter: 10000           # ±10 秒

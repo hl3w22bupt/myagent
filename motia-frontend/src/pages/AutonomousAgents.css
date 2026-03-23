@@ -155,9 +155,9 @@
    ============================== */
 .instances-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
   gap: 1.5rem;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -299,6 +299,7 @@
   gap: 0.125rem;
   min-width: 0;
   flex: 1;
+  position: relative;
 }
 
 .session-id {
@@ -306,16 +307,30 @@
   font-weight: 700;
   color: #1E293B;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  padding-top: 4px;
+}
+
+.session-id:hover {
+  color: #2563EB;
 }
 
 .user-id {
   font-size: 0.75rem;
   color: #64748B;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  padding-top: 2px;
+}
+
+.user-id:hover {
+  color: #475569;
 }
 
 /* ==============================
@@ -355,9 +370,20 @@
   font-size: 0.75rem;
   color: #64748B;
   background: #F1F5F9;
-  padding: 0.0625rem 0.5rem;
+  padding: 0.25rem 0.625rem;
   border-radius: 4px;
   font-weight: 500;
+  cursor: help;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.soul-type-id:hover {
+  background: #E2E8F0;
+  color: #475569;
+}
   display: inline-block;
 }
 
@@ -553,9 +579,20 @@
   font-size: 0.75rem;
   color: #64748B;
   background: #F1F5F9;
-  padding: 0.0625rem 0.5rem;
+  padding: 0.25rem 0.625rem;
   border-radius: 4px;
   font-weight: 500;
+  cursor: help;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.soul-type-id:hover {
+  background: #E2E8F0;
+  color: #475569;
+}
   display: inline-block;
 }
 
@@ -1674,6 +1711,117 @@
   margin-top: 0.25rem;
 }
 
+/* ==============================
+   History Pagination
+   ============================== */
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #E2E8F0;
+}
+
+.pagination-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #E2E8F0;
+  background: white;
+  border-radius: 6px;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #F1F5F9;
+}
+
+.pagination-btn svg {
+  flex-shrink: 0;
+}
+
+.pagination-info {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748B;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ==============================
+   Pagination Jump Input
+   ============================== */
+.pagination-jump {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid #E2E8F0;
+}
+
+.pagination-input {
+  width: 50px;
+  height: 32px;
+  padding: 0 0.5rem;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  text-align: center;
+  color: #1E293B;
+  transition: all 0.2s ease;
+}
+
+.pagination-input:focus {
+  outline: none;
+  border-color: #CBD5E1;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.pagination-input::placeholder {
+  color: #94A3B8;
+  font-size: 0.75rem;
+}
+
+.pagination-jump-btn {
+  height: 32px;
+  padding: 0 0.75rem;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.pagination-jump-btn:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+.pagination-jump-btn:active {
+  transform: scale(0.98);
+}
+
 /* Responsive Modal */
 @media (max-width: 640px) {
   .config-modal-overlay {
@@ -1700,5 +1848,37 @@
     font-size: 0.75rem;
     padding: 1rem;
     max-height: 300px;
+  }
+}
+
+/* ==============================
+   Copy Feedback Tooltip
+   ============================== */
+.copy-feedback {
+  position: absolute;
+  left: 0;
+  top: -18px;
+  font-size: 0.7rem;
+  color: #16A34A;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #F0FDF4;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #BBF7D0;
+  animation: fadeIn 0.2s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

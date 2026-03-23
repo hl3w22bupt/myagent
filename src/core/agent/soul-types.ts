@@ -29,6 +29,15 @@ export interface SoulConfig {
     /** Idle timeout before hibernating (milliseconds) */
     idle_timeout: number;
   };
+
+  /** Heartbeat configuration */
+  heartbeat?: {
+    /** Heartbeat interval (milliseconds) */
+    interval: number;
+
+    /** Random jitter to avoid simultaneous wakeups (milliseconds) */
+    jitter?: number;
+  };
 }
 
 /**

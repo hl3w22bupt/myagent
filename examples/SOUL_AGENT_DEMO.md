@@ -23,18 +23,27 @@ npm run dev
 
 #### 方式 1: 使用 cURL
 
-**聊天 API（推荐）**
+**用户聊天（推荐）**
 ```bash
-curl -X POST http://localhost:3000/api/demo/soul/chat \
+curl -X POST http://localhost:3000/api/soul/emotional-girlfriend-lively/execute \
   -H "Content-Type: application/json" \
   -d '{
-    "soulId": "emotional-girlfriend-lively",
     "userId": "demo-user-123",
-    "message": "我今天工作很累，想休息一下"
+    "trigger_time": "2026-03-20T22:00:00Z",
+    "context": {
+      "source": "api",
+      "data": {
+        "type": "user_message",
+        "message": {
+          "role": "user",
+          "content": "我今天工作很累，想休息一下"
+        }
+      }
+    }
   }'
 ```
 
-**通用执行 API**
+**系统触发（定时、事件）**
 ```bash
 curl -X POST http://localhost:3000/api/soul/emotional-girlfriend-lively/execute \
   -H "Content-Type: application/json" \
@@ -71,12 +80,21 @@ npx ts-node examples/soul-agent-demo.ts
 ### 场景 1: 用户主动聊天
 
 ```bash
-curl -X POST http://localhost:3000/api/demo/soul/chat \
+curl -X POST http://localhost:3000/api/soul/emotional-girlfriend-lively/execute \
   -H "Content-Type: application/json" \
   -d '{
-    "soulId": "emotional-girlfriend-lively",
     "userId": "demo-user-123",
-    "message": "你好，我今天工作很累"
+    "trigger_time": "2026-03-20T22:00:00Z",
+    "context": {
+      "source": "api",
+      "data": {
+        "type": "user_message",
+        "message": {
+          "role": "user",
+          "content": "你好，我今天工作很累"
+        }
+      }
+    }
   }'
 ```
 
@@ -151,37 +169,51 @@ curl -X POST http://localhost:3000/api/soul/emotional-girlfriend-lively/execute 
 
 ## API 端点说明
 
-### 1. 聊天 API
+### 1. Soul 执行 API（统一接口）
 ```
-POST /api/demo/soul/chat
+POST /api/soul/:soulId/execute
 ```
 
 **请求体：**
 ```json
 {
-  "soulId": "emotional-girlfriend-lively",
   "userId": "demo-user-123",
-  "message": "用户消息内容"
+  "trigger_time": "2026-03-20T22:00:00Z",
+  "taskId": "task-soul-emotional-girlfriend-lively-demo-user-123-thread-abc",  // 可选：直接指定 task
+  "context": {
+    "source": "api|cron|event",
+    "data": {
+      "type": "user_message",
+      "message": {
+        "role": "user",
+        "content": "用户消息内容"
+      }
+    }
+  }
 }
 ```
+
+**参数说明：**
+- `taskId`（可选）：直接指定要操作的 task ID
+  - 如果提供且 task 存在 → 复用该 task
+  - 如果提供但 task 不存在 → 返回 404
+  - 如果不提供 → 通过 `threadId` 推导或创建新 task
+- `context.source`：触发源（`api` 用户消息、`cron` 定时、`event` 事件）
+- `context.data.threadId`：MyEcho thread ID（用于多轮对话）
 
 **响应：**
 ```json
 {
   "success": true,
+  "message": "Soul agent executed successfully",
+  "taskId": "task-soul-emotional-girlfriend-lively-demo-user-123",
   "sessionId": "soul-emotional-girlfriend-lively-demo-user-123",
   "soulId": "emotional-girlfriend-lively",
-  "userId": "demo-user-123",
-  "executionTime": 2720,
-  "result": {
-    "message": "对话已处理",
-    "conversations": [...],
-    "agentOutput": {...}
-  }
+  "output": "Soul 的回复内容"
 }
 ```
 
-### 2. 通用执行 API
+### 2. 任务聊天 API（多轮对话）
 ```
 POST /api/soul/:soulId/execute
 ```
@@ -289,12 +321,21 @@ agent:
 
 4. 测试新 Soul：
    ```bash
-   curl -X POST http://localhost:3000/api/demo/soul/chat \
+   curl -X POST http://localhost:3000/api/soul/my-new-soul/execute \
      -H "Content-Type: application/json" \
      -d '{
-       "soulId": "my-new-soul",
        "userId": "test-user",
-       "message": "测试消息"
+       "trigger_time": "2026-03-20T22:00:00Z",
+       "context": {
+         "source": "api",
+         "data": {
+           "type": "user_message",
+           "message": {
+             "role": "user",
+             "content": "测试消息"
+           }
+         }
+       }
      }'
    ```
 

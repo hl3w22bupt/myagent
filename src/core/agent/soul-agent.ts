@@ -20,6 +20,8 @@ import { extractUserId } from '../utils/session-utils';
 import { createExecutionId, calculateDuration } from '../utils/date-utils';
 import { MAX_DECISION_LENGTH, DEFAULT_TASK_NAME } from '../constants/execution';
 import { getDataStore } from '../database/data-store';
+import { SoulContextBuilder } from '../context/soul-context-builder';
+import { SoulExecutionContext, RawTriggerContext, DecisionResult } from './soul-context-types';
 
 /**
  * SoulAgent - Autonomous agent with hibernation capabilities
@@ -81,7 +83,7 @@ export class SoulAgent extends Agent {
     // 7. Initialize Soul state
     this.soulState = {
       status: 'IDLE',
-      currentTask: null,
+      currentTask: this.taskId,  // ← 保留 taskId，用于 periodic check 触发
       lastActivity: null,
       scheduledWakeup: null,
       statistics: {
@@ -132,27 +134,47 @@ ${soulGoal}
   }
 
   /**
-   * Execute trigger task (main entry point for Soul)
+   * Execute trigger task (main entry point for Soul) - 【包工头逻辑】
    *
-   * Completely generic, contains no business logic.
-   * All business logic is defined in soul.yaml's goal field.
-   *
-   * Implementation: 复用父类 Agent 的 run() 方法
-   * - 自动推送 taskExecution stream
-   * - 自动推送 taskResult stream
-   * - 执行完成后回到 idle 状态
+   * 根据触发源决定处理方式：
+   * - API 触发（user_message）：接单模式 - 取消当前任务，处理用户消息
+   * - 定时触发（periodic_check）：造单模式 - 判断是否需要行动
    *
    * @param input - Soul execution input
    * @returns Execution result
    */
   async execute(input: SoulInput & { streams?: any }): Promise<any> {
     const { trigger_time, context, streams } = input;
+    const source = context.source;
 
     // 记录触发源和时间
-    this.lastTriggerSource = context.source;
+    this.lastTriggerSource = source;
     this.lastTriggerTime = trigger_time;
 
-    console.log(`[SoulAgent] ${this.sessionId} executing at ${trigger_time}, source: ${context.source}`);
+    console.log(`[SoulAgent] ${this.sessionId} executing at ${trigger_time}, source: ${source}`);
+
+    // 【包工头逻辑】根据触发源选择处理方式
+    if (source === 'user_message') {
+      // 【接单模式】API 触发：用户消息优先
+      return await this.handleUserMessage(input, streams);
+    } else {
+      // 【造单模式】定时触发：自主决策
+      return await this.handlePeriodicCheck(input, streams);
+    }
+  }
+
+  /**
+   * 【接单模式】处理用户消息
+   *
+   * 客户优先：取消正在运行的任务，立即处理用户消息
+   *
+   * @param input - Soul execution input
+   * @param streams - Stream 更新接口
+   * @returns Execution result
+   */
+  private async handleUserMessage(input: SoulInput, streams: any): Promise<any> {
+    const { trigger_time, context } = input;
+    const dataStore = getDataStore();
 
     // Create execution record
     const triggeredAt = new Date(trigger_time);
@@ -175,20 +197,24 @@ ${soulGoal}
     // Save initial execution record
     await soulExecutionHistoryService.saveExecution(executionRecord);
 
-    // Get dataStore for task status updates
-    const dataStore = getDataStore();
-
     try {
+      console.log(`[SoulAgent] 【接单模式】处理用户消息`);
+
+      // 如果正在运行，取消当前任务（用户消息优先）
+      if (this.soulState.currentTask) {
+        console.log(`[SoulAgent] Cancelling current task - user message priority`);
+        await this.cancelCurrentTask();
+      }
+
       // 1. 更新主任务状态为 'running'
       try {
         await dataStore.initialize();
         const task = await dataStore.getTask(this.taskId);
         if (task) {
-          // 更新任务描述为用户消息
-          const taskDescription = this.buildTaskPrompt(trigger_time, context);
+          const taskDescription = `用户发来消息：${context.data.userRequest || context.data.message || '(无内容)'}`;
           await dataStore.updateTask(this.taskId, {
             status: 'running',
-            task: taskDescription.substring(0, 200)  // 限制长度
+            task: taskDescription.substring(0, 200)
           });
           console.log(`[SoulAgent] Updated main task status to running: ${this.taskId}`);
         }
@@ -199,27 +225,21 @@ ${soulGoal}
       // 2. Update state
       this.soulState.status = 'ACTIVE';
       this.soulState.lastActivity = Date.now();
-      this.soulState.currentTask = executionRecord.id;
+      // ✅ 保留主任务 ID（this.taskId），不覆盖为 execution ID
+      // this.soulState.currentTask = executionRecord.id;  // ❌ 不要覆盖主任务 ID
 
-      // 3. Build task prompt (根据触发源构建)
-      const taskPrompt = this.buildTaskPrompt(trigger_time, context);
+      // 3. Build task prompt
+      const taskPrompt = `用户发来消息：${context.data.userRequest || context.data.message || '(无内容)'}`;
+      executionRecord.currentTask = `Execute soul: user_message`;
 
-      // Update execution record with task info
-      executionRecord.currentTask = `Execute soul: ${context.source}`;
-
-      // ✅ 保存用户消息到对话历史（使用标准 task_contexts）
-      if (context.source === 'user_message' && context.data?.userRequest) {
+      // 4. 保存用户消息到对话历史
+      if (context.data?.userRequest) {
         try {
-          const dataStore = getDataStore();
           await dataStore.initialize();
-
-          // 确保 task context 存在
           const existingContext = await dataStore.getContext(this.taskId);
           if (!existingContext) {
             await dataStore.createTaskContext(this.taskId, this.sessionId, context.data.userRequest);
           }
-
-          // 添加对话轮次（使用扁平化的 ConversationRound 结构）
           await dataStore.addConversationRound(this.taskId, {
             round: Date.now(),
             timestamp: Date.now(),
@@ -233,7 +253,7 @@ ${soulGoal}
         }
       }
 
-      // ✅ 直接推送 stream 更新（不依赖 Agent.run()）
+      // 5. 推送 stream 更新
       if (streams?.taskExecution) {
         const startUniqueId = `${this.taskId}-start-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, startUniqueId, {
@@ -249,22 +269,21 @@ ${soulGoal}
             data: {
               triggerSource: context.source,
               triggerData: context.data,
-              message: `Soul Agent triggered by: ${context.source}`
+              message: `Soul Agent triggered by: user_message`
             }
           }
         });
-        console.log(`[SoulAgent] Pushed execution start to stream: ${this.taskId}`);
       }
 
-      // ✅ 发送 Task 层级的 execution trace
+      // 6. 发送 Task 层级的 execution trace
       if (streams?.executionTraces) {
         const taskTraceId = `task-start-${this.taskId}-${Date.now()}`;
         await streams.executionTraces.set(this.taskId, taskTraceId, {
           id: taskTraceId,
-          level: 'task',  // ✅ Task 层级
+          level: 'task',
           taskId: this.taskId,
           agentId: this.sessionId,
-          stage: 'task_start',
+          stage: 'pre',
           status: 'running',
           inputData: JSON.stringify({
             triggerSource: context.source,
@@ -284,16 +303,15 @@ ${soulGoal}
             }
           }
         });
-        console.log(`[SoulAgent] ✅ Task-level trace sent`);
       }
 
-      // ✅ 发送 Agent 层级的 pre execution trace
+      // 7. 发送 Agent 层级的 pre execution trace
       if (streams?.executionTraces) {
         const agentPreTraceId = `agent-${this.sessionId}-pre-${Date.now()}`;
         const subjectInfo = this.getSubjectInfo();
         await streams.executionTraces.set(this.taskId, agentPreTraceId, {
           id: agentPreTraceId,
-          level: 'agent',  // ✅ Agent 层级
+          level: 'agent',
           taskId: this.taskId,
           agentId: this.sessionId,
           stage: 'pre',
@@ -312,21 +330,15 @@ ${soulGoal}
             soulId: this.soulConfig.soul_id
           }
         });
-        console.log(`[SoulAgent] ✅ Agent pre-trace sent`);
       }
 
-      // 4. === 核心：调用父类的 run()，复用现有执行流程 ===
-
-      // ✅ 加载对话历史（参考 master-agent 的实现）
+      // 8. 加载对话历史
       let conversationHistory: any[] = [];
       try {
         const taskContext = await dataStore.getContext(this.taskId);
         if (taskContext && taskContext.conversationRounds) {
-          // 转换 conversationRounds 为 Agent 期望的格式
           conversationHistory = [];
-
           for (const round of taskContext.conversationRounds) {
-            // 添加用户消息
             if (round.userMessage) {
               conversationHistory.push({
                 role: 'user',
@@ -334,7 +346,6 @@ ${soulGoal}
                 timestamp: round.timestamp,
               });
             }
-            // 添加助手响应（如果存在）
             if (round.assistantOutput) {
               conversationHistory.push({
                 role: 'assistant',
@@ -343,49 +354,42 @@ ${soulGoal}
               });
             }
           }
-
           console.log(`[SoulAgent] ✅ Loaded ${conversationHistory.length} messages from conversation history`);
         }
       } catch (error) {
         console.error(`[SoulAgent] Failed to load conversation history:`, error);
       }
 
+      // 9. 调用基类 Agent.run()
       const result = await this.run(
         taskPrompt,
-        this.taskId,  // ✅ 使用主任务 ID，确保 stream 推送到正确的任务
+        this.taskId,
         {
-          // ✅ 传递对话历史（参考 master-agent）
           conversationHistory: conversationHistory,
-          // 注入原语工具
           tools: this.getPrimitiveTools(),
-          // ✅ 传递 streams，让 Agent.run() 能够推送 stream 更新
           streams: streams
         }
       );
 
-      // 🔍 DIAGNOSTIC: 打印 result 对象的详细信息
       console.log(`[SoulAgent] 🔍 Result from Agent.run():`, {
         success: result.success,
         hasOutput: !!result.output,
         outputLength: result.output?.length || 0,
         outputPreview: result.output?.substring(0, 100) || '(no output)',
         hasError: !!result.error,
-        error: result.error,
         executionTime: result.executionTime,
         stepsCount: result.steps?.length || 0,
-        hasClarification: !!result.clarification,
       });
 
-      // 5. 记录执行结果
+      // 10. 记录执行结果
       if (result.output) {
-        executionRecord.llmThoughtProcess = 'Soul decided on action based on goal and context';
+        executionRecord.llmThoughtProcess = 'Soul responded to user message';
         executionRecord.llmDecision = result.output.substring(0, MAX_DECISION_LENGTH);
       }
 
-      // ✅ 保存助手响应到对话历史（使用标准 task_contexts）
-      if (result.output && context.source === 'user_message') {
+      // 11. 保存助手响应到对话历史
+      if (result.output) {
         try {
-          // 解析 JSON output，提取 message 字段
           let assistantMessage = result.output;
           try {
             const parsed = JSON.parse(result.output);
@@ -396,18 +400,13 @@ ${soulGoal}
             // 不是 JSON，使用原始 output
           }
 
-          const dataStore = getDataStore();
           await dataStore.initialize();
-
-          // 获取当前 context
           const currentContext = await dataStore.getContext(this.taskId);
           if (currentContext && currentContext.conversationRounds && currentContext.conversationRounds.length > 0) {
-            // 更新最新的对话轮次的助手响应
             const rounds = currentContext.conversationRounds;
             const lastRound = rounds[rounds.length - 1];
             lastRound.assistantOutput = assistantMessage;
 
-            // 使用原始 SQL 更新，因为 addConversationRound 会添加新轮次
             const pool = (dataStore as any).pool;
             const client = await pool.connect();
             try {
@@ -427,14 +426,14 @@ ${soulGoal}
         }
       }
 
-      // ✅ 发送 Agent 层级的 post execution trace
+      // 12. 发送 Agent 层级的 post execution trace
       if (streams?.executionTraces) {
         const agentPostTraceId = `agent-${this.sessionId}-post-${Date.now()}`;
         const subjectInfo = this.getSubjectInfo();
         const status = result.success !== false ? 'completed' : 'failed';
         await streams.executionTraces.set(this.taskId, agentPostTraceId, {
           id: agentPostTraceId,
-          level: 'agent',  // ✅ Agent 层级
+          level: 'agent',
           taskId: this.taskId,
           agentId: this.sessionId,
           stage: 'post',
@@ -452,10 +451,9 @@ ${soulGoal}
             steps: result.steps?.length || 0
           }
         });
-        console.log(`[SoulAgent] ✅ Agent post-trace sent`);
       }
 
-      // 6. 更新执行记录
+      // 13. 更新执行记录
       executionRecord.status = 'completed';
       executionRecord.completedAt = new Date();
       executionRecord.duration = calculateDuration(executionRecord.startedAt, executionRecord.completedAt);
@@ -463,16 +461,9 @@ ${soulGoal}
         output: result.output,
         steps: result.steps?.length || 0
       };
-
       await soulExecutionHistoryService.saveExecution(executionRecord);
 
-      // 7. === 执行完成后休眠，等待下次触发 ===
-      // 数据保存通过 soul-api 发送 agent.task.completed 事件处理
-      // Soul Agent 的特殊性是执行完成后回到 IDLE 状态，等待下次触发
-      // 但数据保存流程和 Master Agent 完全一样
-      await this.hibernate('执行完成，等待下次触发');
-
-      // ✅ 推送执行完成的 stream 更新
+      // 14. 推送执行完成的 stream 更新
       if (streams?.taskExecution) {
         const completeUniqueId = `${this.taskId}-complete-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, completeUniqueId, {
@@ -493,18 +484,17 @@ ${soulGoal}
             }
           }
         });
-        console.log(`[SoulAgent] Pushed execution completion to stream: ${this.taskId}`);
       }
 
-      // ✅ 发送 Task 完成的 execution trace
+      // 15. 发送 Task 完成的 execution trace
       if (streams?.executionTraces) {
         const taskTraceId = `task-complete-${this.taskId}-${Date.now()}`;
         await streams.executionTraces.set(this.taskId, taskTraceId, {
           id: taskTraceId,
-          level: 'task',  // ✅ Task 层级
+          level: 'task',
           taskId: this.taskId,
           agentId: this.sessionId,
-          stage: 'task_complete',
+          stage: 'post',
           status: 'completed',
           inputData: JSON.stringify({
             triggerSource: context.source,
@@ -527,9 +517,9 @@ ${soulGoal}
             }
           }
         });
-        console.log(`[SoulAgent] ✅ Task completion trace sent`);
       }
 
+      // 16. 执行完成后休眠
       await this.hibernate('执行完成，等待下次触发');
 
       return result;
@@ -539,45 +529,541 @@ ${soulGoal}
       executionRecord.completedAt = new Date();
       executionRecord.duration = calculateDuration(executionRecord.startedAt, executionRecord.completedAt);
       executionRecord.error = error.message;
-
       await soulExecutionHistoryService.saveExecution(executionRecord);
 
       // 失败后也要休眠，避免持续重试
-      // 数据保存通过 soul-api 发送 agent.task.failed 事件处理
       await this.hibernate(`执行失败: ${error.message}`);
-
       throw error;
     }
   }
 
   /**
-   * Build task prompt
+   * 【造单模式】处理定时检查
    *
-   * 根据触发源动态构建任务提示
+   * 判断是否需要行动：
+   * - 不需要 → 休眠
+   * - 需要 → 描述任务 → 调用基类 Agent.run()
    *
-   * @param trigger_time - Trigger timestamp
-   * @param triggerContext - Trigger context from application
-   * @returns Task prompt string
+   * @param input - Soul execution input
+   * @param streams - Stream 更新接口
+   * @returns Execution result
    */
-  private buildTaskPrompt(trigger_time: string, triggerContext: any): string {
-    const { source, data } = triggerContext;
+  private async handlePeriodicCheck(input: SoulInput, streams: any): Promise<any> {
+    const { trigger_time, context } = input;
+    const dataStore = getDataStore();
 
-    // 根据触发源构建不同的提示
-    if (source === 'user_message') {
-      // 用户主动发消息
-      return `用户发来消息：${data.userRequest || data.message || '(无内容)'}`;
-    } else if (source === 'soul_schedule') {
-      // 定时唤醒
-      return `现在是 ${new Date(trigger_time).toLocaleString()}，根据你的长期目标（goal）判断是否需要主动行动。`;
-    } else if (source === 'emotion_detection') {
-      // 情绪检测触发
-      return `检测到用户情绪变化：${JSON.stringify(data)}，根据你的目标判断是否需要关心。`;
-    } else if (source === 'webhook') {
-      // Webhook 触发
-      return `收到 webhook 事件：${JSON.stringify(data)}，根据你的目标判断是否需要响应。`;
-    } else {
-      // 其他触发源
-      return `触发时间：${trigger_time}，触发源：${source}，数据：${JSON.stringify(data || {})}`;
+    // Create execution record
+    const triggeredAt = new Date(trigger_time);
+    const startedAt = new Date();
+
+    const executionRecord: SoulExecutionRecord = {
+      id: createExecutionId(this.sessionId),
+      soulId: this.soulConfig.soul_id,
+      sessionId: this.sessionId,
+      userId: this.userId,
+      triggeredAt,
+      triggerSource: context.source,
+      triggerData: context.data,
+      startedAt,
+      status: 'running',
+      currentTask: DEFAULT_TASK_NAME,
+      primitiveCalls: []
+    };
+
+    // Save initial execution record
+    await soulExecutionHistoryService.saveExecution(executionRecord);
+
+    try {
+      console.log(`[SoulAgent] 【造单模式】处理定时检查`);
+
+      // 1. 构建结构化上下文
+      const ctx = SoulContextBuilder.build(trigger_time, context);
+
+      // 2. 判断是否需要行动（前置决策）
+      const decision = await this.makeDecision(ctx);
+
+      if (!decision.needsAction) {
+        // 不需要行动，直接休眠
+        console.log(`[SoulAgent] ${this.sessionId} no action needed: ${decision.reason}`);
+
+        executionRecord.status = 'completed';
+        executionRecord.completedAt = new Date();
+        executionRecord.duration = calculateDuration(executionRecord.startedAt, executionRecord.completedAt);
+        executionRecord.llmDecision = decision.reason;
+        await soulExecutionHistoryService.saveExecution(executionRecord);
+
+        await this.hibernate(decision.reason || '无需行动');
+        return { success: true, action: 'hibernated', reason: decision.reason };
+      }
+
+      // 3. 需要行动，描述任务
+      console.log(`[SoulAgent] ${this.sessionId} action needed: ${decision.reason}`);
+      const taskPrompt = this.buildTaskDescription(ctx);
+      executionRecord.currentTask = `Execute soul: ${decision.reason}`;
+
+      // 4. Update state
+      this.soulState.status = 'ACTIVE';
+      this.soulState.lastActivity = Date.now();
+      // ✅ 保留主任务 ID（this.taskId），不覆盖为 execution ID
+      // execution ID 用于执行历史追踪，但 currentTask 应该始终指向主任务
+      // this.soulState.currentTask = executionRecord.id;  // ❌ 不要覆盖主任务 ID
+
+      // 5. 更新主任务状态为 'running'
+      try {
+        await dataStore.initialize();
+        const task = await dataStore.getTask(this.taskId);
+        if (task) {
+          await dataStore.updateTask(this.taskId, {
+            status: 'running',
+            task: taskPrompt.substring(0, 200)
+          });
+          console.log(`[SoulAgent] Updated main task status to running: ${this.taskId}`);
+        }
+      } catch (error) {
+        console.error(`[SoulAgent] Failed to update main task status:`, error);
+      }
+
+      // 6. 推送 stream 更新
+      if (streams?.taskExecution) {
+        const startUniqueId = `${this.taskId}-start-${Date.now()}`;
+        await streams.taskExecution.set(this.taskId, startUniqueId, {
+          taskId: this.taskId,
+          task: taskPrompt.substring(0, 100),
+          status: 'running',
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          type: 'soul_execution',
+          stage: 'executing',
+          progressType: 'soul_trigger',
+          metadata: {
+            data: {
+              triggerSource: context.source,
+              triggerData: context.data,
+              message: `Soul Agent triggered by: ${context.source}`
+            }
+          }
+        });
+      }
+
+      // 7. 发送 Task 层级的 execution trace
+      if (streams?.executionTraces) {
+        const taskTraceId = `task-start-${this.taskId}-${Date.now()}`;
+        await streams.executionTraces.set(this.taskId, taskTraceId, {
+          id: taskTraceId,
+          level: 'task',
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'pre',
+          status: 'running',
+          inputData: JSON.stringify({
+            triggerSource: context.source,
+            triggerData: context.data,
+            task: taskPrompt
+          }),
+          outputData: JSON.stringify({
+            message: 'Soul Agent task started'
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            soulId: this.soulConfig.soul_id,
+            data: {
+              triggerSource: context.source,
+              taskType: 'soul_execution'
+            }
+          }
+        });
+      }
+
+      // 8. 发送 Agent 层级的 pre execution trace
+      if (streams?.executionTraces) {
+        const agentPreTraceId = `agent-${this.sessionId}-pre-${Date.now()}`;
+        const subjectInfo = this.getSubjectInfo();
+        await streams.executionTraces.set(this.taskId, agentPreTraceId, {
+          id: agentPreTraceId,
+          level: 'agent',
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'pre',
+          status: 'started',
+          inputData: JSON.stringify({
+            task: taskPrompt,
+            agentType: 'SoulAgent',
+            soulId: this.soulConfig.soul_id,
+            triggerSource: context.source
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: subjectInfo.subjectSubTitle,
+            soulId: this.soulConfig.soul_id
+          }
+        });
+      }
+
+      // 9. 加载对话历史
+      let conversationHistory: any[] = [];
+      try {
+        const taskContext = await dataStore.getContext(this.taskId);
+        if (taskContext && taskContext.conversationRounds) {
+          conversationHistory = [];
+          for (const round of taskContext.conversationRounds) {
+            if (round.userMessage) {
+              conversationHistory.push({
+                role: 'user',
+                content: round.userMessage,
+                timestamp: round.timestamp,
+              });
+            }
+            if (round.assistantOutput) {
+              conversationHistory.push({
+                role: 'assistant',
+                content: round.assistantOutput,
+                timestamp: round.timestamp,
+              });
+            }
+          }
+          console.log(`[SoulAgent] ✅ Loaded ${conversationHistory.length} messages from conversation history`);
+        }
+      } catch (error) {
+        console.error(`[SoulAgent] Failed to load conversation history:`, error);
+      }
+
+      // 10. 调用基类 Agent.run()
+      const result = await this.run(
+        taskPrompt,
+        this.taskId,
+        {
+          conversationHistory: conversationHistory,
+          tools: this.getPrimitiveTools(),
+          streams: streams
+        }
+      );
+
+      console.log(`[SoulAgent] 🔍 Result from Agent.run():`, {
+        success: result.success,
+        hasOutput: !!result.output,
+        outputLength: result.output?.length || 0,
+        outputPreview: result.output?.substring(0, 100) || '(no output)',
+        hasError: !!result.error,
+        executionTime: result.executionTime,
+        stepsCount: result.steps?.length || 0,
+      });
+
+      // 11. 记录执行结果
+      if (result.output) {
+        executionRecord.llmThoughtProcess = 'Soul decided on action based on goal and context';
+        executionRecord.llmDecision = result.output.substring(0, MAX_DECISION_LENGTH);
+      }
+
+      // 12. 发送 Agent 层级的 post execution trace
+      if (streams?.executionTraces) {
+        const agentPostTraceId = `agent-${this.sessionId}-post-${Date.now()}`;
+        const subjectInfo = this.getSubjectInfo();
+        const status = result.success !== false ? 'completed' : 'failed';
+        await streams.executionTraces.set(this.taskId, agentPostTraceId, {
+          id: agentPostTraceId,
+          level: 'agent',
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'post',
+          status: status,
+          outputData: result.output ? JSON.stringify({ output: result.output }) : undefined,
+          error: result.error,
+          executionTime: result.executionTime,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: subjectInfo.subjectSubTitle,
+            soulId: this.soulConfig.soul_id,
+            success: result.success !== false,
+            steps: result.steps?.length || 0
+          }
+        });
+      }
+
+      // 13. 更新执行记录
+      executionRecord.status = 'completed';
+      executionRecord.completedAt = new Date();
+      executionRecord.duration = calculateDuration(executionRecord.startedAt, executionRecord.completedAt);
+      executionRecord.output = {
+        output: result.output,
+        steps: result.steps?.length || 0
+      };
+      await soulExecutionHistoryService.saveExecution(executionRecord);
+
+      // 14. 推送执行完成的 stream 更新
+      if (streams?.taskExecution) {
+        const completeUniqueId = `${this.taskId}-complete-${Date.now()}`;
+        await streams.taskExecution.set(this.taskId, completeUniqueId, {
+          taskId: this.taskId,
+          task: result.output || '执行完成',
+          status: 'completed',
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          type: 'soul_execution',
+          stage: 'completed',
+          progressType: 'soul_completion',
+          metadata: {
+            data: {
+              output: result.output,
+              steps: result.steps?.length || 0,
+              duration: executionRecord.duration,
+              message: 'Soul Agent execution completed'
+            }
+          }
+        });
+      }
+
+      // 15. 发送 Task 完成的 execution trace
+      if (streams?.executionTraces) {
+        const taskTraceId = `task-complete-${this.taskId}-${Date.now()}`;
+        await streams.executionTraces.set(this.taskId, taskTraceId, {
+          id: taskTraceId,
+          level: 'task',
+          taskId: this.taskId,
+          agentId: this.sessionId,
+          stage: 'post',
+          status: 'completed',
+          inputData: JSON.stringify({
+            triggerSource: context.source,
+            task: taskPrompt
+          }),
+          outputData: JSON.stringify({
+            output: result.output,
+            steps: result.steps?.length || 0,
+            duration: executionRecord.duration,
+            success: result.success
+          }),
+          timestamp: new Date().toISOString(),
+          metadata: {
+            sessionId: this.sessionId,
+            soulId: this.soulConfig.soul_id,
+            data: {
+              triggerSource: context.source,
+              taskType: 'soul_execution',
+              executionStatus: 'completed'
+            }
+          }
+        });
+      }
+
+      // 16. 执行完成后休眠
+      await this.hibernate('执行完成，等待下次触发');
+
+      return result;
+    } catch (error: any) {
+      // 更新执行记录为失败
+      executionRecord.status = 'failed';
+      executionRecord.completedAt = new Date();
+      executionRecord.duration = calculateDuration(executionRecord.startedAt, executionRecord.completedAt);
+      executionRecord.error = error.message;
+      await soulExecutionHistoryService.saveExecution(executionRecord);
+
+      // 失败后也要休眠，避免持续重试
+      await this.hibernate(`执行失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 【心跳方法】由 HeartbeatScheduler 调用
+   *
+   * 简化版的造单模式，只做决策，不执行完整流程
+   * 用于定期检查是否需要主动行动
+   *
+   * @returns 心跳结果
+   */
+  async heartbeat(): Promise<{ action: 'hibernate' | 'active' | 'complete'; reason?: string }> {
+    console.log(`[SoulAgent] 💓 Heartbeat: ${this.sessionId}`);
+
+    try {
+      // 1. 构建结构化上下文
+      const now = new Date();
+      const trigger_time = now.toISOString();
+      const context = {
+        source: 'heartbeat',
+        data: {
+          reason: 'Periodic heartbeat check',
+          last_interaction: this.soulState.lastActivity
+            ? new Date(this.soulState.lastActivity).toISOString()
+            : null,
+          current_hour: now.getHours()
+        }
+      };
+
+      const ctx = SoulContextBuilder.build(trigger_time, context);
+
+      // 2. 判断是否需要行动
+      const decision = await this.makeDecision(ctx);
+
+      if (!decision.needsAction) {
+        // 不需要行动，返回休眠状态
+        console.log(`[SoulAgent] ${this.sessionId} no action needed: ${decision.reason}`);
+
+        // 更新状态为 IDLE
+        this.soulState.status = 'IDLE';
+
+        return {
+          action: 'hibernate',
+          reason: decision.reason
+        };
+      }
+
+      // 3. 需要行动 - 调用完整的 execute 方法
+      console.log(`[SoulAgent] ${this.sessionId} action needed: ${decision.reason}`);
+
+      // 更新状态为 ACTIVE
+      this.soulState.status = 'ACTIVE';
+      this.soulState.lastActivity = Date.now();
+
+      // 执行完整流程（会自动调用 handlePeriodicCheck）
+      await this.execute({
+        trigger_time,
+        context
+      });
+
+      // 执行完成后，根据状态返回
+      if (this.shouldHibernate()) {
+        return { action: 'hibernate', reason: 'Task completed, should hibernate' };
+      }
+
+      return { action: 'active', reason: 'Task completed, still active' };
+
+    } catch (error: any) {
+      console.error(`[SoulAgent] ${this.sessionId} heartbeat error:`, error);
+
+      // 出错时也返回休眠，避免持续重试
+      return {
+        action: 'hibernate',
+        reason: `Heartbeat error: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * 【前置决策】判断是否需要行动
+   *
+   * 基于结构化上下文，让 LLM 快速判断是否需要行动
+   *
+   * @param ctx - 结构化上下文
+   * @returns 决策结果
+   */
+  private async makeDecision(ctx: SoulExecutionContext): Promise<DecisionResult> {
+    console.log(`[SoulAgent] Making decision based on context`);
+
+    const prompt = `
+根据上下文快速判断是否需要行动（回答 JSON）：
+
+\`\`\`json
+${JSON.stringify(ctx, null, 2)}
+\`\`\`
+
+## 你的目标
+
+${this.soulConfig.goal}
+
+## 判断标准
+
+- 需要：应该主动互动（问候、关心、陪伴等）
+- 不需要：用户状态良好，无需打扰
+
+回答格式：
+\`\`\`json
+{
+  "needsAction": true/false,
+  "reason": "原因说明"
+}
+\`\`\`
+    `.trim();
+
+    try {
+      // 使用父类 Agent 的 llm 实例进行决策
+      const response = await this.llm.messagesCreate(
+        [
+          { role: 'system', content: '你是一个决策助手。只返回纯 JSON，不要包含其他文字或 markdown 标记。' },
+          { role: 'user', content: prompt }
+        ],
+        {
+          max_tokens: 200,
+          temperature: 0
+        },
+        'soul decision'
+      );
+
+      // 解析 JSON 响应
+      const content = response.content;
+
+      // 尝试直接解析
+      try {
+        const decision = JSON.parse(content);
+        return decision;
+      } catch (parseError) {
+        // 如果直接解析失败，尝试提取 JSON（处理可能的 markdown 代码块）
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const decision = JSON.parse(jsonMatch[0]);
+          return decision;
+        }
+        throw parseError;
+      }
+    } catch (error) {
+      console.error('[SoulAgent] Decision failed:', error);
+      // 默认：不需要行动
+      return { needsAction: false, reason: '决策失败，保守处理' };
+    }
+  }
+
+  /**
+   * 构建任务描述
+   *
+   * 把决策后的任务描述清楚，交给基类 Agent 处理
+   *
+   * @param ctx - 结构化上下文
+   * @returns 任务描述
+   */
+  private buildTaskDescription(ctx: SoulExecutionContext): string {
+    return `
+## 📍 当前情况
+
+\`\`\`json
+${JSON.stringify(ctx, null, 2)}
+\`\`\`
+
+---
+
+## 🎯 你的目标
+
+${this.soulConfig.goal}
+
+---
+
+## 💡 任务
+
+根据当前上下文，判断是否需要主动互动。
+如果需要，直接行动。
+如果不需要，调用 hibernate() 休眠。
+    `.trim();
+  }
+
+  /**
+   * 取消当前任务
+   */
+  private async cancelCurrentTask(): Promise<void> {
+    if (this.soulState.currentTask) {
+      const dataStore = getDataStore();
+      try {
+        await dataStore.initialize();
+        await dataStore.updateTask(this.soulState.currentTask, {
+          status: 'cancelled',
+          error: 'Cancelled by user message (priority)'
+        });
+        console.log(`[SoulAgent] ✅ Cancelled task: ${this.soulState.currentTask}`);
+      } catch (error) {
+        console.error(`[SoulAgent] Failed to cancel task:`, error);
+      }
     }
   }
 
@@ -635,20 +1121,6 @@ ${soulGoal}
         }
       },
       {
-        name: 'schedule',
-        description: '安排下次任务或唤醒',
-        parameters: {
-          type: 'object',
-          properties: {
-            trigger_config: { type: 'object', description: '触发器配置' }
-          },
-          required: ['trigger_config']
-        },
-        implementation: async (args) => {
-          return await this.scheduleNext(args);
-        }
-      },
-      {
         name: 'complete',
         description: '标记当前任务完成',
         parameters: {
@@ -697,11 +1169,6 @@ ${soulGoal}
               callRecord.result = { hibernated: true };
               break;
 
-            case 'schedule':
-              console.log(`[SoulAgent] ${this.sessionId} scheduled next wakeup`);
-              callRecord.result = { scheduled: true };
-              break;
-
             case 'complete':
               console.log(`[SoulAgent] ${this.sessionId} completed task`);
               callRecord.result = { completed: true };
@@ -741,7 +1208,7 @@ ${soulGoal}
    * Soul Agent 的 hibernate 不是"销毁"实例，而是"暂停"
    * - 改变状态为 IDLE
    * - 保存状态到数据库
-   * - 等待下次触发
+   * - 更新 scheduled_wakeup 时间（用于 periodic check cron 触发）
    *
    * @param reason - Hibernate reason
    */
@@ -750,14 +1217,26 @@ ${soulGoal}
 
     // 1. 更新状态为 IDLE（不是 HIBERNATED，区别在于：IDLE 等待下次触发，HIBERNATED 是长期休眠）
     this.soulState.status = 'IDLE';
-    this.soulState.currentTask = null;
+    // 注意：不清空 currentTask，保留它以便 periodic check 触发时使用
 
     // 2. 保存状态到数据库
     const soulId = this.soulConfig.soul_id;
     await soulStateDataService.saveSoulState(this.sessionId, soulId, this.soulState);
 
+    // 3. 更新 scheduled_wakeup 时间（数据库驱动的心跳调度）
+    const heartbeat = this.soulConfig.heartbeat;
+    if (heartbeat) {
+      const jitter = heartbeat.jitter || 0;
+      const delay = heartbeat.interval + (Math.random() * jitter - jitter / 2);
+
+      // 直接更新数据库，不再使用回调
+      await soulStateDataService.updateScheduledWakeup(this.sessionId, delay);
+
+      console.log(`[SoulAgent] ${this.sessionId} scheduled next wakeup in ${Math.round(delay / 1000)}s`);
+    }
+
     // 注意：不销毁实例，保持状态
-    // 等待下次 execute() 调用
+    // 等待下次 execute() 调用或 periodic check cron 触发
   }
 
   /**
@@ -889,76 +1368,6 @@ ${soulGoal}
   }
 
   /**
-   * Schedule next wakeup
-   *
-   * @param args - Schedule arguments
-   * @returns Schedule result
-   */
-  private async scheduleNext(args: any): Promise<any> {
-    console.log(`[SoulAgent] ${this.sessionId} scheduling next wakeup`);
-
-    try {
-      const triggerConfig = args.trigger_config;
-
-      if (!triggerConfig) {
-        throw new Error('trigger_config is required for schedule');
-      }
-
-      // Calculate scheduled wakeup time based on trigger type
-      let scheduledWakeupTime: number | null = null;
-
-      if (triggerConfig.type === 'delay') {
-        // Schedule after delay milliseconds
-        const delay = triggerConfig.delay || 0;
-        scheduledWakeupTime = Date.now() + delay;
-      } else if (triggerConfig.type === 'timestamp') {
-        // Schedule at specific timestamp
-        scheduledWakeupTime = triggerConfig.timestamp;
-      } else if (triggerConfig.type === 'cron') {
-        // Calculate next cron time
-        // TODO: Implement cron parsing
-        // For now, require timestamp to be provided
-        if (!triggerConfig.next_timestamp) {
-          throw new Error('next_timestamp is required for cron scheduling');
-        }
-        scheduledWakeupTime = triggerConfig.next_timestamp;
-      }
-
-      if (!scheduledWakeupTime) {
-        throw new Error('Could not determine scheduled wakeup time');
-      }
-
-      // Update soul state with scheduled wakeup
-      this.soulState.scheduledWakeup = scheduledWakeupTime;
-
-      // Save to database
-      await soulStateDataService.saveSoulState(
-        this.sessionId,
-        this.soulConfig.soul_id,
-        this.soulState
-      );
-
-      // TODO: Register with scheduling system (e.g., node-cron, agenda)
-      // For now, the scheduled wakeup is stored in database and can be queried
-      // The application layer should periodically check for scheduled wakeups
-
-      console.log(`[SoulAgent] ${this.sessionId} scheduled wakeup at ${new Date(scheduledWakeupTime).toISOString()}`);
-
-      return {
-        success: true,
-        scheduledWakeup: scheduledWakeupTime,
-        scheduledAt: new Date(scheduledWakeupTime).toISOString()
-      };
-    } catch (error: any) {
-      console.error(`[SoulAgent] ${this.sessionId} failed to schedule: ${error.message}`);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
    * Complete current task
    *
    * @param result - Task result
@@ -1031,5 +1440,15 @@ ${soulGoal}
    */
   updateLastActivity(): void {
     this.soulState.lastActivity = Date.now();
+  }
+
+  /**
+   * Set last activity timestamp (for loading from database)
+   * Used by soul-agent-executor to restore state from database
+   *
+   * @param timestamp - Last activity timestamp in milliseconds
+   */
+  setLastActivity(timestamp: number): void {
+    this.soulState.lastActivity = timestamp;
   }
 }

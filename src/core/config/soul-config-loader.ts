@@ -47,10 +47,11 @@ export class SoulConfigLoader {
         display_name: config.display_name || soulId,
         subagent: config.subagent,
         goal: config.goal,
-        primitives: config.primitives || ['hibernate', 'schedule', 'complete'],
+        primitives: config.primitives || ['hibernate', 'complete'],
         hibernation: {
           idle_timeout: config.hibernation?.idle_timeout || 3600000 // Default: 1 hour
-        }
+        },
+        heartbeat: config.heartbeat || undefined
       };
 
       // Cache configuration

@@ -38,6 +38,23 @@ export interface CleanupConfig {
 }
 
 /**
+ * Get cleanup duration from environment variable
+ * Format: SOUL_CLEANUP_DURATION_HOURS=1 (for 1 hour)
+ * Default: 12 hours
+ */
+function getCleanupDurationFromEnv(): number {
+  const envHours = process.env.SOUL_CLEANUP_DURATION_HOURS;
+  if (envHours) {
+    const hours = parseFloat(envHours);
+    if (!isNaN(hours) && hours > 0) {
+      console.log(`[SoulCleanup] Using cleanup duration from env: ${hours} hours`);
+      return hours * 3600000;
+    }
+  }
+  return 12 * 3600000; // default: 12 hours
+}
+
+/**
  * SoulCleanupService - Cleans up long-stopped Soul Agent instances
  */
 export class SoulCleanupService {
@@ -45,7 +62,7 @@ export class SoulCleanupService {
 
   constructor(config?: Partial<CleanupConfig>) {
     this.config = {
-      maxStoppedDuration: config?.maxStoppedDuration || 12 * 3600000, // 12 hours
+      maxStoppedDuration: config?.maxStoppedDuration || getCleanupDurationFromEnv(),
     };
   }
 

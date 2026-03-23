@@ -19,12 +19,13 @@ export const config = {
   name: 'soul-cleanup-cron',
   description: 'Cleanup stopped Soul Agent instances older than 12 hours',
   emits: [], // No events emitted
+  flows: ['soul-agent-flow'],
 };
 
 /**
  * Cron handler
  */
-export default async function soulCleanupCron() {
+export const handler = async function soulCleanupCron() {
   console.log('========================================');
   console.log('[SoulCleanupCron] Triggered at', new Date().toISOString());
   console.log('========================================');
