@@ -49,7 +49,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Soul Agent now uses standard user profiles
    */
-  async getUserProfile(sessionId: string): Promise<UserProfile> {
+  async getUserProfile(_sessionId: string): Promise<UserProfile> {
     console.warn('[SoulContextManager] getUserProfile is deprecated');
     return {
       name: '用户',
@@ -63,7 +63,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Soul Agent now uses standard context metadata
    */
-  async getRelationshipState(sessionId: string): Promise<RelationshipState> {
+  async getRelationshipState(_sessionId: string): Promise<RelationshipState> {
     console.warn('[SoulContextManager] getRelationshipState is deprecated');
     return {
       intimacy: 50,
@@ -77,7 +77,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Use ContextManager.getContext() to get conversation history from task_contexts
    */
-  async getRecentConversations(sessionId: string, limit: number = 10): Promise<Array<{
+  async getRecentConversations(_sessionId: string, _limit: number = 10): Promise<Array<{
     role: 'user' | 'assistant';
     content: string;
     timestamp: number;
@@ -91,7 +91,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Use ContextManager.getContext() instead
    */
-  async getSoulContext(sessionId: string): Promise<SoulContext> {
+  async getSoulContext(_sessionId: string): Promise<SoulContext> {
     console.warn('[SoulContextManager] getSoulContext is deprecated');
     return {
       userProfile: {},
@@ -105,7 +105,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Updates are now handled through standard context operations
    */
-  async updateContext(sessionId: string, context: Partial<SoulContext>): Promise<void> {
+  async updateContext(_sessionId: string, _context: Partial<SoulContext>): Promise<void> {
     console.warn('[SoulContextManager] updateContext is deprecated - no-op');
   }
 
@@ -114,7 +114,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Use standard context updates instead
    */
-  async updateRelationshipState(sessionId: string, relationship: Partial<RelationshipState>): Promise<void> {
+  async updateRelationshipState(_sessionId: string, _relationship: Partial<RelationshipState>): Promise<void> {
     console.warn('[SoulContextManager] updateRelationshipState is deprecated - no-op');
   }
 
@@ -123,7 +123,7 @@ export class SoulContextManager extends ContextManager {
    *
    * @deprecated Soul Agent now saves conversations to task_contexts automatically
    */
-  async addConversationMessage(sessionId: string, role: 'user' | 'assistant', content: string): Promise<void> {
+  async addConversationMessage(_sessionId: string, _role: 'user' | 'assistant', _content: string): Promise<void> {
     console.warn('[SoulContextManager] addConversationMessage is deprecated - no-op');
   }
 

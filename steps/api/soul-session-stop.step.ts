@@ -4,7 +4,6 @@
  * 停止指定的 Soul Agent 实例
  */
 
-import { z } from 'zod';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { SoulState } from '../../src/core/agent/soul-types';
 

@@ -1008,7 +1008,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           // Generate a unique artifact ID for the text output
           const artifactId = `text_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           // ✅ 优先使用 structuredOutput（完整 JSON），如果没有则使用 output
-          const textContent = normalizedResult.structuredOutput
+          const textContent = 'structuredOutput' in normalizedResult && normalizedResult.structuredOutput
             ? JSON.stringify(normalizedResult.structuredOutput, null, 2)
             : normalizedResult.output;
 

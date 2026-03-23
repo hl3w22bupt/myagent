@@ -60,8 +60,8 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
   const userRequest = triggerContext.data?.userRequest || triggerContext.data?.message || '';
   const taskDescription = userRequest ? userRequest : 'Soul Agent execution';
 
-  let taskId: string;
-  let sessionId: string;
+  let taskId: string = '';
+  let sessionId: string = '';
   let existingTask: any = null;
 
   logger.info('Soul Execute API: Received trigger request', {
@@ -181,7 +181,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
       if (parsedOutput.message) {
         textOutput = parsedOutput.message;
       }
-    } catch (e) {
+    } catch {
       // 如果不是 JSON，保持原样
       parsedOutput = null;
     }

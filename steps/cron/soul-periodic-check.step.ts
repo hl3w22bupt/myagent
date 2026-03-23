@@ -64,7 +64,7 @@ export const handler = async ({ logger, emit }: any) => {
 
   const queryWindowHours = getQueryWindowHours();
   let totalTriggered = 0;
-  let totalSkipped = 0;
+  const totalSkipped = 0;
   let totalFailed = 0;
 
   try {
@@ -127,8 +127,7 @@ export const handler = async ({ logger, emit }: any) => {
           data: {
             sessionId: soulState.session_id,
             soulId: soulState.soul_id,
-            taskId: soulState.current_task_id,  // ← 包含 taskId
-            ...triggerData,
+            ...triggerData,  // ← triggerData already contains taskId
           },
         });
 

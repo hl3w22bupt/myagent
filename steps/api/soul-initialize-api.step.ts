@@ -9,7 +9,6 @@ import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
-import { MessageIdGenerator } from '../../src/utils/message-id-generator';
 
 /**
  * Soul Initialize API configuration
@@ -24,20 +23,6 @@ export const config: ApiRouteConfig = {
 
   emits: [],
   flows: ['agent-workflow'],
-};
-
-/**
- * Request schema
- */
-const requestSchema = {
-  soulId: 'string',
-  userId: 'string',
-  characterId: 'string',  // MyEcho character ID
-  deviceId: 'string',     // MyEcho device ID
-  taskName: 'string',     // Task display name (optional, defaults to "对话")
-  app: 'string',          // App identifier (optional, defaults to "myecho")
-  threadId: 'string',     // MyEcho thread ID (optional)
-  metadata: 'object',     // Optional metadata
 };
 
 /**

@@ -36,7 +36,7 @@ export class SubagentConfigLoader {
       // Check if file exists
       try {
         await fs.access(configPath);
-      } catch (error) {
+      } catch {
         throw new Error(`Subagent configuration not found: ${configPath}`);
       }
 

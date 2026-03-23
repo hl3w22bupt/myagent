@@ -23,7 +23,7 @@ export const periodicCheckTrigger = {
     for (const user of users) {
       const soulId = 'emotional-girlfriend-lively';
       const userId = user.id;
-      const sessionId = `soul-${soulId}-${userId}`;
+      const _sessionId = `soul-${soulId}-${userId}`;
 
       // 构建触发上下文
       const triggerContext = {

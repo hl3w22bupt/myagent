@@ -6,11 +6,8 @@
  */
 
 import { PostgresDataStore } from './postgres-store';
-import { getDataStore as getDataStore_ } from './data-store';
 import { SoulState } from '../agent/soul-types';
 import { SoulExecutionRecord, ExecutionHistoryQuery } from '../agent/soul-execution-types';
-
-const getDataStore = getDataStore_;
 
 // Global store instance
 let postgresStore: PostgresDataStore | null = null;

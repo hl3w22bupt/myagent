@@ -17,7 +17,6 @@ import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
 import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader';
 import { EventConfig } from 'motia';
 import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
-import { getDataStore } from '../../src/core/database/data-store';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 
 /**
@@ -44,7 +43,7 @@ export const handler = async (
   input: any,
   { emit, logger, streams }: any
 ) => {
-  const { taskId, task, sessionId, soulId, userId, trigger_time, context } = input;
+  const { taskId, sessionId, soulId, userId, trigger_time, context } = input;
 
   logger.info('Soul Agent Executor: Received soul task execution request', {
     taskId,
@@ -125,7 +124,7 @@ export const handler = async (
       if (parsedOutput.message) {
         textOutput = parsedOutput.message;
       }
-    } catch (e) {
+    } catch {
       // 如果不是 JSON，保持原样
       parsedOutput = null;
     }

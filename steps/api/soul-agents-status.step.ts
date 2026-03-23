@@ -66,7 +66,7 @@ export const handler = async (request: any, { logger }: any) => {
           return {
             soulId,
             displayName: soulConfig.display_name,
-            description: soulConfig.description || '',
+            description: soulConfig.goal || '', // Use goal instead of non-existent description
             subagent: soulConfig.subagent,
             primitives: soulConfig.primitives || [],
             goal: soulConfig.goal?.substring(0, 200) + '...', // 截取前200字符

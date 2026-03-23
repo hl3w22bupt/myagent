@@ -4,9 +4,7 @@
  * 删除指定的 Soul Agent 实例
  */
 
-import { z } from 'zod';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
 
 /**
  * Soul Session Delete API configuration.

@@ -6,7 +6,6 @@
  */
 
 import { soulScheduler } from '../src/core/scheduler/soul-scheduler';
-import { SoulState } from '../src/core/agent/soul-types';
 import { soulContextDataService } from '../src/core/database/soul-data-service';
 import { soulStateDataService } from '../src/core/database/soul-data-service';
 
@@ -257,7 +256,7 @@ async function demoHibernation() {
     console.log('  休眠状态:', soulState?.status);
 
     // 唤醒
-    const wokenSoul = await soulScheduler.activateSoul(DEMO_CONFIG.soulId, sessionId);
+    await soulScheduler.activateSoul(DEMO_CONFIG.soulId, sessionId);
     console.log('✅ Soul 已唤醒');
 
     const wokenState = await soulStateDataService.getSoulState(sessionId);

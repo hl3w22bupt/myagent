@@ -6,9 +6,8 @@
  */
 
 import { PostgresDataStore } from '../database/postgres-store';
-import { getDataStore as getDataStore_ } from '../database/data-store';
 
-const getDataStore = getDataStore_;
+// Unused import removed
 
 /**
  * Stopped instance metadata

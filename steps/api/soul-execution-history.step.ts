@@ -104,7 +104,7 @@ export const handler = async (request: any, { logger }: any) => {
         body: {
           success: false,
           error: 'Invalid query parameters',
-          details: error.errors
+          details: error.issues
         }
       };
     }

@@ -17,7 +17,6 @@
  */
 
 import { SoulAgent } from '../agent/soul-agent';
-import { SoulState } from '../agent/soul-types';
 import { soulConfigLoader } from '../config/soul-config-loader';
 import { subagentConfigLoader } from '../config/subagent-config-loader';
 
@@ -192,7 +191,7 @@ export class SoulScheduler {
       await soulAgent.enterHibernation('Scheduled hibernation');
 
       // Get soul state
-      const soulState = soulAgent.getSoulState();
+      soulAgent.getSoulState();
 
       // TODO: Save state to database
       // await getDataStore().saveSoulState(sessionId, soulState);

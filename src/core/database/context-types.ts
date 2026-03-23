@@ -188,6 +188,7 @@ export interface TaskContext {
   metadata: {
     lastCompressedAt?: Date;
     compressed?: boolean;
+    type?: string;
   };
 }
 

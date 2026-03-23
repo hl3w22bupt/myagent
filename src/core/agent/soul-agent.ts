@@ -10,8 +10,6 @@
 import { Agent } from './agent';
 import { AgentConfig } from './types';
 import { SoulConfig, SoulState, SoulInput, PrimitiveTool } from './soul-types';
-import { soulConfigLoader } from '../config/soul-config-loader';
-import { subagentConfigLoader } from '../config/subagent-config-loader';
 import { soulStateDataService } from '../database/soul-data-service';
 import { soulExecutionHistoryService } from '../database/soul-data-service';
 import { soulNotificationDataService } from '../database/soul-notification-service';
@@ -21,7 +19,7 @@ import { createExecutionId, calculateDuration } from '../utils/date-utils';
 import { MAX_DECISION_LENGTH, DEFAULT_TASK_NAME } from '../constants/execution';
 import { getDataStore } from '../database/data-store';
 import { SoulContextBuilder } from '../context/soul-context-builder';
-import { SoulExecutionContext, RawTriggerContext, DecisionResult } from './soul-context-types';
+import { SoulExecutionContext, DecisionResult } from './soul-context-types';
 
 /**
  * SoulAgent - Autonomous agent with hibernation capabilities
@@ -396,7 +394,7 @@ ${soulGoal}
             if (parsed.message) {
               assistantMessage = parsed.message;
             }
-          } catch (e) {
+          } catch {
             // 不是 JSON，使用原始 output
           }
 
@@ -1373,7 +1371,7 @@ ${this.soulConfig.goal}
    * @param result - Task result
    * @returns Complete result
    */
-  private async completeTask(result: any): Promise<any> {
+  private async completeTask(_result: any): Promise<any> {
     this.soulState.statistics.totalTasks++;
 
     console.log(`[SoulAgent] ${this.sessionId} completed task. Total: ${this.soulState.statistics.totalTasks}`);
