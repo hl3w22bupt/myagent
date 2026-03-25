@@ -33,13 +33,13 @@ export interface CleanupResult {
  * Configuration for cleanup operation
  */
 export interface CleanupConfig {
-  maxStoppedDuration: number; // milliseconds, default: 12 hours
+  maxStoppedDuration: number; // milliseconds, default: 1 hour
 }
 
 /**
  * Get cleanup duration from environment variable
  * Format: SOUL_CLEANUP_DURATION_HOURS=1 (for 1 hour)
- * Default: 12 hours
+ * Default: 1 hour (changed from 12 hours for faster cleanup)
  */
 function getCleanupDurationFromEnv(): number {
   const envHours = process.env.SOUL_CLEANUP_DURATION_HOURS;
@@ -50,7 +50,7 @@ function getCleanupDurationFromEnv(): number {
       return hours * 3600000;
     }
   }
-  return 12 * 3600000; // default: 12 hours
+  return 1 * 3600000; // default: 1 hour (changed from 12 hours)
 }
 
 /**
@@ -118,14 +118,15 @@ export class SoulCleanupService {
 
   /**
    * Find stopped instances older than max duration
+   * Uses updated_at as the reliable stop time (last_activity may have timezone issues)
    */
   private async findStoppedInstances(client: any): Promise<StoppedInstance[]> {
     const query = `
-      SELECT session_id, soul_id, last_activity
+      SELECT session_id, soul_id, updated_at as stopped_at
       FROM soul_states
       WHERE status = 'STOPPED'
-        AND last_activity < NOW() - INTERVAL '1 millisecond' * $1
-      ORDER BY last_activity ASC
+        AND updated_at < NOW() - INTERVAL '1 millisecond' * $1
+      ORDER BY updated_at ASC
     `;
 
     const result = await client.query(query, [this.config.maxStoppedDuration]);
@@ -133,8 +134,8 @@ export class SoulCleanupService {
     return result.rows.map((row: any) => ({
       sessionId: row.session_id,
       soulId: row.soul_id,
-      stoppedAt: new Date(row.last_activity),
-      stoppedDuration: Date.now() - new Date(row.last_activity).getTime(),
+      stoppedAt: new Date(row.stopped_at),
+      stoppedDuration: Date.now() - new Date(row.stopped_at).getTime(),
     }));
   }
 

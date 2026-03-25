@@ -578,7 +578,11 @@ function AutonomousAgents() {
                     </button>
                   </div>
                   {instance.soulDescription && (
-                    <div className="soul-type-description">{instance.soulDescription}</div>
+                    <div className="soul-type-description" title={instance.soulDescription}>
+                      {instance.soulDescription.length > 60
+                        ? `${instance.soulDescription.substring(0, 60)}...`
+                        : instance.soulDescription}
+                    </div>
                   )}
                 </div>
 

@@ -84,6 +84,7 @@ export class SoulAgent extends Agent {
       currentTask: this.taskId,  // ← 保留 taskId，用于 periodic check 触发
       lastActivity: null,
       scheduledWakeup: null,
+      activeSince: null,
       statistics: {
         totalTasks: 0,
         uptime: 0
@@ -223,6 +224,9 @@ ${soulGoal}
       // 2. Update state
       this.soulState.status = 'ACTIVE';
       this.soulState.lastActivity = Date.now();
+      if (!this.soulState.activeSince) {
+        this.soulState.activeSince = Date.now();
+      }
       // ✅ 保留主任务 ID（this.taskId），不覆盖为 execution ID
       // this.soulState.currentTask = executionRecord.id;  // ❌ 不要覆盖主任务 ID
 
@@ -602,6 +606,9 @@ ${soulGoal}
       // 4. Update state
       this.soulState.status = 'ACTIVE';
       this.soulState.lastActivity = Date.now();
+      if (!this.soulState.activeSince) {
+        this.soulState.activeSince = Date.now();
+      }
       // ✅ 保留主任务 ID（this.taskId），不覆盖为 execution ID
       // execution ID 用于执行历史追踪，但 currentTask 应该始终指向主任务
       // this.soulState.currentTask = executionRecord.id;  // ❌ 不要覆盖主任务 ID
@@ -916,6 +923,9 @@ ${soulGoal}
       // 更新状态为 ACTIVE
       this.soulState.status = 'ACTIVE';
       this.soulState.lastActivity = Date.now();
+      if (!this.soulState.activeSince) {
+        this.soulState.activeSince = Date.now();
+      }
 
       // 执行完整流程（会自动调用 handlePeriodicCheck）
       await this.execute({
@@ -1213,11 +1223,19 @@ ${this.soulConfig.goal}
   private async hibernate(reason: string): Promise<void> {
     console.log(`[SoulAgent] ${this.sessionId} hibernating: ${reason}`);
 
-    // 1. 更新状态为 IDLE（不是 HIBERNATED，区别在于：IDLE 等待下次触发，HIBERNATED 是长期休眠）
+    // 1. Calculate and accumulate uptime before going to IDLE
+    if (this.soulState.activeSince) {
+      const sessionUptime = Date.now() - this.soulState.activeSince;
+      this.soulState.statistics.uptime += sessionUptime;
+      this.soulState.activeSince = null;
+      console.log(`[SoulAgent] ${this.sessionId} accumulated uptime: ${Math.round(sessionUptime / 1000)}s, total: ${Math.round(this.soulState.statistics.uptime / 1000)}s`);
+    }
+
+    // 2. 更新状态为 IDLE（不是 HIBERNATED，区别在于：IDLE 等待下次触发，HIBERNATED 是长期休眠）
     this.soulState.status = 'IDLE';
     // 注意：不清空 currentTask，保留它以便 periodic check 触发时使用
 
-    // 2. 保存状态到数据库
+    // 3. 保存状态到数据库
     const soulId = this.soulConfig.soul_id;
     await soulStateDataService.saveSoulState(this.sessionId, soulId, this.soulState);
 
@@ -1262,6 +1280,9 @@ ${this.soulConfig.goal}
 
     // 2. Update state
     this.soulState.status = 'ACTIVE';
+    if (!this.soulState.activeSince) {
+      this.soulState.activeSince = Date.now();
+    }
 
     // 3. TODO: Notify scheduler
     // await SoulScheduler.wakeup(this);
@@ -1375,6 +1396,10 @@ ${this.soulConfig.goal}
     this.soulState.statistics.totalTasks++;
 
     console.log(`[SoulAgent] ${this.sessionId} completed task. Total: ${this.soulState.statistics.totalTasks}`);
+
+    // Save statistics to database
+    const soulId = this.soulConfig.soul_id;
+    await soulStateDataService.saveSoulState(this.sessionId, soulId, this.soulState);
 
     // Auto-hibernate if should
     if (this.shouldHibernate()) {

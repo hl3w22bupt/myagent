@@ -1,7 +1,7 @@
 /**
  * Soul Agent Periodic Check Cron Step
  *
- * 每 1 分钟触发一次，检查数据库中 scheduled_wakeup 已到的 Soul Agent 实例：
+ * 每 5 分钟触发一次，检查数据库中 scheduled_wakeup 已到的 Soul Agent 实例：
  * - 查询 scheduled_wakeup < NOW() 且状态为 IDLE 的实例
  * - 使用时间窗口优化查询性能（仅查找最近 N 小时内应该触发的实例）
  * - 发送 soul.agent.execute 事件，触发每个 Soul Agent 的自主决策
@@ -29,6 +29,7 @@ interface SoulAgentState {
 
 /**
  * 从环境变量获取查询时间窗口（小时）
+ * 默认 2 小时，覆盖至少 2 个心跳周期（10分钟 x 2 = 20分钟）
  */
 function getQueryWindowHours(): number {
   const envHours = process.env.SOUL_HEARTBEAT_QUERY_WINDOW_HOURS;
@@ -38,7 +39,7 @@ function getQueryWindowHours(): number {
       return hours;
     }
   }
-  return 1; // default: 1 hour
+  return 2; // default: 2 hours (covers 2 heartbeat cycles)
 }
 
 /**
@@ -47,8 +48,8 @@ function getQueryWindowHours(): number {
 export const config: CronConfig = {
   type: 'cron',
   name: 'SoulPeriodicCheck',
-  description: 'Periodic check for Soul Agents - triggers every minute (dev)',
-  cron: '*/1 * * * *', // 每 1 分钟（开发测试）
+  description: 'Periodic check for Soul Agents - triggers every 5 minutes',
+  cron: '*/5 * * * *', // 每 5 分钟
   emits: ['soul.agent.execute'],
   flows: ['soul-agent-flow'],
 };

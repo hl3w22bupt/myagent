@@ -1,11 +1,8 @@
 /**
  * Soul Cleanup Cron Step
  *
- * Automatically cleans up stopped Soul Agent instances that have been inactive for over 12 hours.
- * Runs every hour to keep the database clean.
- *
- * Schedule: Every hour at minute 0
- * Cron expression: 0 * * * *
+ * Automatically cleans up stopped Soul Agent instances that have been inactive for over 1 hour.
+ * Runs every 10 minutes to keep the database clean.
  */
 
 import { soulCleanupService } from '../../src/core/cleanup/soul-cleanup-service';
@@ -15,9 +12,9 @@ import { soulCleanupService } from '../../src/core/cleanup/soul-cleanup-service'
  */
 export const config = {
   type: 'cron',
-  cron: '0 * * * *', // Every hour at minute 0
+  cron: '*/10 * * * *', // Every 10 minutes
   name: 'soul-cleanup-cron',
-  description: 'Cleanup stopped Soul Agent instances older than 12 hours',
+  description: 'Cleanup stopped Soul Agent instances older than 1 hour',
   emits: [], // No events emitted
   flows: ['soul-agent-flow'],
 };

@@ -56,6 +56,9 @@ export interface SoulState {
   /** Scheduled wakeup time */
   scheduledWakeup: number | null;
 
+  /** When the soul became active (for uptime tracking) */
+  activeSince: number | null;
+
   /** Statistics */
   statistics: {
     /** Total tasks completed */
