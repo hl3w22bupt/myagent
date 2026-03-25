@@ -44,8 +44,8 @@ export class SoulStateDataService {
 
     try {
       await client.query(`
-        INSERT INTO soul_states (session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, statistics, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+        INSERT INTO soul_states (session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
         ON CONFLICT (session_id)
         DO UPDATE SET
           soul_id = EXCLUDED.soul_id,
@@ -53,6 +53,7 @@ export class SoulStateDataService {
           current_task_id = EXCLUDED.current_task_id,
           last_activity = EXCLUDED.last_activity,
           scheduled_wakeup = EXCLUDED.scheduled_wakeup,
+          active_since = EXCLUDED.active_since,
           statistics = EXCLUDED.statistics,
           updated_at = CURRENT_TIMESTAMP
       `, [
@@ -62,6 +63,7 @@ export class SoulStateDataService {
         state.currentTask,
         state.lastActivity ? new Date(state.lastActivity) : null,
         state.scheduledWakeup ? new Date(state.scheduledWakeup) : null,
+        state.activeSince ? new Date(state.activeSince) : null,
         JSON.stringify(state.statistics)
       ]);
 
@@ -89,7 +91,7 @@ export class SoulStateDataService {
 
     try {
       const result = await client.query(`
-        SELECT soul_id, session_id, status, current_task_id, last_activity, scheduled_wakeup, statistics
+        SELECT soul_id, session_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics
         FROM soul_states
         WHERE session_id = $1
       `, [sessionId]);
@@ -105,6 +107,7 @@ export class SoulStateDataService {
         currentTask: row.current_task_id,
         lastActivity: row.last_activity ? new Date(row.last_activity).getTime() : null,
         scheduledWakeup: row.scheduled_wakeup ? new Date(row.scheduled_wakeup).getTime() : null,
+        activeSince: row.active_since ? new Date(row.active_since).getTime() : null,
         statistics: row.statistics || { totalTasks: 0, uptime: 0 }
       };
     } catch (error: any) {
@@ -130,7 +133,7 @@ export class SoulStateDataService {
 
     try {
       let query = `
-        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, statistics
+        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics
         FROM soul_states
         WHERE status = 'ACTIVE'
       `;
@@ -153,6 +156,7 @@ export class SoulStateDataService {
           currentTask: row.current_task_id,
           lastActivity: row.last_activity ? new Date(row.last_activity).getTime() : null,
           scheduledWakeup: row.scheduled_wakeup ? new Date(row.scheduled_wakeup).getTime() : null,
+          activeSince: row.active_since ? new Date(row.active_since).getTime() : null,
           statistics: row.statistics || { totalTasks: 0, uptime: 0 }
         }
       }));
@@ -177,7 +181,7 @@ export class SoulStateDataService {
 
     try {
       let query = `
-        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, statistics
+        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics
         FROM soul_states
         WHERE 1=1
       `;
@@ -200,6 +204,7 @@ export class SoulStateDataService {
           currentTask: row.current_task_id,
           lastActivity: row.last_activity ? new Date(row.last_activity).getTime() : null,
           scheduledWakeup: row.scheduled_wakeup ? new Date(row.scheduled_wakeup).getTime() : null,
+          activeSince: row.active_since ? new Date(row.active_since).getTime() : null,
           statistics: row.statistics || { totalTasks: 0, uptime: 0 }
         }
       }));
