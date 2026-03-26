@@ -15,7 +15,6 @@ The `getUserSessions(userId)` method was returning **all sessions** instead of f
 
 ### 3. Session/Task Creation Issues
 - Session and task creation didn't store `user_id`
-- No mechanism to extract `userId` from Soul Agent session IDs
 
 ## Solution Implemented
 
@@ -62,33 +61,23 @@ const result = await client.query(
 
 ### 3. Updated Session & Task Creation
 
+**Design Decision (After User Discussion)**:
+Following user feedback, we chose **Scheme 1**: Require callers to explicitly provide userId. No automatic extraction from sessionId.
+
 #### Added `userId` to Interfaces:
 - `Task.userId?: string`
 - `Session.userId?: string`
 
-#### Added Automatic userId Extraction:
-```typescript
-private extractUserIdFromSession(sessionId: string, providedUserId?: string): string | undefined {
-  // Use provided userId if available
-  if (providedUserId) return providedUserId;
-
-  // Extract from Soul Agent session_id format: soul-{soulId}-{userId}-{threadId}
-  if (sessionId.startsWith('soul-')) {
-    const parts = sessionId.split('-');
-    if (parts.length >= 4) {
-      // Handle userIds that contain dashes
-      const userIdParts = parts.slice(2, parts.length - 1);
-      return userIdParts.join('-');
-    }
-  }
-  return undefined;
-}
-```
-
 #### Updated Methods:
-- `upsertSession()` - Now accepts optional `userId` parameter
-- `createTask()` - Now accepts optional `userId` parameter
-- Both methods automatically extract `userId` from Soul Agent session IDs
+- `upsertSession(sessionId, metadata?, userId?)` - Uses provided userId directly
+- `createTask(taskData)` - Uses taskData.userId directly
+- **No extraction logic** - simpler, more explicit, better separation of concerns
+
+#### Why This Approach?
+1. ✅ **Explicit is better than implicit** - No hidden string parsing logic
+2. ✅ **Decoupled** - sessionId format doesn't matter
+3. ✅ **Clear responsibility** - Caller owns providing userId
+4. ✅ **Type-safe** - TypeScript ensures userId is passed where needed
 
 ### 4. Updated Data Mapping
 
@@ -104,11 +93,11 @@ Created comprehensive test suite: `tests/unit/session-isolation.test.ts`
 - ✅ Users only see their own sessions
 - ✅ Empty result for non-existent users
 - ✅ Regular agent sessions without userId handled correctly
-- ✅ Tasks associated with userId from Soul Agent session_id
-- ✅ userId extraction from session_id with dashes
-- ✅ Provided userId takes precedence
-- ✅ Session creation with automatic userId extraction
+- ✅ Tasks associated with provided userId
+- ✅ Handles simple userIds (no dashes)
+- ✅ Handles complex userIds (with dashes)
 - ✅ Session creation with explicit userId
+- ✅ Query sessions by userId correctly
 
 **All 8 tests passing ✅**
 
@@ -144,9 +133,9 @@ Created comprehensive test suite: `tests/unit/session-isolation.test.ts`
 ## Backward Compatibility
 
 - ✅ Existing sessions without `user_id` continue to work
-- ✅ `userId` is optional in interfaces
+- ✅ `userId` is optional in interfaces (can be NULL)
 - ✅ APIs that don't provide userId still function
-- ⚠️ **Security Note**: Multi-user environments should apply migration
+- ⚠️ **Security Note**: Multi-user environments should apply migration and ensure userId is passed
 
 ## Files Changed
 
@@ -154,13 +143,13 @@ Created comprehensive test suite: `tests/unit/session-isolation.test.ts`
 - `src/core/database/data-store.ts`
   - Updated schema with `user_id` columns
   - Fixed `getUserSessions()` query
-  - Added `extractUserIdFromSession()` method
   - Updated `upsertSession()`, `createTask()`, `getSession()`
+  - **No extraction logic** - simpler, more explicit
 
 - `src/core/database/postgres-store.ts`
   - Fixed `getUserSessions()` query
-  - Added `extractUserIdFromSession()` method
   - Updated `upsertSession()`, `createTask()`, `mapDbTaskToTask()`
+  - **No extraction logic** - simpler, more explicit
 
 ### Migration Files:
 - `migrations/005_add_user_id_columns.sql`
@@ -180,9 +169,14 @@ Created comprehensive test suite: `tests/unit/session-isolation.test.ts`
 - ✅ New indexes on `user_id` improve query performance
 - ✅ Query now uses indexed column instead of subquery
 
+### Code Quality:
+- ✅ **Simpler** - No complex string parsing
+- ✅ **More explicit** - Clear what data is being stored
+- ✅ **Better separation of concerns** - Callers provide userId
+
 ### Compatibility:
 - ✅ Backward compatible (optional fields)
-- ✅ No breaking changes to existing APIs
+- ⚠️ Callers need to provide userId for proper isolation
 - ⚠️ Migration required for existing production databases
 
 ## Verification
@@ -198,6 +192,44 @@ Test Suites: 1 passed, 1 total
 Tests: 8 passed, 8 total
 ```
 
+## Design Discussion
+
+### Initial Approach (Rejected)
+Tried to extract userId from sessionId string format:
+```typescript
+// ❌ Complex parsing logic
+extractUserIdFromSession(sessionId) {
+  // Parse soul-{soulId}-{userId}-{threadId}
+  // Handle dashes in userId...
+  // Handle dashes in soulId...
+  // What if format changes??
+}
+```
+
+**Problems:**
+- Implicit coupling to sessionId format
+- Fragile and complex
+- Hard to maintain
+
+### Final Approach (Accepted)
+Require explicit userId:
+```typescript
+// ✅ Simple and clear
+upsertSession(sessionId, metadata, userId) {
+  // Just use userId as-is
+}
+
+createTask({ sessionId, userId, ... }) {
+  // Just use userId as-is
+}
+```
+
+**Benefits:**
+- Explicit and clear
+- No format assumptions
+- Easier to understand
+- Better separation of concerns
+
 ## Next Steps
 
 1. **For Development:**
@@ -208,11 +240,12 @@ Tests: 8 passed, 8 total
 2. **For Production Deployment:**
    - Review migration scripts
    - Test migration on staging database
+   - Update Soul Agent code to pass userId
    - Schedule deployment window
    - Run migration scripts
    - Verify session isolation in production
 
-3. **Future Enhancements:**
-   - Consider requiring userId for all new sessions
-   - Add admin API to backfill userId for orphaned sessions
-   - Add monitoring for sessions without userId
+3. **For Callers (Breaking Change):**
+   - **Important**: Code that calls `upsertSession()` or `createTask()` must now provide `userId`
+   - Update Soul Agent API steps to pass userId
+   - Update any other code that creates tasks/sessions
