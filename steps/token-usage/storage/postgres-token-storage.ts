@@ -265,6 +265,7 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
 
   /**
    * Get usage trends over time with specified granularity
+   * Uses local timezone for date truncation (configurable via TZ env var)
    */
   async getUsageTrends(
     startDate: Date,
@@ -280,18 +281,27 @@ export class PostgresTokenUsageStorage implements TokenUsageStorage {
     try {
       const truncateUnit = granularity === 'hour' ? 'hour' : 'day';
 
+      // Get timezone from environment, default to Asia/Shanghai (UTC+8)
+      const timezone = process.env.TZ || 'Asia/Shanghai';
+
+      // Convert to local timezone before truncating
+      // This ensures dates are grouped by local day/hour, not UTC
       const result = await this.pool.query(
         `SELECT
-          DATE_TRUNC('${truncateUnit}', first_call_at) as timestamp,
+          DATE_TRUNC('${truncateUnit}',
+            (first_call_at AT TIME ZONE 'UTC' AT TIME ZONE $3)
+          ) as timestamp,
           COALESCE(SUM(total_tokens), 0) as total_tokens,
           COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
           COALESCE(SUM(completion_tokens), 0) as completion_tokens,
           COUNT(*) as task_count
          FROM token_usage_task
          WHERE first_call_at >= $1 AND first_call_at <= $2
-         GROUP BY DATE_TRUNC('${truncateUnit}', first_call_at)
+         GROUP BY DATE_TRUNC('${truncateUnit}',
+           (first_call_at AT TIME ZONE 'UTC' AT TIME ZONE $3)
+         )
          ORDER BY timestamp ASC`,
-        [startDate.toISOString(), endDate.toISOString()]
+        [startDate.toISOString(), endDate.toISOString(), timezone]
       );
 
       return result.rows.map(row => ({

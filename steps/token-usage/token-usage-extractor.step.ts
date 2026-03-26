@@ -38,7 +38,7 @@ export const config: EventConfig = {
 
   input: inputSchema,
 
-  flows: ['token-usage-tracking'],
+  flows: ['token-usage-tracking', 'agent-workflow'],
 };
 
 /**
@@ -47,7 +47,7 @@ export const config: EventConfig = {
  * Processes execution traces and extracts token usage from LLM calls.
  * Filters for llm_call stage and validates token data before emitting.
  */
-export const handler = async (trace: ExecutionTrace, { logger }: any) => {
+export const handler = async (trace: ExecutionTrace, { logger, emit }: any) => {
   const { traceId, taskId, agentId, stage, metadata } = trace;
 
   logger.info('[Token Usage Extractor] Received trace', {
@@ -57,8 +57,8 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     hasMetadata: !!metadata,
   });
 
-  // Filter for LLM call stages only
-  if (stage !== 'llm_call') {
+  // Filter for LLM call stages only (llm_call, llm_call_execute, llm_call_skill_prompt, etc.)
+  if (!stage?.startsWith('llm_call')) {
     logger.debug('[Token Usage Extractor] Skipping non-LLM trace', {
       traceId,
       stage,
@@ -151,6 +151,19 @@ export const handler = async (trace: ExecutionTrace, { logger }: any) => {
     totalTokens,
   });
 
-  // Event Step automatically emits the return value as 'token_usage_recorded' event
+  // Manually emit token_usage_recorded event
+  if (emit) {
+    await emit({
+      topic: 'token_usage_recorded',
+      data: tokenUsageEvent,
+    });
+    logger.info('[Token Usage Extractor] Emitted token_usage_recorded event', {
+      traceId,
+      taskId,
+    });
+  } else {
+    logger.warn('[Token Usage Extractor] No emit function available');
+  }
+
   return tokenUsageEvent;
 };

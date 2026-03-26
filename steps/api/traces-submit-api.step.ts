@@ -24,9 +24,9 @@ export const config: ApiRouteConfig = {
   method: 'POST',
 
   /**
-   * No events emitted.
+   * Events emitted.
    */
-  emits: [],
+  emits: ['execution.trace.created'],
 
   /**
    * Flow assignment.
@@ -77,7 +77,7 @@ const traceSubmitSchema = z.object({
  */
 export const handler = async (
   input: any,
-  { logger, streams }: any
+  { logger, streams, emit }: any
 ) => {
   logger.info('Submit Trace API: Received request');
 
@@ -111,6 +111,20 @@ export const handler = async (
       id: traceData.id,
       taskId: traceData.taskId,
     });
+
+    // Emit execution.trace.created event for token usage extraction
+    // Use startsWith to match llm_call, llm_call_execute, llm_call_skill_prompt, etc.
+    if (traceData.stage?.startsWith('llm_call') && emit) {
+      await emit({
+        topic: 'execution.trace.created',
+        data: traceData,
+      });
+      logger.info('Submit Trace API: Emitted execution.trace.created event', {
+        traceId: traceData.id,
+        taskId: traceData.taskId,
+        stage: traceData.stage,
+      });
+    }
 
     return {
       status: 200,
