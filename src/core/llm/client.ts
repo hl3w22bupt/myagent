@@ -25,6 +25,11 @@ interface Streams {
   };
 }
 
+/**
+ * Emit function for event emission
+ */
+type EmitFunction = (event: string, data: any) => Promise<void>;
+
 export type LLMProvider = 'anthropic' | 'openai-compatible';
 
 export interface LLMMessage {
@@ -59,6 +64,10 @@ export interface LLMClientConfig {
     agentId?: string;
     skillName?: string;
   };
+  /**
+   * Optional emit function for emitting events after trace collection
+   */
+  emit?: EmitFunction;
 }
 
 /**
@@ -152,12 +161,14 @@ export class LLMClient {
     agentId?: string;
     skillName?: string;
   };
+  private emit?: EmitFunction;
 
   constructor(config: LLMClientConfig) {
     this.provider = config.provider;
     this.model = config.model || this.getDefaultModel(config.provider);
     this.streams = config.streams;
     this.traceContext = config.traceContext;
+    this.emit = config.emit;
 
     switch (config.provider) {
       case 'anthropic':
@@ -313,6 +324,33 @@ export class LLMClient {
       });
 
       console.log(`[LLMClient] Trace sent: ${id}${purpose ? ` (${purpose})` : ''}`);
+
+      // Emit execution.trace.created event for token usage extraction
+      if (this.emit) {
+        await this.emit('execution.trace.created', {
+          id,
+          level,
+          taskId,
+          agentId,
+          skillName,
+          stage: 'llm_call',
+          status: 'completed',
+          executionTime,
+          timestamp: new Date(timestamp).toISOString(),
+          purpose,
+          metadata: {
+            llmProvider: this.provider,
+            llmModel: options.model || this.model,
+            sessionId: agentId,
+            llmResponse: {
+              promptTokens: response.usage?.prompt_tokens,
+              completionTokens: response.usage?.completion_tokens,
+              totalTokens: response.usage?.total_tokens,
+            },
+          },
+        });
+        console.log(`[LLMClient] Emitted execution.trace.created event for ${id}`);
+      }
     } catch (error) {
       console.error('[LLMClient] Failed to send trace:', error);
     }

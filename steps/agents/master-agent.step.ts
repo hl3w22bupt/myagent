@@ -704,6 +704,8 @@ export const handler = async (
     (taskContext.context as any).agentType = agentTypeName;
     (taskContext.context as any).agent = agent;
     (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
+    // Pass emit function to Agent for event emission
+    (taskContext.context as any).emit = emit;
 
     // ⭐ 关键修复：将 userContext 从 metadata 复制到 workingMemory
     // 这样 Agent.buildEnhancedSystemPrompt() 和 Orchestrator 都能找到它

@@ -51,6 +51,9 @@ export class Agent {
   // HITL clarification flag (default: true)
   protected enableClarification: boolean = true;
 
+  // Emit function for event emission (from Motia step context)
+  protected emit?: (event: { topic: string; data: any }) => Promise<void>;
+
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
     this.sessionId = sessionId;
@@ -273,6 +276,12 @@ export class Agent {
       conversationHistoryLength: context?.conversationHistory?.length || 0,
       contextKeys: context ? Object.keys(context) : 'no context',
     });
+
+    // Extract emit function from context for event emission
+    if (context?.emit) {
+      this.emit = context.emit;
+      console.log('[Agent] Emit function stored from context');
+    }
 
     // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
     const effectiveTaskId = taskId || context?.taskId;
@@ -1234,12 +1243,17 @@ ${userRequest}
   updateLLMTraceConfig(taskId?: string): void {
     const streams = getAgentStreams();
     if (streams?.executionTraces && taskId) {
-      // Update LLMClient with streams and trace context
+      // Update LLMClient with streams, trace context, and emit function
       (this.llm as any).streams = streams;
       (this.llm as any).traceContext = {
         taskId,
         agentId: this.sessionId,
       };
+      // Pass emit function to LLMClient for event emission
+      if (this.emit) {
+        (this.llm as any).emit = this.emit;
+        console.log('[Agent] LLM emit function configured');
+      }
       console.log('[Agent] LLM trace config updated', { taskId, agentId: this.sessionId });
     }
   }
