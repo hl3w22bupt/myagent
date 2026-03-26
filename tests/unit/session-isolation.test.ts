@@ -36,13 +36,13 @@ describe('Session Isolation (Issue #65)', () => {
       const userId1 = 'user1';
       const userId2 = 'user2';
 
-      // Create sessions for user1 (Soul Agent format)
-      await sqliteStore.upsertSession(`soul-soul1-${userId1}-thread1`, { test: 'data1' });
-      await sqliteStore.upsertSession(`soul-soul1-${userId1}-thread2`, { test: 'data2' });
+      // Create sessions for user1 (explicitly pass userId)
+      await sqliteStore.upsertSession(`soul-soul1-${userId1}-thread1`, { test: 'data1' }, userId1);
+      await sqliteStore.upsertSession(`soul-soul1-${userId1}-thread2`, { test: 'data2' }, userId1);
 
-      // Create sessions for user2 (Soul Agent format)
-      await sqliteStore.upsertSession(`soul-soul2-${userId2}-thread1`, { test: 'data3' });
-      await sqliteStore.upsertSession(`soul-soul2-${userId2}-thread2`, { test: 'data4' });
+      // Create sessions for user2 (explicitly pass userId)
+      await sqliteStore.upsertSession(`soul-soul2-${userId2}-thread1`, { test: 'data3' }, userId2);
+      await sqliteStore.upsertSession(`soul-soul2-${userId2}-thread2`, { test: 'data4' }, userId2);
 
       // Get sessions for user1 - should only see user1's sessions
       const user1Sessions = await sqliteStore.getUserSessions(userId1);
@@ -77,7 +77,7 @@ describe('Session Isolation (Issue #65)', () => {
   });
 
   describe('Task User Association', () => {
-    it('should associate tasks with userId from Soul Agent session_id', async () => {
+    it('should use provided userId when creating task', async () => {
       const userId = 'test-user';
       const sessionId = `soul-soul1-${userId}-thread1`;
 
@@ -85,6 +85,7 @@ describe('Session Isolation (Issue #65)', () => {
         id: 'task1',
         task: 'Test task',
         sessionId,
+        userId,  // Explicitly provide userId
         status: TaskStatus.PENDING,
         app: 'test',
         retryCount: 0,
@@ -99,7 +100,7 @@ describe('Session Isolation (Issue #65)', () => {
       expect(task?.userId).toBe(userId);
     });
 
-    it('should extract userId from session_id in createTask', async () => {
+    it('should use provided userId for complex userIds', async () => {
       const userId = 'user-with-dash';
       const sessionId = `soul-mysoul-${userId}-thread123`;
 
@@ -107,6 +108,7 @@ describe('Session Isolation (Issue #65)', () => {
         id: 'task2',
         task: 'Another test task',
         sessionId,
+        userId,  // Explicitly provide userId
         status: TaskStatus.PENDING,
         app: 'test',
         retryCount: 0,

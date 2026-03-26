@@ -548,11 +548,9 @@ export class DataStore {
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
-    const userId = this.extractUserIdFromSession(taskData.sessionId, taskData.userId);
 
     const task: Task = {
       ...taskData,
-      userId,  // Set userId from extraction or provided value
       status: TaskStatus.PENDING,
       app: taskData.app || 'default',  // Ensure app has a value
       createdAt: new Date(now),
@@ -582,8 +580,8 @@ export class DataStore {
       ]
     );
 
-    // 创建或更新会话
-    await this.upsertSession(task.sessionId, undefined, userId);
+    // 创建或更新会话（使用显式传入的 userId）
+    await this.upsertSession(task.sessionId, undefined, task.userId);
 
     await this.save();
     return task;
@@ -1261,43 +1259,11 @@ export class DataStore {
   // 会话管理 (新增功能)
   // ============================================================================
 
-  /**
-   * 提取会话中的用户ID
-   * 对于 Soul Agent 会话，从 session_id 中解析 userId
-   * 对于其他会话，使用提供的 userId
-   */
-  private extractUserIdFromSession(sessionId: string, providedUserId?: string): string | undefined {
-    // 如果提供了 userId，直接使用
-    if (providedUserId) {
-      return providedUserId;
-    }
-
-    // 尝试从 Soul Agent session_id 格式解析: soul-{soulId}-{userId}-{threadId}
-    if (sessionId.startsWith('soul-')) {
-      // 找到第二个 '-' 和第三个 '-' 之间的内容作为 userId
-      const parts = sessionId.split('-');
-      if (parts.length >= 4) {
-        // userId 在第二和第四个 '-' 之间 (parts[2] 到 parts[parts.length - 1] 之前)
-        // 例如: soul-soul123-user456-thread789
-        // parts = ['soul', 'soul123', 'user456', 'thread789']
-        // userId = parts[2]
-        // 但如果 userId 本身包含 '-'，比如: soul-soul123-user-with-dash-thread789
-        // parts = ['soul', 'soul123', 'user', 'with', 'dash', 'thread789']
-        // 我们需要取 parts[2] 到倒数第二个部分
-        const userIdParts = parts.slice(2, parts.length - 1);
-        return userIdParts.join('-');
-      }
-    }
-
-    return undefined;
-  }
-
   async upsertSession(sessionId: string, metadata?: Record<string, any>, userId?: string): Promise<void> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
-    const extractedUserId = this.extractUserIdFromSession(sessionId, userId);
 
     // 检查会话是否存在
     const checkStmt = this.db.prepare('SELECT session_id FROM sessions WHERE session_id = ?');
@@ -1307,10 +1273,10 @@ export class DataStore {
 
     if (exists) {
       // 更新最后活跃时间和 user_id（如果有）
-      if (extractedUserId) {
+      if (userId) {
         this.db.run(
           'UPDATE sessions SET last_active_at = ?, metadata = ?, user_id = ? WHERE session_id = ?',
-          [now, metadata ? JSON.stringify(metadata) : null, extractedUserId, sessionId]
+          [now, metadata ? JSON.stringify(metadata) : null, userId, sessionId]
         );
       } else {
         this.db.run(
@@ -1320,10 +1286,10 @@ export class DataStore {
       }
     } else {
       // 创建新会话
-      if (extractedUserId) {
+      if (userId) {
         this.db.run(
           'INSERT INTO sessions (session_id, created_at, last_active_at, metadata, user_id) VALUES (?, ?, ?, ?, ?)',
-          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null, extractedUserId]
+          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null, userId]
         );
       } else {
         this.db.run(

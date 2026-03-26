@@ -530,7 +530,6 @@ export class PostgresDataStore implements Database {
 
     try {
       const now = Date.now();
-      const userId = this.extractUserIdFromSession(data.sessionId, data.userId);
 
       const result = await client.query(
         `INSERT INTO tasks (id, task, session_id, user_id, status, app, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
@@ -540,7 +539,7 @@ export class PostgresDataStore implements Database {
           data.id,
           data.task,
           data.sessionId,
-          userId,  // user_id from extraction or provided value
+          data.userId || null,  // user_id from provided value
           data.status,
           data.app || 'default',  // App identifier
           now,
@@ -559,8 +558,8 @@ export class PostgresDataStore implements Database {
 
       const task = this.mapDbTaskToTask(result.rows[0]);
 
-      // 创建或更新会话记录
-      await this.upsertSession(data.sessionId, undefined, userId);
+      // 创建或更新会话记录（使用显式传入的 userId）
+      await this.upsertSession(data.sessionId, undefined, data.userId);
 
       return task;
     } finally {
@@ -1419,43 +1418,11 @@ export class PostgresDataStore implements Database {
   // Session Operations
   // ============================================================================
 
-  /**
-   * Extract userId from session
-   * For Soul Agent sessions, parse userId from session_id
-   * For other sessions, use provided userId
-   */
-  private extractUserIdFromSession(sessionId: string, providedUserId?: string): string | undefined {
-    // If userId is provided, use it directly
-    if (providedUserId) {
-      return providedUserId;
-    }
-
-    // Try to parse from Soul Agent session_id format: soul-{soulId}-{userId}-{threadId}
-    if (sessionId.startsWith('soul-')) {
-      // Find the content between the second and third '-' as userId
-      const parts = sessionId.split('-');
-      if (parts.length >= 4) {
-        // userId is between parts[2] and parts[parts.length - 1]
-        // For example: soul-soul123-user456-thread789
-        // parts = ['soul', 'soul123', 'user456', 'thread789']
-        // userId = parts[2]
-        // But if userId contains '-', like: soul-soul123-user-with-dash-thread789
-        // parts = ['soul', 'soul123', 'user', 'with', 'dash', 'thread789']
-        // We need to take parts[2] to second-to-last part
-        const userIdParts = parts.slice(2, parts.length - 1);
-        return userIdParts.join('-');
-      }
-    }
-
-    return undefined;
-  }
-
   async upsertSession(sessionId: string, metadata?: Record<string, any>, userId?: string): Promise<void> {
     const client = await this.pool.connect();
 
     try {
       const now = Date.now();
-      const extractedUserId = this.extractUserIdFromSession(sessionId, userId);
 
       // Check if session exists
       const checkResult = await client.query(
@@ -1465,10 +1432,10 @@ export class PostgresDataStore implements Database {
 
       if (checkResult.rows.length > 0) {
         // Update
-        if (extractedUserId) {
+        if (userId) {
           await client.query(
             'UPDATE sessions SET last_active_at = $1, metadata = $2, user_id = $3 WHERE session_id = $4',
-            [now, metadata || {}, extractedUserId, sessionId]
+            [now, metadata || {}, userId, sessionId]
           );
         } else {
           await client.query(
@@ -1478,10 +1445,10 @@ export class PostgresDataStore implements Database {
         }
       } else {
         // Insert
-        if (extractedUserId) {
+        if (userId) {
           await client.query(
             'INSERT INTO sessions (session_id, created_at, last_active_at, metadata, user_id) VALUES ($1, $2, $3, $4, $5)',
-            [sessionId, now, now, metadata || {}, extractedUserId]
+            [sessionId, now, now, metadata || {}, userId]
           );
         } else {
           await client.query(
