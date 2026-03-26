@@ -90,13 +90,13 @@ export const handler = async (request: any, { logger, streams }: any) => {
         id: taskId,
         sessionId: sessionId,
         task: taskName || `对话${threadId ? ` ${threadId}` : ''}`,
+        userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
         status: 'idle' as const,  // ← Idle state, waiting for trigger
         app: app || 'myecho',
         metadata: {
           ...metadata,
           type: 'soul_agent',
           soulId: soulId,
-          userId: userId,
           characterId: characterId,
           deviceId: deviceId,
           threadId: threadId,

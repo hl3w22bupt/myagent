@@ -137,11 +137,11 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
           task: taskDescription,  // ✅ 使用真实的任务描述
           app: request.body.app || request.body.appId || 'myagent',  // ✅ 从请求中获取 app 参数
           sessionId: sessionId,
+          userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
           status: TaskStatus.PENDING,
           metadata: {
             type: 'soul_agent',
             soulId: soulId,
-            userId: userId,
             characterId: soulId,
             deviceId: 'unknown',
             triggerSource: triggerContext.source
