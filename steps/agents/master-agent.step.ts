@@ -557,6 +557,7 @@ export const handler = async (
       id: taskId,
       task: input.task,
       sessionId: sessionId,
+      userId: input.userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
       status: TaskStatus.PENDING,
       metadata: {
         subagent: input.subagent, // 保存 subagent 信息用于后续多轮对话

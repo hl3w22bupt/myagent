@@ -178,7 +178,9 @@ export class PostgresDataStore implements Database {
           id TEXT PRIMARY KEY,
           task TEXT NOT NULL,
           session_id TEXT NOT NULL,
+          user_id TEXT,
           status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'awaiting_clarification', 'idle')),
+          app TEXT NOT NULL DEFAULT 'default',
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL,
           completed_at BIGINT,
@@ -197,6 +199,7 @@ export class PostgresDataStore implements Database {
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)');
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)');
 
       // Composite index for common query patterns
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_session_status_created ON tasks(session_id, status, created_at DESC)');
@@ -304,11 +307,13 @@ export class PostgresDataStore implements Database {
           session_id TEXT PRIMARY KEY,
           created_at BIGINT NOT NULL,
           last_active_at BIGINT NOT NULL,
-          metadata JSONB
+          metadata JSONB,
+          user_id TEXT
         )
       `);
 
       await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at DESC)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)');
 
       // Users table
       await safeQuery(`
@@ -369,6 +374,43 @@ export class PostgresDataStore implements Database {
           END IF;
         END $$;
       `);
+
+      // 自动迁移：为 tasks 表添加 user_id 和 app 列（Issue #65）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tasks' AND column_name = 'user_id'
+          ) THEN
+            ALTER TABLE tasks ADD COLUMN user_id TEXT;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tasks' AND column_name = 'app'
+          ) THEN
+            ALTER TABLE tasks ADD COLUMN app TEXT NOT NULL DEFAULT 'default';
+          END IF;
+        END $$;
+      `);
+
+      // 自动迁移：为 sessions 表添加 user_id 列（Issue #65）
+      await safeQuery(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'sessions' AND column_name = 'user_id'
+          ) THEN
+            ALTER TABLE sessions ADD COLUMN user_id TEXT;
+          END IF;
+        END $$;
+      `);
+
+      // 自动迁移：创建 user_id 索引（Issue #65）
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)');
+      await safeQuery('CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)');
 
       // 创建 favorites 表
       await safeQuery(`
