@@ -144,7 +144,7 @@ export const config: EventConfig = {
   name: 'master-agent',
   description: 'Master agent that orchestrates task execution using PTC',
   subscribes: ['agent.task.execute', 'agent.task.chat'],
-  emits: ['agent.task.completed', 'agent.task.failed'],
+  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
   flows: ['agent-workflow'],
 };
 

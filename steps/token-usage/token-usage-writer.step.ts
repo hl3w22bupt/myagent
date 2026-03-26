@@ -46,7 +46,7 @@ export const config: EventConfig = {
 
   input: inputSchema,
 
-  flows: ['token-usage-tracking'],
+  flows: ['token-usage-tracking', 'agent-workflow'],
 };
 
 /**

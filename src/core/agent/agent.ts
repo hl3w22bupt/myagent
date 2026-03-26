@@ -277,14 +277,14 @@ export class Agent {
       contextKeys: context ? Object.keys(context) : 'no context',
     });
 
+    // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
+    const effectiveTaskId = taskId || context?.taskId;
+
     // Extract emit function from context for event emission
     if (context?.emit) {
       this.emit = context.emit;
       console.log('[Agent] Emit function stored from context');
     }
-
-    // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
-    const effectiveTaskId = taskId || context?.taskId;
 
     console.log('[Agent] Using effective taskId:', effectiveTaskId, 'for all notifications');
 

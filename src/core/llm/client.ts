@@ -26,9 +26,9 @@ interface Streams {
 }
 
 /**
- * Emit function for event emission
+ * Emit function for event emission (Motia format)
  */
-type EmitFunction = (event: string, data: any) => Promise<void>;
+type EmitFunction = (event: { topic: string; data: any }) => Promise<void>;
 
 export type LLMProvider = 'anthropic' | 'openai-compatible';
 
@@ -327,25 +327,28 @@ export class LLMClient {
 
       // Emit execution.trace.created event for token usage extraction
       if (this.emit) {
-        await this.emit('execution.trace.created', {
-          id,
-          level,
-          taskId,
-          agentId,
-          skillName,
-          stage: 'llm_call',
-          status: 'completed',
-          executionTime,
-          timestamp: new Date(timestamp).toISOString(),
-          purpose,
-          metadata: {
-            llmProvider: this.provider,
-            llmModel: options.model || this.model,
-            sessionId: agentId,
-            llmResponse: {
-              promptTokens: response.usage?.prompt_tokens,
-              completionTokens: response.usage?.completion_tokens,
-              totalTokens: response.usage?.total_tokens,
+        await this.emit({
+          topic: 'execution.trace.created',
+          data: {
+            id,
+            level,
+            taskId,
+            agentId,
+            skillName,
+            stage: 'llm_call',
+            status: 'completed',
+            executionTime,
+            timestamp: new Date(timestamp).toISOString(),
+            purpose,
+            metadata: {
+              llmProvider: this.provider,
+              llmModel: options.model || this.model,
+              sessionId: agentId,
+              llmResponse: {
+                promptTokens: response.usage?.prompt_tokens,
+                completionTokens: response.usage?.completion_tokens,
+                totalTokens: response.usage?.total_tokens,
+              },
             },
           },
         });
