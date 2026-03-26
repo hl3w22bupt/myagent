@@ -44,6 +44,7 @@ export interface Task {
   id: string;
   task: string;
   sessionId: string;
+  userId?: string;  // User ID for data isolation (Issue #65)
   status: TaskStatus;
   app: string;
   createdAt: Date;
@@ -169,6 +170,7 @@ export interface Session {
   createdAt: Date;
   lastActiveAt: Date;
   metadata?: Record<string, any>;
+  userId?: string;  // User ID for data isolation (Issue #65)
 }
 
 /**
@@ -370,7 +372,9 @@ export class DataStore {
         id TEXT PRIMARY KEY,
         task TEXT NOT NULL,
         session_id TEXT NOT NULL,
+        user_id TEXT,
         status TEXT NOT NULL,
+        app TEXT NOT NULL DEFAULT 'default',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         completed_at INTEGER,
@@ -382,6 +386,7 @@ export class DataStore {
         is_retry INTEGER DEFAULT 0
       )
     `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)`);
 
     // 2. 会话表
     this.db.run(`
@@ -389,9 +394,11 @@ export class DataStore {
         session_id TEXT PRIMARY KEY,
         created_at INTEGER NOT NULL,
         last_active_at INTEGER NOT NULL,
-        metadata TEXT
+        metadata TEXT,
+        user_id TEXT
       )
     `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
 
     // 3. 任务上下文表 (依赖于 tasks)
     this.db.run(`
@@ -541,6 +548,7 @@ export class DataStore {
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
+
     const task: Task = {
       ...taskData,
       status: TaskStatus.PENDING,
@@ -552,12 +560,13 @@ export class DataStore {
     };
 
     this.db.run(
-      `INSERT INTO tasks (id, task, session_id, status, app, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, task, session_id, user_id, status, app, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.task,
         task.sessionId,
+        task.userId || null,
         task.status,
         task.app,
         task.createdAt.getTime(),
@@ -571,8 +580,8 @@ export class DataStore {
       ]
     );
 
-    // 创建或更新会话
-    await this.upsertSession(task.sessionId);
+    // 创建或更新会话（使用显式传入的 userId）
+    await this.upsertSession(task.sessionId, undefined, task.userId);
 
     await this.save();
     return task;
@@ -1250,7 +1259,7 @@ export class DataStore {
   // 会话管理 (新增功能)
   // ============================================================================
 
-  async upsertSession(sessionId: string, metadata?: Record<string, any>): Promise<void> {
+  async upsertSession(sessionId: string, metadata?: Record<string, any>, userId?: string): Promise<void> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1263,17 +1272,31 @@ export class DataStore {
     checkStmt.free();
 
     if (exists) {
-      // 更新最后活跃时间
-      this.db.run(
-        'UPDATE sessions SET last_active_at = ?, metadata = ? WHERE session_id = ?',
-        [now, metadata ? JSON.stringify(metadata) : null, sessionId]
-      );
+      // 更新最后活跃时间和 user_id（如果有）
+      if (userId) {
+        this.db.run(
+          'UPDATE sessions SET last_active_at = ?, metadata = ?, user_id = ? WHERE session_id = ?',
+          [now, metadata ? JSON.stringify(metadata) : null, userId, sessionId]
+        );
+      } else {
+        this.db.run(
+          'UPDATE sessions SET last_active_at = ?, metadata = ? WHERE session_id = ?',
+          [now, metadata ? JSON.stringify(metadata) : null, sessionId]
+        );
+      }
     } else {
       // 创建新会话
-      this.db.run(
-        'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES (?, ?, ?, ?)',
-        [sessionId, now, now, metadata ? JSON.stringify(metadata) : null]
-      );
+      if (userId) {
+        this.db.run(
+          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata, user_id) VALUES (?, ?, ?, ?, ?)',
+          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null, userId]
+        );
+      } else {
+        this.db.run(
+          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES (?, ?, ?, ?)',
+          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null]
+        );
+      }
     }
 
     await this.save();
@@ -1298,6 +1321,7 @@ export class DataStore {
       createdAt: new Date(result.created_at),
       lastActiveAt: new Date(result.last_active_at),
       metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
+      userId: result.user_id,  // User ID for data isolation (Issue #65)
     };
   }
 
@@ -1650,26 +1674,14 @@ export class DataStore {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
-    // 获取用户信息
-    const user = await this.getUser(userId);
-    if (!user) {
-      return [];
-    }
-
-    // 查询该用户相关的所有任务，按 sessionId 分组
-    const stmt = this.db.prepare('SELECT DISTINCT session_id FROM tasks WHERE session_id IN (SELECT session_id FROM tasks WHERE id IN (SELECT task_id FROM task_contexts WHERE task_id IN (SELECT id FROM tasks ORDER BY created_at DESC)))');
-    stmt.bind([]);
-
-    // 简化：直接查询所有会话，然后根据用户画像中的会话信息过滤
+    // 查询该用户的所有会话，按 user_id 过滤
     const sessionsStmt = this.db.prepare(
       `SELECT s.* FROM sessions s
-       WHERE s.session_id IN (
-         SELECT DISTINCT session_id FROM tasks
-         ORDER BY created_at DESC
-       )
+       WHERE s.user_id = ?
        ORDER BY s.last_active_at DESC
        LIMIT 100`
     );
+    sessionsStmt.bind([userId]);
 
     const sessions: Session[] = [];
     while (sessionsStmt.step()) {
@@ -1679,6 +1691,7 @@ export class DataStore {
         createdAt: new Date(row.created_at),
         lastActiveAt: new Date(row.last_active_at),
         metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        userId: row.user_id,  // User ID for data isolation (Issue #65)
       });
     }
     sessionsStmt.free();
@@ -1742,6 +1755,7 @@ export class DataStore {
       id: row.id,
       task: row.task,
       sessionId: row.session_id,
+      userId: row.user_id,  // User ID for data isolation (Issue #65)
       status: row.status as TaskStatus,
       app: row.app || 'default',  // Use the dedicated app column
       createdAt: new Date(row.created_at),
