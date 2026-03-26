@@ -45,18 +45,22 @@ function Dashboard() {
   }
 
   const formatDate = (timestamp) => {
+    // 使用本地时区格式化日期
     const date = new Date(timestamp)
+    const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
-    return `${month}-${day}`
+    return `${year}-${month}-${day}`
   }
 
   const formatHour = (timestamp) => {
+    // 使用本地时区格式化日期和时间（24小时制）
     const date = new Date(timestamp)
+    const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const hour = String(date.getHours()).padStart(2, '0')
-    return `${month}-${day} ${hour}:00`
+    return `${year}-${month}-${day} ${hour}:00`
   }
 
   // Prepare chart data
