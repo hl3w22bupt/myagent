@@ -71,6 +71,7 @@ motia-workbench.json
 *.bak
 
 .worktree/
+.worktrees/
 
 .serena/
 .cache
