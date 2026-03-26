@@ -222,6 +222,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     task: task,
     app: appIdentifier,  // Store app in dedicated column
     sessionId: finalSessionId,
+    userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
     status: TaskStatus.PENDING,
     metadata: {
       subagent, // 保存 subagent 信息用于后续多轮对话
