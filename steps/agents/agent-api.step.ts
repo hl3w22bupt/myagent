@@ -224,6 +224,8 @@ export const handler = async (request: any, { emit, logger }: any) => {
     sessionId: finalSessionId,
     userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
     status: TaskStatus.PENDING,
+    retryCount: 0,
+    isRetry: false,
     metadata: {
       subagent, // 保存 subagent 信息用于后续多轮对话
       workflow, // 保存 workflow 信息
