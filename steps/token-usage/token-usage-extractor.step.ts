@@ -57,8 +57,8 @@ export const handler = async (trace: ExecutionTrace, { logger, emit }: any) => {
     hasMetadata: !!metadata,
   });
 
-  // Filter for LLM call stages only
-  if (stage !== 'llm_call') {
+  // Filter for LLM call stages only (llm_call, llm_call_execute, llm_call_skill_prompt, etc.)
+  if (!stage?.startsWith('llm_call')) {
     logger.debug('[Token Usage Extractor] Skipping non-LLM trace', {
       traceId,
       stage,

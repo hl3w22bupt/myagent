@@ -113,7 +113,8 @@ export const handler = async (
     });
 
     // Emit execution.trace.created event for token usage extraction
-    if (traceData.stage === 'llm_call' && emit) {
+    // Use startsWith to match llm_call, llm_call_execute, llm_call_skill_prompt, etc.
+    if (traceData.stage?.startsWith('llm_call') && emit) {
       await emit({
         topic: 'execution.trace.created',
         data: traceData,
@@ -121,6 +122,7 @@ export const handler = async (
       logger.info('Submit Trace API: Emitted execution.trace.created event', {
         traceId: traceData.id,
         taskId: traceData.taskId,
+        stage: traceData.stage,
       });
     }
 
