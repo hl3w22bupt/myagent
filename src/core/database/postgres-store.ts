@@ -530,14 +530,17 @@ export class PostgresDataStore implements Database {
 
     try {
       const now = Date.now();
+      const userId = this.extractUserIdFromSession(data.sessionId, data.userId);
+
       const result = await client.query(
-        `INSERT INTO tasks (id, task, session_id, status, app, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        `INSERT INTO tasks (id, task, session_id, user_id, status, app, created_at, updated_at, completed_at, output, error, execution_time, metadata, structured_output, retry_count, is_retry)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING *`,
         [
           data.id,
           data.task,
           data.sessionId,
+          userId,  // user_id from extraction or provided value
           data.status,
           data.app || 'default',  // App identifier
           now,
@@ -557,7 +560,7 @@ export class PostgresDataStore implements Database {
       const task = this.mapDbTaskToTask(result.rows[0]);
 
       // 创建或更新会话记录
-      await this.upsertSession(data.sessionId);
+      await this.upsertSession(data.sessionId, undefined, userId);
 
       return task;
     } finally {
@@ -1416,11 +1419,43 @@ export class PostgresDataStore implements Database {
   // Session Operations
   // ============================================================================
 
-  async upsertSession(sessionId: string, metadata?: Record<string, any>): Promise<void> {
+  /**
+   * Extract userId from session
+   * For Soul Agent sessions, parse userId from session_id
+   * For other sessions, use provided userId
+   */
+  private extractUserIdFromSession(sessionId: string, providedUserId?: string): string | undefined {
+    // If userId is provided, use it directly
+    if (providedUserId) {
+      return providedUserId;
+    }
+
+    // Try to parse from Soul Agent session_id format: soul-{soulId}-{userId}-{threadId}
+    if (sessionId.startsWith('soul-')) {
+      // Find the content between the second and third '-' as userId
+      const parts = sessionId.split('-');
+      if (parts.length >= 4) {
+        // userId is between parts[2] and parts[parts.length - 1]
+        // For example: soul-soul123-user456-thread789
+        // parts = ['soul', 'soul123', 'user456', 'thread789']
+        // userId = parts[2]
+        // But if userId contains '-', like: soul-soul123-user-with-dash-thread789
+        // parts = ['soul', 'soul123', 'user', 'with', 'dash', 'thread789']
+        // We need to take parts[2] to second-to-last part
+        const userIdParts = parts.slice(2, parts.length - 1);
+        return userIdParts.join('-');
+      }
+    }
+
+    return undefined;
+  }
+
+  async upsertSession(sessionId: string, metadata?: Record<string, any>, userId?: string): Promise<void> {
     const client = await this.pool.connect();
 
     try {
       const now = Date.now();
+      const extractedUserId = this.extractUserIdFromSession(sessionId, userId);
 
       // Check if session exists
       const checkResult = await client.query(
@@ -1430,16 +1465,30 @@ export class PostgresDataStore implements Database {
 
       if (checkResult.rows.length > 0) {
         // Update
-        await client.query(
-          'UPDATE sessions SET last_active_at = $1, metadata = $2 WHERE session_id = $3',
-          [now, metadata || {}, sessionId]  // 直接传入对象，自动处理为 JSONB
-        );
+        if (extractedUserId) {
+          await client.query(
+            'UPDATE sessions SET last_active_at = $1, metadata = $2, user_id = $3 WHERE session_id = $4',
+            [now, metadata || {}, extractedUserId, sessionId]
+          );
+        } else {
+          await client.query(
+            'UPDATE sessions SET last_active_at = $1, metadata = $2 WHERE session_id = $3',
+            [now, metadata || {}, sessionId]
+          );
+        }
       } else {
         // Insert
-        await client.query(
-          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES ($1, $2, $3, $4)',
-          [sessionId, now, now, metadata || {}]  // 直接传入对象，自动处理为 JSONB
-        );
+        if (extractedUserId) {
+          await client.query(
+            'INSERT INTO sessions (session_id, created_at, last_active_at, metadata, user_id) VALUES ($1, $2, $3, $4, $5)',
+            [sessionId, now, now, metadata || {}, extractedUserId]
+          );
+        } else {
+          await client.query(
+            'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES ($1, $2, $3, $4)',
+            [sessionId, now, now, metadata || {}]
+          );
+        }
       }
     } finally {
       client.release();
@@ -1730,6 +1779,7 @@ export class PostgresDataStore implements Database {
       id: row.id,
       task: row.task,
       sessionId: row.session_id,
+      userId: row.user_id,  // User ID for data isolation (Issue #65)
       status: row.status as TaskStatus,
       app: row.app || 'default',  // Use the dedicated app column
       // PostgreSQL returns bigint as string, need to convert to number
@@ -1892,20 +1942,13 @@ export class PostgresDataStore implements Database {
     const client = await this.pool.connect();
 
     try {
-      // 获取用户信息
-      const user = await this.getUser(userId);
-      if (!user) {
-        return [];
-      }
-
-      // 查询所有会话并按最后活跃时间倒序排列
+      // 查询该用户的所有会话，按 user_id 过滤
       const result = await client.query(
         `SELECT s.* FROM sessions s
-         WHERE s.session_id IN (
-           SELECT DISTINCT session_id FROM tasks
-         )
+         WHERE s.user_id = $1
          ORDER BY s.last_active_at DESC
-         LIMIT 100`
+         LIMIT 100`,
+        [userId]
       );
 
       return result.rows.map(row => ({
@@ -1913,6 +1956,7 @@ export class PostgresDataStore implements Database {
         createdAt: new Date(parseInt(row.created_at)),
         lastActiveAt: new Date(parseInt(row.last_active_at)),
         metadata: row.metadata,
+        userId: row.user_id,  // User ID for data isolation (Issue #65)
       }));
     } finally {
       client.release();

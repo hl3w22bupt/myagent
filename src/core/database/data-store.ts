@@ -44,6 +44,7 @@ export interface Task {
   id: string;
   task: string;
   sessionId: string;
+  userId?: string;  // User ID for data isolation (Issue #65)
   status: TaskStatus;
   app: string;
   createdAt: Date;
@@ -169,6 +170,7 @@ export interface Session {
   createdAt: Date;
   lastActiveAt: Date;
   metadata?: Record<string, any>;
+  userId?: string;  // User ID for data isolation (Issue #65)
 }
 
 /**
@@ -370,7 +372,9 @@ export class DataStore {
         id TEXT PRIMARY KEY,
         task TEXT NOT NULL,
         session_id TEXT NOT NULL,
+        user_id TEXT,
         status TEXT NOT NULL,
+        app TEXT NOT NULL DEFAULT 'default',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         completed_at INTEGER,
@@ -382,6 +386,7 @@ export class DataStore {
         is_retry INTEGER DEFAULT 0
       )
     `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)`);
 
     // 2. 会话表
     this.db.run(`
@@ -389,9 +394,11 @@ export class DataStore {
         session_id TEXT PRIMARY KEY,
         created_at INTEGER NOT NULL,
         last_active_at INTEGER NOT NULL,
-        metadata TEXT
+        metadata TEXT,
+        user_id TEXT
       )
     `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
 
     // 3. 任务上下文表 (依赖于 tasks)
     this.db.run(`
@@ -541,8 +548,11 @@ export class DataStore {
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
+    const userId = this.extractUserIdFromSession(taskData.sessionId, taskData.userId);
+
     const task: Task = {
       ...taskData,
+      userId,  // Set userId from extraction or provided value
       status: TaskStatus.PENDING,
       app: taskData.app || 'default',  // Ensure app has a value
       createdAt: new Date(now),
@@ -552,12 +562,13 @@ export class DataStore {
     };
 
     this.db.run(
-      `INSERT INTO tasks (id, task, session_id, status, app, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, task, session_id, user_id, status, app, created_at, updated_at, output, error, execution_time, metadata, retry_count, is_retry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.task,
         task.sessionId,
+        task.userId || null,
         task.status,
         task.app,
         task.createdAt.getTime(),
@@ -572,7 +583,7 @@ export class DataStore {
     );
 
     // 创建或更新会话
-    await this.upsertSession(task.sessionId);
+    await this.upsertSession(task.sessionId, undefined, userId);
 
     await this.save();
     return task;
@@ -1250,11 +1261,43 @@ export class DataStore {
   // 会话管理 (新增功能)
   // ============================================================================
 
-  async upsertSession(sessionId: string, metadata?: Record<string, any>): Promise<void> {
+  /**
+   * 提取会话中的用户ID
+   * 对于 Soul Agent 会话，从 session_id 中解析 userId
+   * 对于其他会话，使用提供的 userId
+   */
+  private extractUserIdFromSession(sessionId: string, providedUserId?: string): string | undefined {
+    // 如果提供了 userId，直接使用
+    if (providedUserId) {
+      return providedUserId;
+    }
+
+    // 尝试从 Soul Agent session_id 格式解析: soul-{soulId}-{userId}-{threadId}
+    if (sessionId.startsWith('soul-')) {
+      // 找到第二个 '-' 和第三个 '-' 之间的内容作为 userId
+      const parts = sessionId.split('-');
+      if (parts.length >= 4) {
+        // userId 在第二和第四个 '-' 之间 (parts[2] 到 parts[parts.length - 1] 之前)
+        // 例如: soul-soul123-user456-thread789
+        // parts = ['soul', 'soul123', 'user456', 'thread789']
+        // userId = parts[2]
+        // 但如果 userId 本身包含 '-'，比如: soul-soul123-user-with-dash-thread789
+        // parts = ['soul', 'soul123', 'user', 'with', 'dash', 'thread789']
+        // 我们需要取 parts[2] 到倒数第二个部分
+        const userIdParts = parts.slice(2, parts.length - 1);
+        return userIdParts.join('-');
+      }
+    }
+
+    return undefined;
+  }
+
+  async upsertSession(sessionId: string, metadata?: Record<string, any>, userId?: string): Promise<void> {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
     const now = Date.now();
+    const extractedUserId = this.extractUserIdFromSession(sessionId, userId);
 
     // 检查会话是否存在
     const checkStmt = this.db.prepare('SELECT session_id FROM sessions WHERE session_id = ?');
@@ -1263,17 +1306,31 @@ export class DataStore {
     checkStmt.free();
 
     if (exists) {
-      // 更新最后活跃时间
-      this.db.run(
-        'UPDATE sessions SET last_active_at = ?, metadata = ? WHERE session_id = ?',
-        [now, metadata ? JSON.stringify(metadata) : null, sessionId]
-      );
+      // 更新最后活跃时间和 user_id（如果有）
+      if (extractedUserId) {
+        this.db.run(
+          'UPDATE sessions SET last_active_at = ?, metadata = ?, user_id = ? WHERE session_id = ?',
+          [now, metadata ? JSON.stringify(metadata) : null, extractedUserId, sessionId]
+        );
+      } else {
+        this.db.run(
+          'UPDATE sessions SET last_active_at = ?, metadata = ? WHERE session_id = ?',
+          [now, metadata ? JSON.stringify(metadata) : null, sessionId]
+        );
+      }
     } else {
       // 创建新会话
-      this.db.run(
-        'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES (?, ?, ?, ?)',
-        [sessionId, now, now, metadata ? JSON.stringify(metadata) : null]
-      );
+      if (extractedUserId) {
+        this.db.run(
+          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata, user_id) VALUES (?, ?, ?, ?, ?)',
+          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null, extractedUserId]
+        );
+      } else {
+        this.db.run(
+          'INSERT INTO sessions (session_id, created_at, last_active_at, metadata) VALUES (?, ?, ?, ?)',
+          [sessionId, now, now, metadata ? JSON.stringify(metadata) : null]
+        );
+      }
     }
 
     await this.save();
@@ -1298,6 +1355,7 @@ export class DataStore {
       createdAt: new Date(result.created_at),
       lastActiveAt: new Date(result.last_active_at),
       metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
+      userId: result.user_id,  // User ID for data isolation (Issue #65)
     };
   }
 
@@ -1650,26 +1708,14 @@ export class DataStore {
     await this.ensureInitialized();
     if (!this.db) throw new Error('Database not initialized');
 
-    // 获取用户信息
-    const user = await this.getUser(userId);
-    if (!user) {
-      return [];
-    }
-
-    // 查询该用户相关的所有任务，按 sessionId 分组
-    const stmt = this.db.prepare('SELECT DISTINCT session_id FROM tasks WHERE session_id IN (SELECT session_id FROM tasks WHERE id IN (SELECT task_id FROM task_contexts WHERE task_id IN (SELECT id FROM tasks ORDER BY created_at DESC)))');
-    stmt.bind([]);
-
-    // 简化：直接查询所有会话，然后根据用户画像中的会话信息过滤
+    // 查询该用户的所有会话，按 user_id 过滤
     const sessionsStmt = this.db.prepare(
       `SELECT s.* FROM sessions s
-       WHERE s.session_id IN (
-         SELECT DISTINCT session_id FROM tasks
-         ORDER BY created_at DESC
-       )
+       WHERE s.user_id = ?
        ORDER BY s.last_active_at DESC
        LIMIT 100`
     );
+    sessionsStmt.bind([userId]);
 
     const sessions: Session[] = [];
     while (sessionsStmt.step()) {
@@ -1679,6 +1725,7 @@ export class DataStore {
         createdAt: new Date(row.created_at),
         lastActiveAt: new Date(row.last_active_at),
         metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        userId: row.user_id,  // User ID for data isolation (Issue #65)
       });
     }
     sessionsStmt.free();
@@ -1742,6 +1789,7 @@ export class DataStore {
       id: row.id,
       task: row.task,
       sessionId: row.session_id,
+      userId: row.user_id,  // User ID for data isolation (Issue #65)
       status: row.status as TaskStatus,
       app: row.app || 'default',  // Use the dedicated app column
       createdAt: new Date(row.created_at),
