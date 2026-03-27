@@ -1,238 +1,157 @@
-# AGENTS.md
+# MyAgent - AI开发助手快速指南
 
-> AI Development Guide for Motia Projects
+> **项目定位**: 分布式AI Agent系统 (4层架构: Motia集成 → Agent编排 → Sandbox执行 → Skill抽象)
 
-This file provides context and instructions for AI coding assistants working on Motia projects.
+## 🎯 核心信息
 
-## Project Overview
+**这是什么**: 不是简单的Motia教程项目，而是完整的分布式Agent系统
+**技术栈**: TypeScript (Node.js 20) + Python 3.12 + PostgreSQL + Motia
+**核心能力**: PTC代码生成、多轮对话、上下文管理、实时流式通信
 
-This is a **Motia** application - a framework for building event-driven, type-safe backend systems with:
+## 📚 文档导航
 
-- HTTP API endpoints (API Steps)
-- Background event processing (Event Steps)
-- Scheduled tasks (Cron Steps)
-- Real-time streaming capabilities
-- Built-in state management
-- Visual workflow designer (Workbench)
+### 快速上手
+- **本文档**: 项目概览和快速参考
+- **TESTING_WORKFLOW.md**: 完整测试流程（必读！）
+- **API_REFERENCE.md**: 所有API端点文档
 
-## Quick Start Commands
+### 架构文档
+- **docs/ARCHITECTURE_OVERVIEW.md**: 完整4层架构说明
+- **docs/SYSTEM_CONCEPTS_OVERVIEW.md**: 核心概念详解
+- **docs/PROJECT_STRUCTURE.md**: 项目模块树
+
+### Motia框架
+- **.cursor/rules/motia/\***: Motia最佳实践（11个详细指南）
+
+## 🚀 快速启动
+
+### 环境准备
+```bash
+npm install               # Node.js依赖
+npm run py:install        # Python依赖
+npm run db:init          # PostgreSQL初始化（可选）
+npm run generate-types    # 生成Motia类型
+```
+
+### 启动服务
+```bash
+# 后端（根目录）
+npm run start            # 生产模式
+
+# 前端（motia-frontend目录）
+cd motia-frontend && npm run dev
+```
+
+**端口**: 后端3000，前端5173
+
+### 代码修改后
+```bash
+npm run build            # TypeScript修改后
+npm run generate-types   # Motia配置修改后
+# 服务会自动重启
+```
+
+## 🤖 Subagents
+
+项目提供2个专门subagent（使用 `/agents` 选择）：
+
+| Agent | 用途 | 何时使用 |
+|-------|------|----------|
+| **myagent-developer** | 代码开发 | 编写Motia Step、Agent逻辑、Skill |
+| **myagent-test-loop** | 自动化测试 | 验证功能、测试闭环、调试失败 |
+
+**详细说明**: `.claude/agents/myagent-*-*.md`
+
+## 🔑 核心概念
+
+### 4层架构
+```
+Layer 1: Motia集成层 (事件驱动)
+   ↓
+Layer 2: Agent编排层 (Agent/MasterAgent, PTC生成)
+   ↓
+Layer 3: Sandbox执行层 (Python进程隔离)
+   ↓
+Layer 4: Skill抽象层 (可复用能力)
+```
+
+### Session vs Task
+- **Session**: 会话（多轮对话），长生命周期，30分钟超时
+- **Task**: 单次任务，短生命周期，继承Session上下文
+
+### 关键设计
+- **AgentManager**: 会话管理（每个sessionId → 一个Agent实例）
+- **Hook系统**: AgentHook、TaskHook、SkillHook（生命周期扩展）
+- **上下文压缩**: 20条消息后自动压缩，保留摘要
+
+## 🧪 测试API（最常用）
 
 ```bash
-# Install dependencies
-npm install
+# 1. 提交任务
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"task": "搜索AI最新进展", "sessionId": "test-123"}'
 
-# Start development server (with hot reload)
-npm run dev
+# 2. 查看上下文
+curl http://localhost:3000/api/contexts/{taskId}
 
-# Start production server (without hot reload)
-npm run start
+# 3. 查看输出
+curl http://localhost:3000/api/contexts/outputs/{taskId}
 
-# Generate TypeScript types from steps
-npx motia generate-types
+# 4. 健康检查
+curl http://localhost:3000/health
 ```
 
-## 📚 Comprehensive Guides
+**完整测试流程**: 参考 `TESTING_WORKFLOW.md`
 
-**This project includes detailed Cursor rules in `.cursor/rules/` that contain comprehensive patterns and examples.**
+## ⚠️ 常见坑（速查）
 
-These guides are written in markdown and can be read by any AI coding tool. The sections below provide quick reference, but **always consult the detailed guides in `.cursor/` for complete patterns and examples.**
+| 问题 | 解决 |
+|------|------|
+| Module not found | `npm run generate-types` |
+| column "user_id" does not exist | `npm run db:reset` |
+| 每次请求创建新session | 确保传递sessionId |
+| LLM timeout | 增加src/index.ts中的timeout值 |
 
-### Available Guides
-
-Read these files in `.cursor/rules/motia/` for detailed patterns:
-
-- **`motia-config.mdc`** - Essential project setup, package.json requirements, plugin naming
-- **`api-steps.mdc`** - Creating HTTP endpoints with schemas, validation, and middleware
-- **`event-steps.mdc`** - Background task processing and event-driven workflows
-- **`cron-steps.mdc`** - Scheduled tasks with cron expressions
-- **`state-management.mdc`** - State/cache management across steps
-- **`middlewares.mdc`** - Request/response middleware patterns
-- **`realtime-streaming.mdc`** - WebSocket and SSE patterns
-- **`virtual-steps.mdc`** - Visual flow connections in Workbench
-- **`ui-steps.mdc`** - Custom visual components for Workbench
-
-Architecture guides in `.cursor/architecture/`:
-
-- **`architecture.mdc`** - Project structure, naming conventions, DDD patterns
-- **`error-handling.mdc`** - Error handling best practices
-
-**Read these guides before writing code.** They contain complete examples, type definitions, and best practices.
-
-## Quick Reference
-
-> **⚠️ Important**: The sections below are brief summaries. **Always read the full guides in `.cursor/rules/` for complete patterns, examples, and type definitions.**
-
-### Project Structure
-
-Motia discovers steps from both `/src` and `/steps` folders. Modern projects typically use `/src`:
-
-**Recommended Structure (using `/src`):**
+## 📦 关键文件
 
 ```
-project/
-├── .cursor/rules/   # DETAILED GUIDES - Read these first!
-├── src/
-│   ├── api/        # API endpoints
-│   │   ├── users.step.ts
-│   │   ├── orders.step.js
-│   │   └── products_step.py
-│   ├── events/     # Event handlers
-│   │   ├── order-processing.step.ts
-│   │   └── notifications_step.py
-│   ├── cron/       # Scheduled tasks
-│   │   └── cleanup.step.ts
-│   ├── services/   # Business logic
-│   ├── repositories/ # Data access
-│   └── utils/      # Utilities
-├── middlewares/    # Reusable middleware
-│   └── auth.middleware.ts
-├── motia.config.ts # Motia configuration
-└── types.d.ts      # Auto-generated types
+steps/agents/              # Agent端点
+├── agent-api.step.ts      # /agent/execute
+└── master-agent.step.ts   # Master-Agent事件处理
+
+src/core/
+├── agent/                 # Agent核心
+│   ├── agent.ts           # Agent基类
+│   ├── manager.ts         # AgentManager（会话管理）
+│   └── ptc-generator.ts   # PTC代码生成
+├── sandbox/               # Sandbox执行层
+├── database/              # 数据持久化
+└── context/               # 上下文管理
 ```
 
-**Alternative Structure (using `/steps`):**
+## 🎓 学习路径
 
-```
-project/
-├── steps/          # Step definitions
-│   ├── api/
-│   ├── events/
-│   └── cron/
-├── src/
-│   ├── services/
-│   └── utils/
-└── motia.config.ts
-```
+**新手**:
+1. 阅读本文档
+2. 阅读 `TESTING_WORKFLOW.md`
+3. 使用 `myagent-test-loop` 运行测试
 
-### Step Naming Conventions
+**开发者**:
+1. 阅读 `docs/ARCHITECTURE_OVERVIEW.md`
+2. 阅读 `.cursor/rules/motia/*.mdc`
+3. 使用 `myagent-developer` 编写代码
 
-**TypeScript/JavaScript:** `my-step.step.ts` (kebab-case)  
-**Python:** `my_step_step.py` (snake_case)
+**调试**:
+1. 阅读 `docs/SYSTEM_CONCEPTS_OVERVIEW.md`
+2. 查看日志: `tail -f .motia/logs/motia.log`
+3. 使用Context API分析任务
 
-See `.cursor/architecture/architecture.mdc` for complete naming rules.
+## 📞 获取帮助
 
-### Creating Steps - Quick Start
+- **完整测试流程**: `TESTING_WORKFLOW.md`
+- **API文档**: `API_REFERENCE.md`
+- **架构详解**: `docs/ARCHITECTURE_OVERVIEW.md`
+- **Motia指南**: `.cursor/rules/motia/*.mdc`
 
-Every step needs two exports:
-
-1. **`config`** - Defines type, routing, schemas, emits
-2. **`handler`** - Async function with processing logic
-
-**For complete examples and type definitions, read:**
-
-- `.cursor/rules/motia/api-steps.mdc` - HTTP endpoints
-- `.cursor/rules/motia/event-steps.mdc` - Background tasks
-- `.cursor/rules/motia/cron-steps.mdc` - Scheduled tasks
-
-## Detailed Guides by Topic
-
-> **📖 Read the cursor rules for complete information**
-
-### Step Types
-
-- **API Steps** → Read `.cursor/rules/motia/api-steps.mdc`
-  - HTTP endpoints, schemas, middleware, emits
-  - Complete TypeScript and Python examples
-  - When to use emits vs direct processing
-
-- **Event Steps** → Read `.cursor/rules/motia/event-steps.mdc`
-  - Background processing, topic subscriptions
-  - Retry mechanisms, error handling
-  - Chaining events for complex workflows
-
-- **Cron Steps** → Read `.cursor/rules/motia/cron-steps.mdc`
-  - Scheduled tasks with cron expressions
-  - Idempotent execution patterns
-  - Integration with event emits
-
-### Architecture
-
-- **Project Structure** → Read `.cursor/architecture/architecture.mdc`
-  - File organization, naming conventions
-  - Domain-Driven Design patterns (services, repositories)
-  - Code style guidelines for TypeScript, JavaScript, Python
-
-- **Error Handling** → Read `.cursor/architecture/error-handling.mdc`
-  - ZodError middleware patterns
-  - Logging best practices
-  - HTTP status codes
-
-### Advanced Features
-
-- **State Management** → Read `.cursor/rules/motia/state-management.mdc`
-  - Caching strategies, TTL configuration
-  - When to use state vs database
-  - Complete API reference
-
-- **Middlewares** → Read `.cursor/rules/motia/middlewares.mdc`
-  - Authentication, validation, error handling
-  - Creating reusable middleware
-  - Middleware composition
-
-- **Real-time Streaming** → Read `.cursor/rules/motia/realtime-streaming.mdc`
-  - Server-Sent Events (SSE) patterns
-  - WebSocket support
-  - Client-side integration
-
-- **Virtual Steps** → Read `.cursor/rules/motia/virtual-steps.mdc`
-  - Visual flow connections in Workbench
-  - Documenting API chains
-  - Flow organization
-
-- **UI Steps** → Read `.cursor/rules/motia/ui-steps.mdc`
-  - Custom Workbench visualizations
-  - Available components (EventNode, ApiNode, etc.)
-  - Styling with Tailwind
-
-## Workflow for AI Coding Assistants
-
-When working on Motia projects, follow this pattern:
-
-1. **Read the relevant guide** in `.cursor/rules/` for the task
-   - Creating API? Read `api-steps.mdc`
-   - Background task? Read `event-steps.mdc`
-   - Scheduled job? Read `cron-steps.mdc`
-
-2. **Check the architecture guide** in `.cursor/architecture/architecture.mdc`
-   - Understand project structure
-   - Follow naming conventions
-   - Apply DDD patterns
-
-3. **Implement following the patterns** from the guides
-   - Use the examples as templates
-   - Follow type definitions exactly
-   - Apply best practices
-
-4. **Generate types** after changes
-
-   ```bash
-   npx motia generate-types
-   ```
-
-5. **Test in Workbench** to verify connections
-   ```bash
-   npx motia dev
-   ```
-
-## Critical Rules
-
-- **ALWAYS** ensure `package.json` has `"type": "module"` (read `motia-config.mdc` for details)
-- **ALWAYS** read `.cursor/rules/` guides before writing step code
-- **ALWAYS** run `npx motia generate-types` after modifying configs
-- **ALWAYS** list emits in config before using them in handlers
-- **ALWAYS** follow naming conventions (`*.step.ts` or `*_step.py`)
-- **NEVER** use API steps for background work (use Event steps)
-- **NEVER** skip middleware for ZodError handling in multi-step projects
-- **NEVER** implement rate limiting/CORS in code (infrastructure handles this)
-
-## Resources
-
-- **Detailed Guides**: `.cursor/rules/motia/*.mdc` (in this project)
-- **Architecture**: `.cursor/architecture/*.mdc` (in this project)
-- **Documentation**: [motia.dev/docs](https://motia.dev/docs)
-- **Examples**: [motia.dev/docs/examples](https://motia.dev/docs/examples)
-- **GitHub**: [github.com/MotiaDev/motia](https://github.com/MotiaDev/motia)
-
----
-
-**Remember**: This AGENTS.md is a quick reference. The `.cursor/rules/` directory contains the comprehensive, authoritative guides with complete examples and type definitions. Always consult those guides when implementing Motia patterns.
+**记住**: AGENTS.md只是导航，详细信息在其他文档！

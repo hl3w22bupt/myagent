@@ -12,9 +12,9 @@ This project has detailed development guides in **`.cursor/rules/`** directory. 
 
 **A pre-configured subagent is ready!**
 
-The `motia-developer` subagent in `.claude/agents/` automatically references all 11 cursor rules when coding.
+The `myagent-developer` subagent in `.claude/agents/` automatically references all 11 cursor rules when coding.
 
-Use it: `/agents` → select `motia-developer`
+Use it: `/agents` → select `myagent-developer`
 
 Learn more: [Claude Code Subagents Docs](https://docs.claude.com/en/docs/claude-code/sub-agents)
 
