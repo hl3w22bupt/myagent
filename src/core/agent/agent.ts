@@ -751,7 +751,7 @@ export class Agent {
                             }
                           );
                           // Add collection metadata to each entry
-                          return entries.map(entry => ({
+                          return entries.map((entry: any) => ({
                             ...entry,
                             _collectionName: collection.collection_name,
                             _priority: collection.priority,
