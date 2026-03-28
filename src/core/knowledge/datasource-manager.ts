@@ -13,14 +13,18 @@ let pool: Pool | null = null;
  * Data Source Configuration
  */
 export interface DataSourceConfig {
-  type: 'postgres-pgvector';
+  type: 'postgres-pgvector' | 'lancedb';
   name: string;
   connection: {
-    host: string;
-    port: number;
-    database: string;
+    // PostgreSQL fields
+    host?: string;
+    port?: number;
+    database?: string;
     user?: string;
     password?: string;
+    // LanceDB fields
+    uri?: string;
+    apiKey?: string;
   };
 }
 
@@ -56,6 +60,16 @@ export async function testConnection(config: DataSourceConfig): Promise<{ succes
       await testPool.end();
 
       return { success: true };
+    } else if (config.type === 'lancedb') {
+      const *lance* = await import('@lancedb/lancedb');
+
+      try {
+        const db = await lance.connect(config.connection.uri);
+        await db.close();
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
     }
 
     return { success: false, error: 'Unsupported data source type' };
@@ -134,6 +148,32 @@ export async function discoverCollections(config: DataSourceConfig): Promise<Dis
 
       await discoverPool.end();
       return collections;
+    } else if (config.type === 'lancedb') {
+      const *lance* = await import('@lancedb/lancedb');
+
+      try {
+        const db = await lance.connect(config.connection.uri);
+        const tableNames = await db.tableNames();
+
+        const collections: DiscoveredCollection[] = [];
+        for (const name of tableNames) {
+          const table = await db.openTable(name);
+          const count = await table.count();
+          collections.push({
+            name,
+            entryCount: count,
+            hasEmbeddings: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+
+        await db.close();
+        return collections;
+      } catch (error: any) {
+        console.error('Failed to discover LanceDB collections:', error);
+        return [];
+      }
     }
 
     return [];

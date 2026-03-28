@@ -64,8 +64,8 @@ async function installPgvectorExtension(pool: Pool): Promise<void> {
 /**
  * Create knowledge table with vector column
  */
-async function createKnowledgeTable(pool: Pool): Promise<void> {
-  console.log('\n📋 Creating knowledge table...');
+async function createKnowledgeTable(pool: Pool, embeddingDimensions: number = 1536): Promise<void> {
+  console.log(`\n📋 Creating knowledge table (vector dimensions: ${embeddingDimensions})...`);
 
   const createTableSQL = `
     CREATE TABLE IF NOT EXISTS knowledge (
@@ -74,16 +74,16 @@ async function createKnowledgeTable(pool: Pool): Promise<void> {
       collection_name VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
       metadata JSONB DEFAULT '{}'::jsonb,
-      embedding vector(1536),
+      embedding vector(${embeddingDimensions}),
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
 
-    -- Create composite index for tenant + collection lookups
-    CREATE INDEX IF NOT EXISTS idx_knowledge_tenant_collection
+    -- Create unique constraint on (tenant_id, collection_name) for foreign key references
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_tenant_collection_unique
       ON knowledge(tenant_id, collection_name);
 
-    -- Create unique constraint to prevent duplicates
+    -- Create unique constraint to prevent duplicate content
     CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_unique_content
       ON knowledge(tenant_id, collection_name, content);
 
@@ -213,7 +213,7 @@ async function verifyInstallation(pool: Pool): Promise<void> {
 /**
  * Main setup function
  */
-export async function setupKnowledgeBase(dryRun = false): Promise<void> {
+export async function setupKnowledgeBase(dryRun = false, dimensions = 1536): Promise<void> {
   const pool = createPool();
 
   try {
@@ -221,25 +221,26 @@ export async function setupKnowledgeBase(dryRun = false): Promise<void> {
     console.log('  MyAgent Knowledge Base Setup');
     console.log('============================================================');
     console.log(`Mode: ${dryRun ? 'DRY-RUN (no changes will be made)' : 'EXECUTE'}`);
+    console.log(`Vector Dimensions: ${dimensions}`);
     console.log('============================================================\n');
 
     if (dryRun) {
       console.log('⚠ This is a DRY-RUN. No actual changes will be made.\n');
       console.log('The following actions would be performed:\n');
       console.log('1. Install pgvector extension');
-      console.log('2. Create knowledge table with vector column');
+      console.log(`2. Create knowledge table with vector(${dimensions}) column`);
       console.log('3. Create composite index (tenant + collection)');
       console.log('4. Create unique constraint');
       console.log('5. Create updated timestamp trigger');
       console.log('6. Create vector index (if 1000+ rows)\n');
       console.log('To execute, run with --execute flag:\n');
-      console.log('  npm run setup:knowledge-base -- --execute\n');
+      console.log(`  npm run setup:knowledge-base -- --execute --dimensions ${dimensions}\n`);
       return;
     }
 
     // Execute setup
     await installPgvectorExtension(pool);
-    await createKnowledgeTable(pool);
+    await createKnowledgeTable(pool, dimensions);
     await createVectorIndex(pool);
     await verifyInstallation(pool);
 
@@ -271,7 +272,18 @@ if (isMain) {
   const args = process.argv.slice(2);
   const dryRun = !args.includes('--execute');
 
-  setupKnowledgeBase(dryRun)
+  // Parse --dimensions argument
+  const dimensionsIndex = args.indexOf('--dimensions');
+  const dimensions = dimensionsIndex !== -1 && args[dimensionsIndex + 1]
+    ? parseInt(args[dimensionsIndex + 1], 10)
+    : 1536; // Default to 1536 (OpenAI)
+
+  if (isNaN(dimensions) || dimensions <= 0) {
+    console.error('Invalid dimensions value. Must be a positive integer.');
+    process.exit(1);
+  }
+
+  setupKnowledgeBase(dryRun, dimensions)
     .then(() => process.exit(0))
     .catch((err) => {
       console.error('Setup failed:', err);

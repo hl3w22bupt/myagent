@@ -9,12 +9,16 @@ import { Pool } from 'pg';
 export interface DataSource {
   id: string;
   name: string;
-  type: 'postgres-pgvector';
+  type: 'postgres-pgvector' | 'lancedb';
   connection: {
-    host: string;
-    port: number;
-    database: string;
-    user: string;
+    // PostgreSQL fields
+    host?: string;
+    port?: number;
+    database?: string;
+    user?: string;
+    // LanceDB fields
+    uri?: string;
+    apiKey?: string;
   };
   status: 'connected' | 'error';
   appIds: string[];
@@ -95,6 +99,8 @@ export async function getAllDataSources(): Promise<DataSource[]> {
       port: row.connection_port,
       database: row.connection_database,
       user: row.connection_user,
+      uri: row.connection_uri,
+      apiKey: row.connection_apikey,
     },
     status: row.status,
     appIds: row.app_ids ? row.app_ids.split(',') : [],
@@ -122,6 +128,8 @@ export async function getDataSource(id: string): Promise<DataSource | undefined>
       port: row.connection_port,
       database: row.connection_database,
       user: row.connection_user,
+      uri: row.connection_uri,
+      apiKey: row.connection_apikey,
     },
     status: row.status,
     appIds: row.app_ids ? row.app_ids.split(',') : [],
@@ -135,20 +143,39 @@ export async function getDataSource(id: string): Promise<DataSource | undefined>
 export async function addDataSource(dataSource: DataSource): Promise<void> {
   const pool = getPool();
 
-  await pool.query(`
-    INSERT INTO knowledge_datasources (id, name, type, connection_host, connection_port, connection_database, connection_user, status, app_ids)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-  `, [
+  const queryParams: any[] = [
     dataSource.id,
     dataSource.name,
     dataSource.type,
-    dataSource.connection.host,
-    dataSource.connection.port,
-    dataSource.connection.database,
-    dataSource.connection.user,
     dataSource.status,
     dataSource.appIds.join(','),
-  ]);
+  ];
+
+  let query = '';
+
+  if (dataSource.type === 'lancedb') {
+    query = `
+      INSERT INTO knowledge_datasources (id, name, type, connection_uri, connection_apikey, status, app_ids)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `;
+    queryParams.push(
+      dataSource.connection.uri,
+      dataSource.connection.apiKey || ''
+    );
+  } else {
+    query = `
+      INSERT INTO knowledge_datasources (id, name, type, connection_host, connection_port, connection_database, connection_user, status, app_ids)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `;
+    queryParams.push(
+      dataSource.connection.host,
+      dataSource.connection.port,
+      dataSource.connection.database,
+      dataSource.connection.user
+    );
+  }
+
+  await pool.query(query, queryParams);
 }
 
 /**

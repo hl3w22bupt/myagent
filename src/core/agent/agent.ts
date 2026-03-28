@@ -20,6 +20,7 @@ import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrato
 import { DefaultContextOrchestrator } from '../context/default-orchestrator';
 import Handlebars from 'handlebars';
 import { KnowledgeBase } from '../knowledge/knowledge-base';
+import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -159,8 +160,10 @@ export class Agent {
     if (config.knowledgeBase) {
       this.knowledgeBase = new KnowledgeBase({
         db: config.knowledgeBase.db,
-        openaiApiKey: config.knowledgeBase.openaiApiKey || process.env.OPENAI_API_KEY,
+        apiKey: config.knowledgeBase.apiKey || process.env.OPENAI_API_KEY || '',
+        baseURL: config.knowledgeBase.baseURL,
         embeddingModel: config.knowledgeBase.embeddingModel,
+        embeddingDimensions: config.knowledgeBase.embeddingDimensions,
       });
       console.log(`[Agent ${sessionId}] Knowledge Base initialized`);
     }
@@ -686,31 +689,108 @@ export class Agent {
             }
 
             // ⭐ RAG: Retrieve relevant knowledge if KnowledgeBase available
-            if (this.knowledgeBase && orchestratedContext.knowledgeCollection) {
+            // Priority: 1) Explicit knowledgeCollection (backward compatible), 2) Auto-discover from app
+            if (this.knowledgeBase) {
               try {
                 const query = task || orchestratedContext.originalTask || '';
 
                 if (query.trim()) {
-                  console.log('[Agent] Retrieving knowledge from collection:', {
-                    tenantId: this.sessionId,
-                    collection: orchestratedContext.knowledgeCollection,
-                    query: query.substring(0, 100), // Log first 100 chars
-                  });
+                  let knowledgeEntries: any[] = [];
 
-                  const knowledgeEntries = await this.knowledgeBase.retrieve(
-                    this.sessionId,
-                    orchestratedContext.knowledgeCollection,
-                    query,
-                    {
-                      limit: 5,
-                      threshold: 0.7,
+                  // Determine knowledge collection from:
+                  // 1) Top-level knowledgeCollection (backward compatibility)
+                  // 2) environment.knowledgeCollection (new approach)
+                  const knowledgeCollection = orchestratedContext.knowledgeCollection
+                    || orchestratedContext.environment?.knowledgeCollection;
+
+                  // Mode 1: Explicit knowledge collection (backward compatibility)
+                  if (knowledgeCollection) {
+                    console.log('[Agent] Retrieving knowledge from explicit collection:', {
+                      tenantId: this.sessionId,
+                      collection: knowledgeCollection,
+                      query: query.substring(0, 100),
+                      source: orchestratedContext.knowledgeCollection ? 'top-level' : 'environment',
+                    });
+
+                    knowledgeEntries = await this.knowledgeBase.retrieve(
+                      this.sessionId,
+                      knowledgeCollection,
+                      query,
+                      {
+                        limit: 5,
+                        threshold: 0.7,
+                      }
+                    );
+                  }
+                  // Mode 2: Auto-discover collections from app
+                  else if (orchestratedContext.app) {
+                    console.log('[Agent] Auto-discovering knowledge collections for app:', {
+                      tenantId: this.sessionId,
+                      app: orchestratedContext.app,
+                      query: query.substring(0, 100),
+                    });
+
+                    const collections = await getAppKnowledgeCollections(
+                      this.sessionId,
+                      orchestratedContext.app
+                    );
+
+                    if (collections.length > 0) {
+                      console.log(`[Agent] Found ${collections.length} knowledge collections for app ${orchestratedContext.app}`);
+
+                      // Retrieve from all collections in parallel
+                      const retrievalPromises = collections.map(async (collection) => {
+                        try {
+                          const entries = await this.knowledgeBase!.retrieve(
+                            this.sessionId,
+                            collection.collection_name,
+                            query,
+                            {
+                              limit: 5,
+                              threshold: 0.7,
+                            }
+                          );
+                          // Add collection metadata to each entry
+                          return entries.map(entry => ({
+                            ...entry,
+                            _collectionName: collection.collection_name,
+                            _priority: collection.priority,
+                          }));
+                        } catch (error) {
+                          console.error(`[Agent] Failed to retrieve from collection ${collection.collection_name}:`, error);
+                          return [];
+                        }
+                      });
+
+                      const allResults = await Promise.all(retrievalPromises);
+                      knowledgeEntries = allResults.flat();
+
+                      // Sort by priority (asc) then similarity (desc)
+                      knowledgeEntries.sort((a, b) => {
+                        if (a._priority !== b._priority) {
+                          return a._priority - b._priority;
+                        }
+                        return (b.similarity || 0) - (a.similarity || 0);
+                      });
+
+                      console.log('[Agent] Retrieved knowledge from multiple collections:', {
+                        collectionsCount: collections.length,
+                        totalEntries: knowledgeEntries.length,
+                        collections: collections.map(c => c.collection_name),
+                      });
+                    } else {
+                      console.log(`[Agent] No knowledge collections configured for app ${orchestratedContext.app}`);
                     }
-                  );
+                  }
 
+                  // Inject knowledge into PTC
                   if (knowledgeEntries.length > 0) {
                     ptcOptions.knowledge = knowledgeEntries.map(entry => ({
                       content: entry.content,
-                      metadata: entry.metadata,
+                      metadata: {
+                        ...entry.metadata,
+                        collectionName: entry._collectionName,
+                      },
                       similarity: entry.similarity,
                     }));
 

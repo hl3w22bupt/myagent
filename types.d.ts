@@ -44,6 +44,12 @@ declare module 'motia' {
     'soul-agents-status': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-update-apps-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-test-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user-sessions': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-session': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -57,6 +63,11 @@ declare module 'motia' {
     'context-compression-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'apps-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'app-knowledge-collections-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'app-knowledge-collections-batch-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'app-knowledge-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'app-knowledge-collections-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'subagents-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'task-result-handler': EventHandler<never, never>
     'soul-agent-executor': EventHandler<never, { topic: 'agent.task.completed'; data: never } | { topic: 'agent.task.failed'; data: never }>
@@ -67,6 +78,8 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
+    'knowledge-datasources-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-ingest-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
   }
     
 }

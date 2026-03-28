@@ -73,10 +73,14 @@ export interface AgentConfig {
       idleTimeoutMillis?: number;
       connectionTimeoutMillis?: number;
     };
-    /** OpenAI API key for embeddings */
-    openaiApiKey?: string;
+    /** API key for embedding service (OpenAI or compatible) */
+    apiKey: string;
+    /** Custom base URL for OpenAI-compatible APIs (optional) */
+    baseURL?: string;
     /** Embedding model (default: 'text-embedding-3-small') */
     embeddingModel?: string;
+    /** Vector dimensions (default: 1536) */
+    embeddingDimensions?: number;
   };
 }
 

@@ -76,6 +76,9 @@ export interface OrchestratedContext {
 
   // RAG: Knowledge collection name for retrieving relevant knowledge
   knowledgeCollection?: string;
+
+  // RAG: App identifier for auto-discovering knowledge collections
+  app?: string;
 }
 
 /**

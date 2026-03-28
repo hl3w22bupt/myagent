@@ -187,11 +187,50 @@ const results = await kb.retrieve(
 ]
 ```
 
+## 🌐 使用其他 OpenAI 兼容的 API
+
+KnowledgeBase 支持任何兼容 OpenAI API 格式的服务，只需配置 `baseURL` 和 `apiKey`。
+
+### 配置示例
+
+```typescript
+// 示例1：使用智谱AI
+knowledgeBase: {
+  apiKey: 'your_zhipu_api_key',
+  baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+  embeddingModel: 'embedding-3',
+  embeddingDimensions: 1024,
+}
+
+// 示例2：使用本地模型
+knowledgeBase: {
+  apiKey: 'dummy-key',
+  baseURL: 'http://localhost:8000/v1',
+  embeddingModel: 'local-model',
+  embeddingDimensions: 768,
+}
+
+// 示例3：使用其他兼容服务
+knowledgeBase: {
+  apiKey: 'your_key',
+  baseURL: 'https://your-api.com/v1',
+  embeddingModel: 'model-name',
+  embeddingDimensions: 1536,
+}
+```
+
+### 重要提示
+
+- **向量维度**：确保数据库表的向量维度与模型的维度一致
+- **模型名称**：使用API提供商指定的模型名称
+- **创建表**：根据维度创建表：`npm run setup:knowledge-base -- --execute --dimensions 1024`
+
 ## 🔧 环境变量
 
 | 变量 | 说明 | 必需 |
 |------|------|------|
-| `OPENAI_API_KEY` | OpenAI API 密钥（用于嵌入生成） | 是 |
+| `EMBEDDING_API_KEY` | Embedding API 密钥 | 是 |
+| `EMBEDDING_BASE_URL` | Embedding API 地址（可选，默认OpenAI） | 否 |
 | `PG_HOST` / `DB_HOST` | PostgreSQL 主机地址 | 否（默认：localhost） |
 | `PG_PORT` / `DB_PORT` | PostgreSQL 端口 | 否（默认：5432） |
 | `PG_DATABASE` / `DB_NAME` | 数据库名称 | 否（默认：myagent） |
