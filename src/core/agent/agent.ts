@@ -19,6 +19,7 @@ import { HITLState } from '../database/context-types';
 import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrator';
 import { DefaultContextOrchestrator } from '../context/default-orchestrator';
 import Handlebars from 'handlebars';
+import { KnowledgeBase } from '../knowledge/knowledge-base';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -53,6 +54,9 @@ export class Agent {
 
   // Emit function for event emission (from Motia step context)
   protected emit?: (event: { topic: string; data: any }) => Promise<void>;
+
+  // Knowledge base for RAG (optional, initialized if config provided)
+  protected knowledgeBase?: KnowledgeBase;
 
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
@@ -150,6 +154,16 @@ export class Agent {
     // Initialize PTC Generator with empty registry initially
     // Will be updated when skills are loaded
     this.ptcGenerator = new PTCGenerator(this.llm, []);
+
+    // Initialize Knowledge Base if config provided
+    if (config.knowledgeBase) {
+      this.knowledgeBase = new KnowledgeBase({
+        db: config.knowledgeBase.db,
+        openaiApiKey: config.knowledgeBase.openaiApiKey || process.env.OPENAI_API_KEY,
+        embeddingModel: config.knowledgeBase.embeddingModel,
+      });
+      console.log(`[Agent ${sessionId}] Knowledge Base initialized`);
+    }
   }
 
   /**
@@ -669,6 +683,50 @@ export class Agent {
               console.log('[Agent] Injecting recent skill executions into PTC generation', {
                 count: orchestratedContext.recentSkillExecutions.length,
               });
+            }
+
+            // ⭐ RAG: Retrieve relevant knowledge if KnowledgeBase available
+            if (this.knowledgeBase && orchestratedContext.knowledgeCollection) {
+              try {
+                const query = task || orchestratedContext.originalTask || '';
+
+                if (query.trim()) {
+                  console.log('[Agent] Retrieving knowledge from collection:', {
+                    tenantId: this.sessionId,
+                    collection: orchestratedContext.knowledgeCollection,
+                    query: query.substring(0, 100), // Log first 100 chars
+                  });
+
+                  const knowledgeEntries = await this.knowledgeBase.retrieve(
+                    this.sessionId,
+                    orchestratedContext.knowledgeCollection,
+                    query,
+                    {
+                      limit: 5,
+                      threshold: 0.7,
+                    }
+                  );
+
+                  if (knowledgeEntries.length > 0) {
+                    ptcOptions.knowledge = knowledgeEntries.map(entry => ({
+                      content: entry.content,
+                      metadata: entry.metadata,
+                      similarity: entry.similarity,
+                    }));
+
+                    console.log('[Agent] Retrieved relevant knowledge:', {
+                      count: knowledgeEntries.length,
+                      avgSimilarity: knowledgeEntries.reduce((sum, e) => sum + (e.similarity || 0), 0) / knowledgeEntries.length,
+                    });
+                  } else {
+                    console.log('[Agent] No relevant knowledge found');
+                  }
+                }
+              } catch (error) {
+                console.error('[Agent] Knowledge retrieval failed:', error);
+                // Continue without knowledge rather than failing
+                console.log('[Agent] Continuing without knowledge (fallback strategy)');
+              }
             }
 
             if (orchestratedContext.failureExperiences) {

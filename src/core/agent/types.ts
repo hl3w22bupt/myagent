@@ -59,6 +59,25 @@ export interface AgentConfig {
       isRetryable?: (error: Error) => boolean;
     };
   };
+
+  /** Knowledge Base configuration for RAG (Retrieval-Augmented Generation) */
+  knowledgeBase?: {
+    /** PostgreSQL connection configuration */
+    db: {
+      host?: string;
+      port?: number;
+      database?: string;
+      user?: string;
+      password?: string;
+      max?: number;
+      idleTimeoutMillis?: number;
+      connectionTimeoutMillis?: number;
+    };
+    /** OpenAI API key for embeddings */
+    openaiApiKey?: string;
+    /** Embedding model (default: 'text-embedding-3-small') */
+    embeddingModel?: string;
+  };
 }
 
 /**

@@ -672,7 +672,7 @@ CREATE UNIQUE INDEX idx_knowledge_unique
 
 ```typescript
 // src/core/knowledge/knowledge-base.ts
-import { Client, ClientConfig, QueryResult } from 'pg';
+import { Pool, PoolConfig, QueryResult } from 'pg';
 import { OpenAI } from 'openai';
 
 interface Knowledge {
@@ -692,22 +692,17 @@ interface KnowledgeInsert {
 }
 
 export class KnowledgeBase {
-  private db: Client;
+  private pool: Pool;
   private openai: OpenAI;
   private embeddingCache = new Map<string, number[]>();
 
-  constructor(config: { db: ClientConfig; openaiApiKey: string }) {
-    this.db = new Client(config.db);
+  constructor(config: { db: PoolConfig; openaiApiKey: string }) {
+    // ✅ 使用 Pool 连接池，避免连接泄漏
+    this.pool = new Pool(config.db);
     this.openai = new OpenAI({ apiKey: config.openaiApiKey });
   }
 
-  async connect(): Promise<void> {
-    await this.db.connect();
-  }
-
-  async disconnect(): Promise<void> {
-    await this.db.end();
-  }
+  // ✅ 移除 connect()/disconnect() - Pool 自动管理连接
 
   /**
    * 添加知识到集合
@@ -729,7 +724,8 @@ export class KnowledgeBase {
     const embeddings = await this.embedBatch(texts);
 
     // 3. 批量插入（使用事务）
-    const client = await this.db.connect();
+    // ✅ Pool 自动管理连接，无需手动 connect/release
+    const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
@@ -765,6 +761,7 @@ export class KnowledgeBase {
       await client.query('ROLLBACK');
       throw err;
     } finally {
+      // ✅ 释放连接回连接池
       client.release();
     }
 
@@ -786,34 +783,41 @@ export class KnowledgeBase {
     const queryEmbedding = await this.embedQuery(query);
 
     // 2. 向量搜索（余弦相似度）
-    const searchQuery = `
-      SELECT
-        id,
-        tenant_id AS "tenantId",
-        collection_name AS "collectionName",
-        content,
-        metadata,
-        embedding,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt",
-        1 - (embedding <=> $1::vector) AS similarity
-      FROM knowledge
-      WHERE tenant_id = $2
-        AND collection_name = $3
-        AND 1 - (embedding <=> $1::vector) > $4
-      ORDER BY embedding <=> $1::vector
-      LIMIT $5
-    `;
+    // ✅ Pool 自动管理连接
+    const client = await this.pool.connect();
+    try {
+      const searchQuery = `
+        SELECT
+          id,
+          tenant_id AS "tenantId",
+          collection_name AS "collectionName",
+          content,
+          metadata,
+          embedding,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          1 - (embedding <=> $1::vector) AS similarity
+        FROM knowledge
+        WHERE tenant_id = $2
+          AND collection_name = $3
+          AND 1 - (embedding <=> $1::vector) > $4
+        ORDER BY embedding <=> $1::vector
+        LIMIT $5
+      `;
 
-    const result = await this.db.query(searchQuery, [
-      JSON.stringify(queryEmbedding),
-      tenantId,
-      collectionName,
-      scoreThreshold,
-      topK,
-    ]);
+      const result = await client.query(searchQuery, [
+        JSON.stringify(queryEmbedding),
+        tenantId,
+        collectionName,
+        scoreThreshold,
+        topK,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } finally {
+      // ✅ 释放连接回连接池
+      client.release();
+    }
   }
 
   /**
@@ -885,11 +889,14 @@ const kb = new KnowledgeBase({
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    max: 20,              // 最大连接数
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
   },
   openaiApiKey: process.env.OPENAI_API_KEY,
 });
 
-await kb.connect();
+// ✅ Pool 自动管理连接，无需手动 connect()
 ```
 
 **添加知识：**
@@ -984,60 +991,295 @@ pg_stat_user_indexes.idx_scan WHERE indexname LIKE '%embedding%'
 
 ---
 
+### 2.7 最小可行版本测试计划 ✅
+
+**测试目标**：验证 KnowledgeBase 核心功能和基本集成
+
+**测试文件清单**：
+
+```
+src/core/knowledge/
+├── knowledge-base.spec.ts        # 单元测试
+└── __mocks__/
+    └── openai.mock.ts          # OpenAI API mock
+
+tests/integration/
+└── knowledge-integration.spec.ts  # 集成测试
+```
+
+#### 单元测试（knowledge-base.spec.ts）
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { KnowledgeBase } from '../knowledge-base';
+import { Pool } from 'pg';
+
+describe('KnowledgeBase (MVP)', () => {
+  let kb: KnowledgeBase;
+  let pool: Pool;
+
+  beforeEach(async () => {
+    // 使用测试数据库
+    pool = new Pool({
+      host: 'localhost',
+      port: 5432,
+      database: 'myagent_test',
+      user: 'test',
+      password: 'test',
+    });
+
+    kb = new KnowledgeBase({
+      db: {
+        host: 'localhost',
+        port: 5432,
+        database: 'myagent_test',
+        user: 'test',
+        password: 'test',
+        max: 5,
+      },
+      openaiApiKey: process.env.OPENAI_API_KEY,
+    });
+
+    // 清理测试表
+    await pool.query('DELETE FROM knowledge WHERE tenant_id = $1', ['test-tenant']);
+  });
+
+  afterEach(async () => {
+    await pool.end();
+  });
+
+  describe('addKnowledge()', () => {
+    it('should add knowledge successfully', async () => {
+      const result = await kb.addKnowledge('test-tenant', 'test-collection', [
+        { content: 'Test knowledge' },
+      ]);
+
+      expect(result.inserted).toBe(1);
+      expect(result.failed).toBe(0);
+    });
+
+    it('should validate collection name', async () => {
+      await expect(
+        kb.addKnowledge('test-tenant', 'invalid/collection', [{ content: 'Test' }])
+      ).rejects.toThrow('Invalid collection name');
+    });
+
+    it('should sanitize content', async () => {
+      const result = await kb.addKnowledge('test-tenant', 'test-collection', [
+        { content: '<script>alert("xss")</script>' },
+      ]);
+
+      const inserted = await pool.query(
+        'SELECT content FROM knowledge WHERE tenant_id = $1 AND collection_name = $2',
+        ['test-tenant', 'test-collection']
+      );
+
+      expect(inserted.rows[0].content).not.toContain('<script>');
+    });
+  });
+
+  describe('retrieve()', () => {
+    beforeEach(async () => {
+      // 插入测试数据
+      await kb.addKnowledge('test-tenant', 'test-collection', [
+        { content: 'AI platform for developers' },
+        { content: 'Motia is an event-driven framework' },
+      ]);
+    });
+
+    it('should retrieve relevant knowledge', async () => {
+      const results = await kb.retrieve('test-tenant', 'test-collection', 'What is Motia?');
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].content).toContain('Motia');
+      expect(results[0].similarity).toBeDefined();
+    });
+
+    it('should filter by similarity threshold', async () => {
+      const results = await kb.retrieve('test-tenant', 'test-collection', 'What is Motia?', {
+        scoreThreshold: 0.9,  // 高阈值
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should limit results by topK', async () => {
+      const results = await kb.retrieve('test-tenant', 'test-collection', 'What is Motia?', {
+        topK: 1,
+      });
+
+      expect(results.length).toBe(1);
+    });
+  });
+
+  describe('embedQuery()', () => {
+    it('should cache embeddings', async () => {
+      const query1 = await kb['embedQuery']('test query');
+      const query2 = await kb['embedQuery']('test query');
+
+      // 验证缓存命中（可以通过 spy 或检查 API 调用次数）
+      expect(query1).toEqual(query2);
+    });
+  });
+});
+```
+
+#### 集成测试（knowledge-integration.spec.ts）
+
+```typescript
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { Agent } from '../../core/agent/agent';
+import { KnowledgeBase } from '../../core/knowledge/knowledge-base';
+import { Pool } from 'pg';
+
+describe('Agent + KnowledgeBase Integration (MVP)', () => {
+  let agent: Agent;
+  let kb: KnowledgeBase;
+  let pool: Pool;
+
+  beforeAll(async () => {
+    // 初始化知识库
+    pool = new Pool({ /* test config */ });
+    kb = new KnowledgeBase({ /* config */ });
+
+    // 添加测试知识
+    await kb.addKnowledge('test-tenant', 'dev-platform', [
+      { content: 'MyAgent 是一个分布式 AI Agent 平台' },
+    ]);
+
+    // 初始化 Agent
+    agent = new Agent({
+      agentId: 'test-agent',
+      systemPrompt: 'You are a helpful assistant.',
+      sandbox: { local: { type: 'local', rootDir: '/tmp/sandbox' } },
+    }, 'test-session');
+  });
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  it('should inject knowledge into Agent execution', async () => {
+    const result = await agent.run('什么是 MyAgent？', 'test-task', {
+      knowledgeCollection: 'dev-platform',
+    });
+
+    // 验证知识被使用（检查输出或日志）
+    expect(result.output).toBeDefined();
+    // TODO: 验证知识内容是否在输出中
+  });
+
+  it('should fallback gracefully when knowledge unavailable', async () => {
+    const result = await agent.run('Test task', 'test-task', {
+      knowledgeCollection: 'non-existent',
+    });
+
+    // 验证降级：Agent 仍然执行，不崩溃
+    expect(result.output).toBeDefined();
+  });
+});
+```
+
+**测试覆盖率目标**：
+- 单元测试：80%+ coverage（核心路径）
+- 集成测试：关键流程覆盖（知识注入 + 降级）
+
+---
+
 ## 3. 实施路线图
 
-### Phase 1: 核心能力（3周，调整后）
+### Phase 1: 最小可行版本（1周）
+
+**目标**：验证知识库管理技术可行性
 
 ```
-Week 1: 基础设施 + KnowledgeBase 类
-├── ✅ 向量数据库决策：**pgvector**（已选）
-│   ├── 决策依据：复用现有 PostgreSQL，降低运维复杂度
-│   ├── 安装：PostgreSQL 扩展 `CREATE EXTENSION vector;`
-│   ├── Node.js：`npm install pg`
-│   └── 详见下方「向量数据库配置」
-├── 集成向量数据库
-│   ├── 创建知识表（向量列 + 元数据）
-│   ├── 建立向量索引（IVFFlat 或 HNSW）
-│   └── 连接池配置
-├── 实现 KnowledgeBase 类
-│   ├── retrieve() - 向量检索 + 错误处理 + 重试逻辑
-│   ├── addKnowledge() - 批量插入 + 幂等性保证
-│   ├── embedQuery() - 向量化 + 缓存
-│   └── 安全防护（注入过滤、ACL 验证）
-└── 单元测试
+Day 1-2: 基础设施搭建
+├── 安装 pgvector 扩展
+│   ├── PostgreSQL: CREATE EXTENSION vector;
+│   └── 验证安装
+├── 创建知识表
+│   ├── knowledge 表（含向量列）
+│   └── 向量索引（IVFFlat）
+└── 单元测试框架搭建
 
-Week 2: Agent 集成 + 安全加固
+Day 3-4: KnowledgeBase 类实现
+├── 核心方法实现
+│   ├── addKnowledge() - 批量插入 + 基本错误处理
+│   ├── retrieve() - 向量检索 + 降级策略
+│   ├── embedQuery() - 向量化 + LRU 缓存
+│   └── sanitizeContent() - 内容净化
+├── 单元测试
+│   ├── Happy path 测试
+│   ├── 错误路径测试
+│   └── 边缘情况测试
+└── 基本集成测试
+
+Day 5: Agent 集成
 ├── 在 Agent.run() 中集成 RAG 检索
-│   ├── 自动检索知识
+│   ├── 检查 context.knowledgeCollection
+│   ├── 调用 knowledgeBase.retrieve()
 │   ├── 注入知识到 prompt
-│   ├── 降级策略（无知识模式）
-│   └── 边缘情况处理（collection 不存在、Prompt 太长）
-├── 安全加固
-│   ├── Collection 隔离（tenantId 命名空间）
-│   ├── ACL 验证
-│   ├── 内容净化（XSS/注入过滤）
-│   └── 速率限制（防 DoS）
-└── 集成测试 + 安全测试
+│   └── 降级策略（知识不可用时）
+├── 集成测试
+└── 文档
+    ├── API 使用说明
+    └── 部署指南
 
-Week 3: 性能优化 + 测试验证
-├── 性能优化
-│   ├── 添加缓存（LRU cache, TTL=5min）
-│   ├── 批量检索优化
-│   ├── 异步预取（predictive prefetch）
-│   └── 并行化（RAG 检索与 LLM 生成 pipeline）
-├── 性能测试
-│   ├── 建立性能基准（p99 < 200ms）
-│   ├── 压力测试（1000 并发）
-│   └── 性能回归检测
-├── 故障注入测试
-│   ├── DB 连接丢失
-│   ├── DB 超时
-│   └── 网络分区
-└── 文档 + 部署准备
-    ├── API 文档
-    ├── 部署指南
-    └── 监控配置
+Day 6-7: 测试验证
+├── 运行完整测试套件
+├── 修复发现的问题
+├── 性能基准测试（p99 < 500ms 可接受）
+└── 提交 PR + 代码审查
 ```
+
+**关键成功指标**：
+- ✅ KnowledgeBase 类可以添加和检索知识
+- ✅ Agent 可以在执行时自动检索并注入知识
+- ✅ 知识不可用时 Agent 降级执行（不崩溃）
+- ✅ 单元测试覆盖率 > 80%
+
+**不包含的功能（后续迭代）**：
+- ⏳ 完整的安全加固（ACL、速率限制）
+- ⏳ 性能优化（批量检索、异步预取）
+- ⏳ 故障注入测试
+- ⏳ 输出验证器（ValidationHook）
+- ⏳ 人工干预机制（InterventionHook）
+
+---
+
+### Phase 2: 增强功能（按需迭代）
+
+**2.1 安全加固**（1-2 天）
+- Collection 隔离（tenantId 命名空间）
+- ACL 验证
+- 内容净化增强
+- 速率限制（防 DoS）
+
+**2.2 性能优化**（2-3 天）
+- 添加 LRU 缓存（TTL=5min）
+- 批量检索优化
+- 性能基准测试（p99 < 200ms）
+
+**2.3 输出验证器**（2-3 天）
+- 实现 ValidationHook
+- SchemaValidator
+- CompletenessValidator
+
+**2.4 人工干预机制**（3-5 天）
+- 实现 InterventionHook
+- API 端点
+- Workflow 集成
+
+---
+
+### Phase 3: 高级功能（按需）
+
+**并行委派**（3-5 天）
+- MasterAgent 扩展支持多 subagent 并行
+
+**自定义融合策略**（2-3 天）
+- CustomFusionHook
+- 自定义融合逻辑
 
 **时间调整说明**:
 - 原估算：2 周 → 调整为：**3 周**

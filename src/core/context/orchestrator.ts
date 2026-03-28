@@ -73,6 +73,9 @@ export interface OrchestratedContext {
 
   // 新增：失败经验（用于 LLM 决策）
   failureExperiences?: FailureExperience[];
+
+  // RAG: Knowledge collection name for retrieving relevant knowledge
+  knowledgeCollection?: string;
 }
 
 /**
