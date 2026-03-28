@@ -21,12 +21,13 @@ import {
 } from '../errors/knowledge-errors.js';
 
 export class LanceDBVectorStore implements IVectorStore {
-  private db: lance.Connection;
+  private db!: lance.Connection;
   private openai: OpenAI;
   private embeddingCache: LRUCache<string, number[]>;
   private readonly embeddingModel: string;
   private readonly embeddingDimensions: number;
   private readonly CONNECTION_TIMEOUT = 30000;
+  private connectionInitialized = false;
 
   private readonly COLLECTION_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
   private readonly MAX_CONTENT_LENGTH = 100000;
@@ -61,8 +62,7 @@ export class LanceDBVectorStore implements IVectorStore {
     } catch (error) {
       throw new ConnectionError(
         `Failed to connect to LanceDB at ${this.config.connection.uri}: ${(error as Error).message}`,
-        'lancedb',
-        { cause: error }
+        'lancedb'
       );
     }
   }
@@ -81,6 +81,8 @@ export class LanceDBVectorStore implements IVectorStore {
     if (!sanitizedContent || sanitizedContent.trim().length === 0) {
       throw new ValidationError('Content cannot be empty');
     }
+
+    await this.ensureConnection();
 
     try {
       const table = await this.openOrCreateTable(collectionName);
@@ -101,8 +103,7 @@ export class LanceDBVectorStore implements IVectorStore {
       return id;
     } catch (error) {
       throw new KnowledgeInsertError(
-        `Failed to add knowledge to collection ${collectionName}: ${(error as Error).message}`,
-        { cause: error }
+        `Failed to add knowledge to collection ${collectionName}: ${(error as Error).message}`
       );
     }
   }
@@ -115,6 +116,8 @@ export class LanceDBVectorStore implements IVectorStore {
     if (!this.COLLECTION_NAME_REGEX.test(collectionName)) {
       throw new ValidationError(`Invalid collection name: ${collectionName}`);
     }
+
+    await this.ensureConnection();
 
     try {
       const table = await this.openOrCreateTable(collectionName);
@@ -143,8 +146,7 @@ export class LanceDBVectorStore implements IVectorStore {
       return ids;
     } catch (error) {
       throw new KnowledgeInsertError(
-        `Failed to add batch knowledge to collection ${collectionName}: ${(error as Error).message}`,
-        { cause: error }
+        `Failed to add batch knowledge to collection ${collectionName}: ${(error as Error).message}`
       );
     }
   }
@@ -163,6 +165,8 @@ export class LanceDBVectorStore implements IVectorStore {
       throw new ValidationError('Query cannot be empty');
     }
 
+    await this.ensureConnection();
+
     try {
       const table = await this.db.openTable(collectionName);
       if (!table) return [];
@@ -171,24 +175,24 @@ export class LanceDBVectorStore implements IVectorStore {
       const limit = options.limit || 5;
       const threshold = options.threshold || 0.7;
 
-      const results = await table
-        .search(queryEmbedding)
-        .limit(limit)
-        .where(`tenantId = '${tenantId}'`)
-        .execute();
+      // LanceDB search returns results directly
+      const results = await table.search(queryEmbedding).limit(limit * 2).toArray();
 
+      // Post-filter results by tenantId and threshold
       return results
+        .filter((r: any) => r.tenantId === tenantId)
         .map((r: any) => ({
           id: r.id,
           tenantId: r.tenantId,
           collectionName,
           content: r.content,
           metadata: r.metadata || {},
-          similarity: 1 - r._distance,
+          similarity: 1 - (r._distance || 0),
           createdAt: new Date(r.createdAt),
           updatedAt: new Date(r.updatedAt),
         }))
-        .filter(r => (r.similarity || 0) >= threshold);
+        .filter((r: any) => (r.similarity || 0) >= threshold)
+        .slice(0, limit);
     } catch (error) {
       console.error(`LanceDB retrieval error for collection ${collectionName}:`, error);
       return [];
@@ -197,6 +201,7 @@ export class LanceDBVectorStore implements IVectorStore {
 
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
+      await this.ensureConnection();
       const tables = await this.db.tableNames();
       return { healthy: true };
     } catch (error) {
@@ -206,14 +211,23 @@ export class LanceDBVectorStore implements IVectorStore {
 
   async close(): Promise<void> {
     this.embeddingCache.clear();
-    await this.db.close();
+    if (this.connectionInitialized) {
+      await this.db.close();
+    }
+  }
+
+  private async ensureConnection(): Promise<void> {
+    if (!this.connectionInitialized) {
+      await this.initializeConnection();
+      this.connectionInitialized = true;
+    }
   }
 
   private async openOrCreateTable(name: string) {
     try {
       return await this.db.openTable(name);
     } catch {
-      return await this.db.createTable(name, [
+      const schema = [
         { name: 'id', type: 'string' },
         { name: 'tenantId', type: 'string' },
         { name: 'content', type: 'string' },
@@ -221,7 +235,9 @@ export class LanceDBVectorStore implements IVectorStore {
         { name: 'vector', type: 'vector', dimension: this.embeddingDimensions },
         { name: 'createdAt', type: 'string' },
         { name: 'updatedAt', type: 'string' },
-      ]);
+      ];
+
+      return await this.db.createTable(name, schema);
     }
   }
 
@@ -232,7 +248,7 @@ export class LanceDBVectorStore implements IVectorStore {
     const cached = this.embeddingCache.get(text);
     if (cached) return cached;
 
-    let lastError: Error;
+    let lastError: Error | undefined;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const response = await this.openai.embeddings.create({
@@ -252,8 +268,7 @@ export class LanceDBVectorStore implements IVectorStore {
     }
 
     throw new EmbeddingGenerationError(
-      `Failed to generate embedding after ${maxRetries} attempts: ${lastError.message}`,
-      { cause: lastError }
+      `Failed to generate embedding after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
     );
   }
 

@@ -97,7 +97,7 @@ export class PostgresVectorStore implements IVectorStore {
       return result.rows[0].id;
     } catch (err) {
       await client.query('ROLLBACK');
-      throw new KnowledgeInsertError(`Failed to add knowledge: ${(err as Error).message}`, { cause: err });
+      throw new KnowledgeInsertError(`Failed to add knowledge: ${(err as Error).message}`);
     } finally {
       client.release();
     }
@@ -138,7 +138,7 @@ export class PostgresVectorStore implements IVectorStore {
       return ids;
     } catch (err) {
       await client.query('ROLLBACK');
-      throw new KnowledgeInsertError(`Failed to add batch knowledge: ${(err as Error).message}`, { cause: err });
+      throw new KnowledgeInsertError(`Failed to add batch knowledge: ${(err as Error).message}`);
     } finally {
       client.release();
     }
@@ -213,7 +213,7 @@ export class PostgresVectorStore implements IVectorStore {
     const cached = this.embeddingCache.get(text);
     if (cached) return cached;
 
-    let lastError: Error;
+    let lastError: Error | undefined;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const response = await this.openai.embeddings.create({
@@ -233,8 +233,7 @@ export class PostgresVectorStore implements IVectorStore {
     }
 
     throw new EmbeddingGenerationError(
-      `Failed to generate embedding after ${maxRetries} attempts: ${lastError.message}`,
-      { cause: lastError }
+      `Failed to generate embedding after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
     );
   }
 

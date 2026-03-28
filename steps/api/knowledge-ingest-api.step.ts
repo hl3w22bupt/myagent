@@ -18,7 +18,7 @@ export const bodySchema = z.object({
   tenantId: z.string().default('default'),
   collectionName: z.string(),
   content: z.string(),
-  metadata: z.record(z.any()).optional().default({}),
+  metadata: z.record(z.string(), z.any()).optional().default({}),
 });
 
 export const config: ApiRouteConfig = {
@@ -57,7 +57,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
     throw new Error(`Embedding API error: ${error}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { data: Array<{ embedding: number[] }> };
   return data.data[0].embedding;
 }
 

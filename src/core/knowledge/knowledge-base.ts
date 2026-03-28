@@ -5,7 +5,6 @@
  * This file is kept for backward compatibility.
  */
 
-import { PostgresVectorStore } from './adapters/postgres-adapter.js';
 import type { PostgresConfig } from './interfaces/adapter-config.interface.js';
 
 // Re-export for backward compatibility
@@ -21,10 +20,12 @@ export interface KnowledgeBaseConfig {
   cacheTtl?: number;
 }
 
-// Backward compatible wrapper
-export class KnowledgeBase extends PostgresVectorStore {
+// Backward compatible wrapper using dynamic import
+export class KnowledgeBase {
+  private adapter: any;
+
   constructor(config: KnowledgeBaseConfig) {
-    // Convert old config format to new format
+    // Store config for later use
     const postgresConfig: PostgresConfig = {
       type: 'postgres-pgvector',
       embedding: {
@@ -43,6 +44,34 @@ export class KnowledgeBase extends PostgresVectorStore {
       },
     };
 
-    super(postgresConfig);
+    // Store config for lazy loading
+    this.config = postgresConfig;
+  }
+
+  private config: PostgresConfig;
+  private _adapter: any = null;
+
+  private async getAdapter() {
+    if (!this._adapter) {
+      const { PostgresVectorStore } = await import('./adapters/postgres-adapter.js');
+      this._adapter = new PostgresVectorStore(this.config);
+    }
+    return this._adapter;
+  }
+
+  async addKnowledge(tenantId: string, collectionName: string, content: string, metadata?: Record<string, any>): Promise<number> {
+    const adapter = await this.getAdapter();
+    return adapter.addKnowledge(tenantId, collectionName, content, metadata);
+  }
+
+  async retrieve(tenantId: string, collectionName: string, query: string, options?: any): Promise<any> {
+    const adapter = await this.getAdapter();
+    return adapter.retrieve(tenantId, collectionName, query, options);
+  }
+
+  async close(): Promise<void> {
+    if (this._adapter) {
+      return this._adapter.close();
+    }
   }
 }

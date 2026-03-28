@@ -4,8 +4,8 @@
  */
 
 export class KnowledgeBaseError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(message: string) {
+    super(message);
     this.name = 'KnowledgeBaseError';
   }
 }
@@ -18,29 +18,29 @@ export class ValidationError extends KnowledgeBaseError {
 }
 
 export class ConnectionError extends KnowledgeBaseError {
-  constructor(message: string, public readonly dataSourceType: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(message: string, public readonly dataSourceType: string) {
+    super(message);
     this.name = 'ConnectionError';
   }
 }
 
 export class KnowledgeInsertError extends KnowledgeBaseError {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(message: string, public readonly cause?: Error) {
+    super(message);
     this.name = 'KnowledgeInsertError';
   }
 }
 
 export class EmbeddingGenerationError extends KnowledgeBaseError {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(message: string, public readonly cause?: Error) {
+    super(message);
     this.name = 'EmbeddingGenerationError';
   }
 }
 
 export class RetrievalError extends KnowledgeBaseError {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(message: string, public readonly cause?: Error) {
+    super(message);
     this.name = 'RetrievalError';
   }
 }
