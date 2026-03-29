@@ -1,118 +1,202 @@
 # Motia Project Guide for Claude Code & Claude AI
 
-This project uses **Motia** - a framework for building event-driven, type-safe backend systems.
-
-## 📚 Important: Read the Comprehensive Guides
-
-This project has detailed development guides in **`.cursor/rules/`** directory. These markdown files (`.mdc`) contain complete patterns, examples, and type definitions.
-
-**Before writing any Motia code, read the relevant guides from `.cursor/rules/`**
-
-### For Claude Code Users
-
-**A pre-configured subagent is ready!**
-
-The `motia-developer` subagent in `.claude/agents/` automatically references all 11 cursor rules when coding.
-
-Use it: `/agents` → select `motia-developer`
-
-Learn more: [Claude Code Subagents Docs](https://docs.claude.com/en/docs/claude-code/sub-agents)
-
-### For Claude AI Assistant (Chat)
-
-Explicitly reference cursor rules in your prompts:
-
-```
-Read .cursor/rules/motia/api-steps.mdc and create an API endpoint
-for user registration following the patterns shown.
-```
-
-## Available Guides (11 Comprehensive Files)
-
-All guides in `.cursor/rules/` with **TypeScript, JavaScript, and Python** examples:
-
-**Configuration** (`.cursor/rules/motia/`):
-
-- `motia-config.mdc` - Essential project setup, package.json requirements, plugin naming
-
-**Step Types** (`.cursor/rules/motia/`):
-
-- `api-steps.mdc`, `event-steps.mdc`, `cron-steps.mdc`
-
-**Features** (`.cursor/rules/motia/`):
-
-- `state-management.mdc`, `middlewares.mdc`, `realtime-streaming.mdc`
-- `virtual-steps.mdc`, `ui-steps.mdc`
-
-**Architecture** (`.cursor/architecture/`):
-
-- `architecture.mdc`, `error-handling.mdc`
-
-## Quick Reference
-
-See `AGENTS.md` in this directory for a quick overview and links to specific guides.
-
-**Important**: Motia discovers steps from both `/src` and `/steps` folders. Modern projects use `/src` for a familiar structure.
-
-## Key Commands
-
-```bash
-npm run dev              # Start development server (with hot reload)
-npm run start            # Start production server (without hot reload)
-npx motia generate-types # Regenerate TypeScript types
-```
+> **Project**: Distributed AI Agent System (4-Layer Architecture)
+> **Tech Stack**: TypeScript + PostgreSQL + Motia
 
 ---
 
-**Remember**: The `.cursor/rules/` directory is your primary reference. Read the relevant guide before implementing any Motia pattern.
+## 🎯 Project Overview
 
-## Skill & Tool Execution History System
+**What it is**: Distributed Agent system for task orchestration and execution
+**Core capabilities**: PTC code generation, multi-turn conversations, context management, real-time streaming
 
-The system tracks all skill and tool executions to help the Agent learn from past executions and make better decisions.
+## 📚 Quick Links
 
-### Features
+**Development Guides**:
+- `.cursor/rules/motia/` - Motia best practices (11 detailed guides)
+- `TESTING_WORKFLOW.md` - Complete testing flow
+- `API_REFERENCE.md` - All API endpoints
+- `docs/AGENT_PLATFORM_ARCHITECTURE.md` - Full architecture
 
-1. **Execution History Tracking**
-   - Records all skill executions (success + failure)
-   - Records all tool usage (success + failure)
-   - Stores in TaskContext with retention policies (200 skills, 500 tools)
+**For Claude Code**: Use `/agents` → `myagent-developer` subagent (auto-loads cursor rules)
 
-2. **Failure Experience Extraction**
-   - Automatically extracts lessons from failed executions
-   - Stores in TaskContext.summary.errorsAndSolutions
-   - Retrieval based on keyword matching and frequency
+## 🚀 Quick Start
 
-3. **LLM Prompt Injection**
-   - Recent executions shown to Agent before code generation
-   - Failure experiences injected to help avoid repeating mistakes
-   - Helps Agent make better decisions based on past context
-
-### Configuration
-
-**Environment Variables:**
 ```bash
-# Context API URL for execution history tracking
-MOTIA_CONTEXT_API_URL=http://localhost:3000/api/context
-
-# Enable/disable features (via orchestrator config)
-enableRecentSkillExecutions=true
-enableFailureExperiences=true
+npm install               # Dependencies
+npm run generate-types    # Generate Motia types
+npm run start            # Start server (port 3000) - Recommended
 ```
 
-**Retention Policies:**
-- Skill executions: 200 records (FIFO)
-- Tool usage: 500 records (FIFO)
-- Failure experiences: 100 records (FIFO)
+**Service Management**:
+```bash
+# 后端服务（端口 3000）- 推荐使用生产模式
+npm run start            # Start production mode (recommended)
+npm run dev              # Start dev mode (hot reload, slower)
 
-### API Endpoints
+# 前端服务（端口 5173）
+cd motia-frontend && npm run dev
 
-- `POST /api/context/skill-execution` - Receive skill execution records
-- `POST /api/context/tool-usage` - Receive tool usage records
-- `POST /api/context/failure-experience` - Receive failure experiences
+# 停止服务
+pkill -f "motia start"   # Stop backend
+pkill -f "vite"          # Stop frontend
+```
 
-### Monitoring
+**After code changes**:
+```bash
+npm run build            # TypeScript changes
+npm run generate-types   # Motia config changes
+```
 
-The system logs all executions and failures:
-- `[ContextHook] ✓/✗ Skill execution recorded: {skillName} ({duration}ms)`
-- `[ContextHook] ✓ Failure experience collected: {skillName}`
-- `[Agent] Injecting recent skill executions into PTC generation`
+## 🤖 Test API (Most Used)
+
+```bash
+# 1. Submit task
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"task": "搜索AI最新进展", "sessionId": "test-123"}'
+
+# 2. Check context
+curl http://localhost:3000/api/contexts/{taskId}
+
+# 3. Check output
+curl http://localhost:3000/api/contexts/outputs/{taskId}
+
+# 4. Health check
+curl http://localhost:3000/health
+```
+
+**Full testing flow**: See `TESTING_WORKFLOW.md`
+
+## 🏗️ Architecture (4 Layers)
+
+```
+Layer 1: Motia Integration (event-driven)
+   ↓
+Layer 2: Agent Orchestration (Agent/MasterAgent, PTC)
+   ↓
+Layer 3: Sandbox Execution (Python process isolation)
+   ↓
+Layer 4: Skill Abstraction (reusable capabilities)
+```
+
+**Key Concepts**:
+- **Session**: Multi-turn conversation, 30min timeout
+- **Task**: Single task, inherits session context
+- **AgentManager**: Session management (one Agent per sessionId)
+- **Hook System**: AgentHook, TaskHook, SkillHook (lifecycle extension)
+- **Context Compression**: Auto-compress after 20 messages
+
+## ⚠️ Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| Module not found | `npm run generate-types` |
+| Column "user_id" missing | `npm run db:reset` |
+| Creating new session every time | Ensure `sessionId` is passed |
+| LLM timeout | Increase timeout in `src/index.ts` |
+
+## 📦 Key Files
+
+```
+steps/agents/              # Agent endpoints
+├── agent-api.step.ts      # /agent/execute
+└── master-agent.step.ts   # MasterAgent event handling
+
+src/core/
+├── agent/                 # Agent core
+│   ├── agent.ts           # Agent base class
+│   ├── manager.ts         # AgentManager
+│   └── ptc-generator.ts   # PTC generation
+├── sandbox/               # Sandbox execution
+├── database/              # Data persistence
+└── context/               # Context management
+```
+
+## 🔧 Available Subagents
+
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| **myagent-developer** | Code development | Write Motia Steps, Agent logic, Skills |
+| **myagent-test-loop** | Automated testing | Verify features, test loops, debug failures |
+
+**Details**: `.claude/agents/myagent-*-*.md`
+
+## 📝 Task Submission (with Knowledge Base)
+
+**Using `/agent/execute` endpoint with knowledge collection**:
+
+```bash
+curl -X POST http://localhost:3000/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Python有什么特点？",
+    "sessionId": "test-session",
+    "environment": {
+      "knowledgeCollection": "python-docs"
+    }
+  }'
+```
+
+**The `knowledgeCollection` in `environment` triggers RAG retrieval.**
+
+## 🎓 Learning Path
+
+**Newcomers**:
+1. Read `TESTING_WORKFLOW.md`
+2. Use `myagent-test-loop` for testing
+
+**Developers**:
+1. Read `docs/AGENT_PLATFORM_ARCHITECTURE.md`
+2. Read `.cursor/rules/motia/*.mdc`
+3. Use `myagent-developer` for coding
+
+**Debugging**:
+1. Read `docs/SYSTEM_CONCEPTS_OVERVIEW.md`
+2. Check logs: `tail -f .motia/logs/motia.log`
+3. Use Context API for task analysis
+
+## 💡 Knowledge Base (RAG)
+
+**Configuration**:
+```typescript
+knowledgeBase: {
+  db: { /* PostgreSQL config */ },
+  apiKey: 'your-api-key',
+  baseURL: 'https://...',  // Optional: for OpenAI-compatible APIs
+  embeddingModel: 'text-embedding-3-small',
+  embeddingDimensions: 1536,
+}
+```
+
+**Supported APIs**:
+- OpenAI (default)
+- Any OpenAI-compatible API (set `baseURL` and `apiKey`)
+
+**Setup**:
+```bash
+# Create knowledge table
+npm run setup:knowledge-base -- --execute --dimensions 1536
+
+# For different dimensions (e.g., Zhipu AI: 1024)
+npm run setup:knowledge-base -- --execute --dimensions 1024
+```
+
+**Documentation**: `docs/KNOWLEDGE_BASE_GUIDE.md`
+
+## ⚡ Motia Development
+
+**Comprehensive guides in `.cursor/rules/motia/`**:
+- Configuration, API/Event/Cron steps
+- State management, middlewares, streaming
+- Virtual steps, UI steps
+- Architecture, error handling
+
+**Before writing Motia code**, read the relevant guide from `.cursor/rules/`.
+
+---
+
+**Remember**:
+- The `.cursor/rules/` directory is your primary Motia reference
+- AGENTS.md (this file) is now merged into CLAUDE.md for auto-injection
+- See `docs/` for detailed architecture documentation

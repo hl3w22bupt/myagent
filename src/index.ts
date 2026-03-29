@@ -109,6 +109,19 @@ export function getAgentManager(): AgentManager {
       model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
       apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
     },
+    // Knowledge Base configuration for RAG (enabled by default if DB is configured)
+    knowledgeBase: process.env.KNOWLEDGE_BASE_ENABLED !== 'false' ? {
+      db: {
+        host: process.env.PG_HOST || process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.PG_PORT || process.env.DB_PORT || '5432'),
+        database: process.env.PG_DATABASE || process.env.DB_NAME || 'myagent',
+        user: process.env.PG_USER || process.env.DB_USER || 'leo',
+      },
+      apiKey: process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || '',
+      baseURL: process.env.OPENAI_BASE_URL || undefined,
+      embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      embeddingDimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1536'),
+    } : undefined,
     // Don't restrict availableSkills - let all discovered skills be available
     // This allows users to explicitly request skills via task instructions
     // (undefined = all skills available)

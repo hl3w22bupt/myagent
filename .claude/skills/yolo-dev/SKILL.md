@@ -59,7 +59,7 @@ description: 'YOLO 全自动开发模式 - 自动开发、重启服务、真实�
 - 🔧 运行构建命令
 - ❌ 不会询问用户确认
 
-使用 `motia-developer` 子代理进行开发：
+使用 `myagent-developer` 子代理进行开发：
 - 严格遵循 `.cursor/rules/motia/` 中的所有指南。
 - 所有变更自动提交
 - 不会打断流程询问用户
@@ -351,7 +351,7 @@ if [ "$ALL_E2E_PASSED" = false ]; then
 
   # 自动修复代码
   echo "🔧 开始自动修复 E2E 问题..."
-  echo "请使用 motia-developer agent 分析并修复失败的 E2E 测试..."
+  echo "请使用 myagent-developer agent 分析并修复失败的 E2E 测试..."
 
   # 这里应该启动修复流程
   # 修复后继续循环，重新测试

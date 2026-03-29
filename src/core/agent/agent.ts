@@ -19,6 +19,8 @@ import { HITLState } from '../database/context-types';
 import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrator';
 import { DefaultContextOrchestrator } from '../context/default-orchestrator';
 import Handlebars from 'handlebars';
+import { KnowledgeBase } from '../knowledge/knowledge-base';
+import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -53,6 +55,9 @@ export class Agent {
 
   // Emit function for event emission (from Motia step context)
   protected emit?: (event: { topic: string; data: any }) => Promise<void>;
+
+  // Knowledge base for RAG (optional, initialized if config provided)
+  protected knowledgeBase?: KnowledgeBase;
 
   constructor(config: AgentConfig, sessionId: string) {
     this.config = config;
@@ -150,6 +155,18 @@ export class Agent {
     // Initialize PTC Generator with empty registry initially
     // Will be updated when skills are loaded
     this.ptcGenerator = new PTCGenerator(this.llm, []);
+
+    // Initialize Knowledge Base if config provided
+    if (config.knowledgeBase) {
+      this.knowledgeBase = new KnowledgeBase({
+        db: config.knowledgeBase.db,
+        apiKey: config.knowledgeBase.apiKey || process.env.OPENAI_API_KEY || '',
+        baseURL: config.knowledgeBase.baseURL,
+        embeddingModel: config.knowledgeBase.embeddingModel,
+        embeddingDimensions: config.knowledgeBase.embeddingDimensions,
+      });
+      console.log(`[Agent ${sessionId}] Knowledge Base initialized`);
+    }
   }
 
   /**
@@ -462,8 +479,20 @@ export class Agent {
           metadata: { task },
         });
 
+        // ⭐ Use orchestrator to get context (for knowledge base support)
+        const orchestratedContext: OrchestratedContext = await this.orchestrator.getContext(context || {}, this.state);
+
         // 简化：在对话模式下，使用 conversationHistory 构建对话上下文
         const userContent = this.buildConversationPrompt(context, task);
+
+        // ⭐ RAG: Retrieve relevant knowledge for conversational agent
+        const query = task || orchestratedContext.originalTask || '';
+        const { entries: _knowledgeEntries, context: knowledgeContext } = await this.retrieveKnowledgeForQuery(
+          taskId || 'unknown',
+          query,
+          orchestratedContext,
+          'conversational agent'
+        );
 
         // DEBUG: Log conversationHistory usage
         console.log('[DEBUG] Agent using conversationHistory:', {
@@ -478,9 +507,14 @@ export class Agent {
         // ⭐ Inject user profile into system prompt for personalization
         const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(context);
 
+        // Append knowledge context to user message
+        const enhancedUserContent = knowledgeContext
+          ? `${userContent}${knowledgeContext}`
+          : userContent;
+
         const messages: any[] = [
           { role: 'system', content: enhancedSystemPrompt },
-          { role: 'user', content: userContent }
+          { role: 'user', content: enhancedUserContent }
         ];
 
         // Generate direct LLM response
@@ -538,6 +572,9 @@ export class Agent {
           },
         });
 
+        // ⭐ Use orchestrator to get context (for knowledge base support)
+        const orchestratedContext: OrchestratedContext = await this.orchestrator.getContext(context || {}, this.state);
+
         // ⭐ 使用 conversationHistory 构建对话上下文
         const userContent = this.buildConversationPrompt(context, task);
 
@@ -551,13 +588,27 @@ export class Agent {
           userContentPreview: userContent.substring(0, 500),
         });
 
+        // ⭐ RAG: Retrieve relevant knowledge for direct LLM response
+        const query = task || orchestratedContext.originalTask || '';
+        const { context: knowledgeContext } = await this.retrieveKnowledgeForQuery(
+          taskId || 'unknown',
+          query,
+          orchestratedContext,
+          'direct LLM response'
+        );
+
         // Build conversation messages for LLM (简化为 system + user)
         // ⭐ Inject user profile into system prompt for personalization
         const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(context);
 
+        // Append knowledge context to user message
+        const enhancedUserContent = knowledgeContext
+          ? `${userContent}${knowledgeContext}`
+          : userContent;
+
         const messages: any[] = [
           { role: 'system', content: enhancedSystemPrompt },
-          { role: 'user', content: userContent }
+          { role: 'user', content: enhancedUserContent }
         ];
 
         const llmResponse = await this.llm.messagesCreate(messages);
@@ -669,6 +720,28 @@ export class Agent {
               console.log('[Agent] Injecting recent skill executions into PTC generation', {
                 count: orchestratedContext.recentSkillExecutions.length,
               });
+            }
+
+            // ⭐ RAG: Retrieve relevant knowledge if KnowledgeBase available
+            // Priority: 1) Explicit knowledgeCollection (backward compatible), 2) Auto-discover from app
+            const query = task || orchestratedContext.originalTask || '';
+            const { entries: knowledgeEntries } = await this.retrieveKnowledgeForQuery(
+              taskId || 'unknown',
+              query,
+              orchestratedContext,
+              'PTC generation'
+            );
+
+            // Inject knowledge into PTC
+            if (knowledgeEntries.length > 0) {
+              ptcOptions.knowledge = knowledgeEntries.map(entry => ({
+                content: entry.content,
+                metadata: {
+                  ...entry.metadata,
+                  collectionName: entry._collectionName,
+                },
+                similarity: entry.similarity,
+              }));
             }
 
             if (orchestratedContext.failureExperiences) {
@@ -1806,6 +1879,225 @@ Analyze the task description and categorize it appropriately. Provide confidence
       console.log('[Agent] PTC code saved for task:', taskId, 'round:', round);
     } catch (error) {
       console.error('[Agent] Failed to save PTC code:', error);
+    }
+  }
+
+  /**
+   * Record knowledge retrieval trace
+   */
+  /**
+   * Retrieve knowledge from knowledge base for a given query
+   * Unified method used by: conversational agents, direct LLM response, and PTC CodeGen
+   *
+   * @param taskId - Current task ID for trace recording
+   * @param query - Search query for knowledge retrieval
+   * @param orchestratedContext - Orchestrated context containing environment/app configuration
+   * @param contextLabel - Label for logging (e.g., 'conversational', 'direct-llm', 'ptc')
+   * @returns Object containing retrieved entries and formatted knowledge context
+   */
+  private async retrieveKnowledgeForQuery(
+    taskId: string,
+    query: string,
+    orchestratedContext: OrchestratedContext,
+    contextLabel: string
+  ): Promise<{ entries: any[]; context: string }> {
+    const knowledgeEntries: any[] = [];
+    let knowledgeContext = '';
+
+    if (!this.knowledgeBase) {
+      console.log(`[Agent] No knowledge base available for ${contextLabel}`);
+      return { entries: [], context: '' };
+    }
+
+    const traceTaskId = taskId || 'unknown';
+
+    if (!query.trim()) {
+      console.log(`[Agent] Empty query for ${contextLabel}, skipping knowledge retrieval`);
+      return { entries: [], context: '' };
+    }
+
+    try {
+      // Determine knowledge collection from:
+      // 1) Top-level knowledgeCollection (backward compatibility)
+      // 2) environment.knowledgeCollection (new approach)
+      const knowledgeCollection = orchestratedContext.knowledgeCollection
+        || orchestratedContext.environment?.knowledgeCollection;
+
+      // Mode 1: Explicit knowledge collection
+      if (knowledgeCollection) {
+        console.log(`[Agent] Retrieving knowledge for ${contextLabel}:`, {
+          collection: knowledgeCollection,
+          query: query.substring(0, 100),
+        });
+
+        const startTime = Date.now();
+        const entries = await this.knowledgeBase.retrieve(
+          knowledgeCollection,
+          query,
+          { limit: 5, threshold: 0.3 }
+        );
+        const executionTime = Date.now() - startTime;
+
+        knowledgeEntries.push(...entries);
+
+        // Record knowledge retrieval trace
+        await this.recordKnowledgeRetrievalTrace(traceTaskId, {
+          collection: knowledgeCollection,
+          query: query || '',
+          entryCount: entries.length,
+          executionTime,
+        });
+      }
+      // Mode 2: Auto-discover collections from app
+      else if (orchestratedContext.app) {
+        console.log(`[Agent] Auto-discovering knowledge collections for ${contextLabel}:`, {
+          app: orchestratedContext.app,
+          query: query.substring(0, 100),
+        });
+
+        const collections = await getAppKnowledgeCollections(
+          orchestratedContext.app
+        );
+
+        if (collections.length > 0) {
+          console.log(`[Agent] Found ${collections.length} knowledge collections for app ${orchestratedContext.app}`);
+
+          const startTime = Date.now();
+
+          // Retrieve from all collections in parallel
+          const retrievalPromises = collections.map(async (collection) => {
+            try {
+              const entries = await this.knowledgeBase!.retrieve(
+                collection.collection_name,
+                query,
+                { limit: 5, threshold: 0.3 }
+              );
+              // Add collection metadata to each entry
+              return entries.map((entry: any) => ({
+                ...entry,
+                _collectionName: collection.collection_name,
+                _priority: collection.priority,
+              }));
+            } catch (error) {
+              console.error(`[Agent] Failed to retrieve from collection ${collection.collection_name}:`, error);
+              return [];
+            }
+          });
+
+          const allResults = await Promise.all(retrievalPromises);
+          const flatResults = allResults.flat();
+
+          knowledgeEntries.push(...flatResults);
+
+          // Sort by priority (asc) then similarity (desc)
+          knowledgeEntries.sort((a, b) => {
+            if (a._priority !== b._priority) {
+              return a._priority - b._priority;
+            }
+            return (b.similarity || 0) - (a.similarity || 0);
+          });
+
+          const executionTime = Date.now() - startTime;
+
+          console.log(`[Agent] Retrieved knowledge from multiple collections for ${contextLabel}:`, {
+            collectionsCount: collections.length,
+            totalEntries: flatResults.length,
+            collections: collections.map(c => c.collection_name),
+          });
+
+          // Record knowledge retrieval trace
+          await this.recordKnowledgeRetrievalTrace(traceTaskId, {
+            collections: collections.map(c => ({ name: c.collection_name, priority: c.priority })),
+            query: query || '',
+            entryCount: flatResults.length,
+            executionTime,
+          });
+        } else {
+          console.log(`[Agent] No knowledge collections configured for app ${orchestratedContext.app}`);
+        }
+      } else {
+        console.log(`[Agent] No knowledge collection configured for ${contextLabel}`);
+      }
+
+      // Format knowledge for LLM
+      if (knowledgeEntries.length > 0) {
+        knowledgeContext = '\n\n# Relevant Knowledge\n\n' +
+          knowledgeEntries.map((entry, idx) => {
+            const source = entry._collectionName || entry.metadata?.collectionName || 'knowledge';
+            const similarity = entry.similarity ? ` (similarity: ${(entry.similarity * 100).toFixed(1)}%)` : '';
+            return `## Source ${idx + 1}: ${source}${similarity}\n${entry.content}`;
+          }).join('\n\n');
+
+        console.log(`[Agent] Retrieved knowledge for ${contextLabel}:`, {
+          count: knowledgeEntries.length,
+          avgSimilarity: knowledgeEntries.reduce((sum, e) => sum + (e.similarity || 0), 0) / knowledgeEntries.length,
+          totalCharacters: knowledgeContext.length,
+        });
+      } else {
+        console.log(`[Agent] No relevant knowledge found for ${contextLabel}`);
+      }
+
+    } catch (error) {
+      console.error(`[Agent] Knowledge retrieval failed for ${contextLabel}:`, error);
+      await this.recordKnowledgeRetrievalTrace(traceTaskId, {
+        query: query || '',
+        error: (error as Error).message,
+      });
+    }
+
+    return { entries: knowledgeEntries, context: knowledgeContext };
+  }
+
+  private async recordKnowledgeRetrievalTrace(
+    taskId: string,
+    data: {
+      collection?: string;
+      collections?: Array<{ name: string; priority: number }>;
+      query?: string;
+      entryCount?: number;
+      error?: string;
+      executionTime?: number;
+    }
+  ): Promise<void> {
+    try {
+      const streams = getAgentStreams();
+
+      if (!streams?.executionTraces) {
+        console.log('[Agent] No executionTraces stream available, skipping knowledge trace');
+        return;
+      }
+
+      const id = `knowledge-retrieval-${taskId}-${Date.now()}`;
+      const hasError = !!data.error;
+
+      await streams.executionTraces.set(taskId, id, {
+        id,
+        level: 'agent-internal',
+        taskId,
+        agentId: this.sessionId,
+        stage: 'knowledge_retrieval',
+        status: hasError ? 'failed' : 'completed',
+        timestamp: new Date().toISOString(),
+        inputData: JSON.stringify({
+          type: 'knowledge-retrieval',
+          collection: data.collection,
+          collections: data.collections,
+          query: data.query?.substring(0, 100),
+        }),
+        outputData: !hasError ? JSON.stringify({
+          entryCount: data.entryCount,
+          executionTime: data.executionTime,
+        }) : undefined,
+        error: data.error,
+        metadata: {
+          sessionId: this.sessionId,
+          agentName: this.agentName || 'Agent',
+        }
+      });
+
+      console.log(`[Agent] ✓ Knowledge retrieval trace recorded`, { taskId, id, status: hasError ? 'failed' : 'completed' });
+    } catch (error) {
+      console.error('[Agent] Failed to record knowledge retrieval trace:', error);
     }
   }
 

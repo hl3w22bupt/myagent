@@ -11,6 +11,7 @@ import SkillDetail from './pages/SkillDetail'
 import Agents from './pages/Agents'
 import AutonomousAgents from './pages/AutonomousAgents'
 import Dashboard from './pages/Dashboard'
+import Knowledge from './pages/Knowledge'
 import Settings from './pages/Settings'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { MotiaStreamProvider } from '@motiadev/stream-client-react'
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/skills/:skillName" element={<SkillDetail />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/autonomous-agents" element={<AutonomousAgents />} />
+                <Route path="/knowledge" element={<Knowledge />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
