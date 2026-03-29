@@ -136,7 +136,7 @@ curl -X POST http://localhost:3000/agent/execute \
     password: postgres
   collections:
     - name: python-docs
-      tableName: kb_python_docs
+      tableName: python_docs
 ```
 
 ### LanceDB
