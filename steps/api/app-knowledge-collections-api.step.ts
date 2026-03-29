@@ -24,12 +24,10 @@ export const handler = async (
 ) => {
   try {
     const { appId } = request.pathParams;
-    const queryParams: Record<string, any> = request.queryParams || {};
-    const tenantId = queryParams.tenantId || 'default';
 
-    logger.info('Getting knowledge collections for app', { appId, tenantId });
+    logger.info('Getting knowledge collections for app', { appId });
 
-    const collections = await getAppKnowledgeCollections(tenantId, appId);
+    const collections = await getAppKnowledgeCollections(appId);
 
     return {
       status: 200,

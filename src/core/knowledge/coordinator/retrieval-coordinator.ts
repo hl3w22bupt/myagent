@@ -3,12 +3,11 @@
  * Coordinates parallel retrieval from multiple vector stores
  */
 
-import type { IVectorStore, KnowledgeEntry, RetrieveOptions } from '../interfaces/vector-store.interface.js';
-import type { VectorStoreConfig } from '../interfaces/adapter-config.interface.js';
-import type { CoordinatorConfig } from './coordinator-config.interface.js';
-import { PostgresVectorStore } from '../adapters/postgres-adapter.js';
-import { LanceDBVectorStore } from '../adapters/lancedb-adapter.js';
-import { validateConfig } from '../interfaces/adapter-config.interface.js';
+import type { IVectorStore, KnowledgeEntry, RetrieveOptions } from '../interfaces/vector-store.interface';
+import type { VectorStoreConfig } from '../interfaces/adapter-config.interface';
+import type { CoordinatorConfig } from './coordinator-config.interface';
+import { PostgresVectorStore } from '../adapters/postgres-adapter';
+import { validateConfig } from '../interfaces/adapter-config.interface';
 
 export class RetrievalCoordinator {
   private stores: Map<string, IVectorStore> = new Map();
@@ -26,7 +25,7 @@ export class RetrievalCoordinator {
   /**
    * Get or create vector store instance for a config
    */
-  private getStore(config: VectorStoreConfig): IVectorStore {
+  private async getStore(config: VectorStoreConfig): Promise<IVectorStore> {
     const key = this.getStoreKey(config);
 
     if (!this.stores.has(key)) {
@@ -35,6 +34,9 @@ export class RetrievalCoordinator {
       if (config.type === 'postgres-pgvector') {
         this.stores.set(key, new PostgresVectorStore(config));
       } else if (config.type === 'lancedb') {
+        // Use runtime loader to avoid bundling LanceDB native modules
+        const { getLanceDBAdapter } = await import('../loaders/lancedb-loader');
+        const LanceDBVectorStore = await getLanceDBAdapter();
         this.stores.set(key, new LanceDBVectorStore(config));
       }
     }
@@ -65,12 +67,13 @@ export class RetrievalCoordinator {
   ): Promise<KnowledgeEntry[]> {
     const QUERY_TIMEOUT = 10000;
 
-    const results = await Promise.allSettled(
-      sources.map(source => {
-        const store = this.getStore(source);
+    // Get all stores first (they may need dynamic imports)
+    const storePromises = sources.map(source => this.getStore(source));
+    const stores = await Promise.all(storePromises);
 
+    const results = await Promise.allSettled(
+      stores.map((store, _index) => {
         const queryPromise = store.retrieve(
-          tenantId,
           collectionName,
           query,
           { ...options, limit: this.config.limitPerSource }

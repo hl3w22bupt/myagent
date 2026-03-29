@@ -48,6 +48,7 @@ declare module 'motia' {
     'knowledge-datasources-test-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -78,8 +79,6 @@ declare module 'motia' {
     'agent-result-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'agent-retry-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
     'agent-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'agent.task.execute'; data: never }>
-    'knowledge-datasources-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
-    'knowledge-ingest-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
   }
     
 }

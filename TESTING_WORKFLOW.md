@@ -4,20 +4,62 @@
 
 ## 🚀 快速开始
 
-### 一键启动测试环境
+### 服务管理
+
+**端口说明**：
+- 后端服务：3000 端口（Motia Workbench + API）
+- 前端服务：5173 端口（Vite 开发服务器）
+
+#### 启动服务（推荐）
 
 ```bash
 # 启动后端（根目录）
 cd /Users/leo/workspace/myagent
-npm run start &
+npm run start
+# 后台运行：npm run start &
 
-# 启动前端
+# 启动前端（新终端）
 cd motia-frontend
-npm run dev &
+npm run dev
+# 后台运行：npm run dev &
+```
 
-# 验证服务
-curl http://localhost:3000/health  # 后端
-curl http://localhost:5173          # 前端
+#### 停止服务
+
+```bash
+# 停止后端
+pkill -f "motia start"      # 停止生产模式
+pkill -f "node.*motia"      # 备用方案
+
+# 停止前端
+pkill -f "vite"             # 停止前端
+pkill -f "npm run dev"      # 备用方案
+
+# 或者在启动终端按 Ctrl+C
+```
+
+#### 开发模式（不推荐 - 性能较差）
+
+```bash
+# 仅用于需要热重载的开发调试
+cd /Users/leo/workspace/myagent
+npm run dev
+
+# 停止开发模式
+pkill -f "motia dev"
+```
+
+### 验证服务
+
+```bash
+# 检查后端健康状态
+curl http://localhost:3000/health
+
+# 检查前端（应返回 HTML）
+curl http://localhost:5173
+
+# 检查进程
+ps aux | grep -E "motia|vite" | grep -v grep
 ```
 
 ## 📋 完整测试流程

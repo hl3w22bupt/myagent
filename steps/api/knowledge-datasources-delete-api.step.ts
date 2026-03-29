@@ -3,7 +3,6 @@
  * Delete a data source
  */
 
-import { z } from 'zod';
 import { ApiRouteConfig } from 'motia';
 import { getDataSource, deleteDataSource } from '../../src/core/knowledge/datasource-store.js';
 

@@ -3,7 +3,6 @@
  * Implements IVectorStore interface for LanceDB vector database
  */
 
-import * as lance from '@lancedb/lancedb';
 import OpenAI from 'openai';
 import { LRUCache } from 'lru-cache';
 import type {
@@ -11,17 +10,27 @@ import type {
   KnowledgeEntry,
   RetrieveOptions,
   EmbeddingOptions,
-} from '../interfaces/vector-store.interface.js';
-import type { LanceDBConfig } from '../interfaces/adapter-config.interface.js';
+} from '../interfaces/vector-store.interface';
+import type { LanceDBConfig } from '../interfaces/adapter-config.interface';
 import {
   ValidationError,
   ConnectionError,
-  KnowledgeInsertError,
   EmbeddingGenerationError,
-} from '../errors/knowledge-errors.js';
+} from '../errors/knowledge-errors';
+
+// LanceDB type stubs for dynamic import
+interface LanceConnection {
+  close(): Promise<void>;
+  openTable(name: string): Promise<any>;
+  createTable(name: string, schema: any[]): Promise<any>;
+  tableNames(): Promise<string[]>;
+}
+
+// LanceDB module name as variable to avoid esbuild bundling
+const LANCEDB_MODULE = '@lancedb/lancedb';
 
 export class LanceDBVectorStore implements IVectorStore {
-  private db!: lance.Connection;
+  private db!: LanceConnection;
   private openai: OpenAI;
   private embeddingCache: LRUCache<string, number[]>;
   private readonly embeddingModel: string;
@@ -53,12 +62,15 @@ export class LanceDBVectorStore implements IVectorStore {
 
   private async initializeConnection(): Promise<void> {
     try {
+      // Use require() with variable to avoid esbuild bundling
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const lance = require(LANCEDB_MODULE);
       const connectionPromise = lance.connect(this.config.connection.uri);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Connection timeout')), this.CONNECTION_TIMEOUT)
       );
 
-      this.db = await Promise.race([connectionPromise, timeoutPromise]) as lance.Connection;
+      this.db = await Promise.race([connectionPromise, timeoutPromise]) as LanceConnection;
     } catch (error) {
       throw new ConnectionError(
         `Failed to connect to LanceDB at ${this.config.connection.uri}: ${(error as Error).message}`,
@@ -67,92 +79,7 @@ export class LanceDBVectorStore implements IVectorStore {
     }
   }
 
-  async addKnowledge(
-    tenantId: string,
-    collectionName: string,
-    content: string,
-    metadata?: Record<string, any>
-  ): Promise<string> {
-    if (!this.COLLECTION_NAME_REGEX.test(collectionName)) {
-      throw new ValidationError(`Invalid collection name: ${collectionName}`);
-    }
-
-    const sanitizedContent = this.sanitizeContent(content);
-    if (!sanitizedContent || sanitizedContent.trim().length === 0) {
-      throw new ValidationError('Content cannot be empty');
-    }
-
-    await this.ensureConnection();
-
-    try {
-      const table = await this.openOrCreateTable(collectionName);
-      const embedding = await this.embedQueryWithRetry(sanitizedContent);
-
-      const id = `${tenantId}-${collectionName}-${Date.now()}`;
-
-      await table.add([{
-        id,
-        tenantId,
-        content: sanitizedContent,
-        metadata: metadata || {},
-        vector: embedding,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }]);
-
-      return id;
-    } catch (error) {
-      throw new KnowledgeInsertError(
-        `Failed to add knowledge to collection ${collectionName}: ${(error as Error).message}`
-      );
-    }
-  }
-
-  async addKnowledgeBatch(
-    tenantId: string,
-    collectionName: string,
-    entries: Array<{ content: string; metadata?: Record<string, any> }>
-  ): Promise<string[]> {
-    if (!this.COLLECTION_NAME_REGEX.test(collectionName)) {
-      throw new ValidationError(`Invalid collection name: ${collectionName}`);
-    }
-
-    await this.ensureConnection();
-
-    try {
-      const table = await this.openOrCreateTable(collectionName);
-      const ids: string[] = [];
-      const data = [];
-
-      for (const entry of entries) {
-        const sanitizedContent = this.sanitizeContent(entry.content);
-        const embedding = await this.embedQueryWithRetry(sanitizedContent);
-
-        const id = `${tenantId}-${collectionName}-${Date.now()}-${ids.length}`;
-        ids.push(id);
-
-        data.push({
-          id,
-          tenantId,
-          content: sanitizedContent,
-          metadata: entry.metadata || {},
-          vector: embedding,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      await table.add(data);
-      return ids;
-    } catch (error) {
-      throw new KnowledgeInsertError(
-        `Failed to add batch knowledge to collection ${collectionName}: ${(error as Error).message}`
-      );
-    }
-  }
-
   async retrieve(
-    tenantId: string,
     collectionName: string,
     query: string,
     options: RetrieveOptions = {}
@@ -178,12 +105,10 @@ export class LanceDBVectorStore implements IVectorStore {
       // LanceDB search returns results directly
       const results = await table.search(queryEmbedding).limit(limit * 2).toArray();
 
-      // Post-filter results by tenantId and threshold
+      // Post-filter results by threshold
       return results
-        .filter((r: any) => r.tenantId === tenantId)
         .map((r: any) => ({
           id: r.id,
-          tenantId: r.tenantId,
           collectionName,
           content: r.content,
           metadata: r.metadata || {},
@@ -202,7 +127,7 @@ export class LanceDBVectorStore implements IVectorStore {
   async healthCheck(): Promise<{ healthy: boolean; error?: string }> {
     try {
       await this.ensureConnection();
-      const tables = await this.db.tableNames();
+      await this.db.tableNames();
       return { healthy: true };
     } catch (error) {
       return { healthy: false, error: (error as Error).message };
@@ -278,6 +203,8 @@ export class LanceDBVectorStore implements IVectorStore {
     }
 
     content = content.replace(/<[^>]*>/g, '');
+    // Remove control characters (excluding tab, newline, carriage return)
+    // eslint-disable-next-line no-control-regex
     content = content.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
     content = content.replace(/\s+/g, ' ').trim();
 

@@ -35,7 +35,6 @@ function getPool(): Pool {
  */
 export interface AppKnowledgeMapping {
   app_id: string;
-  tenant_id: string;
   collection_name: string;
   enabled: boolean;
   priority: number;
@@ -44,12 +43,10 @@ export interface AppKnowledgeMapping {
 /**
  * Get all enabled knowledge collections for an app
  *
- * @param tenantId - Tenant ID (usually sessionId)
  * @param appId - Application identifier
  * @returns List of knowledge collection mappings
  */
 export async function getAppKnowledgeCollections(
-  tenantId: string,
   appId: string
 ): Promise<AppKnowledgeMapping[]> {
   const pool = getPool();
@@ -57,19 +54,17 @@ export async function getAppKnowledgeCollections(
   const query = `
     SELECT
       app_id,
-      tenant_id,
       collection_name,
       enabled,
       priority
     FROM app_knowledge_mappings
-    WHERE tenant_id = $1
-      AND app_id = $2
+    WHERE app_id = $1
       AND enabled = TRUE
     ORDER BY priority ASC, collection_name ASC
   `;
 
   try {
-    const result = await pool.query(query, [tenantId, appId]);
+    const result = await pool.query(query, [appId]);
     return result.rows;
   } catch (error) {
     console.error(`[AppKnowledgeManager] Failed to get collections for app ${appId}:`, error);
@@ -80,7 +75,6 @@ export async function getAppKnowledgeCollections(
 /**
  * Add a knowledge collection to an app
  *
- * @param tenantId - Tenant ID
  * @param appId - Application identifier
  * @param collectionName - Knowledge collection name
  * @param enabled - Whether the collection is enabled
@@ -88,7 +82,6 @@ export async function getAppKnowledgeCollections(
  * @returns The created mapping
  */
 export async function addAppKnowledgeCollection(
-  tenantId: string,
   appId: string,
   collectionName: string,
   enabled: boolean = true,
@@ -97,9 +90,9 @@ export async function addAppKnowledgeCollection(
   const pool = getPool();
 
   const query = `
-    INSERT INTO app_knowledge_mappings (app_id, tenant_id, collection_name, enabled, priority)
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (app_id, tenant_id, collection_name)
+    INSERT INTO app_knowledge_mappings (app_id, collection_name, enabled, priority)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (app_id, collection_name)
     DO UPDATE SET
       enabled = EXCLUDED.enabled,
       priority = EXCLUDED.priority,
@@ -108,7 +101,7 @@ export async function addAppKnowledgeCollection(
   `;
 
   try {
-    const result = await pool.query(query, [appId, tenantId, collectionName, enabled, priority]);
+    const result = await pool.query(query, [appId, collectionName, enabled, priority]);
     console.log(`[AppKnowledgeManager] Added collection ${collectionName} to app ${appId}`);
     return result.rows[0];
   } catch (error) {
@@ -120,13 +113,11 @@ export async function addAppKnowledgeCollection(
 /**
  * Remove a knowledge collection from an app
  *
- * @param tenantId - Tenant ID
  * @param appId - Application identifier
  * @param collectionName - Knowledge collection name
  * @returns True if removed, false if not found
  */
 export async function removeAppKnowledgeCollection(
-  tenantId: string,
   appId: string,
   collectionName: string
 ): Promise<boolean> {
@@ -134,14 +125,13 @@ export async function removeAppKnowledgeCollection(
 
   const query = `
     DELETE FROM app_knowledge_mappings
-    WHERE tenant_id = $1
-      AND app_id = $2
-      AND collection_name = $3
+    WHERE app_id = $1
+      AND collection_name = $2
     RETURNING *
   `;
 
   try {
-    const result = await pool.query(query, [tenantId, appId, collectionName]);
+    const result = await pool.query(query, [appId, collectionName]);
     const removed = (result.rowCount ?? 0) > 0;
     if (removed) {
       console.log(`[AppKnowledgeManager] Removed collection ${collectionName} from app ${appId}`);
@@ -156,13 +146,11 @@ export async function removeAppKnowledgeCollection(
 /**
  * Batch configure knowledge collections for an app
  *
- * @param tenantId - Tenant ID
  * @param appId - Application identifier
  * @param collections - Array of collection configurations
  * @returns Array of created/updated mappings
  */
 export async function batchConfigureAppKnowledgeCollections(
-  tenantId: string,
   appId: string,
   collections: Array<{ collectionName: string; enabled?: boolean; priority?: number }>
 ): Promise<AppKnowledgeMapping[]> {
@@ -170,7 +158,6 @@ export async function batchConfigureAppKnowledgeCollections(
 
   for (const config of collections) {
     const mapping = await addAppKnowledgeCollection(
-      tenantId,
       appId,
       config.collectionName,
       config.enabled ?? true,
@@ -186,12 +173,10 @@ export async function batchConfigureAppKnowledgeCollections(
 /**
  * Get all apps that use a specific knowledge collection
  *
- * @param tenantId - Tenant ID
  * @param collectionName - Knowledge collection name
  * @returns List of app IDs using this collection
  */
 export async function getAppsForKnowledgeCollection(
-  tenantId: string,
   collectionName: string
 ): Promise<string[]> {
   const pool = getPool();
@@ -199,14 +184,13 @@ export async function getAppsForKnowledgeCollection(
   const query = `
     SELECT DISTINCT app_id
     FROM app_knowledge_mappings
-    WHERE tenant_id = $1
-      AND collection_name = $2
+    WHERE collection_name = $1
       AND enabled = TRUE
     ORDER BY app_id
   `;
 
   try {
-    const result = await pool.query(query, [tenantId, collectionName]);
+    const result = await pool.query(query, [collectionName]);
     return result.rows.map((row: any) => row.app_id);
   } catch (error) {
     console.error(`[AppKnowledgeManager] Failed to get apps for collection ${collectionName}:`, error);

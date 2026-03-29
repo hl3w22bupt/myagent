@@ -95,8 +95,6 @@ agent:
 | `KnowledgeBase.retrieve()` | 向量数据库超时 | `VectorDBTimeoutError` | ✅ YES | 重试 2x，降级到无知识模式 | "知识库暂时不可用，使用通用模式" |
 | `KnowledgeBase.retrieve()` | 检索返回空结果 | `EmptyResultError` | ✅ YES | 记录日志，继续执行（降级） | 无（静默降级） |
 | `KnowledgeBase.retrieve()` | Collection 不存在 | `CollectionNotFoundError` | ✅ YES | 返回空结果，记录警告 | "指定的知识库不存在" |
-| `KnowledgeBase.addKnowledge()` | 批量插入部分失败 | `PartialInsertError` | ✅ YES | 重试失败项，返回成功/失败详情 | "部分知识添加失败，已重试" |
-| `KnowledgeBase.addKnowledge()` | 向量化失败 | `EmbeddingError` | ✅ YES | 跳过该文档，记录错误 | "部分文档无法向量化" |
 | `ValidationHook.onTaskComplete()` | Schema 验证失败 | `ValidationError` | ✅ YES | 记录详细错误，触发降级策略 | "输出格式不正确，已简化输出" |
 | `ValidationHook.onTaskComplete()` | 完整性检查失败 | `CompletenessError` | ✅ YES | 记录缺失字段，标记为部分成功 | "输出不完整，缺少：xxx" |
 | `InterventionHook.waitForHumanDecision()` | 等待超时 | `InterventionTimeoutError` | ✅ YES | 记录超时，执行默认策略 | "等待人工审核超时，已自动处理" |
@@ -114,6 +112,11 @@ agent:
 
 ### 2.1 知识库管理 🔴 P0
 
+> **重要说明（2026-03-29）**：
+> - ✅ 当前版本支持**检索**外部知识库数据源
+> - ❌ `addKnowledge` 功能已移除（属于未来上下文工程范畴）
+> - 📚 文档中的 `addKnowledge` 代码示例仅供参考，展示未来设计方向
+
 **为什么需要？**
 - 所有 Agent 都需要"读知识"，只是知识内容不同
 - MyAgent 提供**能力**，**知识内容**由上层应用提供
@@ -130,14 +133,6 @@ class KnowledgeBase {
     query: string,
     options: { topK?: number; filter?: Record<string, any> }
   ): Promise<KnowledgeChunk[]>
-
-  /**
-   * 添加知识（通用）
-   */
-  async addKnowledge(
-    collection: string,
-    documents: Array<{ content: string; metadata?: Record<string, any> }>
-  ): Promise<void>
 }
 ```
 
@@ -164,13 +159,7 @@ class Agent {
 
 **使用示例（上层应用）：**
 ```typescript
-// 添加知识
-await knowledgeBase.addKnowledge('product-design', [
-  { content: 'UX 设计原则：F-pattern...', metadata: { domain: 'ux' } },
-  { content: '移动端设计规范...', metadata: { domain: 'mobile' } }
-]);
-
-// Agent 执行时自动检索
+// Agent 执行时自动检索外部知识库
 await agent.run('设计电商购物车', {
   knowledgeCollection: 'product-design'  // ← 指定知识库
 });
@@ -190,7 +179,6 @@ await agent.run('设计电商购物车', {
 
 | 威胁 | 可能性 | 影响 | 是否缓解 | 缓解策略 |
 |-----|-------|------|---------|---------|
-| **知识库注入攻击** | High | High | ✅ YES | 添加知识时验证内容（过滤 XSS、SQL 注入、恶意脚本） |
 | **跨租户知识访问** | High | High | ✅ YES | Collection 命名空间隔离（`tenantId:collectionName`）+ ACL 验证 |
 | **干预决策伪造** | Medium | High | ✅ YES | 签名验证干预请求（HMAC），使用 API Secret |
 | **RAG 检索污染** | Medium | Medium | ✅ YES | 限制返回结果数量（topK ≤ 10），结果相关性评分过滤 |
@@ -201,31 +189,7 @@ await agent.run('设计电商购物车', {
 **安全实现要点**:
 
 ```typescript
-// 1. 知识库添加时的验证
-class KnowledgeBase {
-  async addKnowledge(collection: string, documents: Document[]) {
-    // ✅ 验证 collection 名称（防止路径遍历）
-    if (!/^[a-zA-Z0-9:_-]+$/.test(collection)) {
-      throw new InvalidCollectionNameError(collection);
-    }
-
-    // ✅ 验证文档内容（过滤恶意脚本）
-    const sanitized = documents.map(doc => ({
-      ...doc,
-      content: this.sanitizeContent(doc.content)
-    }));
-  }
-
-  private sanitizeContent(content: string): string {
-    // 移除 HTML 标签、脚本标签、SQL 注入模式
-    return content
-      .replace(/<script[^>]*>.*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, '')
-      .replace(/('|--|;|\bDROP\b|\bDELETE\b|\bEXEC\b)/gi, '');
-  }
-}
-
-// 2. Collection 隔离
+// Collection 隔离
 async retrieve(collection: string, query: string) {
   // ✅ 验证访问权限
   const tenantId = context.tenantId;

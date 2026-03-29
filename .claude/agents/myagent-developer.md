@@ -65,7 +65,7 @@ npm run build          # Rebuild
 **Motia config changes**:
 ```bash
 npm run generate-types
-npm run dev            # Restart
+npm run start          # Restart
 ```
 
 ### Testing
@@ -178,7 +178,8 @@ skills/                  # Python skills
 ## Quick Commands
 
 ```bash
-npm run dev              # Start dev server
+npm run start            # Start server (production mode - recommended)
+npm run dev              # Start dev server (hot reload, slower)
 npm run build            # Build TypeScript
 npm run generate-types   # Generate Motia types
 npm test                 # Run tests

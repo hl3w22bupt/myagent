@@ -25,7 +25,21 @@
 ```bash
 npm install               # Dependencies
 npm run generate-types    # Generate Motia types
-npm run dev              # Start dev server (port 3000)
+npm run start            # Start server (port 3000) - Recommended
+```
+
+**Service Management**:
+```bash
+# 后端服务（端口 3000）- 推荐使用生产模式
+npm run start            # Start production mode (recommended)
+npm run dev              # Start dev mode (hot reload, slower)
+
+# 前端服务（端口 5173）
+cd motia-frontend && npm run dev
+
+# 停止服务
+pkill -f "motia start"   # Stop backend
+pkill -f "vite"          # Stop frontend
 ```
 
 **After code changes**:

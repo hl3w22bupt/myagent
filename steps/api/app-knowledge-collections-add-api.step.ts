@@ -21,7 +21,6 @@ export const config: ApiRouteConfig = {
 
 // Request body schema
 const addCollectionSchema = z.object({
-  tenantId: z.string().min(1),
   collectionName: z.string().min(1),
   enabled: z.boolean().optional().default(true),
   priority: z.number().optional().default(0),
@@ -48,18 +47,16 @@ export const handler = async (
       };
     }
 
-    const { tenantId, collectionName, enabled, priority } = validationResult.data;
+    const { collectionName, enabled, priority } = validationResult.data;
 
     logger.info('Adding knowledge collection to app', {
       appId,
-      tenantId,
       collectionName,
       enabled,
       priority,
     });
 
     const mapping = await addAppKnowledgeCollection(
-      tenantId,
       appId,
       collectionName,
       enabled,

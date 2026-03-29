@@ -9,6 +9,9 @@ import { Pool } from 'pg';
 
 let pool: Pool | null = null;
 
+// LanceDB module name as variable to avoid esbuild bundling
+const LANCEDB_MODULE = '@lancedb/lancedb';
+
 /**
  * Data Source Configuration
  */
@@ -61,13 +64,15 @@ export async function testConnection(config: DataSourceConfig): Promise<{ succes
 
       return { success: true };
     } else if (config.type === 'lancedb') {
-      const lance = await import('@lancedb/lancedb');
-
       try {
         const uri = config.connection.uri;
         if (!uri) {
           return { success: false, error: 'LanceDB URI is required' };
         }
+
+        // Use require() with variable to avoid esbuild bundling
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const lance = require(LANCEDB_MODULE);
         const db = await lance.connect(uri);
         await db.close();
         return { success: true };
@@ -153,8 +158,6 @@ export async function discoverCollections(config: DataSourceConfig): Promise<Dis
       await discoverPool.end();
       return collections;
     } else if (config.type === 'lancedb') {
-      const lance = await import('@lancedb/lancedb');
-
       try {
         const uri = config.connection.uri;
         if (!uri) {
@@ -162,12 +165,15 @@ export async function discoverCollections(config: DataSourceConfig): Promise<Dis
           return [];
         }
 
+        // Use require() with variable to avoid esbuild bundling
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const lance = require(LANCEDB_MODULE);
         const db = await lance.connect(uri);
         const tableNames = await db.tableNames();
 
         const collections: DiscoveredCollection[] = [];
         for (const name of tableNames) {
-          const table = await db.openTable(name);
+          await db.openTable(name);
           // Get approximate count using table stats or estimate
           // For now, use 0 as count since we can't easily get row count
           collections.push({

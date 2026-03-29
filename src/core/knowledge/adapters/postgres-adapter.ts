@@ -3,7 +3,7 @@
  * Implements IVectorStore interface for PostgreSQL with pgvector extension
  */
 
-import { Pool, PoolConfig } from 'pg';
+import { Pool } from 'pg';
 import OpenAI from 'openai';
 import { LRUCache } from 'lru-cache';
 import type {
@@ -11,14 +11,12 @@ import type {
   KnowledgeEntry,
   RetrieveOptions,
   EmbeddingOptions,
-} from '../interfaces/vector-store.interface.js';
-import type { PostgresConfig } from '../interfaces/adapter-config.interface.js';
+} from '../interfaces/vector-store.interface';
+import type { PostgresConfig } from '../interfaces/adapter-config.interface';
 import {
   ValidationError,
-  ConnectionError,
-  KnowledgeInsertError,
   EmbeddingGenerationError,
-} from '../errors/knowledge-errors.js';
+} from '../errors/knowledge-errors';
 
 export class PostgresVectorStore implements IVectorStore {
   private pool: Pool;
@@ -60,92 +58,7 @@ export class PostgresVectorStore implements IVectorStore {
     });
   }
 
-  async addKnowledge(
-    tenantId: string,
-    collectionName: string,
-    content: string,
-    metadata?: Record<string, any>
-  ): Promise<number> {
-    if (!this.COLLECTION_NAME_REGEX.test(collectionName)) {
-      throw new ValidationError(`Invalid collection name: ${collectionName}`);
-    }
-
-    const sanitizedContent = this.sanitizeContent(content);
-    if (!sanitizedContent || sanitizedContent.trim().length === 0) {
-      throw new ValidationError('Content cannot be empty');
-    }
-
-    const embedding = await this.embedQueryWithRetry(sanitizedContent);
-
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const result = await client.query<{ id: number }>(
-        `INSERT INTO knowledge (tenant_id, collection_name, content, metadata, embedding)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, collection_name, content)
-         DO UPDATE SET
-           metadata = EXCLUDED.metadata,
-           embedding = EXCLUDED.embedding,
-           updated_at = NOW()
-         RETURNING id`,
-        [tenantId, collectionName, sanitizedContent, JSON.stringify(metadata || {}), embedding]
-      );
-
-      await client.query('COMMIT');
-      return result.rows[0].id;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw new KnowledgeInsertError(`Failed to add knowledge: ${(err as Error).message}`);
-    } finally {
-      client.release();
-    }
-  }
-
-  async addKnowledgeBatch(
-    tenantId: string,
-    collectionName: string,
-    entries: Array<{ content: string; metadata?: Record<string, any> }>
-  ): Promise<number[]> {
-    if (!this.COLLECTION_NAME_REGEX.test(collectionName)) {
-      throw new ValidationError(`Invalid collection name: ${collectionName}`);
-    }
-
-    const ids: number[] = [];
-    const client = await this.pool.connect();
-
-    try {
-      await client.query('BEGIN');
-
-      for (const entry of entries) {
-        const sanitizedContent = this.sanitizeContent(entry.content);
-        const embedding = await this.embedQueryWithRetry(sanitizedContent);
-
-        const result = await client.query<{ id: number }>(
-          `INSERT INTO knowledge (tenant_id, collection_name, content, metadata, embedding)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (tenant_id, collection_name, content)
-           DO UPDATE SET metadata = EXCLUDED.metadata
-           RETURNING id`,
-          [tenantId, collectionName, sanitizedContent, JSON.stringify(entry.metadata || {}), embedding]
-        );
-
-        ids.push(result.rows[0].id);
-      }
-
-      await client.query('COMMIT');
-      return ids;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw new KnowledgeInsertError(`Failed to add batch knowledge: ${(err as Error).message}`);
-    } finally {
-      client.release();
-    }
-  }
-
   async retrieve(
-    tenantId: string,
     collectionName: string,
     query: string,
     options: RetrieveOptions = {}
@@ -166,19 +79,19 @@ export class PostgresVectorStore implements IVectorStore {
     const client = await this.pool.connect();
     try {
       const searchQuery = `
-        SELECT id, tenant_id, collection_name, content, metadata,
+        SELECT id, collection_name, content, metadata,
                1 - (embedding <=> $1::vector) AS similarity,
                created_at, updated_at
         FROM knowledge
-        WHERE tenant_id = $2 AND collection_name = $3
-          AND 1 - (embedding <=> $1::vector) > $4
+        WHERE collection_name = $2
+          AND 1 - (embedding <=> $1::vector) > $3
         ORDER BY embedding <=> $1::vector
-        LIMIT $5
+        LIMIT $4
       `;
 
       const result = await client.query<KnowledgeEntry>(
         searchQuery,
-        [`[${queryEmbedding.join(',')}]`, tenantId, collectionName, threshold, limit]
+        [`[${queryEmbedding.join(',')}]`, collectionName, threshold, limit]
       );
 
       return result.rows;
@@ -243,6 +156,8 @@ export class PostgresVectorStore implements IVectorStore {
     }
 
     content = content.replace(/<[^>]*>/g, '');
+    // Remove control characters (excluding tab, newline, carriage return)
+    // eslint-disable-next-line no-control-regex
     content = content.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
     content = content.replace(/;.*DROP TABLE.*/gi, '');
     content = content.replace(/;.*DELETE FROM.*/gi, '');

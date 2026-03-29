@@ -24,16 +24,13 @@ export const handler = async (
 ) => {
   try {
     const { appId, collectionName } = request.pathParams;
-    const queryParams: Record<string, any> = request.queryParams || {};
-    const tenantId = queryParams.tenantId || 'default';
 
     logger.info('Removing knowledge collection from app', {
       appId,
-      tenantId,
       collectionName,
     });
 
-    const removed = await removeAppKnowledgeCollection(tenantId, appId, collectionName);
+    const removed = await removeAppKnowledgeCollection(appId, collectionName);
 
     if (!removed) {
       return {

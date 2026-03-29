@@ -12,7 +12,7 @@
  *   npx tsx scripts/setup-knowledge-base.ts [--execute]
  */
 
-import { Pool, QueryResult } from 'pg';
+import { Pool } from 'pg';
 
 interface PgConfig {
   host?: string;

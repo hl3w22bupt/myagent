@@ -21,7 +21,6 @@ export const config: ApiRouteConfig = {
 
 // Request body schema
 const batchConfigSchema = z.object({
-  tenantId: z.string().min(1),
   collections: z.array(z.object({
     collectionName: z.string().min(1),
     enabled: z.boolean().optional().default(true),
@@ -50,16 +49,14 @@ export const handler = async (
       };
     }
 
-    const { tenantId, collections } = validationResult.data;
+    const { collections } = validationResult.data;
 
     logger.info('Batch configuring knowledge collections for app', {
       appId,
-      tenantId,
       count: collections.length,
     });
 
     const mappings = await batchConfigureAppKnowledgeCollections(
-      tenantId,
       appId,
       collections
     );

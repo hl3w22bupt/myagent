@@ -23,8 +23,13 @@ FRONTEND_RUNNING=$?
 
 if [ $BACKEND_RUNNING -ne 0 ] || [ $FRONTEND_RUNNING -ne 0 ]; then
   echo "❌ Services not running. Start them first:"
-  echo "  Backend: cd /path/to/myagent && npm run start"
-  echo "  Frontend: cd /path/to/myagent/motia-frontend && npm run dev"
+  echo "  Backend (recommended): cd /path/to/myagent && npm run start"
+  echo "  Backend (dev mode):   cd /path/to/myagent && npm run dev"
+  echo "  Frontend:             cd /path/to/myagent/motia-frontend && npm run dev"
+  echo ""
+  echo "To stop services:"
+  echo "  pkill -f 'motia start'  # Stop backend"
+  echo "  pkill -f vite          # Stop frontend"
   exit 1
 fi
 
@@ -33,13 +38,22 @@ echo "✅ Services are running"
 
 **If services are not running, start them**:
 ```bash
-# Terminal 1: Backend
+# Terminal 1: Backend (production mode - recommended)
 cd /Users/leo/workspace/myagent
-npm run start &
+npm run start
+
+# Terminal 1: Backend (dev mode - hot reload, slower)
+# cd /Users/leo/workspace/myagent
+# npm run dev
 
 # Terminal 2: Frontend
 cd /Users/leo/workspace/myagent/motia-frontend
-npm run dev &
+npm run dev
+
+# To stop services:
+# pkill -f "motia start"  # Stop backend
+# pkill -f vite           # Stop frontend
+# Or press Ctrl+C in each terminal
 ```
 
 ### Phase 2: Submit Test Task

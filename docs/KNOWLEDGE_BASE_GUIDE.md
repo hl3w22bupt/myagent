@@ -7,6 +7,27 @@
 
 MyAgent 现在支持知识库功能，允许 Agent 在执行任务时检索相关背景知识，提供更准确和上下文相关的回答。
 
+### 当前版本（Phase 1 MVP）
+
+**核心功能**：
+- ✅ **多数据源检索**：对接外部已有的知识库（PostgreSQL + pgvector、LanceDB）
+- ✅ **向量相似度搜索**：基于 embedding 的语义检索
+- ✅ **多租户支持**：使用 `tenantId:collectionName` 隔离
+- ✅ **性能优化**：LRU 缓存和连接池
+- ✅ **降级策略**：知识检索失败时自动降级
+
+### 未来规划（Phase 2+）
+
+**知识写入功能**（属于**上下文工程**范畴）：
+- 🔄 Agent 自主学习和知识沉淀
+- 📚 从对话中提取新知识
+- 🤖 知识库自动更新和进化
+- 🎯 个性化知识积累
+
+> **注意**：知识写入功能需要完整的知识管理流程（去重、验证、质量控制），属于长期规划，当前版本不支持。
+
+MyAgent 现在支持知识库功能，允许 Agent 在执行任务时检索相关背景知识，提供更准确和上下文相关的回答。
+
 ### 核心特性
 
 - **向量嵌入**: 使用 OpenAI `text-embedding-3-small` (1536 维)
@@ -79,21 +100,15 @@ const agent = new MasterAgent(
 );
 ```
 
-### 4. 添加知识到集合
+### 4. 准备知识库数据
 
-```typescript
-// 添加知识条目
-await agent.knowledgeBase?.addKnowledge(
-  'tenant-123',           // 租户 ID
-  'product-docs',         // 集合名称
-  '我们的产品支持 XXX 功能',  // 知识内容
-  {
-    category: 'feature',
-    version: '1.0',
-    tags: ['product', 'feature'],
-  }
-);
-```
+**注意**：当前版本的知识库功能专注于**检索**外部已有的知识库数据源。
+
+- 使用外部数据源（PostgreSQL + pgvector、LanceDB 等）
+- 通过数据源配置对接已有的知识库表
+- 支持多数据源统一检索
+
+**知识写入功能**（自主学习和知识沉淀）属于未来的**上下文工程**功能，当前版本不支持。
 
 ### 5. 使用知识库执行任务
 
@@ -125,28 +140,6 @@ Agent 将自动：
 - `openaiApiKey`: OpenAI API 密钥
 - `embeddingModel`: 嵌入模型（默认：'text-embedding-3-small'）
 - `cacheTtl`: 缓存 TTL（默认：300000ms = 5分钟）
-
-#### `addKnowledge(tenantId, collectionName, content, metadata?)`
-
-添加知识到集合。
-
-**参数**:
-- `tenantId`: 租户 ID（用于多租户隔离）
-- `collectionName`: 集合名称（只能包含字母、数字、下划线、连字符）
-- `content`: 知识内容
-- `metadata`: 可选元数据（JSON 对象）
-
-**返回**: 创建的知识条目 ID
-
-**示例**:
-```typescript
-const id = await kb.addKnowledge(
-  'tenant-1',
-  'docs',
-  'Feature X allows users to do Y',
-  { feature: 'X', category: 'user-guide' }
-);
-```
 
 #### `retrieve(tenantId, collectionName, query, options?)`
 
@@ -399,20 +392,6 @@ const result = await agent.run(
 );
 ```
 
-### 3. 知识库管理
-
-```typescript
-// 创建不同集合的知识库
-await kb.addKnowledge('tenant-1', 'sales', '销售话术...');
-await kb.addKnowledge('tenant-1', 'support', '支持文档...');
-await kb.addKnowledge('tenant-1', 'training', '培训材料...');
-
-// 根据场景选择不同知识库
-await agent.run(task, undefined, { knowledgeCollection: 'sales' });
-await agent.run(task, undefined, { knowledgeCollection: 'support' });
-await agent.run(task, undefined, { knowledgeCollection: 'training' });
-```
-
 ## 🆘 故障排查
 
 ### 问题：pgvector 扩展不可用
@@ -431,14 +410,16 @@ brew install pgvector
 ### 问题：知识检索返回空结果
 
 **可能原因**:
-1. 集合中没有相关知识
+1. 数据源中没有相关知识
 2. 相似度阈值设置太高
 3. 查询与知识内容差异较大
+4. 数据源连接配置错误
 
 **解决方案**:
-- 降低 `threshold` 参数（如 0.5）
+- 降低 `threshold` 参数（如 0.3）
 - 增加 `limit` 参数（如 10）
-- 确认知识内容已正确添加
+- 确认数据源配置正确
+- 验证外部知识库表中是否有相关数据
 
 ### 问题：性能较慢
 
