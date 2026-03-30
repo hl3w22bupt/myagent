@@ -148,8 +148,8 @@
 }
 
 .agent-selector-corner .agent-icon {
-  font-size: 1rem;
-  line-height: 1;
+  width: 1rem;
+  height: 1rem;
   opacity: 0.8;
 }
 
@@ -170,6 +170,7 @@
   background: rgba(100, 116, 139, 0.08);
 }
 
+.agent-selector-corner:hover .agent-icon,
 .agent-selector-corner:hover .agent-selector-label {
   opacity: 0.7;
   color: #64748b;
@@ -180,8 +181,10 @@
   background: rgba(99, 102, 241, 0.08);
 }
 
-.agent-selector-corner .agent-select-input:focus + .agent-selector-button .agent-selector-label {
+.agent-selector-corner .agent-select-input:focus + .agent-selector-button .agent-selector-label,
+.agent-selector-corner .agent-select-input:focus + .agent-selector-button .agent-icon {
   color: #6366f1;
+  opacity: 1;
 }
 
 /* 禁用状态 */
@@ -270,7 +273,7 @@
 .skill-selector-corner .skill-icon {
   width: 1rem;
   height: 1rem;
-  opacity: 0.5;
+  opacity: 0.8;
 }
 
 .skill-selector-corner .chevron-icon {

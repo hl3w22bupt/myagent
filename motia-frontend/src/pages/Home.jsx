@@ -710,7 +710,17 @@ function Home() {
                       ))}
                     </select>
                     <div className="agent-selector-button">
-                      <span className="agent-icon">🤖</span>
+                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="10" rx="2"/>
+                        <circle cx="12" cy="5" r="2"/>
+                        <path d="M12 7v4"/>
+                        <circle cx="8" cy="16" r="1" fill="#10B981"/>
+                        <circle cx="16" cy="16" r="1" fill="#10B981"/>
+                        <path d="M8 8l-4 4"/>
+                        <path d="M16 8l4 4"/>
+                        <circle cx="5" cy="5" r="1"/>
+                        <circle cx="19" cy="5" r="1"/>
+                      </svg>
                       <span className="agent-selector-label">
                         {selectedAgent ? selectedAgent : 'Auto'}
                       </span>
@@ -741,12 +751,9 @@ function Home() {
                       ))}
                     </select>
                     <div className="skill-selector-button">
-                      <svg className="skill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {/* Skill 图标：工具/齿轮图标 */}
+                      <svg className="skill-icon" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
                         <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v6m0 6v6"/>
-                        <path d="m4.93 4.93 4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m6 0h6"/>
-                        <path d="m4.93 19.07 4.24-4.24m5.66-5.66 4.24-4.24"/>
+                        <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
                       </svg>
                       <span className="skill-selector-label">
                         {selectedSkills.length > 0 ? selectedSkills[0] : 'Auto'}
