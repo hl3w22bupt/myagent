@@ -178,6 +178,13 @@ See `.cursor/rules/motia/` for Motia development best practices (11 detailed gui
 
 MIT
 
+## Learn More About Motia
+
+- [Motia Documentation](https://motia.dev/docs) - Complete guides and API reference
+- [Quick Start Guide](https://motia.dev/docs/getting-started/quick-start) - Detailed getting started tutorial
+- [Core Concepts](https://motia.dev/docs/concepts/overview) - Learn about Steps and Motia architecture
+- [Discord Community](https://discord.gg/motia) - Get help and connect with other developers
+
 ---
 
 **Built with [Motia](https://github.com/garrytan/gstack)** - Unified backend framework for modern applications
