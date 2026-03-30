@@ -940,6 +940,38 @@ ${task}
       );
     }
 
+    // ⭐ NEW: Filter subagent skills with MasterAgent's availableSkills constraint
+    // When user specifies availableSkills in API request, both MasterAgent and subagents
+    // should respect this constraint by using only the intersection of skills
+    let filteredSkills = config.availableSkills || [];
+
+    if (this.masterConfig.availableSkills && this.masterConfig.availableSkills.length > 0) {
+      const masterSkills = new Set(this.masterConfig.availableSkills);
+      const subagentSkills = config.availableSkills || [];
+
+      // Take intersection: MasterAgent.availableSkills ∩ subagentConfig.availableSkills
+      filteredSkills = subagentSkills.filter((skill: string) => masterSkills.has(skill));
+
+      console.log(`[MasterAgent] Filtering subagent skills with user constraint`, {
+        subagent: name,
+        masterSkills: Array.from(masterSkills),
+        subagentSkills,
+        filteredSkills,
+        'intersection count': filteredSkills.length,
+      });
+
+      // If intersection is empty, log a warning but still create subagent with empty skills
+      // This will cause the subagent to use native Python code execution
+      if (filteredSkills.length === 0) {
+        console.warn(
+          `[MasterAgent] ⚠️ No skills overlap between MasterAgent constraint and subagent "${name}". ` +
+          `Subagent will have no skills available and will use native Python execution. ` +
+          `MasterAgent skills: ${Array.from(masterSkills).join(', ')}, ` +
+          `Subagent skills: ${subagentSkills.join(', ')}`
+        );
+      }
+    }
+
     // Create unique sessionId for subagent with clear prefix
     // Using independent namespace to distinguish from master agent
     const subagentSessionId = `subagent-${subagentKey}-${Date.now()}`;
@@ -948,7 +980,7 @@ ${task}
       {
         name,  // Set name for getSubjectInfo() to use as subjectSubTitle
         systemPrompt: config.systemPrompt,  // No fallback - must exist
-        availableSkills: config.availableSkills || [],  // Config exists, so this is safe
+        availableSkills: filteredSkills,  // Use filtered skills (intersection with MasterAgent's constraint)
         llm: this.config.llm,
         sandbox: this.config.sandbox,
         constraints: config?.constraints, // 传递 constraints 包含 enableClarification
@@ -962,6 +994,8 @@ ${task}
       subagentSessionId,
       masterSessionId: this.sessionId,
       workflowStepId,
+      'skills count': filteredSkills.length,
+      'skills': filteredSkills,
     });
 
     return subagent;
@@ -1150,6 +1184,8 @@ ${task}
         ...(context?.originalTask && { originalTask: context.originalTask }),
         // ⭐ 传递 rewriteRequest 给 subagent
         ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+        // ⭐ NEW: 传递 environment 给 subagent（用于任务特定的配置，如 project_dir, language 等）
+        ...(context?.environment && { environment: context.environment }),
         // ⭐ NEW: 传递 userProfile 和 userContext 给 subagent（通过 workingMemory）
         ...((userProfile || userContext) && {
           workingMemory: {

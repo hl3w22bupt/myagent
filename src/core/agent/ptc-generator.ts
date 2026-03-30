@@ -897,6 +897,10 @@ ${skillsBlock}
 ${(() => {
   // Generate EXACT code templates for each selected skill
   if (selectedSkills.length > 0) {
+    // Check if environment is provided
+    const hasEnvironment = options?.environment && Object.keys(options.environment).length > 0;
+    const envComment = hasEnvironment ? `\n        # ⭐ CRITICAL: environment parameter provided in <context> - MUST include it!` : '';
+
     return `<exact_code_templates>
 FOR EACH SELECTED SKILL, USE THIS EXACT CODE TEMPLATE:
 
@@ -904,12 +908,17 @@ ${selectedSkills.map(skill => {
   const param = this.findTaskParameter(skill);
   return `# === ${skill} ===
 # REQUIRED PARAMETER NAME: '${param}'
-# DO NOT use 'task' - use '${param}' instead!
+# DO NOT use 'task' - use '${param}' instead!${envComment}
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='${skill}',
     input_data={
-        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!
+        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!${hasEnvironment ? `
+        'environment': {  # ⭐ MANDATORY: Extract from <environment> section above
+            'project_dir': 'value_from_environment',
+            'language': 'value_from_environment',
+            # ... include all environment key-value pairs
+        },` : ''}
         # Add other optional parameters if mentioned in task
     }
 )

@@ -206,6 +206,7 @@ function Home() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [selectedAgent, setSelectedAgent] = useState('') // 选中的 subagent（空字符串表示自动选择）
+  const [selectedSkills, setSelectedSkills] = useState([]) // 选中的 skills（空数组表示自动选择）
 
   // 获取媒体文件的 Blob URL - 使用 useCallback 优化，防止每次渲染都重新创建函数
   const getMediaBlobUrl = useCallback(async (path) => {
@@ -615,7 +616,7 @@ function Home() {
       // 如果选中了 agent，作为 delegateTo 传递
       const delegateTo = selectedAgent ? [selectedAgent] : undefined
 
-      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId, delegateTo)
+      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId, delegateTo, selectedSkills)
 
       if (response.data && response.data.taskId) {
         // 保存sessionId到sessionStorage
@@ -722,6 +723,58 @@ function Home() {
                       <span className="agent-selector-label">
                         {selectedAgent ? selectedAgent : 'Auto'}
                       </span>
+                      <svg className="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m6 9 6 6 6-6"/>
+                      </svg>
+                    </div>
+                  </div>
+                )}
+
+                {/* Skill 选择器 - 右下角，与提交按钮水平对齐 */}
+                {skills.length > 0 && (
+                  <div className="skill-selector-corner">
+                    <select
+                      className="skill-select-input"
+                      value={selectedSkills.length > 0 ? selectedSkills[0] : ''}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setSelectedSkills(value ? [value] : [])
+                      }}
+                      disabled={submitting}
+                    >
+                      <option value="">All Skills</option>
+                      {skills.map(skill => (
+                        <option key={skill.name} value={skill.name}>
+                          {skill.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="skill-selector-button">
+                      <svg className="skill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        {/* Skill 图标：工具/齿轮图标 */}
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v6m0 6v6"/>
+                        <path d="m4.93 4.93 4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m6 0h6"/>
+                        <path d="m4.93 19.07 4.24-4.24m5.66-5.66 4.24-4.24"/>
+                      </svg>
+                      <span className="skill-selector-label">
+                        {selectedSkills.length > 0 ? selectedSkills[0] : 'All'}
+                      </span>
+                      {selectedSkills.length > 0 && (
+                        <button
+                          type="button"
+                          className="skill-clear-button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedSkills([])
+                          }}
+                          disabled={submitting}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                          </svg>
+                        </button>
+                      )}
                       <svg className="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m6 9 6 6 6-6"/>
                       </svg>
