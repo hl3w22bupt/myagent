@@ -1310,28 +1310,8 @@ When the <context> section contains <environment> information:
 2. Pass it to skills that support environment context using the 'environment' parameter
 
 Example PATTERN for environment-aware skills (like claude-code-cli):
-```python
-# If environment exists in context, build the environment dict
-environment_dict = {}
-if '<environment>' in context_text:
-    # Parse environment key-value pairs from context
-    # Example: "project_dir: projects/project-a\\nlanguage: python"
-    environment_dict = {
-        'project_dir': 'projects/project-a',
-        'language': 'python',
-        'framework': 'fastapi',
-        'branch': 'main'
-    }
-
-# Then pass to skill
-result = await execute_with_retry(
-    'claude-code-cli',
-    {
-        'task': '{actual_task}',
-        'environment': environment_dict  # ← Pass the full environment dict
-    }
-)
-```
+Python code: environment_dict = {\\n  'project_dir': 'projects/project-a',\\n  'language': 'python',\\n  'framework': 'fastapi',\\n  'branch': 'main'\\n}
+Then: result = await execute_with_retry('claude-code-cli', {'task': task, 'environment': environment_dict})
 
 CRITICAL RULES for environment passing:
 - ALWAYS pass environment as a dictionary to skills that support it
