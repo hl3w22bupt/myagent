@@ -695,7 +695,7 @@ function Home() {
 
                 {/* Agent 选择器 - 左下角，与提交按钮水平对齐 */}
                 {agents.length > 0 && (
-                  <div className="agent-selector-corner">
+                  <div className="agent-selector-corner" title="subagent">
                     <select
                       className="agent-select-input"
                       value={selectedAgent}
@@ -710,16 +710,7 @@ function Home() {
                       ))}
                     </select>
                     <div className="agent-selector-button">
-                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {/* Subagent 图标：主圆圈代表主 agent，小圆圈代表 subagent，连线表示层级关系 */}
-                        <circle cx="12" cy="6" r="3"/>
-                        <circle cx="6" cy="18" r="3"/>
-                        <circle cx="18" cy="18" r="3"/>
-                        <path d="M12 9v6"/>
-                        <path d="M9 18h6"/>
-                        <path d="M12 12l-3 3"/>
-                        <path d="M12 12l3 3"/>
-                      </svg>
+                      <span className="agent-icon">🤖</span>
                       <span className="agent-selector-label">
                         {selectedAgent ? selectedAgent : 'Auto'}
                       </span>
@@ -730,9 +721,9 @@ function Home() {
                   </div>
                 )}
 
-                {/* Skill 选择器 - 右下角，与提交按钮水平对齐 */}
+                {/* Skill 选择器 - 左下角，紧挨着 Agent 选择器 */}
                 {skills.length > 0 && (
-                  <div className="skill-selector-corner">
+                  <div className="skill-selector-corner" title="skill">
                     <select
                       className="skill-select-input"
                       value={selectedSkills.length > 0 ? selectedSkills[0] : ''}
@@ -742,7 +733,7 @@ function Home() {
                       }}
                       disabled={submitting}
                     >
-                      <option value="">All Skills</option>
+                      <option value="">Auto</option>
                       {skills.map(skill => (
                         <option key={skill.name} value={skill.name}>
                           {skill.name}
@@ -758,7 +749,7 @@ function Home() {
                         <path d="m4.93 19.07 4.24-4.24m5.66-5.66 4.24-4.24"/>
                       </svg>
                       <span className="skill-selector-label">
-                        {selectedSkills.length > 0 ? selectedSkills[0] : 'All'}
+                        {selectedSkills.length > 0 ? selectedSkills[0] : 'Auto'}
                       </span>
                       {selectedSkills.length > 0 && (
                         <button
@@ -769,6 +760,7 @@ function Home() {
                             setSelectedSkills([])
                           }}
                           disabled={submitting}
+                          title="清除选择"
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 6L6 18M6 6l12 12"/>
