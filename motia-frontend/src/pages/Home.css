@@ -193,11 +193,21 @@
   cursor: not-allowed;
 }
 
-/* Skill 选择器 - 输入框内右下角，与提交按钮对齐 */
+/* Agent 和 Skill 选择器容器 - 水平排列 */
+.hero-submit-form {
+  position: relative;
+}
+
+/* 当两个选择器都存在时，调整 agent 选择器的位置 */
+.hero-submit-form:has(.skill-selector-corner) .agent-selector-corner {
+  left: 1.25rem;
+}
+
+/* Skill 选择器 - 输入框内左下角，紧挨着 Agent 选择器 */
 .skill-selector-corner {
   position: absolute;
   bottom: 0.875rem;
-  right: 1.25rem;
+  left: 9.5rem; /* 紧挨着 agent 选择器（约 120px + 间距） */
   z-index: 10;
 }
 
