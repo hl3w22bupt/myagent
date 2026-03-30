@@ -207,7 +207,7 @@
 .skill-selector-corner {
   position: absolute;
   bottom: 0.875rem;
-  left: 9.5rem; /* 紧挨着 agent 选择器（约 120px + 间距） */
+  left: 10.5rem; /* 与 agent 选择器之间留出更多间距 */
   z-index: 10;
 }
 
