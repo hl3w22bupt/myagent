@@ -170,9 +170,11 @@ def copy_files_to_outputs(workspace_artifacts: Dict[str, Any], task_id: str) -> 
 
 def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Execute Claude Code CLI with stdin input.
+    Execute Claude Code CLI with environment-aware workspace management.
 
-    Workspace constraint: All files created in tmp-workspace/{task_id}/claude-code-skill/
+    Supports two workspace modes:
+    1. Persistent project directory (when environment.project_dir is provided)
+    2. Temporary workspace (default, for backward compatibility)
     """
     import time
     start_time = time.time()
@@ -186,20 +188,73 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # Try to get from environment
         task_id = os.getenv('MOTIA_TASK_ID', 'unknown-task')
 
-    # Extract parameters
+    # ========== Extract parameters ==========
     task = input_data.get('task', '').strip()
-    model = input_data.get('model', 'claude-sonnet-4-5')
-    timeout = input_data.get('timeout', 300)
 
-    # Set up workspace directory: tmp-workspace/{task_id}/claude-code-skill/
-    workspace_root = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
-    workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
+    # ========== Extract environment parameters ==========
+    environment = input_data.get('environment', {})
+
+    # Workspace related
+    project_dir = environment.get('project_dir') or environment.get('workspace')
+
+    # Tech stack related
+    language = environment.get('language', 'python')
+    framework = environment.get('framework')
+    runtime = environment.get('runtime')
+
+    # Git related
+    git_url = environment.get('git_url')
+    branch = environment.get('branch', 'main')
+    commit = environment.get('commit')
+
+    # Config related
+    database = environment.get('database')
+    api_version = environment.get('api_version')
+
+    # Claude CLI related (with fallback to direct parameters for backward compatibility)
+    model = (
+        input_data.get('model') or                      # Direct parameter (deprecated)
+        environment.get('model') or                     # environment.model
+        'claude-sonnet-4-5'                             # Default value
+    )
+
+    timeout = (
+        input_data.get('timeout') or                    # Direct parameter (deprecated)
+        environment.get('timeout', 300)                 # environment.timeout or default
+    )
+
+    # ========== Log environment parameters ==========
+    print(f"[CLAUDE-CODE-CLI] Environment parameters:")
+    if project_dir:
+        print(f"  project_dir: {project_dir} (PERSISTENT WORKSPACE)")
+    else:
+        print(f"  project_dir: not specified (using temporary workspace)")
+    print(f"  language: {language}")
+    if framework:
+        print(f"  framework: {framework}")
+    if git_url:
+        print(f"  git_url: {git_url}")
+    if branch:
+        print(f"  branch: {branch}")
+    print(f"  model: {model}")
+    print(f"  timeout: {timeout}s")
+
+    # ========== Workspace Decision ==========
+    if project_dir:
+        # Use persistent project directory
+        working_dir = os.path.abspath(project_dir)
+        is_persistent = True
+        print(f"[CLAUDE-CODE-CLI] ✓ Using persistent workspace: {working_dir}")
+    else:
+        # Use default tmp-workspace
+        workspace_root = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
+        workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
+        working_dir = os.path.abspath(workspace_dir)
+        is_persistent = False
+        print(f"[CLAUDE-CODE-CLI] ✓ Using temporary workspace: {working_dir}")
 
     # Create workspace directory
-    os.makedirs(workspace_dir, exist_ok=True)
-
-    # Convert to absolute path to avoid any confusion
-    working_dir = os.path.abspath(workspace_dir)
+    os.makedirs(working_dir, exist_ok=True)
 
     # Validate task
     if not task:
@@ -222,9 +277,34 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "Task parameter is required"
             }
 
-    # Update task to include workspace context
-    # Tell Claude CLI it's already in the correct working directory
-    task_with_context = f"{task}\n\nYou are currently in the working directory where files should be created. Please create all files in the current directory (do not use absolute paths)."
+    # ========== Build enhanced task description ==========
+    task_parts = [task]
+
+    # Add tech stack context
+    if language:
+        task_parts.append(f"Language: {language}")
+    if framework:
+        task_parts.append(f"Framework: {framework}")
+    if runtime:
+        task_parts.append(f"Runtime: {runtime}")
+
+    # Add git context
+    if git_url:
+        task_parts.append(f"Git Repository: {git_url}")
+    if branch:
+        task_parts.append(f"Branch: {branch}")
+    if commit:
+        task_parts.append(f"Commit: {commit}")
+
+    # Add workspace context
+    if is_persistent:
+        task_parts.append(f"Working in project directory: {working_dir}")
+    else:
+        task_parts.append(f"Working in temporary workspace")
+
+    task_parts.append("Create all files in the current directory (do not use absolute paths).")
+
+    task_with_context = "\n".join(task_parts)
 
     # Validate working directory exists
     work_path = Path(working_dir).expanduser().resolve()
@@ -235,7 +315,8 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     error=ErrorInfo(
                         type="resource",
                         message=f'Working directory does not exist: {working_dir}',
-                        retryable=False
+                        retryable=False,
+                        suggestions=[f"Create the directory first: mkdir -p {working_dir}"]
                     )
                 ) \
                 .build()
@@ -296,10 +377,157 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             print(f"[WORKSPACE] Directory does not exist: {workspace_artifacts['directory']}")
 
-        # Copy files to persistent outputs/ directory
-        output_files = copy_files_to_outputs(workspace_artifacts, task_id)
+        # ========== Result handling based on workspace mode ==========
 
-        print(f"[COPIED] {len(output_files)} files to outputs/codes/")
+        if is_persistent:
+            # ========== PERSISTENT WORKSPACE MODE ==========
+            # Files are in the project directory, don't copy to outputs/
+            # Return text type with file list in metadata
+
+            print(f"[PERSISTENT MODE] Files remain in project directory: {working_dir}")
+
+            if exit_code == 0:
+                try:
+                    output_data = json.loads(stdout) if stdout else {}
+
+                    if OUTPUT_BUILDER_AVAILABLE:
+                        builder = OutputBuilder()
+
+                        # Add metadata
+                        builder.add_standard_metadata("task", task)
+                        builder.add_standard_metadata("model", model)
+                        builder.add_standard_metadata("exit_code", exit_code)
+                        builder.add_standard_metadata("execution_time", execution_time)
+                        builder.add_standard_metadata("working_dir", working_dir)
+                        builder.add_standard_metadata("is_persistent", True)
+
+                        # Add environment parameters to metadata
+                        builder.add_standard_metadata("environment", {
+                            "project_dir": project_dir,
+                            "language": language,
+                            "framework": framework,
+                            "git_url": git_url,
+                            "branch": branch,
+                            "commit": commit,
+                            "database": database,
+                            "api_version": api_version
+                        })
+
+                        # Add workspace artifacts
+                        builder.add_standard_metadata("workspace_artifacts", workspace_artifacts)
+
+                        # Build file list for metadata
+                        files_created = [
+                            {
+                                "path": f["path"],
+                                "absolute_path": os.path.join(working_dir, f["path"]),
+                                "size": f["size_bytes"],
+                                "extension": f["extension"]
+                            }
+                            for f in workspace_artifacts.get("files", [])
+                        ]
+
+                        builder.add_standard_metadata("files_created", files_created)
+
+                        # Build text summary
+                        file_list = "\n".join([
+                            f"  - {f['path']} ({f['size_bytes']} bytes)"
+                            for f in workspace_artifacts.get("files", [])
+                        ]) if workspace_artifacts.get("files") else "  (no files created)"
+
+                        summary_text = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+Project directory: {working_dir}
+Files remain in the project directory.
+"""
+
+                        # Add Claude CLI output if available
+                        if isinstance(output_data, dict):
+                            if output_data:
+                                summary_text += f"\n\nClaude CLI Output:\n{json.dumps(output_data, ensure_ascii=False, indent=2)}"
+                        elif stdout.strip():
+                            summary_text += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        builder.set_text(summary_text)
+                        builder.set_title(f"Generated {len(workspace_artifacts.get('files', []))} file(s)")
+
+                        result = builder.build()
+                        write_structured_output(result, session_id)
+                        return result
+                    else:
+                        # Fallback without OutputBuilder
+                        file_list = "\n".join([
+                            f"  - {f['path']}"
+                            for f in workspace_artifacts.get("files", [])
+                        ])
+
+                        content = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+"""
+                        if stdout.strip():
+                            content += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        return {
+                            "success": True,
+                            "result_type": "text",
+                            "content": content,
+                            "metadata": {
+                                "execution_time": execution_time,
+                                "working_dir": working_dir,
+                                "is_persistent": True,
+                                "files_created": files_created,
+                                "environment": {
+                                    "project_dir": project_dir,
+                                    "language": language,
+                                    "framework": framework
+                                }
+                            }
+                        }
+                except json.JSONDecodeError:
+                    # Not JSON output
+                    if OUTPUT_BUILDER_AVAILABLE:
+                        builder = OutputBuilder()
+                        builder.add_standard_metadata("task", task)
+                        builder.add_standard_metadata("working_dir", working_dir)
+                        builder.add_standard_metadata("is_persistent", True)
+
+                        file_list = "\n".join([
+                            f"  - {f['path']}"
+                            for f in workspace_artifacts.get("files", [])
+                        ])
+
+                        summary_text = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+"""
+                        if stdout.strip():
+                            summary_text += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        builder.set_text(summary_text)
+                        result = builder.build()
+                        write_structured_output(result, session_id)
+                        return result
+                    else:
+                        return {
+                            "success": True,
+                            "result_type": "text",
+                            "content": stdout,
+                            "metadata": {
+                                "execution_time": execution_time,
+                                "working_dir": working_dir,
+                                "is_persistent": True
+                            }
+                        }
+        else:
+            # ========== TEMPORARY WORKSPACE MODE (Legacy Behavior) ==========
+            # Copy files to outputs/codes/ directory
+            output_files = copy_files_to_outputs(workspace_artifacts, task_id)
+            print(f"[TEMPORARY MODE] Copied {len(output_files)} files to outputs/codes/")
 
         # Check if command succeeded
         if exit_code == 0:
