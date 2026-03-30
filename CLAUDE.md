@@ -16,7 +16,8 @@
 - `.cursor/rules/motia/` - Motia best practices (11 detailed guides)
 - `TESTING_WORKFLOW.md` - Complete testing flow
 - `API_REFERENCE.md` - All API endpoints
-- `docs/AGENT_PLATFORM_ARCHITECTURE.md` - Full architecture
+- `docs/reference/architecture/README.md` - Architecture overview
+- `docs/reference/architecture/agent-system.md` - Agent system details
 
 **For Claude Code**: Use `/agents` → `myagent-developer` subagent (auto-loads cursor rules)
 
@@ -152,7 +153,7 @@ curl -X POST http://localhost:3000/agent/execute \
 3. Use `myagent-developer` for coding
 
 **Debugging**:
-1. Read `docs/SYSTEM_CONCEPTS_OVERVIEW.md`
+1. Read `docs/reference/architecture/core-concepts.md`
 2. Check logs: `tail -f .motia/logs/motia.log`
 3. Use Context API for task analysis
 
@@ -172,6 +173,7 @@ knowledgeBase: {
 **Supported APIs**:
 - OpenAI (default)
 - Any OpenAI-compatible API (set `baseURL` and `apiKey`)
+- **Dynamic model selection**: Automatically switches between models based on detected vector dimensions (768D → ollama, 1536D → OpenAI)
 
 **Setup**:
 ```bash
@@ -182,7 +184,12 @@ npm run setup:knowledge-base -- --execute --dimensions 1536
 npm run setup:knowledge-base -- --execute --dimensions 1024
 ```
 
-**Documentation**: `docs/KNOWLEDGE_BASE_GUIDE.md`
+**Features**:
+- **Auto-dimension detection**: Automatically detects vector dimensions when associating knowledge bases
+- **Per-collection configuration**: Each app-collection mapping can have custom field mappings and thresholds
+- **Multi-dimension support**: Seamlessly work with knowledge tables of different dimensions
+
+**Documentation**: `docs/reference/architecture/knowledge-base.md`
 
 ## ⚡ Motia Development
 
@@ -199,4 +206,4 @@ npm run setup:knowledge-base -- --execute --dimensions 1024
 **Remember**:
 - The `.cursor/rules/` directory is your primary Motia reference
 - AGENTS.md (this file) is now merged into CLAUDE.md for auto-injection
-- See `docs/` for detailed architecture documentation
+- See `docs/reference/` for detailed architecture documentation

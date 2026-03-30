@@ -17,6 +17,9 @@ export interface KnowledgeEntry {
 export interface RetrieveOptions {
   limit?: number;           // Default: 5
   threshold?: number;       // Default: 0.7
+  contentField?: string;    // Content field name (e.g., 'content', 'text')
+  embeddingField?: string;  // Embedding field name (e.g., 'embedding', 'vector')
+  embeddingDimensions?: number; // Table's embedding dimensions (for validation)
 }
 
 export interface EmbeddingOptions {

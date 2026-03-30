@@ -22,6 +22,9 @@ export const config: ApiRouteConfig = {
 // Request body schema
 const addCollectionSchema = z.object({
   collectionName: z.string().min(1),
+  contentField: z.string().optional().default('content'),
+  embeddingField: z.string().optional().default('embedding'),
+  threshold: z.number().optional().default(0.7),
   enabled: z.boolean().optional().default(true),
   priority: z.number().optional().default(0),
 });
@@ -47,11 +50,14 @@ export const handler = async (
       };
     }
 
-    const { collectionName, enabled, priority } = validationResult.data;
+    const { collectionName, contentField, embeddingField, threshold, enabled, priority } = validationResult.data;
 
     logger.info('Adding knowledge collection to app', {
       appId,
       collectionName,
+      contentField,
+      embeddingField,
+      threshold,
       enabled,
       priority,
     });
@@ -59,6 +65,9 @@ export const handler = async (
     const mapping = await addAppKnowledgeCollection(
       appId,
       collectionName,
+      contentField,
+      embeddingField,
+      threshold,
       enabled,
       priority
     );
@@ -68,7 +77,11 @@ export const handler = async (
       body: {
         success: true,
         data: {
-          collectionName: mapping.collection_name,
+          tableName: mapping.table_name,
+          contentField: mapping.content_field,
+          embeddingField: mapping.embedding_field,
+          threshold: mapping.threshold,
+          embeddingDimensions: mapping.embedding_dimensions,
           enabled: mapping.enabled,
           priority: mapping.priority,
         },

@@ -1,5 +1,73 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import './Knowledge.css'
+
+// 可搜索下拉框组件（移到组件外部避免重新创建）
+const SearchableSelect = ({ label, value, onChange, options, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState(value || '')
+  const inputRef = useState(null)[0]
+
+  // 当外部value变化时，更新内部state
+  useEffect(() => {
+    setSearchTerm(value || '')
+  }, [value])
+
+  const filteredOptions = options.filter(option =>
+    option.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const handleInputChange = (e) => {
+    const newValue = e.target.value
+    setSearchTerm(newValue)
+    onChange(newValue)
+  }
+
+  const handleOptionClick = (option) => {
+    setSearchTerm(option)
+    onChange(option)
+    setIsOpen(false)
+    // 让输入框保持焦点
+    setTimeout(() => {
+      if (inputRef?.current) {
+        inputRef.current.focus()
+      }
+    }, 0)
+  }
+
+  return (
+    <div className="searchable-select">
+      <label>{label}</label>
+      <div className="searchable-select-wrapper">
+        <input
+          ref={inputRef}
+          type="text"
+          className="searchable-select-input"
+          placeholder={placeholder}
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => {
+            // 延迟关闭，让点击事件先触发
+            setTimeout(() => setIsOpen(false), 200)
+          }}
+        />
+        {isOpen && filteredOptions.length > 0 && (
+          <div className="searchable-select-dropdown">
+            {filteredOptions.map((option, index) => (
+              <div
+                key={index}
+                className="searchable-select-option"
+                onMouseDown={() => handleOptionClick(option)}
+              >
+                {option}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function Knowledge() {
   const [collections, setCollections] = useState([])
@@ -21,6 +89,12 @@ function Knowledge() {
   const [showCollectionAppSelector, setShowCollectionAppSelector] = useState({})
   const [selectedAppFilter, setSelectedAppFilter] = useState('all')
   const [message, setMessage] = useState(null)
+  const [fieldMappings, setFieldMappings] = useState({}) // 存储字段映射配置
+  const [tableSchemas, setTableSchemas] = useState({}) // 存储表结构信息
+  const [fieldSearchTerms, setFieldSearchTerms] = useState({}) // 存储字段搜索词
+  const [selectedAppsForMapping, setSelectedAppsForMapping] = useState({}) // 存储每个知识库选中的app
+  const [showEditDialog, setShowEditDialog] = useState({}) // 控制编辑对话框显示
+  const [editForm, setEditForm] = useState({}) // 存储编辑表单数据
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -36,6 +110,53 @@ function Knowledge() {
       console.error('Failed to fetch available apps:', error)
     }
   }
+
+  // 获取表结构信息
+  const fetchTableSchema = async (tableName) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/knowledge/table-schema`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName })
+      })
+      const data = await response.json()
+      if (data.success) {
+        setTableSchemas(prev => ({
+          ...prev,
+          [tableName]: data.data.columns
+        }))
+        return data.data.columns
+      }
+    } catch (error) {
+      console.error(`Failed to fetch schema for ${tableName}:`, error)
+    }
+    return []
+  }
+
+  // 优化的字段映射处理函数
+  const handleContentFieldChange = useCallback((sourceId, collectionName) => (value) => {
+    const key = `${sourceId}-${collectionName}`
+    setFieldMappings(prev => ({
+      ...prev,
+      [key]: { ...prev[key], contentField: value }
+    }))
+  }, [])
+
+  const handleEmbeddingFieldChange = useCallback((sourceId, collectionName) => (value) => {
+    const key = `${sourceId}-${collectionName}`
+    setFieldMappings(prev => ({
+      ...prev,
+      [key]: { ...prev[key], embeddingField: value }
+    }))
+  }, [])
+
+  const handleThresholdChange = useCallback((sourceId, collectionName) => (value) => {
+    const key = `${sourceId}-${collectionName}`
+    setFieldMappings(prev => ({
+      ...prev,
+      [key]: { ...prev[key], threshold: parseFloat(value) || 0.7 }
+    }))
+  }, [])
 
   const fetchDataSources = async () => {
     try {
@@ -214,7 +335,7 @@ function Knowledge() {
     }
   }
 
-  const addCollection = async (collectionName, appId) => {
+  const addCollection = async (collectionName, appId, contentField = 'content', embeddingField = 'embedding', threshold = 0.7) => {
     setLoading(true)
     try {
       const response = await fetch(`${API_BASE}/api/apps/${appId}/knowledge-collections/add`, {
@@ -223,6 +344,9 @@ function Knowledge() {
         body: JSON.stringify({
           tenantId: 'default',
           collectionName,
+          contentField,
+          embeddingField,
+          threshold,
           enabled: true,
           priority: 0
         })
@@ -264,10 +388,41 @@ function Knowledge() {
     }
   }
 
+  const updateCollection = async (appId, collectionName, contentField, embeddingField, threshold) => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/apps/${appId}/knowledge-collections/${collectionName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentField,
+          embeddingField,
+          threshold,
+          enabled: true,
+          priority: 0
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        setMessage({ type: 'success', text: '知识库配置更新成功' })
+        fetchAllCollections()
+        return true
+      } else {
+        setMessage({ type: 'error', text: data.error || '更新失败' })
+        return false
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '网络错误' })
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const toggleCollectionStatus = async (collectionName, currentStatus, appId) => {
     setLoading(true)
     try {
-      const collection = collections.find(c => c.collectionName === collectionName && c.appId === appId)
+      const collection = collections.find(c => c.tableName === collectionName && c.appId === appId)
       const response = await fetch(`${API_BASE}/api/apps/${appId}/knowledge-collections/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -292,7 +447,7 @@ function Knowledge() {
   }
 
   const isCollectionLinked = (collectionName) => {
-    return collections.some(c => c.collectionName === collectionName)
+    return collections.some(c => c.tableName === collectionName)
   }
 
   useEffect(() => {
@@ -400,7 +555,7 @@ function Knowledge() {
           </div>
           <div className="stat-info">
             <div className="stat-label">知识库集合</div>
-            <div className="stat-value">{new Set(collections.map(c => c.collectionName)).size}</div>
+            <div className="stat-value">{new Set(collections.map(c => c.tableName)).size}</div>
           </div>
         </div>
         <div className="stat-card stat-busy">
@@ -545,7 +700,7 @@ function Knowledge() {
                   {discoveredCollections[source.id].map((collection) => {
                     // 检查这个知识库关联了哪些应用
                     const linkedApps = collections.filter(
-                      c => c.collectionName === collection.name
+                      c => c.tableName === collection.name
                     ).map(c => c.appId)
 
                     return (
@@ -568,13 +723,54 @@ function Knowledge() {
                             <div className="linked-apps">
                               <span className="linked-apps-label">已关联:</span>
                               <span className="linked-apps-list">{linkedApps.join(', ')}</span>
+                              <button
+                                className="btn-edit-collection"
+                                onClick={() => {
+                                  const collectionConfig = collections.find(
+                                    c => c.tableName === collection.name && c.appId === linkedApps[0]
+                                  )
+                                  const editKey = `${source.id}-${collection.name}`
+                                  setEditForm(prev => ({
+                                    ...prev,
+                                    [editKey]: {
+                                      appId: linkedApps[0],
+                                      collectionName: collection.name,
+                                      contentField: collectionConfig?.contentField || 'content',
+                                      embeddingField: collectionConfig?.embeddingField || 'embedding',
+                                      threshold: collectionConfig?.threshold || 0.7
+                                    }
+                                  }))
+                                  setShowEditDialog(prev => ({
+                                    ...prev,
+                                    [editKey]: true
+                                  }))
+                                }}
+                                title="编辑配置"
+                              >
+                                <svg style={{ width: '16px', height: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
                             </div>
                           )}
                         </div>
                         <div className="collection-actions">
                           <button
                             className="btn-link-app"
-                            onClick={() => {
+                            onClick={async () => {
+                              // 获取表结构
+                              await fetchTableSchema(collection.name)
+
+                              // 初始化临时选择的app（复制当前已关联的app）
+                              const mappingKey = `${source.id}-${collection.name}`
+                              const currentLinkedApps = collections.filter(
+                                c => c.tableName === collection.name
+                              ).map(c => c.appId)
+                              setSelectedAppsForMapping(prev => ({
+                                ...prev,
+                                [mappingKey]: currentLinkedApps
+                              }))
+
                               setShowCollectionAppSelector(prev => ({
                                 ...prev,
                                 [`${source.id}-${collection.name}`]: true
@@ -596,7 +792,7 @@ function Knowledge() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div className="selector-header">
-                              <span>选择要关联的应用</span>
+                              <span>关联应用到知识库</span>
                               <button
                                 className="btn-close-dropdown"
                                 onClick={() => setShowCollectionAppSelector(prev => ({
@@ -607,23 +803,62 @@ function Knowledge() {
                                 ✕
                               </button>
                             </div>
+
+                            {/* 字段映射配置 */}
+                            <div className="field-mapping-section">
+                              <div className="field-mapping-title">字段映射配置</div>
+                              <div className="field-mapping-fields">
+                                <SearchableSelect
+                                  label="内容字段名"
+                                  value={fieldMappings[`${source.id}-${collection.name}`]?.contentField || 'content'}
+                                  onChange={handleContentFieldChange(source.id, collection.name)}
+                                  options={tableSchemas[collection.name]?.map(col => col.name) || []}
+                                  placeholder="选择或输入内容字段名"
+                                />
+                                <SearchableSelect
+                                  label="Embedding字段名"
+                                  value={fieldMappings[`${source.id}-${collection.name}`]?.embeddingField || 'embedding'}
+                                  onChange={handleEmbeddingFieldChange(source.id, collection.name)}
+                                  options={tableSchemas[collection.name]?.map(col => col.name) || []}
+                                  placeholder="选择或输入Embedding字段名"
+                                />
+                                <div className="field-input">
+                                  <label>相似度阈值</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                    value={fieldMappings[`${source.id}-${collection.name}`]?.threshold || 0.7}
+                                    onChange={(e) => handleThresholdChange(source.id, collection.name)(e.target.value)}
+                                    placeholder="0.7"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="selector-list">
                               {availableApps.length === 0 ? (
                                 <div className="no-apps-hint">暂无可用应用</div>
                               ) : (
                                 availableApps.map((app) => {
-                                  const isLinked = linkedApps.includes(app)
+                                  const mappingKey = `${source.id}-${collection.name}`
+                                  const selectedApps = selectedAppsForMapping[mappingKey] || linkedApps
+                                  const isLinked = selectedApps.includes(app)
+
                                   return (
                                     <label key={app} className="selector-item">
                                       <input
                                         type="checkbox"
                                         checked={isLinked}
                                         onChange={(e) => {
-                                          if (e.target.checked) {
-                                            addCollection(collection.name, app)
-                                          } else {
-                                            removeCollection(collection.name, app)
-                                          }
+                                          const newSelectedApps = e.target.checked
+                                            ? [...selectedApps, app]
+                                            : selectedApps.filter(a => a !== app)
+                                          setSelectedAppsForMapping(prev => ({
+                                            ...prev,
+                                            [mappingKey]: newSelectedApps
+                                          }))
                                         }}
                                       />
                                       <span>{app}</span>
@@ -631,6 +866,179 @@ function Knowledge() {
                                   )
                                 })
                               )}
+                            </div>
+
+                            {/* 确认和取消按钮 */}
+                            <div className="mapping-actions">
+                              <button
+                                className="btn-cancel-mapping"
+                                onClick={() => {
+                                  setShowCollectionAppSelector(prev => ({
+                                    ...prev,
+                                    [`${source.id}-${collection.name}`]: false
+                                  }))
+                                  // 清空临时选择
+                                  const mappingKey = `${source.id}-${collection.name}`
+                                  setSelectedAppsForMapping(prev => {
+                                    const newState = { ...prev }
+                                    delete newState[mappingKey]
+                                    return newState
+                                  })
+                                }}
+                              >
+                                取消
+                              </button>
+                              <button
+                                className="btn-confirm-mapping"
+                                onClick={async () => {
+                                  const mappingKey = `${source.id}-${collection.name}`
+                                  const newSelectedApps = selectedAppsForMapping[mappingKey] || []
+                                  const contentField = fieldMappings[mappingKey]?.contentField || 'content'
+                                  const embeddingField = fieldMappings[mappingKey]?.embeddingField || 'embedding'
+                                  const threshold = fieldMappings[mappingKey]?.threshold || 0.7
+
+                                  // 计算需要添加和删除的app
+                                  const appsToAdd = newSelectedApps.filter(app => !linkedApps.includes(app))
+                                  const appsToRemove = linkedApps.filter(app => !newSelectedApps.includes(app))
+
+                                  // 执行添加和删除操作
+                                  for (const app of appsToAdd) {
+                                    await addCollection(collection.name, app, contentField, embeddingField, threshold)
+                                  }
+                                  for (const app of appsToRemove) {
+                                    await removeCollection(collection.name, app)
+                                  }
+
+                                  // 关闭弹窗并清空临时选择
+                                  setShowCollectionAppSelector(prev => ({
+                                    ...prev,
+                                    [`${source.id}-${collection.name}`]: false
+                                  }))
+                                  setSelectedAppsForMapping(prev => {
+                                    const newState = { ...prev }
+                                    delete newState[mappingKey]
+                                    return newState
+                                  })
+                                }}
+                              >
+                                确认关联
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 编辑配置对话框 */}
+                        {showEditDialog[`${source.id}-${collection.name}`] && (
+                          <div className="collection-app-selector-overlay">
+                            <div className="collection-app-selector-dialog">
+                              <h4>编辑知识库配置 - {collection.name}</h4>
+                              <div className="field-mapping-fields">
+                                <div className="field-input">
+                                  <label>内容字段</label>
+                                  <input
+                                    type="text"
+                                    value={editForm[`${source.id}-${collection.name}`]?.contentField || 'content'}
+                                    onChange={(e) => {
+                                      const editKey = `${source.id}-${collection.name}`
+                                      setEditForm(prev => ({
+                                        ...prev,
+                                        [editKey]: {
+                                          ...prev[editKey],
+                                          contentField: e.target.value
+                                        }
+                                      }))
+                                    }}
+                                    placeholder="content"
+                                  />
+                                </div>
+                                <div className="field-input">
+                                  <label>Embedding 字段</label>
+                                  <input
+                                    type="text"
+                                    value={editForm[`${source.id}-${collection.name}`]?.embeddingField || 'embedding'}
+                                    onChange={(e) => {
+                                      const editKey = `${source.id}-${collection.name}`
+                                      setEditForm(prev => ({
+                                        ...prev,
+                                        [editKey]: {
+                                          ...prev[editKey],
+                                          embeddingField: e.target.value
+                                        }
+                                      }))
+                                    }}
+                                    placeholder="embedding"
+                                  />
+                                </div>
+                                <div className="field-input">
+                                  <label>相似度阈值</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                    value={editForm[`${source.id}-${collection.name}`]?.threshold || 0.7}
+                                    onChange={(e) => {
+                                      const editKey = `${source.id}-${collection.name}`
+                                      setEditForm(prev => ({
+                                        ...prev,
+                                        [editKey]: {
+                                          ...prev[editKey],
+                                          threshold: parseFloat(e.target.value) || 0.7
+                                        }
+                                      }))
+                                    }}
+                                    placeholder="0.7"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* 显示字段映射信息 */}
+                              {editForm[`${source.id}-${collection.name}`] && (
+                                <div className="field-mapping-info">
+                                  <div className="field-mapping-label">字段映射:</div>
+                                  <div className="field-mapping-values">
+                                    <span>content → {editForm[`${source.id}-${collection.name}`]?.contentField || 'content'}</span>
+                                    <span>embedding → {editForm[`${source.id}-${collection.name}`]?.embeddingField || 'embedding'}</span>
+                                    <span>threshold → {editForm[`${source.id}-${collection.name}`]?.threshold || 0.7}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="mapping-actions">
+                                <button
+                                  className="btn-cancel-mapping"
+                                  onClick={() => {
+                                    setShowEditDialog(prev => ({
+                                      ...prev,
+                                      [`${source.id}-${collection.name}`]: false
+                                    }))
+                                  }}
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  className="btn-confirm-mapping"
+                                  onClick={async () => {
+                                    const editKey = `${source.id}-${collection.name}`
+                                    const form = editForm[editKey]
+                                    const success = await updateCollection(
+                                      form.appId,
+                                      form.collectionName,
+                                      form.contentField,
+                                      form.embeddingField,
+                                      form.threshold
+                                    )
+                                    if (success) {
+                                      setShowEditDialog(prev => ({
+                                        ...prev,
+                                        [editKey]: false
+                                      }))
+                                    }
+                                  }}
+                                >
+                                  保存
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -707,10 +1115,10 @@ function Knowledge() {
                 collections
                   .filter(collection => selectedAppFilter === 'all' || collection.appId === selectedAppFilter)
                   .reduce((acc, collection) => {
-                    if (!acc[collection.collectionName]) {
-                      acc[collection.collectionName] = []
+                    if (!acc[collection.tableName]) {
+                      acc[collection.tableName] = []
                     }
-                    acc[collection.collectionName].push(collection)
+                    acc[collection.tableName].push(collection)
                     return acc
                   }, {})
               ).map(([collectionName, apps]) => (
@@ -724,6 +1132,27 @@ function Knowledge() {
                       <div className="collection-meta">关联 {apps.length} 个应用</div>
                     </div>
                   </div>
+                  {/* 字段映射信息单独一行 */}
+                  {apps.length > 0 && (
+                    <div className="collection-field-mapping-row">
+                      <div className="collection-field-mapping">
+                        <span className="field-mapping-item">
+                          <span className="field-mapping-label">内容字段:</span>
+                          <span className="field-mapping-value">{apps[0].contentField || 'content'}</span>
+                        </span>
+                        <span className="field-mapping-separator">•</span>
+                        <span className="field-mapping-item">
+                          <span className="field-mapping-label">embedding:</span>
+                          <span className="field-mapping-value">{apps[0].embeddingField || 'embedding'}</span>
+                        </span>
+                        <span className="field-mapping-separator">•</span>
+                        <span className="field-mapping-item">
+                          <span className="field-mapping-label">阈值:</span>
+                          <span className="field-mapping-value">{apps[0].threshold !== undefined ? apps[0].threshold : 0.7}</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <div className="collection-apps-list">
                     {apps.map((app) => (
                       <div key={`${collectionName}-${app.appId}`} className="app-item">

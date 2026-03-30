@@ -33,6 +33,11 @@ export const handler = async (request: any, { logger }: any) => {
             port: source.connection.port,
             database: source.connection.database,
           },
+          embedding: {
+            model: source.embedding_model,
+            dimensions: source.embedding_dimensions,
+            baseURL: source.embedding_base_url,
+          },
           status: source.status,
           appIds: source.appIds,
           createdAt: source.createdAt,

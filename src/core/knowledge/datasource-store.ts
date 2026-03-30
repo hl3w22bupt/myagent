@@ -20,6 +20,9 @@ export interface DataSource {
     uri?: string;
     apiKey?: string;
   };
+  embedding_model?: string;
+  embedding_dimensions?: number;
+  embedding_base_url?: string;
   status: 'connected' | 'error';
   appIds: string[];
   createdAt: string;
@@ -102,6 +105,9 @@ export async function getAllDataSources(): Promise<DataSource[]> {
       uri: row.connection_uri,
       apiKey: row.connection_apikey,
     },
+    embedding_model: row.embedding_model,
+    embedding_dimensions: row.embedding_dimensions,
+    embedding_base_url: row.embedding_base_url,
     status: row.status,
     appIds: row.app_ids ? row.app_ids.split(',') : [],
     createdAt: row.created_at,
@@ -131,6 +137,9 @@ export async function getDataSource(id: string): Promise<DataSource | undefined>
       uri: row.connection_uri,
       apiKey: row.connection_apikey,
     },
+    embedding_model: row.embedding_model,
+    embedding_dimensions: row.embedding_dimensions,
+    embedding_base_url: row.embedding_base_url,
     status: row.status,
     appIds: row.app_ids ? row.app_ids.split(',') : [],
     createdAt: row.created_at,

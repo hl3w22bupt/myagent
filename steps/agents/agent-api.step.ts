@@ -245,6 +245,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
       availableSkills, // Pass through as-is (empty = let PTCGenerator decide)
       useDelegation,
       delegateTo, // Pass explicit delegation to MasterAgent
+      app: appIdentifier, // App identifier for knowledge base auto-discovery
       environment, // Environment configuration for task context
       userId, // MyEcho: User ID for profile accumulation
       userContext, // MyEcho: User configuration bundle
