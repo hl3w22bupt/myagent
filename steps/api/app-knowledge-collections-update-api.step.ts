@@ -1,8 +1,8 @@
 /**
- * App-Knowledge Collections Add API
+ * App-Knowledge Collections Update API
  *
- * POST /api/apps/:appId/knowledge-collections/add
- * Add a knowledge collection to an app
+ * PUT /api/apps/:appId/knowledge-collections/:collectionName
+ * Update knowledge collection configuration for an app
  */
 
 import { ApiRouteConfig } from 'motia';
@@ -11,17 +11,16 @@ import { addAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledg
 
 export const config: ApiRouteConfig = {
   type: 'api',
-  name: 'app-knowledge-collections-add-api',
-  description: 'Add knowledge collection to app',
-  path: '/api/apps/:appId/knowledge-collections/add',
-  method: 'POST',
+  name: 'app-knowledge-collections-update-api',
+  description: 'Update knowledge collection configuration',
+  path: '/api/apps/:appId/knowledge-collections/:collectionName',
+  method: 'PUT',
   emits: [],
   flows: ['api-workflow'],
 };
 
 // Request body schema
-const addCollectionSchema = z.object({
-  collectionName: z.string().min(1),
+const updateCollectionSchema = z.object({
   contentField: z.string().optional().default('content'),
   embeddingField: z.string().optional().default('embedding'),
   threshold: z.number().optional().default(0.7),
@@ -34,11 +33,11 @@ export const handler = async (
   { logger }: any
 ) => {
   try {
-    const { appId } = request.pathParams;
+    const { appId, collectionName } = request.pathParams;
     const body = request.body;
 
     // Validate request body
-    const validationResult = addCollectionSchema.safeParse(body);
+    const validationResult = updateCollectionSchema.safeParse(body);
     if (!validationResult.success) {
       return {
         status: 400,
@@ -50,9 +49,9 @@ export const handler = async (
       };
     }
 
-    const { collectionName, contentField, embeddingField, threshold, enabled, priority } = validationResult.data;
+    const { contentField, embeddingField, threshold, enabled, priority } = validationResult.data;
 
-    logger.info('Adding knowledge collection to app', {
+    logger.info('Updating knowledge collection configuration', {
       appId,
       collectionName,
       contentField,
@@ -88,7 +87,7 @@ export const handler = async (
       },
     };
   } catch (error: any) {
-    logger.error('Failed to add knowledge collection', {
+    logger.error('Failed to update knowledge collection', {
       error: error.message,
       stack: error.stack,
     });
@@ -97,7 +96,7 @@ export const handler = async (
       status: 500,
       body: {
         success: false,
-        error: error.message || 'Failed to add knowledge collection',
+        error: error.message || 'Failed to update knowledge collection',
       },
     };
   }

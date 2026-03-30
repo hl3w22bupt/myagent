@@ -35,7 +35,11 @@ function getPool(): Pool {
  */
 export interface AppKnowledgeMapping {
   app_id: string;
-  collection_name: string;
+  table_name: string;
+  content_field: string;
+  embedding_field: string;
+  threshold: number;
+  embedding_dimensions?: number;
   enabled: boolean;
   priority: number;
 }
@@ -54,13 +58,17 @@ export async function getAppKnowledgeCollections(
   const query = `
     SELECT
       app_id,
-      collection_name,
+      table_name,
+      content_field,
+      embedding_field,
+      threshold,
+      embedding_dimensions,
       enabled,
       priority
     FROM app_knowledge_mappings
     WHERE app_id = $1
       AND enabled = TRUE
-    ORDER BY priority ASC, collection_name ASC
+    ORDER BY priority ASC, table_name ASC
   `;
 
   try {
@@ -76,7 +84,10 @@ export async function getAppKnowledgeCollections(
  * Add a knowledge collection to an app
  *
  * @param appId - Application identifier
- * @param collectionName - Knowledge collection name
+ * @param collectionName - Knowledge collection name (table name)
+ * @param contentField - Content field name (default: 'content')
+ * @param embeddingField - Embedding field name (default: 'embedding')
+ * @param threshold - Similarity threshold (default: 0.7)
  * @param enabled - Whether the collection is enabled
  * @param priority - Retrieval priority (lower = higher priority)
  * @returns The created mapping
@@ -84,16 +95,30 @@ export async function getAppKnowledgeCollections(
 export async function addAppKnowledgeCollection(
   appId: string,
   collectionName: string,
+  contentField: string = 'content',
+  embeddingField: string = 'embedding',
+  threshold: number = 0.7,
   enabled: boolean = true,
   priority: number = 0
 ): Promise<AppKnowledgeMapping> {
   const pool = getPool();
 
+  // ⭐ Auto-detect embedding dimensions when adding new collection
+  let embeddingDimensions: number | null = null;
+  const dimensions = await detectTableDimensions(collectionName, embeddingField);
+  if (dimensions !== null) {
+    embeddingDimensions = dimensions;
+  }
+
   const query = `
-    INSERT INTO app_knowledge_mappings (app_id, collection_name, enabled, priority)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (app_id, collection_name)
+    INSERT INTO app_knowledge_mappings (app_id, table_name, content_field, embedding_field, threshold, embedding_dimensions, enabled, priority)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    ON CONFLICT (app_id, table_name)
     DO UPDATE SET
+      content_field = EXCLUDED.content_field,
+      embedding_field = EXCLUDED.embedding_field,
+      threshold = EXCLUDED.threshold,
+      embedding_dimensions = EXCLUDED.embedding_dimensions,
       enabled = EXCLUDED.enabled,
       priority = EXCLUDED.priority,
       updated_at = NOW()
@@ -101,8 +126,17 @@ export async function addAppKnowledgeCollection(
   `;
 
   try {
-    const result = await pool.query(query, [appId, collectionName, enabled, priority]);
-    console.log(`[AppKnowledgeManager] Added collection ${collectionName} to app ${appId}`);
+    const result = await pool.query(query, [
+      appId,
+      collectionName,
+      contentField,
+      embeddingField,
+      threshold,
+      embeddingDimensions,
+      enabled,
+      priority
+    ]);
+    console.log(`[AppKnowledgeManager] Added collection ${collectionName} to app ${appId} (dimensions: ${embeddingDimensions})`);
     return result.rows[0];
   } catch (error) {
     console.error(`[AppKnowledgeManager] Failed to add collection ${collectionName} to app ${appId}:`, error);
@@ -126,7 +160,7 @@ export async function removeAppKnowledgeCollection(
   const query = `
     DELETE FROM app_knowledge_mappings
     WHERE app_id = $1
-      AND collection_name = $2
+      AND table_name = $2
     RETURNING *
   `;
 
@@ -152,7 +186,14 @@ export async function removeAppKnowledgeCollection(
  */
 export async function batchConfigureAppKnowledgeCollections(
   appId: string,
-  collections: Array<{ collectionName: string; enabled?: boolean; priority?: number }>
+  collections: Array<{
+    collectionName: string;
+    contentField?: string;
+    embeddingField?: string;
+    threshold?: number;
+    enabled?: boolean;
+    priority?: number;
+  }>
 ): Promise<AppKnowledgeMapping[]> {
   const results: AppKnowledgeMapping[] = [];
 
@@ -160,6 +201,9 @@ export async function batchConfigureAppKnowledgeCollections(
     const mapping = await addAppKnowledgeCollection(
       appId,
       config.collectionName,
+      config.contentField ?? 'content',
+      config.embeddingField ?? 'embedding',
+      config.threshold ?? 0.7,
       config.enabled ?? true,
       config.priority ?? 0
     );
@@ -184,7 +228,7 @@ export async function getAppsForKnowledgeCollection(
   const query = `
     SELECT DISTINCT app_id
     FROM app_knowledge_mappings
-    WHERE collection_name = $1
+    WHERE table_name = $1
       AND enabled = TRUE
     ORDER BY app_id
   `;
@@ -195,6 +239,56 @@ export async function getAppsForKnowledgeCollection(
   } catch (error) {
     console.error(`[AppKnowledgeManager] Failed to get apps for collection ${collectionName}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Detect embedding dimensions for a table
+ *
+ * @param tableName - Table name to check
+ * @param embeddingField - Embedding field name (default: 'embedding')
+ * @returns Detected dimensions or null if failed
+ */
+export async function detectTableDimensions(
+  tableName: string,
+  embeddingField: string = 'embedding'
+): Promise<number | null> {
+  const pool = getPool();
+
+  const query = `
+    SELECT ${embeddingField}
+    FROM ${tableName}
+    WHERE ${embeddingField} IS NOT NULL
+    LIMIT 1
+  `;
+
+  try {
+    const result = await pool.query(query);
+    if (result.rows.length === 0) {
+      console.warn(`[AppKnowledgeManager] No vectors found in ${tableName}.${embeddingField}`);
+      return null;
+    }
+
+    const vectorValue = result.rows[0][embeddingField];
+
+    // Parse vector dimensions
+    let dimensions: number;
+    if (typeof vectorValue === 'string') {
+      // Format: "[0.1,0.2,0.3,...]" or "0.1,0.2,0.3,..."
+      const cleanStr = vectorValue.replace(/^\[|\]$/g, '');
+      dimensions = cleanStr.split(',').filter(s => s.trim().length > 0).length;
+    } else if (Array.isArray(vectorValue)) {
+      dimensions = vectorValue.length;
+    } else {
+      console.warn(`[AppKnowledgeManager] Unknown vector format in ${tableName}.${embeddingField}`);
+      return null;
+    }
+
+    console.log(`[AppKnowledgeManager] Detected dimensions for ${tableName}.${embeddingField}: ${dimensions}`);
+    return dimensions;
+  } catch (error) {
+    console.error(`[AppKnowledgeManager] Failed to detect dimensions for ${tableName}:`, error);
+    return null;
   }
 }
 

@@ -98,6 +98,12 @@ export const inputSchema = _z.object({
   userId: _z.string().optional(),
 
   /**
+   * Optional: App identifier for knowledge base auto-discovery.
+   * Used to automatically find and retrieve relevant knowledge collections.
+   */
+  app: _z.string().optional(),
+
+  /**
    * Optional: User context for MyEcho integration.
    * Configuration bundle for AI girlfriend personality and user preferences.
    */
@@ -724,6 +730,15 @@ export const handler = async (
       (taskContext.context as any).environment = input.environment;
       logger.info('[master-agent.step] environment copied to context', {
         keys: Object.keys(input.environment),
+      });
+    }
+
+    // ⭐ 将 app 从 input 复制到 context
+    // 这样 Orchestrator 能够找到它并用于知识库自动发现
+    if (input.app) {
+      (taskContext.context as any).app = input.app;
+      logger.info('[master-agent.step] app copied to context', {
+        app: input.app,
       });
     }
 

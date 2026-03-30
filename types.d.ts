@@ -44,6 +44,7 @@ declare module 'motia' {
     'soul-agents-status': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-table-schema-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-update-apps-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-test-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-datasources-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
@@ -65,6 +66,7 @@ declare module 'motia' {
     'context-artifacts-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'context-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'apps-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'app-knowledge-collections-update-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'app-knowledge-collections-remove-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'app-knowledge-collections-batch-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'app-knowledge-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

@@ -78,7 +78,12 @@ export class DefaultContextOrchestrator implements ContextOrchestrator {
       result.environment = context.environment;
     }
 
-    // 7. 最近技能执行记录（可选）
+    // 7. 应用标识：从 context 取（用于知识库自动发现）
+    if (context?.app) {
+      result.app = context.app;
+    }
+
+    // 8. 最近技能执行记录（可选）
     if (this.config.enableRecentSkillExecutions) {
       const recentExecutions = this.retrieveRecentSkillExecutions(context);
       if (recentExecutions.length > 0) {

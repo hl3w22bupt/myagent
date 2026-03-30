@@ -34,7 +34,11 @@ export const handler = async (
       body: {
         success: true,
         data: collections.map((c: any) => ({
-          collectionName: c.collection_name,
+          tableName: c.table_name,
+          contentField: c.content_field,
+          embeddingField: c.embedding_field,
+          threshold: c.threshold,
+          embeddingDimensions: c.embedding_dimensions,
           enabled: c.enabled,
           priority: c.priority,
         })),

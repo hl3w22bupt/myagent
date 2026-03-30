@@ -1968,18 +1968,24 @@ Analyze the task description and categorize it appropriately. Provide confidence
           const retrievalPromises = collections.map(async (collection) => {
             try {
               const entries = await this.knowledgeBase!.retrieve(
-                collection.collection_name,
+                collection.table_name,
                 query,
-                { limit: 5, threshold: 0.3 }
+                {
+                  limit: 5,
+                  threshold: collection.threshold || 0.7,
+                  contentField: collection.content_field,
+                  embeddingField: collection.embedding_field,
+                  embeddingDimensions: collection.embedding_dimensions
+                }
               );
               // Add collection metadata to each entry
               return entries.map((entry: any) => ({
                 ...entry,
-                _collectionName: collection.collection_name,
+                _collectionName: collection.table_name,
                 _priority: collection.priority,
               }));
             } catch (error) {
-              console.error(`[Agent] Failed to retrieve from collection ${collection.collection_name}:`, error);
+              console.error(`[Agent] Failed to retrieve from collection ${collection.table_name}:`, error);
               return [];
             }
           });
@@ -2002,12 +2008,12 @@ Analyze the task description and categorize it appropriately. Provide confidence
           console.log(`[Agent] Retrieved knowledge from multiple collections for ${contextLabel}:`, {
             collectionsCount: collections.length,
             totalEntries: flatResults.length,
-            collections: collections.map(c => c.collection_name),
+            collections: collections.map(c => c.table_name),
           });
 
           // Record knowledge retrieval trace
           await this.recordKnowledgeRetrievalTrace(traceTaskId, {
-            collections: collections.map(c => ({ name: c.collection_name, priority: c.priority })),
+            collections: collections.map(c => ({ name: c.table_name, priority: c.priority })),
             query: query || '',
             entryCount: flatResults.length,
             executionTime,
