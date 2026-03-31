@@ -24,8 +24,8 @@ export const config: ApiRouteConfig = {
   path: '/api/soul/:soulId/execute',
   method: 'POST',
 
-  // ✅ 发送 completion 事件
-  emits: ['agent.task.completed', 'agent.task.failed'],
+  // ✅ 发送 completion 事件和 execution traces
+  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
   flows: ['agent-workflow'],
 };
 
@@ -160,7 +160,10 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
 
     const result = await soulAgent.execute({
       trigger_time: trigger_time || new Date().toISOString(),
-      context: triggerContext,
+      context: {
+        ...triggerContext,
+        emit: emit,  // ⭐ Pass emit function to SoulAgent for token usage events
+      },
       streams: streams,
     });
 

@@ -198,7 +198,51 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
     project_dir = environment.get('project_dir') or environment.get('workspace')
 
     # Tech stack related
-    language = environment.get('language', 'python')
+    # 优先级: 1) environment.language > 2) LLM 推理 > 3) 默认 None（让 Claude CLI 自己决定）
+    language = environment.get('language')
+    language_inferred = False  # 标记是否为推理值
+
+    if not language:
+        # 使用公共 LLMClient 推理最合适的编程语言
+        try:
+            from core.skill.llm_client import get_llm_client
+
+            # 获取 LLM client（使用 Haiku 快速模型）
+            # ⭐ skill_name 使用主 skill 名字，让 trace 聚合在一起
+            llm_client = get_llm_client(
+                model="claude-haiku-4-20250514",  # 快速且便宜
+                task_id=task_id,
+                skill_name="claude-code-cli"  # ⭐ 使用主 skill 名字
+            )
+
+            # 轻量级 LLM 调用：只推理语言
+            response = llm_client.generate(
+                prompt=f"""根据以下任务描述，判断最合适的编程语言。
+
+任务：{task}
+
+请只返回语言名称（如：html, python, javascript, java, node, typescript, go, rust 等）。如果无法确定，返回空字符串。
+
+只返回语言名称，不要其他内容。""",
+                max_tokens=50,
+                temperature=0,
+                purpose="language_detection"  # 用于区分不同用途的 LLM 调用
+            )
+
+            inferred_language = response.content.strip().lower()
+            # 过滤掉无效结果
+            valid_languages = {'html', 'python', 'javascript', 'typescript', 'java', 'node', 'go', 'rust', 'c++', 'c', 'php', 'ruby', 'swift', 'kotlin'}
+            if inferred_language in valid_languages:
+                language = inferred_language
+                language_inferred = True
+                print(f"[CLAUDE-CODE-CLI] ✓ LLM inferred language: {language} (tokens: {response.usage['input_tokens']} in, {response.usage['output_tokens']} out)")
+            else:
+                print(f"[CLAUDE-CODE-CLI] LLM returned invalid language: '{inferred_language}', using auto-detect")
+                language = None
+        except Exception as e:
+            print(f"[CLAUDE-CODE-CLI] LLM language inference failed: {e}, using auto-detect")
+            language = None
+
     framework = environment.get('framework')
     runtime = environment.get('runtime')
 
@@ -229,7 +273,10 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         print(f"  project_dir: {project_dir} (PERSISTENT WORKSPACE)")
     else:
         print(f"  project_dir: not specified (using temporary workspace)")
-    print(f"  language: {language}")
+    if language:
+        print(f"  language: {language} {'(inferred from task)' if language_inferred else '(from environment)'}")
+    else:
+        print(f"  language: not specified (Claude CLI will auto-detect)")
     if framework:
         print(f"  framework: {framework}")
     if git_url:
@@ -246,12 +293,19 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         is_persistent = True
         print(f"[CLAUDE-CODE-CLI] ✓ Using persistent workspace: {working_dir}")
     else:
-        # Use default tmp-workspace
-        workspace_root = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
-        workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
-        working_dir = os.path.abspath(workspace_dir)
-        is_persistent = False
-        print(f"[CLAUDE-CODE-CLI] ✓ Using temporary workspace: {working_dir}")
+        # Check if WorkspaceManager already provided a workspace directory
+        if '_workspace_dir' in input_data:
+            # Use the workspace directory provided by WorkspaceManager
+            working_dir = os.path.abspath(input_data['_workspace_dir'])
+            is_persistent = False
+            print(f"[CLAUDE-CODE-CLI] ✓ Using workspace from WorkspaceManager: {working_dir}")
+        else:
+            # Use default tmp-workspace (fallback)
+            workspace_root = os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
+            workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
+            working_dir = os.path.abspath(workspace_dir)
+            is_persistent = False
+            print(f"[CLAUDE-CODE-CLI] ✓ Using temporary workspace: {working_dir}")
 
     # Create workspace directory
     os.makedirs(working_dir, exist_ok=True)

@@ -648,6 +648,12 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 
 **IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no <plan> tags.**
 
+## CRITICAL - Subagent Name Format:
+**ALL subagent names use HYPHENS (-), NOT SPACES!**
+- ✅ CORRECT: developer-engineer, code-reviewer, data-analyst, security-auditor
+- ❌ WRONG: developer engineer, code reviewer, data analyst, security auditor
+- ALWAYS use the exact name from the available subagents list
+
 Respond with this exact JSON structure:
 {
   "selected_subagents": ["subagent-name"] or [],
@@ -669,6 +675,15 @@ Rules:
 - steps: detailed breakdown of the task
 
 ## Examples
+
+Example 0 - Code Implementation (confidence 90):
+Task: "Implement a user authentication feature with JWT tokens"
+Response: {
+  "selected_subagents": ["developer-engineer"],
+  "confidence": 90,
+  "reasoning": "Code implementation task directly matches developer-engineer's specialty",
+  "steps": [{"task": "Implement authentication feature", "delegateTo": "developer-engineer", "confidence": 90}]
+}
 
 Example 1 - Perfect Match (confidence 95):
 Task: "Review the authentication code in auth.ts for security issues"
@@ -984,6 +999,7 @@ ${task}
         llm: this.config.llm,
         sandbox: this.config.sandbox,
         constraints: config?.constraints, // 传递 constraints 包含 enableClarification
+        knowledgeBase: this.config.knowledgeBase,  // ⭐ 传递 knowledgeBase 配置给 subagent（用于 RAG）
       },
       subagentSessionId
     );
@@ -1186,6 +1202,10 @@ ${task}
         ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
         // ⭐ NEW: 传递 environment 给 subagent（用于任务特定的配置，如 project_dir, language 等）
         ...(context?.environment && { environment: context.environment }),
+        // ⭐ NEW: 传递 app 给 subagent（用于知识库自动发现）
+        ...(context?.app && { app: context.app }),
+        // ⭐ CRITICAL: 传递 emit 函数给 subagent（用于发送 token usage events）
+        ...(context?.emit && { emit: context.emit }),
         // ⭐ NEW: 传递 userProfile 和 userContext 给 subagent（通过 workingMemory）
         ...((userProfile || userContext) && {
           workingMemory: {
@@ -1199,6 +1219,10 @@ ${task}
         subagentName,
         hasConversationHistory: !!subagentContext.conversationHistory,
         conversationHistoryLength: subagentContext.conversationHistory?.length || 0,
+        hasApp: !!subagentContext.app,
+        app: subagentContext.app,
+        hasEnvironment: !!subagentContext.environment,
+        environmentKeys: subagentContext.environment ? Object.keys(subagentContext.environment) : [],
       });
 
       // Call onTaskStart hook
@@ -1486,8 +1510,10 @@ Important rules:
     }
 
     // Normalize config to internal format
+    // ⭐ IMPORTANT: Use the folder name (kebab-case) as the name, NOT the config.name
+    // This ensures consistency between the key and the name field
     return {
-      name: config.name,
+      name: name,  // Use folder name (e.g., "developer-engineer") instead of config.name
       description: config.description || `Subagent: ${name}`,
       systemPrompt,
       availableSkills: config.agent.available_skills || config.agent.availableSkills,
