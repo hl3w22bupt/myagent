@@ -3,6 +3,8 @@
   overflow: visible;
   background-color: #1e1e1e;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* 确保容器本身不会裁剪内容 */
+  max-width: 100%;
 }
 
 /* Header Bar */
@@ -130,6 +132,33 @@
   overflow-y: auto !important;
   max-height: 80vh;
   white-space: pre !important;
+}
+
+/* 代码包装器 - 支持双向滚动 */
+.code-player-code-wrapper {
+  overflow: auto !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: 80vh;
+  border-radius: 0 0 8px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4a4a #1e1e1e;
+}
+
+/* SyntaxHighlighter 的容器元素支持滚动 */
+.code-player-container > div {
+  overflow: auto !important;
+  overflow-x: auto !important;
+  max-height: 80vh;
+}
+
+/* SyntaxHighlighter 的 code 元素保持预格式化 */
+.code-player-container code {
+  white-space: pre !important;
+  overflow-x: auto !important;
+  display: block !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
 }
 
 .code-player-empty {

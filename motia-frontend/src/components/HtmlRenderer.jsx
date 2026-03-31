@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import './HtmlRenderer.css'
 
 /**
@@ -34,15 +36,23 @@ const HtmlRenderer = ({ content, type = 'markdown', filename = '' }) => {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              // 自定义代码块渲染
+              // 自定义代码块渲染 - 使用语法高亮
               code({ node, inline, className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '')
+                const language = match ? match[1] : 'text'
                 return !inline ? (
-                  <pre className={className}>
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  </pre>
+                  <SyntaxHighlighter
+                    language={language}
+                    style={vscDarkPlus}
+                    showLineNumbers={true}
+                    customStyle={{
+                      margin: 0,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                    }}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
                 ) : (
                   <code className={className} {...props}>
                     {children}

@@ -59,7 +59,7 @@
   /* 设置固定最大高度，超出时滚动 */
   max-height: calc(100vh - 280px);
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto; /* 允许水平滚动，避免长代码被截断 */
 }
 
 /* 滚动条样式 */

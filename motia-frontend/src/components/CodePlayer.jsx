@@ -11,7 +11,9 @@ import './CodePlayer.css'
  * 用于展示代码片段，支持语法高亮、语言检测和预览
  */
 const CodePlayer = ({ code, language = 'text', filename = '' }) => {
-  const [viewMode, setViewMode] = useState('preview') // 'code' or 'preview' - 默认显示预览
+  // 智能默认视图：HTML/SVG/Markdown 默认预览，其他默认代码视图
+  const defaultViewMode = (language === 'html' || language === 'svg' || language === 'markdown') ? 'preview' : 'code'
+  const [viewMode, setViewMode] = useState(defaultViewMode)
   const [copied, setCopied] = useState(false)
 
   if (!code) {
@@ -158,32 +160,42 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
 
       {/* Content */}
       {viewMode === 'code' ? (
-        <SyntaxHighlighter
-          language={detectedLanguage}
-          style={vscDarkPlus}
-          showLineNumbers={true}
-          wrapLines={false}
-          lineProps={(lineNumber) => ({
-            style: { display: 'block', cursor: 'pointer' },
-            onClick: () => {
-              console.log('Line clicked:', lineNumber)
-            }
-          })}
-          customStyle={{
-            margin: 0,
-            borderRadius: '8px',
-            fontSize: '14px',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            overflowX: 'auto',
-            overflowY: 'auto',
-            whiteSpace: 'pre',
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#4a4a4a #1e1e1e'
-          }}
-        >
-          {codeContent}
-        </SyntaxHighlighter>
+        <div className="code-player-code-wrapper">
+          <SyntaxHighlighter
+            language={detectedLanguage}
+            style={vscDarkPlus}
+            showLineNumbers={true}
+            wrapLines={false}
+            wrapLongLines={false}
+            lineProps={(lineNumber) => ({
+              style: { display: 'block', cursor: 'pointer' },
+              onClick: () => {
+                console.log('Line clicked:', lineNumber)
+              }
+            })}
+            customStyle={{
+              margin: 0,
+              borderRadius: '0 0 8px 8px',
+              fontSize: '14px',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              overflowX: 'auto',
+              overflowY: 'auto',
+              whiteSpace: 'pre',
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#4a4a4a #1e1e1e',
+              backgroundColor: '#1e1e1e'
+            }}
+            codeTagProps={{
+              style: {
+                whiteSpace: 'pre',
+                fontFamily: "'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace"
+              }
+            }}
+          >
+            {codeContent}
+          </SyntaxHighlighter>
+        </div>
       ) : detectedLanguage === 'markdown' ? (
         <div className="code-player-preview markdown-preview">
           <ReactMarkdown
