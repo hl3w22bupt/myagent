@@ -123,7 +123,7 @@ export const handler = async (request: any, { logger }: any) => {
     const unifiedStore = await getOptimizedStore();
 
     // Map status filter to TaskStatus (direct mapping, only validate if valid status)
-    const validStatuses = ['pending', 'running', 'completed', 'failed', 'awaiting_clarification'];
+    const validStatuses = ['pending', 'running', 'idle', 'completed', 'failed', 'awaiting_clarification'];
     const taskStatus = status && validStatuses.includes(status) ? status as any : undefined;
 
     const { tasks, total } = await unifiedStore.listTasks({
