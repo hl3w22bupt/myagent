@@ -1,6 +1,8 @@
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './CodePlayer.css'
 
 /**
@@ -108,8 +110,8 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
     }
   }
 
-  // 是否支持预览（目前只支持 HTML）
-  const supportsPreview = detectedLanguage === 'html' || detectedLanguage === 'svg'
+  // 是否支持预览（支持 HTML、SVG、Markdown）
+  const supportsPreview = detectedLanguage === 'html' || detectedLanguage === 'svg' || detectedLanguage === 'markdown'
 
   return (
     <div className="code-player-container">
@@ -182,6 +184,37 @@ const CodePlayer = ({ code, language = 'text', filename = '' }) => {
         >
           {codeContent}
         </SyntaxHighlighter>
+      ) : detectedLanguage === 'markdown' ? (
+        <div className="code-player-preview markdown-preview">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              code: ({ node, inline, className, children, ...props }) => {
+                const match = /language-(\w+)/.exec(className || '')
+                return !inline ? (
+                  <SyntaxHighlighter
+                    language={match ? match[1] : 'text'}
+                    style={vscDarkPlus}
+                    PreTag="div"
+                    customStyle={{
+                      borderRadius: '4px',
+                      margin: '8px 0',
+                      fontSize: '13px',
+                    }}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                ) : (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                )
+              },
+            }}
+          >
+            {codeContent}
+          </ReactMarkdown>
+        </div>
       ) : (
         <div className="code-player-preview">
           <iframe
