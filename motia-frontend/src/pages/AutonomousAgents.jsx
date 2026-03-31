@@ -584,6 +584,22 @@ function AutonomousAgents() {
                         : instance.soulDescription}
                     </div>
                   )}
+                  {/* App 标识和 Task 跳转 - 小字行 */}
+                  <div className="instance-meta-row">
+                    <span className="app-tag">{instance.app || 'default'}</span>
+                    {instance.taskId && (
+                      <>
+                        <span className="meta-separator">•</span>
+                        <a
+                          href={`/tasks/${instance.taskId}`}
+                          className="task-link-text"
+                          title={`查看任务: ${instance.taskId}`}
+                        >
+                          {instance.taskId}
+                        </a>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Instance Body - Details */}

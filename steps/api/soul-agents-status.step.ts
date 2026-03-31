@@ -86,6 +86,8 @@ export const handler = async (request: any, { logger }: any) => {
                   sessionId: instance.sessionId,
                   soulId: soulId,  // ✅ 添加 soulId 字段
                   userId: instance.sessionId.replace(`soul-${soulId}-`, ''),
+                  app: instance.app || 'myecho',  // ✅ 添加 app 字段
+                  taskId: instance.state.currentTask,  // ✅ 添加 taskId 字段
                   status: instance.state.status,
                   currentTask: instance.state.currentTask,
                   lastActivity: instance.state.lastActivity,

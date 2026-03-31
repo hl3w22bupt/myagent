@@ -92,7 +92,7 @@ export const handler = async (request: any, { logger, streams }: any) => {
         task: taskName || `对话${threadId ? ` ${threadId}` : ''}`,
         userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
         status: 'idle' as const,  // ← Idle state, waiting for trigger
-        app: app || 'myecho',
+        app: app || 'default',
         metadata: {
           ...metadata,
           type: 'soul_agent',
@@ -124,13 +124,13 @@ export const handler = async (request: any, { logger, streams }: any) => {
     // 2. Get or create Soul Agent (use activateSoul for idempotency)
     const soulAgent = await soulScheduler.activateSoul(soulId, sessionId);
 
-    // 3. 更新 soul_states 表的 current_task_id 字段
+    // 3. 更新 soul_states 表的 current_task_id 字段和 app 字段
     // 这样 periodic check 触发时可以获取到关联的 taskId
     const soulState = soulAgent.getSoulState();
     await soulStateDataService.saveSoulState(sessionId, soulId, {
       ...soulState,
       currentTask: taskId  // ← 关联 taskId
-    });
+    }, app);  // ← 保存 app 标识
 
     logger.info('Soul Initialize API: Soul Agent ready', {
       sessionId,
@@ -170,6 +170,7 @@ export const handler = async (request: any, { logger, streams }: any) => {
           soulId: soulId,
           userId: userId,
           characterId: characterId,
+          app: app || 'default',
           status: 'idle',
           message: 'Soul Agent initialized successfully'
         }
