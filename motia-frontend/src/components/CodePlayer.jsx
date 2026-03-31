@@ -11,7 +11,7 @@ import './CodePlayer.css'
  * 用于展示代码片段，支持语法高亮、语言检测和预览
  */
 const CodePlayer = ({ code, language = 'text', filename = '' }) => {
-  const [viewMode, setViewMode] = useState('code') // 'code' or 'preview'
+  const [viewMode, setViewMode] = useState('preview') // 'code' or 'preview' - 默认显示预览
   const [copied, setCopied] = useState(false)
 
   if (!code) {
