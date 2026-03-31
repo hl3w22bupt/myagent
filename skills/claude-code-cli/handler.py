@@ -22,14 +22,156 @@ except ImportError:
     OUTPUT_BUILDER_AVAILABLE = False
 
 
-def scan_workspace_artifacts(workspace_dir: str) -> Dict[str, Any]:
-    """Scan workspace directory for created artifacts/files."""
+def scan_workspace_artifacts_git(workspace_dir: str) -> Dict[str, Any]:
+    """使用 git status 获取变更的文件（仅适用于 git 仓库）。
+
+    优势：
+    - 只返回有变更的文件（新增、修改、删除）
+    - 对于大型项目，避免扫描全部文件
+    - 更符合实际工作流程
+    """
     artifacts = {
         "directory": workspace_dir,
         "exists": False,
         "files": [],
         "total_size_bytes": 0,
-        "file_count": 0
+        "file_count": 0,
+        "scan_method": "git_status"
+    }
+
+    try:
+        work_path = Path(workspace_dir).expanduser().resolve()
+        if not work_path.exists():
+            return artifacts
+
+        # 检查是否是 git 仓库
+        git_dir = work_path / '.git'
+        if not git_dir.exists():
+            # 不是 git 仓库，返回特殊标记
+            artifacts["exists"] = True
+            artifacts["scan_method"] = "not_git_repo"
+            return artifacts
+
+        artifacts["exists"] = True
+
+        # 运行 git status --porcelain 获取变更文件
+        result = subprocess.run(
+            ['git', 'status', '--porcelain', '--untracked-files=all'],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            # git 命令失败，返回错误信息
+            artifacts["error"] = f"git status failed: {result.stderr}"
+            return artifacts
+
+        files = []
+        total_size = 0
+
+        # 解析 git status 输出
+        # 格式: XY filename
+        # X = 暂存区状态, Y = 工作区状态
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+
+            status = line[:2].strip()  # XY 状态
+            filepath = line[3:]  # 文件路径
+
+            # 跳过子模块
+            if status.startswith('S'):
+                continue
+
+            full_path = work_path / filepath
+            if not full_path.exists():
+                # 文件被删除了，记录状态但跳过大小计算
+                files.append({
+                    "path": filepath,
+                    "absolute_path": str(full_path),
+                    "size_bytes": 0,
+                    "status": status,
+                    "deleted": True
+                })
+                continue
+
+            try:
+                stat = full_path.stat()
+                if stat.st_mode & 0o170000 != 0o100000:  # 不是常规文件
+                    continue
+
+                file_info = {
+                    "path": filepath,
+                    "absolute_path": str(full_path),
+                    "size_bytes": stat.st_size,
+                    "modified_time": stat.st_mtime,
+                    "extension": full_path.suffix or 'no_extension',
+                    "status": status  # git 状态
+                }
+                files.append(file_info)
+                total_size += stat.st_size
+            except Exception as e:
+                # 跳过无法访问的文件
+                continue
+
+        # Sort files by path
+        files.sort(key=lambda x: x["path"])
+
+        artifacts["files"] = files
+        artifacts["total_size_bytes"] = total_size
+        artifacts["file_count"] = len(files)
+
+        # Group by extension
+        extensions = {}
+        for f in files:
+            ext = f["extension"]
+            extensions[ext] = extensions.get(ext, 0) + 1
+        artifacts["files_by_extension"] = extensions
+
+        print(f"[WORKSPACE] Git status scan: {len(files)} changed file(s)")
+
+    except subprocess.TimeoutExpired:
+        artifacts["error"] = "git status timed out"
+    except Exception as e:
+        artifacts["error"] = str(e)
+
+    return artifacts
+
+
+def scan_workspace_artifacts(workspace_dir: str) -> Dict[str, Any]:
+    """Scan workspace directory for created artifacts/files.
+
+    优先使用 git status 扫描（快速、精准），降级到全量扫描。
+    """
+    # 首先尝试使用 git status
+    git_result = scan_workspace_artifacts_git(workspace_dir)
+
+    # 如果 git status 成功且有结果，直接返回
+    if (git_result.get("exists") and
+        git_result.get("scan_method") == "git_status" and
+        not git_result.get("error") and
+        git_result.get("file_count", 0) > 0):
+        return git_result
+
+    # 如果不是 git 仓库或 git status 失败，使用全量扫描
+    print(f"[WORKSPACE] Git scan not available, using full scan...")
+    return scan_workspace_artifacts_full(workspace_dir)
+
+
+def scan_workspace_artifacts_full(workspace_dir: str) -> Dict[str, Any]:
+    """全量扫描工作区目录（降级方案）。
+
+    注意：对于大型项目，这可能很慢且消耗内存。
+    """
+    artifacts = {
+        "directory": workspace_dir,
+        "exists": False,
+        "files": [],
+        "total_size_bytes": 0,
+        "file_count": 0,
+        "scan_method": "full_recursive"
     }
 
     try:
@@ -445,8 +587,24 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
             print(f"[WORKSPACE] Directory: {workspace_artifacts['directory']}")
             print(f"[WORKSPACE] Files created: {workspace_artifacts['file_count']}")
             print(f"[WORKSPACE] Total size: {workspace_artifacts['total_size_bytes']} bytes")
-            for file_info in workspace_artifacts["files"]:
-                print(f"[WORKSPACE]   - {file_info['path']} ({file_info['size_bytes']} bytes)")
+            print(f"[WORKSPACE] Scan method: {workspace_artifacts.get('scan_method', 'unknown')}")
+
+            # ⚠️ Only print file details for temporary workspace (not persistent)
+            # Persistent workspaces may have thousands of files, which would:
+            # 1. Generate massive output (thousands of lines)
+            # 2. Consume Node.js memory when LocalSandboxAdapter captures stdout
+            # 3. Cause JavaScript heap out of memory errors
+            if not is_persistent and workspace_artifacts['file_count'] <= 100:
+                # Only print details for small temporary workspaces
+                for file_info in workspace_artifacts["files"][:50]:  # Limit to 50 files
+                    print(f"[WORKSPACE]   - {file_info['path']} ({file_info['size_bytes']} bytes)")
+                if workspace_artifacts['file_count'] > 50:
+                    print(f"[WORKSPACE]   ... and {workspace_artifacts['file_count'] - 50} more files")
+            elif is_persistent:
+                # Persistent mode: just show summary
+                if workspace_artifacts['file_count'] > 0:
+                    print(f"[WORKSPACE] ⚠️  File list omitted (persistent mode with {workspace_artifacts['file_count']} files)")
+                    print(f"[WORKSPACE]    Use 'git status' to see changes in the project directory")
         else:
             print(f"[WORKSPACE] Directory does not exist: {workspace_artifacts['directory']}")
 
@@ -489,24 +647,40 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                         # Add workspace artifacts
                         builder.add_standard_metadata("workspace_artifacts", workspace_artifacts)
 
-                        # Build file list for metadata
-                        files_created = [
-                            {
-                                "path": f["path"],
-                                "absolute_path": os.path.join(working_dir, f["path"]),
-                                "size": f["size_bytes"],
-                                "extension": f["extension"]
-                            }
-                            for f in workspace_artifacts.get("files", [])
-                        ]
+                        # Build file list for metadata (always include, but limited for persistent mode)
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 100:
+                            # Persistent mode with many files: only include summary in metadata
+                            files_created = [{
+                                "count": len(workspace_artifacts.get("files", [])),
+                                "note": "File list omitted for persistent mode (use 'git status' to see changes)"
+                            }]
+                        else:
+                            # Temporary mode or small file count: include all files
+                            files_created = [
+                                {
+                                    "path": f["path"],
+                                    "absolute_path": os.path.join(working_dir, f["path"]),
+                                    "size": f["size_bytes"],
+                                    "extension": f["extension"]
+                                }
+                                for f in workspace_artifacts.get("files", [])
+                            ]
 
                         builder.add_standard_metadata("files_created", files_created)
 
                         # Build text summary
-                        file_list = "\n".join([
-                            f"  - {f['path']} ({f['size_bytes']} bytes)"
-                            for f in workspace_artifacts.get("files", [])
-                        ]) if workspace_artifacts.get("files") else "  (no files created)"
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 0:
+                            # Persistent mode: show summary, not detailed list
+                            file_count = len(workspace_artifacts.get("files", []))
+                            file_list = f"  {file_count} file(s) changed (list omitted for persistent mode)\n  Use 'git status' in the project directory to see changes."
+                        elif workspace_artifacts.get("files"):
+                            # Temporary mode or small file count: show detailed list
+                            file_list = "\n".join([
+                                f"  - {f['path']} ({f['size_bytes']} bytes)"
+                                for f in workspace_artifacts.get("files", [])
+                            ])
+                        else:
+                            file_list = "  (no files created)"
 
                         summary_text = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
 
@@ -531,10 +705,18 @@ Files remain in the project directory.
                         return result
                     else:
                         # Fallback without OutputBuilder
-                        file_list = "\n".join([
-                            f"  - {f['path']}"
-                            for f in workspace_artifacts.get("files", [])
-                        ])
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 0:
+                            # Persistent mode: show summary, not detailed list
+                            file_count = len(workspace_artifacts.get("files", []))
+                            file_list = f"  {file_count} file(s) changed (list omitted for persistent mode)\n  Use 'git status' to see changes."
+                        elif workspace_artifacts.get("files"):
+                            # Temporary mode: show detailed list
+                            file_list = "\n".join([
+                                f"  - {f['path']}"
+                                for f in workspace_artifacts.get("files", [])
+                            ])
+                        else:
+                            file_list = "  (no files created)"
 
                         content = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
 
