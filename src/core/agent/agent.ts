@@ -1392,12 +1392,14 @@ ${userRequest}
       if (streams.executionTraces) {
         const id = `intent-analysis-${groupId}-${timestamp}`;
         await streams.executionTraces.set(groupId, id, {
-          id,
+          traceId: id,
           level: 'agent-internal',
           taskId: groupId,
           agentId: this.sessionId,
           stage: 'intent_analysis',
           status: 'completed',
+          retryCount: 0,
+          maxRetries: 3,
           inputData: JSON.stringify({ task, agentType: this.constructor.name }),
           outputData: JSON.stringify({
             intent: analysisResult.intent,
@@ -1468,12 +1470,14 @@ ${userRequest}
       if (streams.executionTraces) {
         const id = `ptc-planning-${groupId}-${timestamp}`;
         await streams.executionTraces.set(groupId, id, {
-          id,
+          traceId: id,
           level: 'agent-internal',
           taskId: groupId,
           agentId: this.sessionId,
           stage: 'ptc_planning',
           status: 'completed',
+          retryCount: 0,
+          maxRetries: 3,
           inputData: JSON.stringify({ task, agentType: this.constructor.name }),
           outputData: JSON.stringify({
             selectedSkills: skills,
@@ -2077,12 +2081,14 @@ Analyze the task description and categorize it appropriately. Provide confidence
       const hasError = !!data.error;
 
       await streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level: 'agent-internal',
         taskId,
         agentId: this.sessionId,
         stage: 'knowledge_retrieval',
         status: hasError ? 'failed' : 'completed',
+        retryCount: 0,
+        maxRetries: 3,
         timestamp: new Date().toISOString(),
         inputData: JSON.stringify({
           type: 'knowledge-retrieval',

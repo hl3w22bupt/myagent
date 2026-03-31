@@ -302,7 +302,7 @@ export class LLMClient {
       }
 
       await this.streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level,
         taskId,
         agentId,
@@ -310,6 +310,8 @@ export class LLMClient {
         stage: 'llm_call',
         status: 'completed',
         executionTime,
+        retryCount: 0,
+        maxRetries: 3,
         timestamp: new Date(timestamp).toISOString(),
         purpose, // Add purpose field to trace
         metadata: {
@@ -342,7 +344,7 @@ export class LLMClient {
         await this.emit({
           topic: 'execution.trace.created',
           data: {
-            id,
+            traceId: id,
             level,
             taskId,
             agentId,
@@ -352,6 +354,8 @@ export class LLMClient {
             executionTime,
             timestamp: new Date(timestamp).toISOString(),
             purpose,
+            retryCount: 0,
+            maxRetries: 3,
             metadata: {
               llmProvider: this.provider,
               llmModel: options.model || this.model,

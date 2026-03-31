@@ -99,7 +99,7 @@ execution:
       bins: ["claude"]
   handler: handler.py
   function: execute_claude_code_cli
-  timeout: 360000
+  timeout: 7200000  # 2 hours (2 * 60 * 60 * 1000 ms)
 
 tags:
   - tool

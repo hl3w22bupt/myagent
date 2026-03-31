@@ -1093,12 +1093,14 @@ ${task}
         // 1. Record delegation planning trace with full plan details
         const delegationId = `delegation-planning-${this.sessionId}-${Date.now()}`;
         await streams.executionTraces.set(taskId, delegationId, {
-          id: delegationId,
+          traceId: delegationId,
           level: 'agent-internal',
           taskId,
           agentId: this.sessionId,
           stage: 'delegation_planning',
           status: 'completed',
+          retryCount: 0,
+          maxRetries: 3,
           timestamp: new Date().toISOString(),
           metadata: {
             sessionId: this.sessionId,

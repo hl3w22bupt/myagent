@@ -262,10 +262,29 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         'claude-sonnet-4-5'                             # Default value
     )
 
-    timeout = (
-        input_data.get('timeout') or                    # Direct parameter (deprecated)
-        environment.get('timeout', 300)                 # environment.timeout or default
-    )
+    # ⭐ Timeout priority: environment.timeout > skill.yaml (SKILL_EXECUTION_TIMEOUT) > input_data.timeout > 300s
+    # Note: environment.timeout and input_data.timeout are in SECONDS
+    #       SKILL_EXECUTION_TIMEOUT (from skill.yaml) is in MILLISECONDS
+    timeout = None
+
+    # 1. Check environment.timeout (highest priority, user-specified, in seconds)
+    if environment.get('timeout'):
+        timeout = int(environment.get('timeout'))
+
+    # 2. Check SKILL_EXECUTION_TIMEOUT (from skill.yaml execution.timeout, in milliseconds)
+    #    Only use if environment.timeout is not set
+    if timeout is None:
+        skill_timeout_ms = os.environ.get('SKILL_EXECUTION_TIMEOUT')
+        if skill_timeout_ms:
+            timeout = int(skill_timeout_ms) // 1000  # Convert ms to seconds
+
+    # 3. Check input_data.timeout (deprecated direct parameter, in seconds)
+    if timeout is None:
+        timeout = input_data.get('timeout')
+
+    # 4. Default to 300 seconds (5 minutes)
+    if timeout is None:
+        timeout = 300
 
     # ========== Log environment parameters ==========
     print(f"[CLAUDE-CODE-CLI] Environment parameters:")

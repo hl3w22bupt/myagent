@@ -109,13 +109,13 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           PYTHONPATH: pythonPathEnv,
           ...options.env,
         },
-        timeout: options.timeout || 300000, // 5 minutes default for video rendering
+        timeout: options.timeout || 600000, // 10 minutes default (aligned with TASK_TIMEOUT in index.ts)
       });
 
       this.activeSessions.set(sessionId, childProcess);
 
       // 4. Collect output
-      const timeout = options.timeout || 300000;
+      const timeout = options.timeout || 600000;
       const result = await this.collectResult(childProcess, timeout);
 
       // 5. Save script for debugging and log path

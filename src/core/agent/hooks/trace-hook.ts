@@ -77,12 +77,14 @@ export class AgentTraceHook extends BaseAgentHook {
 
       // Create initial agent trace entry
       await streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level: 'agent',
         taskId,
         agentId,
         stage: 'pre',
         status: 'started',
+        retryCount: 0,
+        maxRetries: 3,
         inputData: JSON.stringify({
           task,
           agentType: context.agentType,
@@ -144,7 +146,7 @@ export class AgentTraceHook extends BaseAgentHook {
 
       // Create a separate post trace entry (don't overwrite pre!)
       await streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level: 'agent',
         taskId,
         agentId,
@@ -153,6 +155,8 @@ export class AgentTraceHook extends BaseAgentHook {
         outputData: result.output ? JSON.stringify(result.output) : undefined,
         error: result.error,
         executionTime: result.executionTime,
+        retryCount: 0,
+        maxRetries: 3,
         timestamp: new Date().toISOString(),
         metadata: {
           sessionId,
