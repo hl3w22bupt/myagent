@@ -1,6 +1,6 @@
 name: claude-code-cli
-description: Execute Claude Code CLI for advanced coding tasks using --print flag. Ideal for complex refactoring, code generation, multi-file edits, and architecture work.
-version: 1.1.0
+description: Execute Claude Code CLI with environment-aware workspace management. Supports persistent project directories and technology stack context. Ideal for complex refactoring, code generation, multi-file edits, and architecture work.
+version: 1.2.0
 
 type: hybrid
 
@@ -10,32 +10,88 @@ input_schema:
   properties:
     task:
       type: string
-      description: "Coding task description (e.g., 'Create a function that sorts an array')"
+      description: "Coding task description (e.g., 'Create a user authentication API')"
+
+    environment:
+      type: object
+      description: "Environment configuration for project context and code generation preferences"
+      properties:
+        # === Workspace 相关 ===
+        project_dir:
+          type: string
+          description: "Project directory for code generation (e.g., 'projects/project-a'). If not provided, uses temporary workspace"
+        workspace:
+          type: string
+          description: "Alias for project_dir (for backward compatibility)"
+
+        # === 技术栈相关 ===
+        language:
+          type: string
+          description: "Programming language (e.g., 'python', 'typescript', 'java', 'go')"
+          default: "python"
+        framework:
+          type: string
+          description: "Framework or library (e.g., 'fastapi', 'react', 'nextjs', 'spring')"
+        runtime:
+          type: string
+          description: "Runtime version (e.g., 'node18', 'python3.11')"
+
+        # === Git 相关 ===
+        git_url:
+          type: string
+          description: "Git repository URL (e.g., 'https://github.com/user/repo')"
+        branch:
+          type: string
+          description: "Git branch name (e.g., 'main', 'develop')"
+          default: "main"
+        commit:
+          type: string
+          description: "Specific commit hash"
+
+        # === 配置相关 ===
+        database:
+          type: string
+          description: "Database type (e.g., 'postgresql', 'mysql', 'mongodb')"
+        api_version:
+          type: string
+          description: "API version (e.g., 'v1', 'v2')"
+
+        # === Claude CLI 相关 ===
+        model:
+          type: string
+          description: "Claude model to use (e.g., 'claude-sonnet-4-5', 'claude-opus-4-6')"
+          default: "claude-sonnet-4-5"
+        timeout:
+          type: integer
+          description: "Execution timeout in seconds"
+          default: 300
+
+    # === 兼容旧接口的直接参数（deprecated） ===
     model:
       type: string
-      description: "Claude model to use (default: claude-sonnet-4-5)"
+      description: "Deprecated: Use environment.model instead"
       default: "claude-sonnet-4-5"
     timeout:
       type: integer
-      description: "Command timeout in seconds (default: 300)"
+      description: "Deprecated: Use environment.timeout instead"
       default: 300
-    working_dir:
-      type: string
-      description: "Working directory for execution (default: /tmp)"
-      default: "/tmp"
 
 prompt_template: |
   You need to execute Claude Code CLI for the following coding task.
 
   Task: {task}
 
-  The claude-code-cli skill will directly execute the Claude Code CLI with the --print flag
-  to ensure non-interactive execution and prevent timeouts.
+  The claude-code-cli skill will directly execute the Claude Code CLI to ensure non-interactive execution.
 
-  Available parameters:
-  - model: {model|claude-sonnet-4-5}
-  - timeout: {timeout|300} seconds
-  - working_dir: {working_dir|/tmp}
+  Environment context (from <environment> tag):
+  - project_dir: {environment.project_dir|not specified}
+  - language: {environment.language|python}
+  - framework: {environment.framework|not specified}
+  - branch: {environment.branch|main}
+  - model: {environment.model|claude-sonnet-4-5}
+  - timeout: {environment.timeout|300} seconds
+
+  Note: All environment parameters are optional and have sensible defaults.
 
 execution:
   runtime:
@@ -43,7 +99,7 @@ execution:
       bins: ["claude"]
   handler: handler.py
   function: execute_claude_code_cli
-  timeout: 360000
+  timeout: 7200000  # 2 hours (2 * 60 * 60 * 1000 ms)
 
 tags:
   - tool

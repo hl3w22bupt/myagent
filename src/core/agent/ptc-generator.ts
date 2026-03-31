@@ -897,6 +897,10 @@ ${skillsBlock}
 ${(() => {
   // Generate EXACT code templates for each selected skill
   if (selectedSkills.length > 0) {
+    // Check if environment is provided
+    const hasEnvironment = options?.environment && Object.keys(options.environment).length > 0;
+    const envComment = hasEnvironment ? `\n        # ⭐ CRITICAL: environment parameter provided in <context> - MUST include it!` : '';
+
     return `<exact_code_templates>
 FOR EACH SELECTED SKILL, USE THIS EXACT CODE TEMPLATE:
 
@@ -904,12 +908,17 @@ ${selectedSkills.map(skill => {
   const param = this.findTaskParameter(skill);
   return `# === ${skill} ===
 # REQUIRED PARAMETER NAME: '${param}'
-# DO NOT use 'task' - use '${param}' instead!
+# DO NOT use 'task' - use '${param}' instead!${envComment}
 result = await execute_with_retry(
     execute_func=executor.execute,
     skill_name='${skill}',
     input_data={
-        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!
+        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!${hasEnvironment ? `
+        'environment': {  # ⭐ MANDATORY: Extract from <environment> section above
+            'project_dir': 'value_from_environment',
+            'language': 'value_from_environment',
+            # ... include all environment key-value pairs
+        },` : ''}
         # Add other optional parameters if mentioned in task
     }
 )
@@ -1303,6 +1312,25 @@ TIPS FOR FILE/VIDEO GENERATION:
   - MOTIA_NOTIFY_API_URL: API endpoint for progress notifications
   - MOTIA_SESSION_ID: Current session ID for multi-turn conversations
   - MOTIA_TRACE_ID: Trace ID for debugging
+
+=== ENVIRONMENT PARAMETER PASSING ===
+When the <context> section contains <environment> information:
+1. Extract the ENTIRE environment object as a Python dictionary
+2. Pass it to skills that support environment context using the 'environment' parameter
+
+Example PATTERN for environment-aware skills (like claude-code-cli):
+Python code: environment_dict = {\\n  'project_dir': 'projects/project-a',\\n  'language': 'python',\\n  'framework': 'fastapi',\\n  'branch': 'main'\\n}
+Then: result = await execute_with_retry('claude-code-cli', {'task': task, 'environment': environment_dict})
+
+CRITICAL RULES for environment passing:
+- ALWAYS pass environment as a dictionary to skills that support it
+- DO NOT flatten environment into individual skill parameters
+- Let the skill handler extract what it needs from environment
+- If environment is not provided, omit the 'environment' parameter (skill will use defaults)
+
+Skills that support environment parameter:
+- claude-code-cli: Uses project_dir, language, framework, branch, model, timeout
+- Other skills may also support environment - check their schema
 
 ${executionHistorySection}=== TASK CONTEXT ===
 <context>

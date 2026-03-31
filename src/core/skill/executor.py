@@ -540,31 +540,47 @@ class SkillExecutor:
         if not skill.execution:
             raise ValueError(f"Skill '{skill.name}' missing execution config")
 
-        # 构建模块路径
-        handler = skill.execution.handler
-        if handler.endswith('.py'):
-            handler = handler[:-3]
+        # ⭐ 获取 skill.yaml 中配置的 timeout
+        skill_timeout = 30000  # 默认 30 秒
+        if skill.execution and skill.execution.timeout:
+            skill_timeout = skill.execution.timeout
 
-        # 动态导入
-        module_path = f"skills.{skill.name}.{handler.replace('/', '.')}"
-        skill_module = importlib.import_module(module_path)
+        # ⭐ 设置环境变量 SKILL_EXECUTION_TIMEOUT，供 handler.py 使用
+        original_timeout = os.environ.get('SKILL_EXECUTION_TIMEOUT')
+        try:
+            os.environ['SKILL_EXECUTION_TIMEOUT'] = str(skill_timeout)
 
-        # 获取函数
-        function_name = skill.execution.function or "execute"
-        if not hasattr(skill_module, function_name):
-            raise AttributeError(
-                f"Function '{function_name}' not found in '{module_path}'"
-            )
+            # 构建模块路径
+            handler = skill.execution.handler
+            if handler.endswith('.py'):
+                handler = handler[:-3]
 
-        handler_func = getattr(skill_module, function_name)
+            # 动态导入
+            module_path = f"skills.{skill.name}.{handler.replace('/', '.')}"
+            skill_module = importlib.import_module(module_path)
 
-        # 执行
-        if asyncio.iscoroutinefunction(handler_func):
-            result = await handler_func(input_data)
-        else:
-            result = handler_func(input_data)
+            # 获取函数
+            function_name = skill.execution.function or "execute"
+            if not hasattr(skill_module, function_name):
+                raise AttributeError(
+                    f"Function '{function_name}' not found in '{module_path}'"
+                )
 
-        return result
+            handler_func = getattr(skill_module, function_name)
+
+            # 执行
+            if asyncio.iscoroutinefunction(handler_func):
+                result = await handler_func(input_data)
+            else:
+                result = handler_func(input_data)
+
+            return result
+        finally:
+            # ⭐ 恢复原始环境变量值（或删除）
+            if original_timeout is None:
+                os.environ.pop('SKILL_EXECUTION_TIMEOUT', None)
+            else:
+                os.environ['SKILL_EXECUTION_TIMEOUT'] = original_timeout
 
     async def execute_batch(
         self,

@@ -239,7 +239,19 @@ export class LLMClient {
     executionTime: number,
     purpose?: string
   ): Promise<void> {
-    if (!this.streams?.executionTraces || !this.traceContext?.taskId) {
+    // Debug: 检查为什么 trace 没有被发送
+    if (!this.streams?.executionTraces) {
+      console.warn('[LLMClient] ❌ Trace not sent: missing streams.executionTraces', {
+        hasStreams: !!this.streams,
+        traceContext: this.traceContext,
+      });
+      return;
+    }
+    if (!this.traceContext?.taskId) {
+      console.warn('[LLMClient] ❌ Trace not sent: missing traceContext.taskId', {
+        hasStreams: !!this.streams?.executionTraces,
+        traceContext: this.traceContext,
+      });
       return;
     }
 
@@ -290,7 +302,7 @@ export class LLMClient {
       }
 
       await this.streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level,
         taskId,
         agentId,
@@ -298,6 +310,8 @@ export class LLMClient {
         stage: 'llm_call',
         status: 'completed',
         executionTime,
+        retryCount: 0,
+        maxRetries: 3,
         timestamp: new Date(timestamp).toISOString(),
         purpose, // Add purpose field to trace
         metadata: {
@@ -330,7 +344,7 @@ export class LLMClient {
         await this.emit({
           topic: 'execution.trace.created',
           data: {
-            id,
+            traceId: id,
             level,
             taskId,
             agentId,
@@ -340,6 +354,8 @@ export class LLMClient {
             executionTime,
             timestamp: new Date(timestamp).toISOString(),
             purpose,
+            retryCount: 0,
+            maxRetries: 3,
             metadata: {
               llmProvider: this.provider,
               llmModel: options.model || this.model,

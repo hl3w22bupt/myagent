@@ -22,14 +22,156 @@ except ImportError:
     OUTPUT_BUILDER_AVAILABLE = False
 
 
-def scan_workspace_artifacts(workspace_dir: str) -> Dict[str, Any]:
-    """Scan workspace directory for created artifacts/files."""
+def scan_workspace_artifacts_git(workspace_dir: str) -> Dict[str, Any]:
+    """使用 git status 获取变更的文件（仅适用于 git 仓库）。
+
+    优势：
+    - 只返回有变更的文件（新增、修改、删除）
+    - 对于大型项目，避免扫描全部文件
+    - 更符合实际工作流程
+    """
     artifacts = {
         "directory": workspace_dir,
         "exists": False,
         "files": [],
         "total_size_bytes": 0,
-        "file_count": 0
+        "file_count": 0,
+        "scan_method": "git_status"
+    }
+
+    try:
+        work_path = Path(workspace_dir).expanduser().resolve()
+        if not work_path.exists():
+            return artifacts
+
+        # 检查是否是 git 仓库
+        git_dir = work_path / '.git'
+        if not git_dir.exists():
+            # 不是 git 仓库，返回特殊标记
+            artifacts["exists"] = True
+            artifacts["scan_method"] = "not_git_repo"
+            return artifacts
+
+        artifacts["exists"] = True
+
+        # 运行 git status --porcelain 获取变更文件
+        result = subprocess.run(
+            ['git', 'status', '--porcelain', '--untracked-files=all'],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            # git 命令失败，返回错误信息
+            artifacts["error"] = f"git status failed: {result.stderr}"
+            return artifacts
+
+        files = []
+        total_size = 0
+
+        # 解析 git status 输出
+        # 格式: XY filename
+        # X = 暂存区状态, Y = 工作区状态
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+
+            status = line[:2].strip()  # XY 状态
+            filepath = line[3:]  # 文件路径
+
+            # 跳过子模块
+            if status.startswith('S'):
+                continue
+
+            full_path = work_path / filepath
+            if not full_path.exists():
+                # 文件被删除了，记录状态但跳过大小计算
+                files.append({
+                    "path": filepath,
+                    "absolute_path": str(full_path),
+                    "size_bytes": 0,
+                    "status": status,
+                    "deleted": True
+                })
+                continue
+
+            try:
+                stat = full_path.stat()
+                if stat.st_mode & 0o170000 != 0o100000:  # 不是常规文件
+                    continue
+
+                file_info = {
+                    "path": filepath,
+                    "absolute_path": str(full_path),
+                    "size_bytes": stat.st_size,
+                    "modified_time": stat.st_mtime,
+                    "extension": full_path.suffix or 'no_extension',
+                    "status": status  # git 状态
+                }
+                files.append(file_info)
+                total_size += stat.st_size
+            except Exception as e:
+                # 跳过无法访问的文件
+                continue
+
+        # Sort files by path
+        files.sort(key=lambda x: x["path"])
+
+        artifacts["files"] = files
+        artifacts["total_size_bytes"] = total_size
+        artifacts["file_count"] = len(files)
+
+        # Group by extension
+        extensions = {}
+        for f in files:
+            ext = f["extension"]
+            extensions[ext] = extensions.get(ext, 0) + 1
+        artifacts["files_by_extension"] = extensions
+
+        print(f"[WORKSPACE] Git status scan: {len(files)} changed file(s)")
+
+    except subprocess.TimeoutExpired:
+        artifacts["error"] = "git status timed out"
+    except Exception as e:
+        artifacts["error"] = str(e)
+
+    return artifacts
+
+
+def scan_workspace_artifacts(workspace_dir: str) -> Dict[str, Any]:
+    """Scan workspace directory for created artifacts/files.
+
+    优先使用 git status 扫描（快速、精准），降级到全量扫描。
+    """
+    # 首先尝试使用 git status
+    git_result = scan_workspace_artifacts_git(workspace_dir)
+
+    # 如果 git status 成功且有结果，直接返回
+    if (git_result.get("exists") and
+        git_result.get("scan_method") == "git_status" and
+        not git_result.get("error") and
+        git_result.get("file_count", 0) > 0):
+        return git_result
+
+    # 如果不是 git 仓库或 git status 失败，使用全量扫描
+    print(f"[WORKSPACE] Git scan not available, using full scan...")
+    return scan_workspace_artifacts_full(workspace_dir)
+
+
+def scan_workspace_artifacts_full(workspace_dir: str) -> Dict[str, Any]:
+    """全量扫描工作区目录（降级方案）。
+
+    注意：对于大型项目，这可能很慢且消耗内存。
+    """
+    artifacts = {
+        "directory": workspace_dir,
+        "exists": False,
+        "files": [],
+        "total_size_bytes": 0,
+        "file_count": 0,
+        "scan_method": "full_recursive"
     }
 
     try:
@@ -170,9 +312,11 @@ def copy_files_to_outputs(workspace_artifacts: Dict[str, Any], task_id: str) -> 
 
 def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Execute Claude Code CLI with stdin input.
+    Execute Claude Code CLI with environment-aware workspace management.
 
-    Workspace constraint: All files created in tmp-workspace/{task_id}/claude-code-skill/
+    Supports two workspace modes:
+    1. Persistent project directory (when environment.project_dir is provided)
+    2. Temporary workspace (default, for backward compatibility)
     """
     import time
     start_time = time.time()
@@ -186,20 +330,146 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # Try to get from environment
         task_id = os.getenv('MOTIA_TASK_ID', 'unknown-task')
 
-    # Extract parameters
+    # ========== Extract parameters ==========
     task = input_data.get('task', '').strip()
-    model = input_data.get('model', 'claude-sonnet-4-5')
-    timeout = input_data.get('timeout', 300)
 
-    # Set up workspace directory: tmp-workspace/{task_id}/claude-code-skill/
-    workspace_root = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
-    workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
+    # ========== Extract environment parameters ==========
+    environment = input_data.get('environment', {})
+
+    # Workspace related
+    project_dir = environment.get('project_dir') or environment.get('workspace')
+
+    # Tech stack related
+    # 优先级: 1) environment.language > 2) LLM 推理 > 3) 默认 None（让 Claude CLI 自己决定）
+    language = environment.get('language')
+    language_inferred = False  # 标记是否为推理值
+
+    if not language:
+        # 使用公共 LLMClient 推理最合适的编程语言
+        try:
+            from core.skill.llm_client import get_llm_client
+
+            # 获取 LLM client（使用 Haiku 快速模型）
+            # ⭐ skill_name 使用主 skill 名字，让 trace 聚合在一起
+            llm_client = get_llm_client(
+                model="claude-haiku-4-20250514",  # 快速且便宜
+                task_id=task_id,
+                skill_name="claude-code-cli"  # ⭐ 使用主 skill 名字
+            )
+
+            # 轻量级 LLM 调用：只推理语言
+            response = llm_client.generate(
+                prompt=f"""根据以下任务描述，判断最合适的编程语言。
+
+任务：{task}
+
+请只返回语言名称（如：html, python, javascript, java, node, typescript, go, rust 等）。如果无法确定，返回空字符串。
+
+只返回语言名称，不要其他内容。""",
+                max_tokens=50,
+                temperature=0,
+                purpose="language_detection"  # 用于区分不同用途的 LLM 调用
+            )
+
+            inferred_language = response.content.strip().lower()
+            # 过滤掉无效结果
+            valid_languages = {'html', 'python', 'javascript', 'typescript', 'java', 'node', 'go', 'rust', 'c++', 'c', 'php', 'ruby', 'swift', 'kotlin'}
+            if inferred_language in valid_languages:
+                language = inferred_language
+                language_inferred = True
+                print(f"[CLAUDE-CODE-CLI] ✓ LLM inferred language: {language} (tokens: {response.usage['input_tokens']} in, {response.usage['output_tokens']} out)")
+            else:
+                print(f"[CLAUDE-CODE-CLI] LLM returned invalid language: '{inferred_language}', using auto-detect")
+                language = None
+        except Exception as e:
+            print(f"[CLAUDE-CODE-CLI] LLM language inference failed: {e}, using auto-detect")
+            language = None
+
+    framework = environment.get('framework')
+    runtime = environment.get('runtime')
+
+    # Git related
+    git_url = environment.get('git_url')
+    branch = environment.get('branch', 'main')
+    commit = environment.get('commit')
+
+    # Config related
+    database = environment.get('database')
+    api_version = environment.get('api_version')
+
+    # Claude CLI related (with fallback to direct parameters for backward compatibility)
+    model = (
+        input_data.get('model') or                      # Direct parameter (deprecated)
+        environment.get('model') or                     # environment.model
+        'claude-sonnet-4-5'                             # Default value
+    )
+
+    # ⭐ Timeout priority: environment.timeout > skill.yaml (SKILL_EXECUTION_TIMEOUT) > input_data.timeout > 300s
+    # Note: environment.timeout and input_data.timeout are in SECONDS
+    #       SKILL_EXECUTION_TIMEOUT (from skill.yaml) is in MILLISECONDS
+    timeout = None
+
+    # 1. Check environment.timeout (highest priority, user-specified, in seconds)
+    if environment.get('timeout'):
+        timeout = int(environment.get('timeout'))
+
+    # 2. Check SKILL_EXECUTION_TIMEOUT (from skill.yaml execution.timeout, in milliseconds)
+    #    Only use if environment.timeout is not set
+    if timeout is None:
+        skill_timeout_ms = os.environ.get('SKILL_EXECUTION_TIMEOUT')
+        if skill_timeout_ms:
+            timeout = int(skill_timeout_ms) // 1000  # Convert ms to seconds
+
+    # 3. Check input_data.timeout (deprecated direct parameter, in seconds)
+    if timeout is None:
+        timeout = input_data.get('timeout')
+
+    # 4. Default to 300 seconds (5 minutes)
+    if timeout is None:
+        timeout = 300
+
+    # ========== Log environment parameters ==========
+    print(f"[CLAUDE-CODE-CLI] Environment parameters:")
+    if project_dir:
+        print(f"  project_dir: {project_dir} (PERSISTENT WORKSPACE)")
+    else:
+        print(f"  project_dir: not specified (using temporary workspace)")
+    if language:
+        print(f"  language: {language} {'(inferred from task)' if language_inferred else '(from environment)'}")
+    else:
+        print(f"  language: not specified (Claude CLI will auto-detect)")
+    if framework:
+        print(f"  framework: {framework}")
+    if git_url:
+        print(f"  git_url: {git_url}")
+    if branch:
+        print(f"  branch: {branch}")
+    print(f"  model: {model}")
+    print(f"  timeout: {timeout}s")
+
+    # ========== Workspace Decision ==========
+    if project_dir:
+        # Use persistent project directory
+        working_dir = os.path.abspath(project_dir)
+        is_persistent = True
+        print(f"[CLAUDE-CODE-CLI] ✓ Using persistent workspace: {working_dir}")
+    else:
+        # Check if WorkspaceManager already provided a workspace directory
+        if '_workspace_dir' in input_data:
+            # Use the workspace directory provided by WorkspaceManager
+            working_dir = os.path.abspath(input_data['_workspace_dir'])
+            is_persistent = False
+            print(f"[CLAUDE-CODE-CLI] ✓ Using workspace from WorkspaceManager: {working_dir}")
+        else:
+            # Use default tmp-workspace (fallback)
+            workspace_root = os.getenv('MOTIA_WORKSPACE_DIR', '/tmp/motia-sandbox')
+            workspace_dir = os.path.join(workspace_root, f'tmp-workspace', task_id, 'claude-code-skill')
+            working_dir = os.path.abspath(workspace_dir)
+            is_persistent = False
+            print(f"[CLAUDE-CODE-CLI] ✓ Using temporary workspace: {working_dir}")
 
     # Create workspace directory
-    os.makedirs(workspace_dir, exist_ok=True)
-
-    # Convert to absolute path to avoid any confusion
-    working_dir = os.path.abspath(workspace_dir)
+    os.makedirs(working_dir, exist_ok=True)
 
     # Validate task
     if not task:
@@ -222,9 +492,34 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "Task parameter is required"
             }
 
-    # Update task to include workspace context
-    # Tell Claude CLI it's already in the correct working directory
-    task_with_context = f"{task}\n\nYou are currently in the working directory where files should be created. Please create all files in the current directory (do not use absolute paths)."
+    # ========== Build enhanced task description ==========
+    task_parts = [task]
+
+    # Add tech stack context
+    if language:
+        task_parts.append(f"Language: {language}")
+    if framework:
+        task_parts.append(f"Framework: {framework}")
+    if runtime:
+        task_parts.append(f"Runtime: {runtime}")
+
+    # Add git context
+    if git_url:
+        task_parts.append(f"Git Repository: {git_url}")
+    if branch:
+        task_parts.append(f"Branch: {branch}")
+    if commit:
+        task_parts.append(f"Commit: {commit}")
+
+    # Add workspace context
+    if is_persistent:
+        task_parts.append(f"Working in project directory: {working_dir}")
+    else:
+        task_parts.append(f"Working in temporary workspace")
+
+    task_parts.append("Create all files in the current directory (do not use absolute paths).")
+
+    task_with_context = "\n".join(task_parts)
 
     # Validate working directory exists
     work_path = Path(working_dir).expanduser().resolve()
@@ -235,7 +530,8 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     error=ErrorInfo(
                         type="resource",
                         message=f'Working directory does not exist: {working_dir}',
-                        retryable=False
+                        retryable=False,
+                        suggestions=[f"Create the directory first: mkdir -p {working_dir}"]
                     )
                 ) \
                 .build()
@@ -291,15 +587,202 @@ def execute_claude_code_cli(input_data: Dict[str, Any]) -> Dict[str, Any]:
             print(f"[WORKSPACE] Directory: {workspace_artifacts['directory']}")
             print(f"[WORKSPACE] Files created: {workspace_artifacts['file_count']}")
             print(f"[WORKSPACE] Total size: {workspace_artifacts['total_size_bytes']} bytes")
-            for file_info in workspace_artifacts["files"]:
-                print(f"[WORKSPACE]   - {file_info['path']} ({file_info['size_bytes']} bytes)")
+            print(f"[WORKSPACE] Scan method: {workspace_artifacts.get('scan_method', 'unknown')}")
+
+            # ⚠️ Only print file details for temporary workspace (not persistent)
+            # Persistent workspaces may have thousands of files, which would:
+            # 1. Generate massive output (thousands of lines)
+            # 2. Consume Node.js memory when LocalSandboxAdapter captures stdout
+            # 3. Cause JavaScript heap out of memory errors
+            if not is_persistent and workspace_artifacts['file_count'] <= 100:
+                # Only print details for small temporary workspaces
+                for file_info in workspace_artifacts["files"][:50]:  # Limit to 50 files
+                    print(f"[WORKSPACE]   - {file_info['path']} ({file_info['size_bytes']} bytes)")
+                if workspace_artifacts['file_count'] > 50:
+                    print(f"[WORKSPACE]   ... and {workspace_artifacts['file_count'] - 50} more files")
+            elif is_persistent:
+                # Persistent mode: just show summary
+                if workspace_artifacts['file_count'] > 0:
+                    print(f"[WORKSPACE] ⚠️  File list omitted (persistent mode with {workspace_artifacts['file_count']} files)")
+                    print(f"[WORKSPACE]    Use 'git status' to see changes in the project directory")
         else:
             print(f"[WORKSPACE] Directory does not exist: {workspace_artifacts['directory']}")
 
-        # Copy files to persistent outputs/ directory
-        output_files = copy_files_to_outputs(workspace_artifacts, task_id)
+        # ========== Result handling based on workspace mode ==========
 
-        print(f"[COPIED] {len(output_files)} files to outputs/codes/")
+        if is_persistent:
+            # ========== PERSISTENT WORKSPACE MODE ==========
+            # Files are in the project directory, don't copy to outputs/
+            # Return text type with file list in metadata
+
+            print(f"[PERSISTENT MODE] Files remain in project directory: {working_dir}")
+
+            if exit_code == 0:
+                try:
+                    output_data = json.loads(stdout) if stdout else {}
+
+                    if OUTPUT_BUILDER_AVAILABLE:
+                        builder = OutputBuilder()
+
+                        # Add metadata
+                        builder.add_standard_metadata("task", task)
+                        builder.add_standard_metadata("model", model)
+                        builder.add_standard_metadata("exit_code", exit_code)
+                        builder.add_standard_metadata("execution_time", execution_time)
+                        builder.add_standard_metadata("working_dir", working_dir)
+                        builder.add_standard_metadata("is_persistent", True)
+
+                        # Add environment parameters to metadata
+                        builder.add_standard_metadata("environment", {
+                            "project_dir": project_dir,
+                            "language": language,
+                            "framework": framework,
+                            "git_url": git_url,
+                            "branch": branch,
+                            "commit": commit,
+                            "database": database,
+                            "api_version": api_version
+                        })
+
+                        # Add workspace artifacts
+                        builder.add_standard_metadata("workspace_artifacts", workspace_artifacts)
+
+                        # Build file list for metadata (always include, but limited for persistent mode)
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 100:
+                            # Persistent mode with many files: only include summary in metadata
+                            files_created = [{
+                                "count": len(workspace_artifacts.get("files", [])),
+                                "note": "File list omitted for persistent mode (use 'git status' to see changes)"
+                            }]
+                        else:
+                            # Temporary mode or small file count: include all files
+                            files_created = [
+                                {
+                                    "path": f["path"],
+                                    "absolute_path": os.path.join(working_dir, f["path"]),
+                                    "size": f["size_bytes"],
+                                    "extension": f["extension"]
+                                }
+                                for f in workspace_artifacts.get("files", [])
+                            ]
+
+                        builder.add_standard_metadata("files_created", files_created)
+
+                        # Build text summary
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 0:
+                            # Persistent mode: show summary, not detailed list
+                            file_count = len(workspace_artifacts.get("files", []))
+                            file_list = f"  {file_count} file(s) changed (list omitted for persistent mode)\n  Use 'git status' in the project directory to see changes."
+                        elif workspace_artifacts.get("files"):
+                            # Temporary mode or small file count: show detailed list
+                            file_list = "\n".join([
+                                f"  - {f['path']} ({f['size_bytes']} bytes)"
+                                for f in workspace_artifacts.get("files", [])
+                            ])
+                        else:
+                            file_list = "  (no files created)"
+
+                        summary_text = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+Project directory: {working_dir}
+Files remain in the project directory.
+"""
+
+                        # Add Claude CLI output if available
+                        if isinstance(output_data, dict):
+                            if output_data:
+                                summary_text += f"\n\nClaude CLI Output:\n{json.dumps(output_data, ensure_ascii=False, indent=2)}"
+                        elif stdout.strip():
+                            summary_text += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        builder.set_text(summary_text)
+                        builder.set_title(f"Generated {len(workspace_artifacts.get('files', []))} file(s)")
+
+                        result = builder.build()
+                        write_structured_output(result, session_id)
+                        return result
+                    else:
+                        # Fallback without OutputBuilder
+                        if is_persistent and len(workspace_artifacts.get("files", [])) > 0:
+                            # Persistent mode: show summary, not detailed list
+                            file_count = len(workspace_artifacts.get("files", []))
+                            file_list = f"  {file_count} file(s) changed (list omitted for persistent mode)\n  Use 'git status' to see changes."
+                        elif workspace_artifacts.get("files"):
+                            # Temporary mode: show detailed list
+                            file_list = "\n".join([
+                                f"  - {f['path']}"
+                                for f in workspace_artifacts.get("files", [])
+                            ])
+                        else:
+                            file_list = "  (no files created)"
+
+                        content = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+"""
+                        if stdout.strip():
+                            content += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        return {
+                            "success": True,
+                            "result_type": "text",
+                            "content": content,
+                            "metadata": {
+                                "execution_time": execution_time,
+                                "working_dir": working_dir,
+                                "is_persistent": True,
+                                "files_created": files_created,
+                                "environment": {
+                                    "project_dir": project_dir,
+                                    "language": language,
+                                    "framework": framework
+                                }
+                            }
+                        }
+                except json.JSONDecodeError:
+                    # Not JSON output
+                    if OUTPUT_BUILDER_AVAILABLE:
+                        builder = OutputBuilder()
+                        builder.add_standard_metadata("task", task)
+                        builder.add_standard_metadata("working_dir", working_dir)
+                        builder.add_standard_metadata("is_persistent", True)
+
+                        file_list = "\n".join([
+                            f"  - {f['path']}"
+                            for f in workspace_artifacts.get("files", [])
+                        ])
+
+                        summary_text = f"""Generated {len(workspace_artifacts.get('files', []))} file(s) in {working_dir}:
+
+{file_list}
+
+"""
+                        if stdout.strip():
+                            summary_text += f"\n\nClaude CLI Output:\n{stdout}"
+
+                        builder.set_text(summary_text)
+                        result = builder.build()
+                        write_structured_output(result, session_id)
+                        return result
+                    else:
+                        return {
+                            "success": True,
+                            "result_type": "text",
+                            "content": stdout,
+                            "metadata": {
+                                "execution_time": execution_time,
+                                "working_dir": working_dir,
+                                "is_persistent": True
+                            }
+                        }
+        else:
+            # ========== TEMPORARY WORKSPACE MODE (Legacy Behavior) ==========
+            # Copy files to outputs/codes/ directory
+            output_files = copy_files_to_outputs(workspace_artifacts, task_id)
+            print(f"[TEMPORARY MODE] Copied {len(output_files)} files to outputs/codes/")
 
         # Check if command succeeded
         if exit_code == 0:

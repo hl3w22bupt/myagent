@@ -24,11 +24,13 @@ export class TaskTraceHook extends BaseTaskHook {
     try {
       // Create initial trace entry
       await services.streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level: 'task',
         taskId,
         stage: 'pre',
         status: 'started',
+        retryCount: 0,
+        maxRetries: 3,
         inputData: JSON.stringify({
           task,
           sessionId: context.context?.sessionId,
@@ -62,7 +64,7 @@ export class TaskTraceHook extends BaseTaskHook {
 
       // Create completion trace entry
       await services.streams.executionTraces.set(taskId, id, {
-        id,
+        traceId: id,
         level: 'task',
         taskId,
         stage: 'post',
@@ -71,6 +73,8 @@ export class TaskTraceHook extends BaseTaskHook {
         error: result.error,
         errorStack: result.errorStack,
         executionTime: result.executionTime,
+        retryCount: 0,
+        maxRetries: 3,
         timestamp: new Date().toISOString(),
         metadata: {
           sessionId: context.context?.sessionId,

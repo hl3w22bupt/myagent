@@ -155,7 +155,7 @@
    ============================== */
 .instances-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
   gap: 1.5rem;
   max-width: 1600px;
   margin: 0 auto;
@@ -183,46 +183,19 @@
 }
 
 .instance-card.instance-active {
-  border-top: 3px solid #16A34A;
+  /* Status shown in badge only */
 }
 
 .instance-card.instance-hibernated {
-  border-top: 3px solid #D97706;
+  /* Status shown in badge only */
 }
 
 .instance-card.instance-idle {
-  border-top: 3px solid #2563EB;
+  /* Status shown in badge only */
 }
 
 .instance-card.instance-stopped {
-  border-top: 3px solid #94A3B8;
-}
-
-/* Add left border accent for visual clarity */
-.instance-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: transparent;
-}
-
-.instance-card.instance-active::before {
-  background: #16A34A;
-}
-
-.instance-card.instance-hibernated::before {
-  background: #D97706;
-}
-
-.instance-card.instance-idle::before {
-  background: #2563EB;
-}
-
-.instance-card.instance-stopped::before {
-  background: #94A3B8;
+  /* Status shown in badge only */
 }
 
 /* ==============================
@@ -245,6 +218,56 @@
   gap: 0.875rem;
   flex: 1;
   min-width: 0;
+}
+
+/* ==============================
+   Instance Meta Row (App + Task)
+   ============================== */
+.instance-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #F1F5F9;
+  margin-top: 0.5rem;
+}
+
+.app-tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.meta-separator {
+  color: #CBD5E1;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.task-link-text {
+  font-size: 0.6875rem;
+  color: #3B82F6;
+  text-decoration: underline;
+  text-decoration-color: #BFDBFE;
+  text-underline-offset: 2px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.task-link-text:hover {
+  color: #2563EB;
+  text-decoration-color: #93C5FD;
 }
 
 .instance-status-badge {
@@ -388,7 +411,7 @@
 }
 
 .soul-type-info-compact .soul-type-description {
-  font-size: 0.8125rem;
+  font-size: 0.4375rem;
   color: #64748B;
   line-height: 1.5;
   margin: 0;
@@ -597,7 +620,7 @@
 }
 
 .soul-type-info-compact .soul-type-description {
-  font-size: 0.8125rem;
+  font-size: 0.4375rem;
   color: #64748B;
   line-height: 1.5;
   margin: 0;

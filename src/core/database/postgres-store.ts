@@ -549,6 +549,22 @@ export class PostgresDataStore implements Database {
         END $$;
       `);
 
+      // 迁移：添加 app 字段到 soul_states 表
+      await safeQuery(`
+        DO $$
+        BEGIN
+          -- 检查 app 列是否已存在
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'soul_states' AND column_name = 'app'
+          ) THEN
+            ALTER TABLE soul_states ADD COLUMN app TEXT DEFAULT 'default';
+            -- 为已有的记录设置默认值
+            UPDATE soul_states SET app = 'default' WHERE app IS NULL;
+          END IF;
+        END $$
+      `);
+
       await client.query('COMMIT');
       console.log('[PostgresDataStore] Schema initialized');
       } finally {

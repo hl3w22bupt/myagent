@@ -35,7 +35,7 @@ export class SoulStateDataService {
    * @param soulId - Soul ID
    * @param state - Soul state to save
    */
-  async saveSoulState(sessionId: string, soulId: string, state: SoulState): Promise<void> {
+  async saveSoulState(sessionId: string, soulId: string, state: SoulState, app?: string): Promise<void> {
     const store = getPostgresStore();
     await store.initialize();
 
@@ -44,8 +44,8 @@ export class SoulStateDataService {
 
     try {
       await client.query(`
-        INSERT INTO soul_states (session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+        INSERT INTO soul_states (session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics, updated_at, app)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, $9)
         ON CONFLICT (session_id)
         DO UPDATE SET
           soul_id = EXCLUDED.soul_id,
@@ -55,7 +55,8 @@ export class SoulStateDataService {
           scheduled_wakeup = EXCLUDED.scheduled_wakeup,
           active_since = EXCLUDED.active_since,
           statistics = EXCLUDED.statistics,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = CURRENT_TIMESTAMP,
+          app = EXCLUDED.app
       `, [
         sessionId,
         soulId,
@@ -64,10 +65,11 @@ export class SoulStateDataService {
         state.lastActivity ? new Date(state.lastActivity) : null,
         state.scheduledWakeup ? new Date(state.scheduledWakeup) : null,
         state.activeSince ? new Date(state.activeSince) : null,
-        JSON.stringify(state.statistics)
+        JSON.stringify(state.statistics),
+        app || 'default'
       ]);
 
-      console.log(`[SoulStateDataService] Saved soul state: ${sessionId}, status: ${state.status}`);
+      console.log(`[SoulStateDataService] Saved soul state: ${sessionId}, status: ${state.status}, app: ${app || 'myecho'}`);
     } catch (error: any) {
       console.error(`[SoulStateDataService] Failed to save soul state: ${error.message}`);
       throw error;
@@ -172,7 +174,7 @@ export class SoulStateDataService {
    * Get all Soul Agent states (including IDLE, HIBERNATED, ACTIVE)
    * Used by soul-agents-status API to show all instances
    */
-  async getAllSoulStates(soulId?: string): Promise<Array<{ sessionId: string; soulId: string; state: SoulState }>> {
+  async getAllSoulStates(soulId?: string): Promise<Array<{ sessionId: string; soulId: string; state: SoulState; app?: string }>> {
     const store = getPostgresStore();
     await store.initialize();
 
@@ -181,7 +183,7 @@ export class SoulStateDataService {
 
     try {
       let query = `
-        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics
+        SELECT session_id, soul_id, status, current_task_id, last_activity, scheduled_wakeup, active_since, statistics, app
         FROM soul_states
         WHERE 1=1
       `;
@@ -199,6 +201,7 @@ export class SoulStateDataService {
       return result.rows.map((row: any) => ({
         sessionId: row.session_id,
         soulId: row.soul_id,
+        app: row.app || 'myecho',
         state: {
           status: row.status,
           currentTask: row.current_task_id,

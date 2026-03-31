@@ -648,6 +648,12 @@ Analyze the task and decide: delegate to a specialized subagent OR handle with m
 
 **IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no <plan> tags.**
 
+## CRITICAL - Subagent Name Format:
+**ALL subagent names use HYPHENS (-), NOT SPACES!**
+- ✅ CORRECT: developer-engineer, code-reviewer, data-analyst, security-auditor
+- ❌ WRONG: developer engineer, code reviewer, data analyst, security auditor
+- ALWAYS use the exact name from the available subagents list
+
 Respond with this exact JSON structure:
 {
   "selected_subagents": ["subagent-name"] or [],
@@ -669,6 +675,15 @@ Rules:
 - steps: detailed breakdown of the task
 
 ## Examples
+
+Example 0 - Code Implementation (confidence 90):
+Task: "Implement a user authentication feature with JWT tokens"
+Response: {
+  "selected_subagents": ["developer-engineer"],
+  "confidence": 90,
+  "reasoning": "Code implementation task directly matches developer-engineer's specialty",
+  "steps": [{"task": "Implement authentication feature", "delegateTo": "developer-engineer", "confidence": 90}]
+}
 
 Example 1 - Perfect Match (confidence 95):
 Task: "Review the authentication code in auth.ts for security issues"
@@ -940,6 +955,38 @@ ${task}
       );
     }
 
+    // ⭐ NEW: Filter subagent skills with MasterAgent's availableSkills constraint
+    // When user specifies availableSkills in API request, both MasterAgent and subagents
+    // should respect this constraint by using only the intersection of skills
+    let filteredSkills = config.availableSkills || [];
+
+    if (this.masterConfig.availableSkills && this.masterConfig.availableSkills.length > 0) {
+      const masterSkills = new Set(this.masterConfig.availableSkills);
+      const subagentSkills = config.availableSkills || [];
+
+      // Take intersection: MasterAgent.availableSkills ∩ subagentConfig.availableSkills
+      filteredSkills = subagentSkills.filter((skill: string) => masterSkills.has(skill));
+
+      console.log(`[MasterAgent] Filtering subagent skills with user constraint`, {
+        subagent: name,
+        masterSkills: Array.from(masterSkills),
+        subagentSkills,
+        filteredSkills,
+        'intersection count': filteredSkills.length,
+      });
+
+      // If intersection is empty, log a warning but still create subagent with empty skills
+      // This will cause the subagent to use native Python code execution
+      if (filteredSkills.length === 0) {
+        console.warn(
+          `[MasterAgent] ⚠️ No skills overlap between MasterAgent constraint and subagent "${name}". ` +
+          `Subagent will have no skills available and will use native Python execution. ` +
+          `MasterAgent skills: ${Array.from(masterSkills).join(', ')}, ` +
+          `Subagent skills: ${subagentSkills.join(', ')}`
+        );
+      }
+    }
+
     // Create unique sessionId for subagent with clear prefix
     // Using independent namespace to distinguish from master agent
     const subagentSessionId = `subagent-${subagentKey}-${Date.now()}`;
@@ -948,10 +995,11 @@ ${task}
       {
         name,  // Set name for getSubjectInfo() to use as subjectSubTitle
         systemPrompt: config.systemPrompt,  // No fallback - must exist
-        availableSkills: config.availableSkills || [],  // Config exists, so this is safe
+        availableSkills: filteredSkills,  // Use filtered skills (intersection with MasterAgent's constraint)
         llm: this.config.llm,
         sandbox: this.config.sandbox,
         constraints: config?.constraints, // 传递 constraints 包含 enableClarification
+        knowledgeBase: this.config.knowledgeBase,  // ⭐ 传递 knowledgeBase 配置给 subagent（用于 RAG）
       },
       subagentSessionId
     );
@@ -962,6 +1010,8 @@ ${task}
       subagentSessionId,
       masterSessionId: this.sessionId,
       workflowStepId,
+      'skills count': filteredSkills.length,
+      'skills': filteredSkills,
     });
 
     return subagent;
@@ -1043,12 +1093,14 @@ ${task}
         // 1. Record delegation planning trace with full plan details
         const delegationId = `delegation-planning-${this.sessionId}-${Date.now()}`;
         await streams.executionTraces.set(taskId, delegationId, {
-          id: delegationId,
+          traceId: delegationId,
           level: 'agent-internal',
           taskId,
           agentId: this.sessionId,
           stage: 'delegation_planning',
           status: 'completed',
+          retryCount: 0,
+          maxRetries: 3,
           timestamp: new Date().toISOString(),
           metadata: {
             sessionId: this.sessionId,
@@ -1150,6 +1202,12 @@ ${task}
         ...(context?.originalTask && { originalTask: context.originalTask }),
         // ⭐ 传递 rewriteRequest 给 subagent
         ...(context?.rewriteRequest !== undefined && { rewriteRequest: context.rewriteRequest }),
+        // ⭐ NEW: 传递 environment 给 subagent（用于任务特定的配置，如 project_dir, language 等）
+        ...(context?.environment && { environment: context.environment }),
+        // ⭐ NEW: 传递 app 给 subagent（用于知识库自动发现）
+        ...(context?.app && { app: context.app }),
+        // ⭐ CRITICAL: 传递 emit 函数给 subagent（用于发送 token usage events）
+        ...(context?.emit && { emit: context.emit }),
         // ⭐ NEW: 传递 userProfile 和 userContext 给 subagent（通过 workingMemory）
         ...((userProfile || userContext) && {
           workingMemory: {
@@ -1163,6 +1221,10 @@ ${task}
         subagentName,
         hasConversationHistory: !!subagentContext.conversationHistory,
         conversationHistoryLength: subagentContext.conversationHistory?.length || 0,
+        hasApp: !!subagentContext.app,
+        app: subagentContext.app,
+        hasEnvironment: !!subagentContext.environment,
+        environmentKeys: subagentContext.environment ? Object.keys(subagentContext.environment) : [],
       });
 
       // Call onTaskStart hook
@@ -1450,8 +1512,10 @@ Important rules:
     }
 
     // Normalize config to internal format
+    // ⭐ IMPORTANT: Use the folder name (kebab-case) as the name, NOT the config.name
+    // This ensures consistency between the key and the name field
     return {
-      name: config.name,
+      name: name,  // Use folder name (e.g., "developer-engineer") instead of config.name
       description: config.description || `Subagent: ${name}`,
       systemPrompt,
       availableSkills: config.agent.available_skills || config.agent.availableSkills,

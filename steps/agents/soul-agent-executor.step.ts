@@ -30,8 +30,8 @@ export const config: EventConfig = {
   // ✅ 订阅 Soul 专用事件
   subscribes: ['soul.agent.execute'],
 
-  // ✅ 发送 completion 事件（与 master-agent 一样）
-  emits: ['agent.task.completed', 'agent.task.failed'],
+  // ✅ 发送 completion 事件和 execution traces
+  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
 
   flows: ['agent-workflow'],
 };
@@ -94,7 +94,10 @@ export const handler = async (
     // 内部会调用 Agent.run()，自动推送 stream
     const soulInput = {
       trigger_time: trigger_time || new Date().toISOString(),
-      context: context,
+      context: {
+        ...context,
+        emit: emit,  // ⭐ Pass emit function to SoulAgent for token usage events
+      },
       streams: streams,
     };
 

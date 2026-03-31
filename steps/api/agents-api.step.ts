@@ -116,7 +116,8 @@ function loadSubagentsMetadata(): any[] {
             // Extract metadata from agent.yaml
             const agentData: any = {
               id: folder.name,
-              name: agentConfig.name || folder.name,
+              name: folder.name,  // ⭐ Use folder name (developer-engineer) instead of config.name
+              displayName: agentConfig.name || folder.name,  // Keep config name for reference
               description: agentConfig.description || '',
               type: 'subagent',
               status: 'active',

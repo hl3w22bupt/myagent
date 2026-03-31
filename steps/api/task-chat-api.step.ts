@@ -198,27 +198,38 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
       };
     }
 
-    // 获取或生成 sessionId，并从数据库获取任务信息（包括 subagent 和 environment）
-    let sessionId = request.body?.sessionId;
+    // 从数据库获取任务信息（包括 subagent, environment, app）
+    // 始终使用数据库中的 sessionId 以保持多轮对话的上下文连续性
+    let sessionId: string;
     let taskStatus: string | undefined;
     let subagent: string | undefined; // 保存 subagent 用于后续委派
     let environment: Record<string, any> | undefined; // 保存 environment 用于后续对话
+    let app: string | undefined; // 保存 app 用于知识库自动发现
 
-    // 从数据库中获取任务信息（无论前端是否提供 sessionId）
-    // 因为需要获取 subagent 信息用于多轮对话委派
     try {
       const dataStore = getDataStore();
       await dataStore.initialize(); // 确保 DataStore 已初始化
       const taskResult = await dataStore.getTask(taskId);
 
       if (taskResult) {
-        // 如果前端没有提供 sessionId，使用数据库中的
-        if (!sessionId) {
-          sessionId = taskResult.sessionId;
-        }
+        // 始终使用数据库中的 sessionId，忽略前端传递的值
+        // 这确保多轮对话和澄清回答都能保持正确的会话上下文
+        sessionId = taskResult.sessionId;
         taskStatus = taskResult.status;
         subagent = taskResult.metadata?.subagent as string; // 获取 subagent
         environment = taskResult.metadata?.environment as Record<string, any>; // 获取 environment
+        app = taskResult.app; // 获取 app 用于知识库自动发现
+
+        // 如果前端提供了 sessionId 且与数据库不同，记录警告
+        if (request.body?.sessionId && request.body.sessionId !== sessionId) {
+          logger.warn('Task Chat API: Frontend provided sessionId differs from database', {
+            taskId,
+            frontendSessionId: request.body.sessionId,
+            databaseSessionId: sessionId,
+            note: 'Using database sessionId for consistency'
+          });
+        }
+
         logger.info('Task Chat API: Retrieved task info from database', {
           taskId,
           sessionId,
@@ -226,15 +237,31 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
           subagent,
           hasEnvironment: !!environment,
           environmentKeys: environment ? Object.keys(environment) : [],
+          app,
         });
       } else {
-        logger.warn('Task Chat API: Task not found in database', { taskId });
+        logger.error('Task Chat API: Task not found in database', { taskId });
+        return {
+          status: 404,
+          body: {
+            success: false,
+            message: 'Task not found',
+          },
+        };
       }
     } catch (dbError: any) {
       logger.error('Task Chat API: Failed to retrieve task info from database', {
         taskId,
         error: dbError.message
       });
+      return {
+        status: 500,
+        body: {
+          success: false,
+          message: 'Failed to retrieve task info',
+          error: dbError.message,
+        },
+      };
     }
 
     // Determine messageId - use provided or generate new one
@@ -297,6 +324,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
             isClarificationResponse: true, // Flag to indicate this is a clarification response
             subagent, // 传递 subagent 用于委派
             rewriteRequest, // Pass through rewriteRequest flag
+            app, // 传递 app 用于知识库自动发现
           },
         });
 
@@ -397,6 +425,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         continue: true, // Indicate this is a continuation
         subagent, // 传递 subagent 用于委派，保持多轮对话使用同一 subagent
         environment, // 传递 environment 用于多轮对话，保持相同的环境配置
+        app, // 传递 app 用于知识库自动发现，保持多轮对话使用相同的知识库配置
         userId: requestUserId, // Pass userId for MyEcho
         rewriteRequest, // Pass through rewriteRequest flag
       },

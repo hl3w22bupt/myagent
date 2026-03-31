@@ -369,7 +369,8 @@ ${soulGoal}
         {
           conversationHistory: conversationHistory,
           tools: this.getPrimitiveTools(),
-          streams: streams
+          streams: streams,
+          emit: (input.context as any)?.emit,  // ⭐ Pass emit function for token usage events
         }
       );
 
@@ -742,7 +743,8 @@ ${soulGoal}
         {
           conversationHistory: conversationHistory,
           tools: this.getPrimitiveTools(),
-          streams: streams
+          streams: streams,
+          emit: (input.context as any)?.emit,  // ⭐ Pass emit function for token usage events
         }
       );
 

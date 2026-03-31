@@ -512,6 +512,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                   ...(content.voice && { voice: content.voice }),
                   ...(content.lang && { lang: content.lang }),
                   ...(content.speed && { speed: content.speed }),
+                  is_final: isFinalArtifact,
                 },
                 timestamp: new Date(),
               });
@@ -606,6 +607,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
                 columns: columns,
                 title: content.title,
                 tableData: { columns, rows, title: content.title },
+                is_final: isFinalArtifact,
               },
               timestamp: new Date(),
             });
@@ -956,6 +958,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               rows,
               title,
             },
+            is_final: true, // Mark as final artifact for display in UI
           },
           timestamp: new Date(),
         });
@@ -990,6 +993,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
               ...(content.voice && { voice: content.voice }),
               ...(content.lang && { lang: content.lang }),
               ...(content.speed && { speed: content.speed }),
+              is_final: true, // Mark as final artifact for display in UI
             },
             timestamp: new Date(),
           });

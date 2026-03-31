@@ -150,7 +150,7 @@
 .agent-selector-corner .agent-icon {
   width: 1rem;
   height: 1rem;
-  opacity: 0.5;
+  opacity: 0.8;
 }
 
 .agent-selector-corner .chevron-icon {
@@ -189,6 +189,129 @@
 
 /* 禁用状态 */
 .agent-selector-corner .agent-select-input:disabled + .agent-selector-button {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Agent 和 Skill 选择器容器 - 水平排列 */
+.hero-submit-form {
+  position: relative;
+}
+
+/* 当两个选择器都存在时，调整 agent 选择器的位置 */
+.hero-submit-form:has(.skill-selector-corner) .agent-selector-corner {
+  left: 1.25rem;
+}
+
+/* Skill 选择器 - 输入框内左下角，紧挨着 Agent 选择器 */
+.skill-selector-corner {
+  position: absolute;
+  bottom: 0.875rem;
+  left: 10.5rem; /* 与 agent 选择器之间留出更多间距 */
+  z-index: 10;
+}
+
+.skill-selector-corner .skill-select-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 13px;
+  color-scheme: light;
+}
+
+.skill-selector-corner .skill-select-input option {
+  font-size: 13px;
+  padding: 8px 12px;
+  background: white;
+  color: #1e293b;
+}
+
+.skill-selector-corner .skill-selector-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  height: 2.25rem;
+  background: transparent;
+  border-radius: 0.375rem;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  pointer-events: none;
+  border: none;
+  position: relative;
+}
+
+.skill-selector-corner .skill-clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  background: rgba(100, 116, 139, 0.1);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+  color: #94a3b8;
+}
+
+.skill-selector-corner .skill-clear-button:hover {
+  background: rgba(100, 116, 139, 0.2);
+  color: #64748b;
+}
+
+.skill-selector-corner .skill-clear-button svg {
+  width: 0.625rem;
+  height: 0.625rem;
+  stroke-width: 2.5;
+}
+
+.skill-selector-corner .skill-icon {
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.8;
+}
+
+.skill-selector-corner .chevron-icon {
+  width: 0.625rem;
+  height: 0.625rem;
+  opacity: 0.4;
+}
+
+.skill-selector-corner .skill-selector-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+/* 悬停状态 */
+.skill-selector-corner:hover .skill-selector-button {
+  background: rgba(100, 116, 139, 0.08);
+}
+
+.skill-selector-corner:hover .skill-icon,
+.skill-selector-corner:hover .skill-selector-label {
+  opacity: 0.7;
+  color: #64748b;
+}
+
+/* 聚焦状态 */
+.skill-selector-corner .skill-select-input:focus + .skill-selector-button {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.skill-selector-corner .skill-select-input:focus + .skill-selector-button .skill-selector-label,
+.skill-selector-corner .skill-select-input:focus + .skill-selector-button .skill-icon {
+  color: #6366f1;
+  opacity: 1;
+}
+
+/* 禁用状态 */
+.skill-selector-corner .skill-select-input:disabled + .skill-selector-button {
   opacity: 0.3;
   cursor: not-allowed;
 }

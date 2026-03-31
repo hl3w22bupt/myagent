@@ -206,6 +206,7 @@ function Home() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [selectedAgent, setSelectedAgent] = useState('') // 选中的 subagent（空字符串表示自动选择）
+  const [selectedSkills, setSelectedSkills] = useState([]) // 选中的 skills（空数组表示自动选择）
 
   // 获取媒体文件的 Blob URL - 使用 useCallback 优化，防止每次渲染都重新创建函数
   const getMediaBlobUrl = useCallback(async (path) => {
@@ -615,7 +616,7 @@ function Home() {
       // 如果选中了 agent，作为 delegateTo 传递
       const delegateTo = selectedAgent ? [selectedAgent] : undefined
 
-      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId, delegateTo)
+      const response = await tasksAPI.submitTask(taskContent.trim(), sessionId, delegateTo, selectedSkills)
 
       if (response.data && response.data.taskId) {
         // 保存sessionId到sessionStorage
@@ -694,7 +695,7 @@ function Home() {
 
                 {/* Agent 选择器 - 左下角，与提交按钮水平对齐 */}
                 {agents.length > 0 && (
-                  <div className="agent-selector-corner">
+                  <div className="agent-selector-corner" title="subagent">
                     <select
                       className="agent-select-input"
                       value={selectedAgent}
@@ -709,19 +710,70 @@ function Home() {
                       ))}
                     </select>
                     <div className="agent-selector-button">
-                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {/* Subagent 图标：主圆圈代表主 agent，小圆圈代表 subagent，连线表示层级关系 */}
-                        <circle cx="12" cy="6" r="3"/>
-                        <circle cx="6" cy="18" r="3"/>
-                        <circle cx="18" cy="18" r="3"/>
-                        <path d="M12 9v6"/>
-                        <path d="M9 18h6"/>
-                        <path d="M12 12l-3 3"/>
-                        <path d="M12 12l3 3"/>
+                      <svg className="agent-icon" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="10" rx="2"/>
+                        <circle cx="12" cy="5" r="2"/>
+                        <path d="M12 7v4"/>
+                        <circle cx="8" cy="16" r="1" fill="#10B981"/>
+                        <circle cx="16" cy="16" r="1" fill="#10B981"/>
+                        <path d="M8 8l-4 4"/>
+                        <path d="M16 8l4 4"/>
+                        <circle cx="5" cy="5" r="1"/>
+                        <circle cx="19" cy="5" r="1"/>
                       </svg>
                       <span className="agent-selector-label">
                         {selectedAgent ? selectedAgent : 'Auto'}
                       </span>
+                      <svg className="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m6 9 6 6 6-6"/>
+                      </svg>
+                    </div>
+                  </div>
+                )}
+
+                {/* Skill 选择器 - 左下角，紧挨着 Agent 选择器 */}
+                {skills.length > 0 && (
+                  <div className="skill-selector-corner" title="skill">
+                    <select
+                      className="skill-select-input"
+                      value={selectedSkills.length > 0 ? selectedSkills[0] : ''}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setSelectedSkills(value ? [value] : [])
+                      }}
+                      disabled={submitting}
+                    >
+                      <option value="">Auto</option>
+                      {skills.map(skill => (
+                        <option key={skill.name} value={skill.name}>
+                          {skill.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="skill-selector-button">
+                      <svg className="skill-icon" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+                      </svg>
+                      <span className="skill-selector-label">
+                        {selectedSkills.length > 0 ? selectedSkills[0] : 'Auto'}
+                      </span>
+                      {selectedSkills.length > 0 && (
+                        <button
+                          type="button"
+                          className="skill-clear-button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedSkills([])
+                          }}
+                          disabled={submitting}
+                          title="清除选择"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                          </svg>
+                        </button>
+                      )}
                       <svg className="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m6 9 6 6 6-6"/>
                       </svg>

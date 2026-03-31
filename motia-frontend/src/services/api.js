@@ -117,7 +117,7 @@ export const tasksAPI = {
       params: { id },
       timeout // 支持自定义超时时间
     }).then(response => response.data.result),
-  submitTask: (task, sessionId, delegateTo) => {
+  submitTask: (task, sessionId, delegateTo, availableSkills) => {
     const requestKey = `submit_${task}_${sessionId}`
 
     // 检查是否有相同的请求正在处理中
@@ -132,6 +132,9 @@ export const tasksAPI = {
     const payload = { task, sessionId }
     if (delegateTo && delegateTo.length > 0) {
       payload.delegateTo = delegateTo
+    }
+    if (availableSkills && availableSkills.length > 0) {
+      payload.availableSkills = availableSkills
     }
 
     return apiClient.post('/agent/execute', payload)
