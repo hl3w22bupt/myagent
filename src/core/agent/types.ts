@@ -237,7 +237,7 @@ export interface PTCGenerationOptions {
   includeReasoning?: boolean;
 
   /** Maximum tokens for LLM response */
-  maxTokens?: number;
+  max_tokens?: number;
 
   /** Temperature for LLM */
   temperature?: number;
@@ -254,6 +254,9 @@ export interface PTCGenerationOptions {
 
   /** Original task (for multi-turn conversations) */
   originalTask?: string;
+
+  /** User-specified available skills (must be respected - overrides LLM selection) */
+  availableSkills?: string[];
 
   /** 用户画像（来自跨会话累积） */
   userProfile?: any;
