@@ -21,6 +21,7 @@ import { DefaultContextOrchestrator } from '../context/default-orchestrator';
 import Handlebars from 'handlebars';
 import { KnowledgeBase } from '../knowledge/knowledge-base';
 import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
+import { RequestRewriter } from './request-rewriter';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -52,6 +53,10 @@ export class Agent {
 
   // HITL clarification flag (default: true)
   protected enableClarification: boolean = true;
+
+  // Request rewriter for multi-turn conversations and HITL clarification
+  // Note: MasterAgent has its own requestRewriter, so this is optional for base Agent
+  protected requestRewriter?: RequestRewriter;
 
   // Emit function for event emission (from Motia step context)
   protected emit?: (event: { topic: string; data: any }) => Promise<void>;
@@ -396,8 +401,68 @@ export class Agent {
       const intent = await this.notifyIntentAnalysis(task, effectiveTaskId, context);
 
       // === HITL Checkpoint: Check if clarification is needed ===
-      const clarification = await this.checkIntentClarification(intent, task, effectiveTaskId || '', context);
-      if (clarification.needs) {
+      console.log('[Agent HITL] Intent analysis result', { intent: intent.intent, confidence: intent.confidence, threshold: 0.7 });
+      const clarificationResult = await this.checkIntentClarification(intent, task, effectiveTaskId || '', context);
+      console.log('[Agent HITL] checkIntentClarification returned', {
+        needs: clarificationResult.needs,
+        hasClarification: !!clarificationResult.clarification,
+        clarification: clarificationResult.clarification,
+        feedback: clarificationResult.feedback
+      });
+
+      // If clarification was provided, use request rewriter to rewrite the task
+      if (clarificationResult.clarification && this.requestRewriter) {
+        console.log('[Agent HITL] Clarification received, using RequestRewriter to rewrite task');
+
+        // Store original task for logging
+        const originalTask = task;
+
+        // Build conversation history for rewriting: [original task] + [user clarification]
+        const conversationHistory = [
+          { role: 'user', content: task },
+          { role: 'assistant', content: `请提供更多细节，以便我更好地帮助您。${clarificationResult.options ? `\n可选方向：${clarificationResult.options.join(', ')}` : ''}` },
+          { role: 'user', content: clarificationResult.feedback ? `${clarificationResult.clarification}（备注：${clarificationResult.feedback}）` : clarificationResult.clarification }
+        ];
+
+        // Use RequestRewriter to rewrite the task
+        const rewrittenTask = await this.requestRewriter.rewriteRequest(
+          task,
+          conversationHistory,
+          {
+            maxHistoryMessages: 10,
+            contextSummary: undefined  // No context summary available at this stage
+          }
+        );
+
+        // Update task to use rewritten task
+        task = rewrittenTask;
+
+        // ⭐ Sync update context.task so TaskHook saves the correct userMessage
+        // ⭐ Also update context.originalUserTask so buildConversationPrompt uses rewritten task
+        // ⭐ Also store in workingMemory for TaskHook to retrieve
+        if (context) {
+          context.task = rewrittenTask;
+          context.originalUserTask = rewrittenTask;
+
+          // ⭐ Store rewritten task in workingMemory for TaskHook to retrieve
+          if (!context.workingMemory) {
+            context.workingMemory = {};
+          }
+          context.workingMemory.rewrittenTask = rewrittenTask;
+          context.workingMemory.originalTask = originalTask;
+        }
+
+        console.log('[Agent HITL] Task rewritten with clarification', {
+          originalTask,
+          userClarification: clarificationResult.clarification,
+          rewrittenTask: task.substring(0, 200) + '...',
+          contextUpdated: !!context
+        });
+      } else {
+        console.log('[Agent HITL] No clarification provided, using original task');
+      }
+
+      if (clarificationResult.needs) {
         console.log('[Agent] Intent clarification needed, entering HITL checkpoint');
 
         // Send clarification request via Stream
@@ -415,8 +480,8 @@ export class Agent {
               reasoning: intent.reasoning,
               category: intent.category,
               confidence: intent.confidence,
-              question: clarification.question,
-              options: clarification.options,
+              question: clarificationResult.question,
+              options: clarificationResult.options,
               stage: 'post_intent'
             }
           };
@@ -437,8 +502,8 @@ export class Agent {
         await this.saveHITLState(effectiveTaskId || `task-${Date.now()}`, {
           stage: 'post_intent',
           status: 'awaiting',
-          question: clarification.question || '',
-          options: clarification.options,
+          question: clarificationResult.question || '',
+          options: clarificationResult.options,
           createdAt: new Date()
         });
 
@@ -448,15 +513,15 @@ export class Agent {
           error: 'AWAITING_CLARIFICATION',
           clarification: {
             needs: true,
-            question: clarification.question,
-            options: clarification.options,
+            question: clarificationResult.question,
+            options: clarificationResult.options,
             stage: 'post_intent'
           },
           steps: [{
             type: 'hitl_checkpoint',
             content: '任务需要澄清，等待用户补充信息',
             timestamp: Date.now(),
-            metadata: { clarification, intent }
+            metadata: { clarificationResult, intent }
           }],
           executionTime: 0,
           sessionId: this.sessionId,
@@ -1173,16 +1238,47 @@ ${userRequest}
    * Extract clean content from LLM response.
    * Removes markdown code block markers (```json, ```python, ``` etc.)
    * Returns the original JSON or plain text content.
+   *
+   * ⭐ Smart extraction: Only extract code block if the ENTIRE response is wrapped in it.
+   * If there's content before/after the code block, return the full response to avoid data loss.
    */
   private extractCleanContent(response: string): string {
     if (!response) return response;
 
-    // Try to extract content from markdown code blocks
-    const jsonMatch = response.match(/```json\n([\s\S]+?)\n```/) ||
-                     response.match(/```python\n([\s\S]+?)\n```/) ||
-                     response.match(/```\n([\s\S]+?)\n```/);
+    const trimmed = response.trim();
 
-    return jsonMatch ? jsonMatch[1].trim() : response.trim();
+    // Try to extract content from markdown code blocks
+    const jsonMatch = trimmed.match(/```json\n([\s\S]+?)\n```/);
+    const pythonMatch = trimmed.match(/```python\n([\s\S]+?)\n```/);
+    const genericMatch = trimmed.match(/```\n([\s\S]+?)\n```/);
+
+    const match = jsonMatch || pythonMatch || genericMatch;
+
+    if (match) {
+      const extractedContent = match[1].trim();
+      const fullMatch = match[0];
+
+      // ⭐ Smart check: Only extract if the code block covers the entire response
+      // This prevents extracting code snippets from mixed content (text + code)
+      if (fullMatch.trim() === trimmed) {
+        // Entire response is wrapped in a code block, safe to extract
+        console.log('[Agent] Extracted content from code block', {
+          originalLength: trimmed.length,
+          extractedLength: extractedContent.length
+        });
+        return extractedContent;
+      } else {
+        // Mixed content (text + code block), return full response to avoid data loss
+        console.log('[Agent] Mixed content detected, preserving full response', {
+          hasCodeBlock: true,
+          codeBlockPosition: trimmed.indexOf(fullMatch),
+          responseLength: trimmed.length
+        });
+        return trimmed;
+      }
+    }
+
+    return trimmed;
   }
 
   /**
@@ -1655,7 +1751,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
     task: string,
     taskId: string,
     context: any
-  ): Promise<{ needs: boolean; question?: string; options?: string[] }> {
+  ): Promise<{ needs: boolean; question?: string; options?: string[]; clarification?: string; feedback?: string }> {
     // Skip HITL if:
     // 1. Test environment
     // 2. Explicitly disabled via context.skipHITL
@@ -1706,13 +1802,17 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
       }, 'clarification check');
 
       const responseText = response.content || '{}';
+      console.log('[Agent HITL] LLM clarification response:', responseText);
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? jsonMatch[0] : '{}';
       const clarification = JSON.parse(jsonStr);
+      console.log('[Agent HITL] Parsed clarification:', clarification);
 
       if (clarification.needs_clarification) {
         const question = clarification.question || `请提供更多关于"${task}"的信息`;
         const options = clarification.options || [];
+
+        console.log('[Agent HITL] About to save HITL state', { taskId, question, options });
 
         // === NEW HITL FLOW: Internal polling instead of exiting ===
 
@@ -1725,11 +1825,20 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
           createdAt: new Date(),
         });
 
-        console.log('[Agent] HITL clarification needed, waiting for human response', {
-          taskId,
-          question,
-          hasOptions: options.length > 0,
-        });
+        console.log('[Agent HITL] HITL state saved, starting to poll', { taskId });
+
+        // 2. Trigger Agent Hook for webhook notifications
+        try {
+          await this.hookManager.executeHook('onAwaitingHITL', question, options, {
+            agentName: this.config.name || 'unknown',
+            sessionId: this.sessionId,
+            taskId,
+            intent,
+          });
+        } catch (hookError) {
+          console.warn('[Agent] HITL hook execution failed', { error: hookError });
+          // Don't fail - hooks are optional
+        }
 
         // 2. Trigger Agent Hook for webhook notifications
         try {
@@ -1745,21 +1854,61 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         }
 
         // 3. Poll internally waiting for human response
-        const clarificationResult = await this.pollHITLResult(taskId);
+        console.log('[Agent HITL] Starting to poll for HITL response', { taskId });
+        const clarificationResponse = await this.pollHITLResult(taskId);
 
         // 4. Clear HITL state after getting response
         await this.clearHITLState(taskId);
 
         console.log('[Agent] HITL clarification received, resuming execution', {
           taskId,
-          clarification: clarificationResult.content,
+          clarification: clarificationResponse.content,
         });
 
-        // 5. Update task with clarified content
-        // The clarified content will be used to continue execution
-        // Note: We return { needs: false } to continue execution with the clarified task
-        // The caller (run method) will use the original task + clarification as context
-        return { needs: false };
+        // ⭐ Send user clarification message to taskExecution stream
+        // This displays the user's clarification in the frontend message flow
+        const streams = getAgentStreams();
+        if (streams?.taskExecution) {
+          const clarificationMessage = clarificationResponse.feedback
+            ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
+            : clarificationResponse.content;
+
+          const clarificationEvent = {
+            type: 'user_clarification',
+            status: 'clarification_provided',
+            taskId,
+            sessionId: this.sessionId,
+            timestamp: new Date().toISOString(),
+            data: {
+              clarification: clarificationMessage,
+              originalQuestion: question,
+              stage: 'post_intent',
+            }
+          };
+
+          const clarificationEntryId = `user-clarification-${taskId}-${Date.now()}`;
+          await streams.taskExecution.set(taskId, clarificationEntryId, {
+            ...clarificationEvent,
+            category: 'agent_hook',
+          });
+
+          console.log('[Agent] User clarification notification sent', {
+            taskId,
+            clarification: clarificationMessage,
+          });
+        }
+
+        // 5. Return clarification content to be used by the caller
+        console.log('[Agent HITL] Returning clarification result', {
+          needs: false,
+          clarification: clarificationResponse.content,
+          feedback: clarificationResponse.feedback
+        });
+        return {
+          needs: false,
+          clarification: clarificationResponse.content,
+          feedback: clarificationResponse.feedback
+        };
       }
 
       return { needs: false };
@@ -1787,9 +1936,47 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         });
 
         const clarificationResult = await this.pollHITLResult(taskId);
+
+        // ⭐ Send user clarification message to taskExecution stream (same as normal path)
+        const streams = getAgentStreams();
+        if (streams?.taskExecution) {
+          const clarificationMessage = clarificationResult.feedback
+            ? `${clarificationResult.content}（备注：${clarificationResult.feedback}）`
+            : clarificationResult.content;
+
+          const clarificationEvent = {
+            type: 'user_clarification',
+            status: 'clarification_provided',
+            taskId,
+            sessionId: this.sessionId,
+            timestamp: new Date().toISOString(),
+            data: {
+              clarification: clarificationMessage,
+              originalQuestion: question,
+              stage: 'post_intent',
+            }
+          };
+
+          const clarificationEntryId = `user-clarification-${taskId}-${Date.now()}`;
+          await streams.taskExecution.set(taskId, clarificationEntryId, {
+            ...clarificationEvent,
+            category: 'agent_hook',
+          });
+
+          console.log('[Agent] User clarification notification sent (fallback path)', {
+            taskId,
+            clarification: clarificationMessage,
+          });
+        }
+
         await this.clearHITLState(taskId);
 
-        return { needs: false };
+        // Return clarification content to be used by RequestRewriter
+        return {
+          needs: false,
+          clarification: clarificationResult.content,
+          feedback: clarificationResult.feedback
+        };
       }
       return { needs: false };
     }
@@ -1816,11 +2003,15 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
    */
   private async saveHITLState(taskId: string, hitlState: HITLState): Promise<void> {
     try {
+      console.log('[Agent] saveHITLState called', { taskId, hitlState });
       const contextManager = new ContextManager();
       const taskContext = await contextManager.getContext(taskId);
 
       if (taskContext) {
+        console.log('[Agent] TaskContext found, current hitlState:', taskContext.hitlState);
         taskContext.hitlState = hitlState;
+        console.log('[Agent] taskContext.hitlState set to:', taskContext.hitlState);
+        console.log('[Agent] About to call saveContext, full context keys:', Object.keys(taskContext));
         await contextManager.saveContext(taskContext);
         console.log('[Agent] HITL state saved:', hitlState);
       } else {
@@ -1842,7 +2033,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
    */
   private async pollHITLResult(taskId: string): Promise<{ content: string; feedback?: string }> {
     const POLL_INTERVAL = 2000; // 2 seconds
-    const TIMEOUT = 300 * 1000; // 5 minutes
+    const TIMEOUT = 600 * 1000; // 10 minutes
     const startTime = Date.now();
 
     console.log('[Agent] Starting HITL polling', { taskId, POLL_INTERVAL, TIMEOUT });

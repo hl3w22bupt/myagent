@@ -158,6 +158,19 @@ export const handler = async (request: any, { logger }: any) => {
       timestamp: new Date(),
     };
 
+    // Add clarification response to conversation history
+    const clarificationMessage = feedback
+      ? `${decision}（备注：${feedback}）`
+      : decision;
+
+    // Add as a new conversation round
+    await contextManager.addConversationRound(taskId, {
+      round: (taskContext.conversationRounds?.length || 0) + 1,
+      timestamp: new Date(),
+      userMessage: clarificationMessage,
+      assistantReply: undefined, // Agent will process this and reply
+    });
+
     // Save to database
     await contextManager.saveContext(taskContext);
 
