@@ -98,11 +98,19 @@ export class DefaultTaskHook extends BaseTaskHook {
   async onProgressingNotify(context: TaskContext): Promise<void> {
     // No-op: Do not send heartbeat to Stream
     // This keeps Stream output minimal and focused on actual state changes
- 
+
     // Add custom progress metrics logging
     const { services } = context;
-    services.logger.debug('Task progress', {
-      taskId: context.taskId,
-    });
+    try {
+      services.logger.debug('Task progress', {
+        taskId: context.taskId,
+      });
+    } catch (error: any) {
+      // Ignore IPC channel closed errors during shutdown
+      // This prevents unhandled error events when service is stopping
+      if (error.code !== 'ERR_IPC_CHANNEL_CLOSED') {
+        console.warn('[DefaultTaskHook] Failed to log task progress:', error.message);
+      }
+    }
   }
 }

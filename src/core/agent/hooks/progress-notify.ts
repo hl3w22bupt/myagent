@@ -211,10 +211,31 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
 
       // Get subject info from agent instance
       const agent = context.agent as any;
-      const subjectInfo = agent?.getSubjectInfo?.() || {
-        subjectTitle: agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
-        subjectSubTitle: undefined,
-      };
+
+      // ⭐ Smart fallback to avoid "Agent / Agent" duplicate
+      let subjectInfo;
+      if (agent?.getSubjectInfo && typeof agent.getSubjectInfo === 'function') {
+        subjectInfo = agent.getSubjectInfo();
+        // ⭐ Double-check: if both title and subtitle are same or "Agent", use title only
+        if (subjectInfo.subjectTitle === subjectInfo.subjectSubTitle ||
+            subjectInfo.subjectSubTitle === 'Agent') {
+          subjectInfo = {
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: undefined
+          };
+        }
+      } else {
+        // Fallback: construct from agentType
+        if (agentType === 'MasterAgent') {
+          subjectInfo = { subjectTitle: 'Master Agent', subjectSubTitle: undefined };
+        } else if (agentType === 'Agent') {
+          // Base Agent class - use "执行代理" to avoid "Agent / Agent" duplicate
+          subjectInfo = { subjectTitle: '执行代理', subjectSubTitle: undefined };
+        } else {
+          // Named subagent - use agentType as title, no subtitle
+          subjectInfo = { subjectTitle: agentType, subjectSubTitle: undefined };
+        }
+      }
 
       const event = {
         type: 'agent',  // 统一为 'agent'
@@ -276,10 +297,31 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       // Get subject info from agent instance
       const agent = context.agent as any;
       const agentType = agent?.constructor?.name || context.agentType || 'Agent';
-      const subjectInfo = agent?.getSubjectInfo?.() || {
-        subjectTitle: agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
-        subjectSubTitle: undefined,
-      };
+
+      // ⭐ Smart fallback to avoid "Agent / Agent" duplicate
+      let subjectInfo;
+      if (agent?.getSubjectInfo && typeof agent.getSubjectInfo === 'function') {
+        subjectInfo = agent.getSubjectInfo();
+        // ⭐ Double-check: if both title and subtitle are same or "Agent", use title only
+        if (subjectInfo.subjectTitle === subjectInfo.subjectSubTitle ||
+            subjectInfo.subjectSubTitle === 'Agent') {
+          subjectInfo = {
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: undefined
+          };
+        }
+      } else {
+        // Fallback: construct from agentType
+        if (agentType === 'MasterAgent') {
+          subjectInfo = { subjectTitle: 'Master Agent', subjectSubTitle: undefined };
+        } else if (agentType === 'Agent') {
+          // Base Agent class - use "执行代理" to avoid "Agent / Agent" duplicate
+          subjectInfo = { subjectTitle: '执行代理', subjectSubTitle: undefined };
+        } else {
+          // Named subagent - use agentType as title, no subtitle
+          subjectInfo = { subjectTitle: agentType, subjectSubTitle: undefined };
+        }
+      }
 
       // 获取 artifact 数量（支持多种 context 结构）
       const artifactCount = context.artifactIndex?.length ||
@@ -412,5 +454,14 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       });
       throw error;
     }
+  }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
+    return undefined;
   }
 }

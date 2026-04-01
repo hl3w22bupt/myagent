@@ -70,10 +70,34 @@ export class AgentTraceHook extends BaseAgentHook {
     try {
       // Get subject info from agent instance
       const agent = context.agent as any;
-      const subjectInfo = agent?.getSubjectInfo?.() || {
-        subjectTitle: context.agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
-        subjectSubTitle: context.subagentName || undefined,
-      };
+
+      // ⭐ Smart fallback to avoid "Agent / Agent" duplicate
+      let subjectInfo;
+      if (agent?.getSubjectInfo && typeof agent.getSubjectInfo === 'function') {
+        subjectInfo = agent.getSubjectInfo();
+        // ⭐ Double-check: if both title and subtitle are same or "Agent", use title only
+        if (subjectInfo.subjectTitle === subjectInfo.subjectSubTitle ||
+            subjectInfo.subjectSubTitle === 'Agent') {
+          subjectInfo = {
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: undefined
+          };
+        }
+      } else {
+        // Fallback: construct from agentType
+        if (context.agentType === 'MasterAgent') {
+          subjectInfo = { subjectTitle: 'Master Agent', subjectSubTitle: undefined };
+        } else if (context.agentType === 'Agent') {
+          // Base Agent class - use "执行代理" to avoid "Agent / Agent" duplicate
+          subjectInfo = { subjectTitle: '执行代理', subjectSubTitle: undefined };
+        } else {
+          // Named subagent - use agentType as title, subagentName as subtitle if available
+          subjectInfo = {
+            subjectTitle: context.agentType,
+            subjectSubTitle: context.subagentName || undefined
+          };
+        }
+      }
 
       // Create initial agent trace entry
       await streams.executionTraces.set(taskId, id, {
@@ -136,10 +160,34 @@ export class AgentTraceHook extends BaseAgentHook {
     try {
       // Get subject info from agent instance
       const agent = context.agent as any;
-      const subjectInfo = agent?.getSubjectInfo?.() || {
-        subjectTitle: context.agentType === 'MasterAgent' ? 'Master Agent' : 'Subagent',
-        subjectSubTitle: context.subagentName || undefined,
-      };
+
+      // ⭐ Smart fallback to avoid "Agent / Agent" duplicate
+      let subjectInfo;
+      if (agent?.getSubjectInfo && typeof agent.getSubjectInfo === 'function') {
+        subjectInfo = agent.getSubjectInfo();
+        // ⭐ Double-check: if both title and subtitle are same or "Agent", use title only
+        if (subjectInfo.subjectTitle === subjectInfo.subjectSubTitle ||
+            subjectInfo.subjectSubTitle === 'Agent') {
+          subjectInfo = {
+            subjectTitle: subjectInfo.subjectTitle,
+            subjectSubTitle: undefined
+          };
+        }
+      } else {
+        // Fallback: construct from agentType
+        if (context.agentType === 'MasterAgent') {
+          subjectInfo = { subjectTitle: 'Master Agent', subjectSubTitle: undefined };
+        } else if (context.agentType === 'Agent') {
+          // Base Agent class - use "执行代理" to avoid "Agent / Agent" duplicate
+          subjectInfo = { subjectTitle: '执行代理', subjectSubTitle: undefined };
+        } else {
+          // Named subagent - use agentType as title, subagentName as subtitle if available
+          subjectInfo = {
+            subjectTitle: context.agentType,
+            subjectSubTitle: context.subagentName || undefined
+          };
+        }
+      }
 
       // Determine final status
       const status = result.success ? 'completed' : 'failed';
@@ -190,6 +238,15 @@ export class AgentTraceHook extends BaseAgentHook {
     for (const [agentId] of this.currentTraces.entries()) {
       this.currentTraces.delete(agentId);
     }
+    return undefined;
+  }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
     return undefined;
   }
 }

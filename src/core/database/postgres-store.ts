@@ -247,6 +247,13 @@ export class PostgresDataStore implements Database {
           ) THEN
             ALTER TABLE task_contexts ADD COLUMN tool_usage_history JSONB NOT NULL DEFAULT '[]'::jsonb;
           END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'task_contexts' AND column_name = 'hitl_state'
+          ) THEN
+            ALTER TABLE task_contexts ADD COLUMN hitl_state JSONB;
+          END IF;
         END $$;
       `);
 
@@ -1108,6 +1115,7 @@ export class PostgresDataStore implements Database {
         skillExecutionHistory: contextRow.skill_execution_history || [],
         toolUsageHistory: contextRow.tool_usage_history || [],
         workingMemory: contextRow.working_memory,
+        hitlState: contextRow.hitl_state,
         metadata: contextRow.metadata,
       };
     } finally {
@@ -1122,6 +1130,8 @@ export class PostgresDataStore implements Database {
       const fields: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
+
+      console.log('[PostgresDataStore] updateContext called', { taskId, hasHitlState: updates.hitlState !== undefined });
 
       if (updates.summary !== undefined) {
         fields.push(`summary = $${paramIndex++}`);
@@ -1139,6 +1149,11 @@ export class PostgresDataStore implements Database {
         fields.push(`working_memory = $${paramIndex++}`);
         values.push(JSON.stringify(updates.workingMemory));
       }
+      if (updates.hitlState !== undefined) {
+        console.log('[PostgresDataStore] Adding hitl_state to update fields');
+        fields.push(`hitl_state = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.hitlState));
+      }
       if (updates.metadata !== undefined) {
         fields.push(`metadata = $${paramIndex++}`);
         // 🔧 FIX: 显式序列化为 JSON 字符串，确保正确存储为 JSONB
@@ -1150,10 +1165,14 @@ export class PostgresDataStore implements Database {
       values.push(Date.now());
       values.push(taskId);
 
+      console.log('[PostgresDataStore] Executing UPDATE query', { fields: fields.join(', ') });
+
       await client.query(
         `UPDATE task_contexts SET ${fields.join(', ')} WHERE task_id = $${paramIndex}`,
         values
       );
+
+      console.log('[PostgresDataStore] UPDATE query completed');
     } finally {
       client.release();
     }

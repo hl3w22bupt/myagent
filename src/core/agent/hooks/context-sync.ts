@@ -205,4 +205,13 @@ export class AgentContextSyncHook extends BaseAgentHook {
       // Don't throw - destruction should continue
     }
   }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
+    return undefined;
+  }
 }

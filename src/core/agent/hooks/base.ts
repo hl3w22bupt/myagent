@@ -173,4 +173,28 @@ export abstract class BaseAgentHook {
   abstract onAgentDestroy(
     sessionId: string
   ): Promise<void | undefined>;
+
+  /**
+   * Called when Agent requests human clarification (HITL - Human In The Loop).
+   *
+   * Use this to:
+   * - Send webhook notifications to external systems
+   * - Log HITL requests for monitoring
+   * - Trigger custom workflows when clarification is needed
+   *
+   * @param question - Clarification question to present to human
+   * @param options - Optional multiple choice options for quick selection
+   * @param agentContext - Context information about the Agent requesting clarification
+   * @returns Optional abort signal or custom behavior
+   */
+  abstract onAwaitingHITL?(
+    question: string,
+    options?: string[],
+    agentContext?: {
+      agentName: string;
+      sessionId: string;
+      taskId: string;
+      intent?: any;
+    }
+  ): Promise<void | undefined>;
 }

@@ -1,0 +1,5 @@
+type: hitl_webhook
+enabled: false  # Default off, requires HITL_WEBHOOK_URL environment variable
+description: "Send webhook notifications when Agent requests human clarification (HITL)"
+config:
+  url: "{{ env.HITL_WEBHOOK_URL }}"

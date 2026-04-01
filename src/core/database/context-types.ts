@@ -65,6 +65,9 @@ export interface HITLState {
   /** 卡点状态：awaiting（等待用户）或 completed（已收到用户反馈） */
   status: 'awaiting' | 'completed';
 
+  /** Agent 名称（用于前端显示） */
+  agentName?: string;
+
   /** 向用户提出的问题 */
   question?: string;
 
@@ -80,6 +83,7 @@ export interface HITLState {
   /** 用户回复内容 */
   response?: {
     content: string;
+    feedback?: string;  // 可选的补充反馈
     timestamp: Date;
   };
 }

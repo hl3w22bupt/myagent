@@ -127,10 +127,14 @@ export class ContextManagerTaskHook extends BaseTaskHook {
         }))
         .filter(Boolean);
 
+      // ⭐ Use rewritten task if available (from HITL checkpoint)
+      // Priority: context.context.workingMemory.rewrittenTask (HITL) > context.task (original)
+      const userMessageToStore = context.context?.workingMemory?.rewrittenTask || context.task;
+
       const newRound = {
         round: currentRound,
         timestamp: new Date(),
-        userMessage: context.task,
+        userMessage: userMessageToStore,
         assistantOutput: result.success ? result.output : undefined,
         error: result.success ? undefined : result.error,
         artifacts,

@@ -1,0 +1,76 @@
+.clarification-waiting-card {
+  margin: 16px 0;
+  border: 2px solid #F59E0B;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+
+.clarification-card-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  gap: 12px;
+}
+
+.clarification-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #F59E0B; /* 橙色，与卡片边框一致 */
+}
+
+.clarification-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.clarification-card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #92400E;
+  margin-bottom: 4px;
+}
+
+.clarification-card-agent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #B45309;
+  margin-bottom: 4px;
+}
+
+.clarification-card-agent svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.clarification-card-question {
+  font-size: 14px;
+  color: #78716C;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clarification-card-expand-btn {
+  padding: 8px 16px;
+  background: #F59E0B;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.clarification-card-expand-btn:hover {
+  background: #D97706;
+}
+
+.clarification-card-expand-btn:active {
+  background: #B45309;
+}

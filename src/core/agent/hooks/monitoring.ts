@@ -345,4 +345,13 @@ export class AgentMonitoringHook extends BaseAgentHook {
   getMonitoringData(sessionId: string): AgentMonitoringData | undefined {
     return this.monitoringData.get(sessionId);
   }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
+    return undefined;
+  }
 }
