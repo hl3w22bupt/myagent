@@ -91,11 +91,25 @@ export class TaskHookExecutor {
           await hook.onProgressingNotify(context);
         } catch (error) {
           // Silent failure, don't interrupt task
-          context.services.logger.warn('TaskHook progressing failed', {
-            error,
-            hookName: hook.constructor.name,
-            taskId: context.taskId,
-          });
+          // ⭐ Also handle IPC channel closed errors gracefully
+          const err = error as { code?: string; message?: string };
+          if (err.code === 'ERR_IPC_CHANNEL_CLOSED') {
+            // IPC channel closed, likely during shutdown - ignore silently
+            console.debug(`[TaskHookExecutor] IPC channel closed for ${hook.constructor.name}, skipping progress notification`);
+          } else {
+            // For other errors, try to log but don't throw
+            try {
+              context.services.logger.warn('TaskHook progressing failed', {
+                error: err.message || String(error),
+                hookName: hook.constructor.name,
+                taskId: context.taskId,
+              });
+            } catch (logError) {
+              // If logging also fails (e.g., IPC closed), use console
+              const logErr = logError as { message?: string };
+              console.warn('[TaskHookExecutor] Failed to log progressing error:', logErr.message || String(logError));
+            }
+          }
         }
       }
     }, 30000); // 30 second interval
