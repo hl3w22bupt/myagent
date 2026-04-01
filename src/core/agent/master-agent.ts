@@ -25,7 +25,7 @@ export class MasterAgent extends Agent {
   private cacheVersion: string; // Cache version based on subagents config
   private masterConfig: MasterAgentConfig; // Store typed config
   private explicitDelegateTo: string[] | undefined; // Explicit delegation targets
-  private requestRewriter: RequestRewriter; // Request rewriter for multi-turn conversations
+  protected requestRewriter: RequestRewriter; // Request rewriter for multi-turn conversations (protected for HITL in base Agent)
   private contextManager: ContextManager; // Context manager for conversation history
 
   // Delegation plan cache to reduce LLM calls
@@ -301,50 +301,23 @@ export class MasterAgent extends Agent {
         stepsToExecute: directExecutionSteps.length
       });
 
-      // Build combined task with reasoning, plan steps, and original request
-      // This ensures original user request is preserved during execution
-      const combinedTask = `<reasoning>
-${plan.reasoning || 'Direct execution by MasterAgent'}
-</reasoning>
-
-<steps>
-${directExecutionSteps.map((step, index) => {
-  const stepInfo = `Step ${index + 1}: ${step.task}`;
-  const reasonInfo = step.reason ? `\nReason: ${step.reason}` : '';
-  return `${stepInfo}${reasonInfo}`;
-}).join('\n\n')}
-</steps>
-
-<original_request>
-${task}
-</original_request>`;
-
-      console.log('[MasterAgent] Combined task with original request preserved:', {
-        hasReasoning: !!plan.reasoning,
-        stepsCount: directExecutionSteps.length,
-        originalTask: task.substring(0, 100),
-      });
-
       // Step 3: Notify task decomposition before execution
-      await this.notifyTaskDecomposition(task, combinedTask, plan, _taskId);
+      await this.notifyTaskDecomposition(task, task, plan, _taskId);
 
-      // Step 4: Execute combined task with single PTC generation
+      // Step 4: Execute task directly (same as subagent path)
       steps.push({
         type: 'execution',
-        content: 'Executing combined task',
+        content: 'Executing task directly',
         timestamp: Date.now(),
       });
 
-      // Pass original task in context for better PTC generation
-      // ⭐ 关键修复：传递完整的 context，包括 workingMemory.userProfile
+      // Build execution context (same as subagent delegation path)
       const executionContext = {
         // 保留原始 context 的所有内容（包括 workingMemory.userProfile）
         ...context,
         // 添加/覆盖执行特定字段
         originalUserTask: originalTask,  // 原始用户输入（用于 conversationHistory 存储）
         originalTask: originalTask,  // Original user request (before rewriting)
-        combinedTask: combinedTask,  // MasterAgent's plan
-        delegationPlan: plan,  // Full delegation plan
       };
 
       console.log('[MasterAgent] Direct execution context created', {
@@ -352,7 +325,7 @@ ${task}
         conversationHistoryLength: executionContext.conversationHistory?.length || 0,
       });
 
-      const result = await super.run(combinedTask, _taskId, executionContext);
+      const result = await super.run(task, _taskId, executionContext);
 
       const executionTime = Date.now() - startTime;
 
