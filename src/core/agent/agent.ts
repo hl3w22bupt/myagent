@@ -1632,11 +1632,17 @@ Analyze the task description and categorize it appropriately. Provide confidence
   /**
    * Check if intent clarification is needed using LLM.
    * Returns a more intelligent clarification request based on task analysis.
+   *
+   * NEW: When clarification is needed, this method will:
+   * 1. Save HITL state to TaskContext (status: 'awaiting')
+   * 2. Trigger Agent Hook 'onAwaitingHITL' for webhooks
+   * 3. Poll internally waiting for human response
+   * 4. Resume execution with clarified task
    */
   private async checkIntentClarification(
     intent: any,
     task: string,
-    _taskId: string,
+    taskId: string,
     context: any
   ): Promise<{ needs: boolean; question?: string; options?: string[] }> {
     // Skip HITL if:
@@ -1694,11 +1700,55 @@ Analyze the task description and categorize it appropriately. Provide confidence
       const clarification = JSON.parse(jsonStr);
 
       if (clarification.needs_clarification) {
-        return {
-          needs: true,
-          question: clarification.question || `请提供更多关于"${task}"的信息`,
-          options: clarification.options || []
-        };
+        const question = clarification.question || `请提供更多关于"${task}"的信息`;
+        const options = clarification.options || [];
+
+        // === NEW HITL FLOW: Internal polling instead of exiting ===
+
+        // 1. Save HITL state to TaskContext
+        await this.saveHITLState(taskId, {
+          stage: 'post_intent',
+          status: 'awaiting',
+          question,
+          options,
+          createdAt: new Date(),
+        });
+
+        console.log('[Agent] HITL clarification needed, waiting for human response', {
+          taskId,
+          question,
+          hasOptions: options.length > 0,
+        });
+
+        // 2. Trigger Agent Hook for webhook notifications
+        try {
+          await this.hookManager.executeHook('onAwaitingHITL', question, options, {
+            agentName: this.config.name || 'unknown',
+            sessionId: this.sessionId,
+            taskId,
+            intent,
+          });
+        } catch (hookError) {
+          console.warn('[Agent] HITL hook execution failed', { error: hookError });
+          // Don't fail - hooks are optional
+        }
+
+        // 3. Poll internally waiting for human response
+        const clarificationResult = await this.pollHITLResult(taskId);
+
+        // 4. Clear HITL state after getting response
+        await this.clearHITLState(taskId);
+
+        console.log('[Agent] HITL clarification received, resuming execution', {
+          taskId,
+          clarification: clarificationResult.content,
+        });
+
+        // 5. Update task with clarified content
+        // The clarified content will be used to continue execution
+        // Note: We return { needs: false } to continue execution with the clarified task
+        // The caller (run method) will use the original task + clarification as context
+        return { needs: false };
       }
 
       return { needs: false };
@@ -1706,11 +1756,29 @@ Analyze the task description and categorize it appropriately. Provide confidence
       // 如果 LLM 调用失败，fallback 到简单规则
       console.error('[Agent] LLM clarification check failed, using fallback rules:', error);
       if (intent.confidence < 0.5) {
-        return {
-          needs: true,
-          question: `您的任务"${task}"不够详细，请问您想做什么？`,
-          options: intent.possibleIntents || ['创建视频', '编写代码', '生成文档', '数据分析']
-        };
+        const question = `您的任务"${task}"不够详细，请问您想做什么？`;
+        const options = intent.possibleIntents || ['创建视频', '编写代码', '生成文档', '数据分析'];
+
+        // Apply same HITL flow for fallback
+        await this.saveHITLState(taskId, {
+          stage: 'post_intent',
+          status: 'awaiting',
+          question,
+          options,
+          createdAt: new Date(),
+        });
+
+        await this.hookManager.executeHook('onAwaitingHITL', question, options, {
+          agentName: this.config.name || 'unknown',
+          sessionId: this.sessionId,
+          taskId,
+          intent,
+        });
+
+        const clarificationResult = await this.pollHITLResult(taskId);
+        await this.clearHITLState(taskId);
+
+        return { needs: false };
       }
       return { needs: false };
     }
@@ -1749,6 +1817,80 @@ Analyze the task description and categorize it appropriately. Provide confidence
       }
     } catch (error) {
       console.error('[Agent] Failed to save HITL state:', error);
+    }
+  }
+
+  /**
+   * Poll internally waiting for HITL clarification result.
+   *
+   * This method continuously checks TaskContext.hitlState.status
+   * until it changes from 'awaiting' to 'completed'.
+   *
+   * Polling interval: 2 seconds
+   * Timeout: 5 minutes (300 seconds)
+   */
+  private async pollHITLResult(taskId: string): Promise<{ content: string; feedback?: string }> {
+    const POLL_INTERVAL = 2000; // 2 seconds
+    const TIMEOUT = 300 * 1000; // 5 minutes
+    const startTime = Date.now();
+
+    console.log('[Agent] Starting HITL polling', { taskId, POLL_INTERVAL, TIMEOUT });
+
+    while (Date.now() - startTime < TIMEOUT) {
+      try {
+        const contextManager = new ContextManager();
+        const taskContext = await contextManager.getContext(taskId);
+
+        if (!taskContext?.hitlState) {
+          console.warn('[Agent] HITL state not found during polling', { taskId });
+          // Return empty result to continue execution
+          return { content: '' };
+        }
+
+        if (taskContext.hitlState.status === 'completed' && taskContext.hitlState.response) {
+          console.log('[Agent] HITL response received', {
+            taskId,
+            response: taskContext.hitlState.response.content,
+          });
+          return {
+            content: taskContext.hitlState.response.content,
+            feedback: taskContext.hitlState.response.feedback,
+          };
+        }
+
+        // Still awaiting, wait and retry
+        console.log('[Agent] Still waiting for HITL response', {
+          taskId,
+          elapsed: Date.now() - startTime,
+        });
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      } catch (error) {
+        console.error('[Agent] Error during HITL polling', { taskId, error });
+        // Wait and retry on error
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      }
+    }
+
+    // Timeout - return empty result to continue execution
+    console.warn('[Agent] HITL polling timeout, continuing execution', { taskId, TIMEOUT });
+    return { content: '' };
+  }
+
+  /**
+   * Clear HITL state from TaskContext after clarification is received.
+   */
+  private async clearHITLState(taskId: string): Promise<void> {
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext && taskContext.hitlState) {
+        delete taskContext.hitlState;
+        await contextManager.saveContext(taskContext);
+        console.log('[Agent] HITL state cleared', { taskId });
+      }
+    } catch (error) {
+      console.error('[Agent] Failed to clear HITL state', { taskId, error });
     }
   }
 

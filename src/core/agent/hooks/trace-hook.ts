@@ -192,4 +192,13 @@ export class AgentTraceHook extends BaseAgentHook {
     }
     return undefined;
   }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
+    return undefined;
+  }
 }

@@ -12,6 +12,9 @@ import PtcCodeTab from '../components/PtcCodeTab'
 import ArtifactsTab from '../components/ArtifactsTab'
 import ContextTab from '../components/ContextTab'
 import TokenUsageTab from '../components/TokenUsageTab'
+import ClarificationWaitingCard from '../components/task/ClarificationWaitingCard'
+import ClarificationModal from '../components/task/ClarificationModal'
+import { useTaskPolling } from '../hooks/useTaskPolling'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -365,6 +368,10 @@ function TaskDetail() {
   const [favoriteArtifacts, setFavoriteArtifacts] = useState(new Map()) // artifactId -> favoriteId 映射
   const [loadingFavorites, setLoadingFavorites] = useState(false) // 收藏操作加载状态
   const [pinningTask, setPinningTask] = useState(false) // 置顶操作加载状态
+  const [clarificationModalOpen, setClarificationModalOpen] = useState(false) // HITL 澄清模态框状态
+
+  // HITL 轮询 Hook
+  const { task: polledTask, hitlState } = useTaskPolling(id, 2000)
 
   // 表格状态管理
   const [tableSearchQuery, setTableSearchQuery] = useState('')
@@ -3521,6 +3528,16 @@ function TaskDetail() {
                 <h3>任务执行进度</h3>
                 <span className="stream-count">{messages.length} 条消息</span>
               </div>
+
+              {/* HITL 澄清等待卡片 */}
+              {hitlState?.status === 'awaiting' && task?.status === 'running' && (
+                <ClarificationWaitingCard
+                  agentName={hitlState.agentName || task.metadata?.subagent || 'Agent'}
+                  question={hitlState.question || '请提供更多信息'}
+                  onExpand={() => setClarificationModalOpen(true)}
+                />
+              )}
+
               <div className="progress-stream-content">
               {/* 统一的消息列表：进度流 + 聊天（使用分组） */}
               {(() => {
@@ -3673,6 +3690,29 @@ function TaskDetail() {
           </div>
         </div>
       </div>
+
+      {/* HITL 澄清模态框 */}
+      <ClarificationModal
+        open={clarificationModalOpen}
+        onClose={() => setClarificationModalOpen(false)}
+        question={hitlState?.question || ''}
+        options={hitlState?.options}
+        onSubmit={async (decision, feedback) => {
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+          const response = await fetch(`${API_BASE_URL}/api/tasks/${id}/hitl`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, feedback }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to submit clarification');
+          }
+
+          const result = await response.json();
+          console.log('[HITL] Clarification submitted:', result);
+        }}
+      />
     )
 }
 

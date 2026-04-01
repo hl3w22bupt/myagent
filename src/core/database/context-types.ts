@@ -80,6 +80,7 @@ export interface HITLState {
   /** 用户回复内容 */
   response?: {
     content: string;
+    feedback?: string;  // 可选的补充反馈
     timestamp: Date;
   };
 }

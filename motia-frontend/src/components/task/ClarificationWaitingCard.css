@@ -1,0 +1,66 @@
+.clarification-waiting-card {
+  margin: 16px 0;
+  border: 2px solid #F59E0B;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+
+.clarification-card-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  gap: 12px;
+}
+
+.clarification-card-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.clarification-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.clarification-card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #92400E;
+  margin-bottom: 4px;
+}
+
+.clarification-card-agent {
+  font-size: 13px;
+  color: #B45309;
+  margin-bottom: 4px;
+}
+
+.clarification-card-question {
+  font-size: 14px;
+  color: #78716C;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clarification-card-expand-btn {
+  padding: 8px 16px;
+  background: #F59E0B;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.clarification-card-expand-btn:hover {
+  background: #D97706;
+  transform: translateX(2px);
+}
+
+.clarification-card-expand-btn:active {
+  transform: translateX(2px) scale(0.98);
+}

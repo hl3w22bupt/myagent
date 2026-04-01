@@ -413,4 +413,13 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       throw error;
     }
   }
+
+  async onAwaitingHITL(
+    _question: string,
+    _options?: string[],
+    _agentContext?: any
+  ): Promise<void | undefined> {
+    // Not used in this hook
+    return undefined;
+  }
 }
