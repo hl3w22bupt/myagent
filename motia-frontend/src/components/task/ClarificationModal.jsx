@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { X, Info, Check, AlertCircle } from 'lucide-react';
 import './ClarificationModal.css';
 
 /**
@@ -10,6 +11,8 @@ import './ClarificationModal.css';
  * - 更好的交互反馈和动画
  * - 完整的可访问性支持
  * - 优雅的 loading 状态
+ * - 使用 SVG 图标替代 emoji
+ * - 添加验证错误提示
  *
  * Props:
  * - open: 是否打开模态框
@@ -23,6 +26,7 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
   const [textInput, setTextInput] = useState('');
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   // Ref for focus trap (可访问性)
   const modalRef = useRef(null);
@@ -36,6 +40,7 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
       setTextInput('');
       setFeedback('');
       setIsSubmitting(false);
+      setValidationError('');
 
       // 延迟聚焦到第一个可交互元素（等待动画完成）
       const timer = setTimeout(() => {
@@ -69,10 +74,12 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
     const decision = hasOptions ? selectedOption : textInput.trim();
 
     if (!decision) {
-      // 使用内联提示而不是 alert
+      // 显示验证错误提示
+      setValidationError(hasOptions ? '请选择一个选项' : '请输入您的回复');
       return;
     }
 
+    setValidationError('');
     setIsSubmitting(true);
     try {
       await onSubmit(decision, feedback.trim() || undefined);
@@ -125,14 +132,26 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
             aria-label="关闭对话框"
             ref={firstFocusableRef}
           >
-            ✕
+            <X size={18} strokeWidth={2.5} />
           </button>
         </div>
 
         {/* 模态框内容 */}
         <div className="clarification-modal-body">
+          {/* 验证错误提示 */}
+          {validationError && (
+            <div className="clarification-modal-validation-error" role="alert">
+              <AlertCircle size={16} strokeWidth={2} />
+              <span>{validationError}</span>
+            </div>
+          )}
+
           <div className="clarification-modal-question">
-            <strong>问题：</strong>{question}
+            <div className="clarification-modal-question-header">
+              <AlertCircle size={18} strokeWidth={2} className="question-icon" />
+              <strong>问题：</strong>
+            </div>
+            <div className="clarification-modal-question-text">{question}</div>
           </div>
 
           {/* 选项按钮（如果有） */}
@@ -151,7 +170,10 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
                       aria-pressed={isSelected}
                       aria-label={`选项 ${index + 1}: ${option}`}
                     >
-                      {option}
+                      <span className="option-text">{option}</span>
+                      {isSelected && (
+                        <Check size={18} strokeWidth={2.5} className="option-check" />
+                      )}
                     </button>
                   );
                 })}
@@ -188,7 +210,8 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
               htmlFor="clarification-feedback"
               className="clarification-modal-feedback-label"
             >
-              补充说明（可选）
+              <Info size={14} strokeWidth={2} />
+              <span>补充说明（可选）</span>
             </label>
             <textarea
               id="clarification-feedback"

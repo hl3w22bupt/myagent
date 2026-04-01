@@ -391,8 +391,8 @@ function TaskDetail() {
   const [pinningTask, setPinningTask] = useState(false) // 置顶操作加载状态
   const [clarificationModalOpen, setClarificationModalOpen] = useState(false) // HITL 澄清模态框状态
 
-  // HITL 轮询 Hook
-  const { task: polledTask, hitlState } = useTaskPolling(id, 2000)
+  // HITL 轮询 Hook（5秒轮询，降低请求频率）
+  const { task: polledTask, hitlState } = useTaskPolling(id, 5000)
 
   // 调试日志
   useEffect(() => {
@@ -3571,7 +3571,7 @@ function TaskDetail() {
               {/* HITL 澄清等待卡片 */}
               {hitlState?.status === 'awaiting' && (
                 <ClarificationWaitingCard
-                  agentName={hitlState.agentName || task.metadata?.subagent || 'Agent'}
+                  agentName={hitlState.agentName || 'Agent'}
                   question={hitlState.question || '请提供更多信息'}
                   onExpand={() => setClarificationModalOpen(true)}
                 />

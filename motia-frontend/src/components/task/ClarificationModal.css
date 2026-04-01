@@ -76,7 +76,6 @@
 .clarification-modal-close {
   background: none;
   border: none;
-  font-size: 22px;
   color: #94A3B8; /* 中性灰色 */
   cursor: pointer;
   padding: 0;
@@ -87,17 +86,17 @@
   justify-content: center;
   border-radius: 8px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* 更平滑的过渡 */
-  line-height: 1;
 }
 
+/* ✅ 修复：移除 scale transform，避免布局偏移 */
 .clarification-modal-close:hover {
   background: #F1F5F9;
   color: #475569;
-  transform: scale(1.05); /* 微妙的缩放效果 */
 }
 
 .clarification-modal-close:active {
-  transform: scale(0.95);
+  background: #E2E8F0;
+  color: #1E293B;
 }
 
 /* ------------------------------------------------------------
@@ -105,6 +104,33 @@
    ------------------------------------------------------------ */
 .clarification-modal-body {
   padding: 28px; /* 统一的内边距 */
+}
+
+/* Validation Error - 验证错误提示 */
+.clarification-modal-validation-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  color: #DC2626;
+  font-size: 14px;
+  font-weight: 500;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Question - 问题显示 */
@@ -117,12 +143,25 @@
   background: linear-gradient(135deg, #FFFBEB 0%, #FEF7E0 100%); /* 渐变背景 */
   border-left: 4px solid #F97316; /* 使用橙色 CTA 色 */
   border-radius: 8px;
-  font-weight: 500; /* 更粗的字重 */
 }
 
-.clarification-modal-question strong {
+.clarification-modal-question-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
   color: #9A3412; /* 深橙色 */
   font-weight: 600;
+}
+
+.clarification-modal-question-header .question-icon {
+  flex-shrink: 0;
+  color: #F97316;
+}
+
+.clarification-modal-question-text {
+  color: #334155;
+  font-weight: 500;
 }
 
 /* Options - 选项按钮 */
@@ -156,28 +195,43 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   position: relative;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-/* 添加点击涟漪效果 */
-.clarification-option-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.1) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s;
+/* ✅ 使用 SVG 图标，移除伪元素 */
+.clarification-option-btn .option-text {
+  flex: 1;
 }
 
-.clarification-option-btn:hover::before {
-  opacity: 1;
+.clarification-option-btn .option-check {
+  flex-shrink: 0;
+  color: #2563EB;
+  animation: checkIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@keyframes checkIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ✅ 移除伪元素，简化hover状态，避免布局偏移 */
 .clarification-option-btn:hover {
   border-color: #3B82F6; /* 使用蓝色主色 */
   background: #EFF6FF; /* 浅蓝色背景 */
-  transform: translateY(-1px); /* 微妙的上移效果 */
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.clarification-option-btn:active {
+  transform: scale(0.98);
 }
 
 .clarification-option-btn.selected {
@@ -186,16 +240,6 @@
   color: #1E3A8A; /* 深蓝色文字 */
   font-weight: 600;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); /* 外发光效果 */
-}
-
-.clarification-option-btn.selected::after {
-  content: '✓';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  color: #2563EB;
-  font-weight: bold;
-  font-size: 16px;
 }
 
 /* Text Input - 文本输入 */
@@ -254,9 +298,10 @@
   letter-spacing: -0.01em;
 }
 
-.clarification-modal-feedback-label::before {
-  content: 'ℹ️';
-  font-size: 14px;
+/* ✅ 使用 SVG 图标，移除伪元素 */
+.clarification-modal-feedback-label svg {
+  flex-shrink: 0;
+  color: #3B82F6;
 }
 
 .clarification-modal-feedback-textarea {
@@ -320,11 +365,10 @@
 .clarification-modal-btn-cancel:hover {
   background: #F1F5F9;
   border-color: #94A3B8;
-  transform: translateY(-1px);
 }
 
 .clarification-modal-btn-cancel:active {
-  transform: translateY(0);
+  background: #E2E8F0;
 }
 
 .clarification-modal-btn-submit {
@@ -333,14 +377,13 @@
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25); /* 添加阴影 */
 }
 
+/* ✅ 移除 translateY，避免布局偏移 */
 .clarification-modal-btn-submit:hover:not(:disabled) {
   background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
-  transform: translateY(-1px);
 }
 
 .clarification-modal-btn-submit:active:not(:disabled) {
-  transform: translateY(0);
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
 }
 

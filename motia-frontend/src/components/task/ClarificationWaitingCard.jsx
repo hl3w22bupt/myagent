@@ -1,4 +1,5 @@
 import React from 'react';
+import { HelpCircle, Bot } from 'lucide-react';
 import './ClarificationWaitingCard.css';
 
 /**
@@ -23,10 +24,15 @@ const ClarificationWaitingCard = ({ agentName, question, onExpand }) => {
   return (
     <div className="clarification-waiting-card">
       <div className="clarification-card-header">
-        <div className="clarification-card-icon">⏸️</div>
+        <div className="clarification-card-icon">
+          <HelpCircle size={32} strokeWidth={1.5} />
+        </div>
         <div className="clarification-card-content">
           <div className="clarification-card-title">等待澄清回复</div>
-          <div className="clarification-card-agent">Agent: {agentName}</div>
+          <div className="clarification-card-agent">
+            <Bot size={14} strokeWidth={2} />
+            <span>{agentName}</span>
+          </div>
           <div className="clarification-card-question">{questionPreview}</div>
         </div>
         <button

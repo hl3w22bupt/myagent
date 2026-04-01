@@ -14,8 +14,11 @@
 }
 
 .clarification-card-icon {
-  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  color: #F59E0B; /* 橙色，与卡片边框一致 */
 }
 
 .clarification-card-content {
@@ -31,9 +34,17 @@
 }
 
 .clarification-card-agent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #B45309;
   margin-bottom: 4px;
+}
+
+.clarification-card-agent svg {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .clarification-card-question {
@@ -58,9 +69,8 @@
 
 .clarification-card-expand-btn:hover {
   background: #D97706;
-  transform: translateX(2px);
 }
 
 .clarification-card-expand-btn:active {
-  transform: translateX(2px) scale(0.98);
+  background: #B45309;
 }

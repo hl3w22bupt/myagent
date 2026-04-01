@@ -502,6 +502,7 @@ export class Agent {
         await this.saveHITLState(effectiveTaskId || `task-${Date.now()}`, {
           stage: 'post_intent',
           status: 'awaiting',
+          agentName: this.agentName || this.config.name || 'Agent',
           question: clarificationResult.question || '',
           options: clarificationResult.options,
           createdAt: new Date()
@@ -1820,6 +1821,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         await this.saveHITLState(taskId, {
           stage: 'post_intent',
           status: 'awaiting',
+          agentName: this.agentName || this.config.name || 'Agent',
           question,
           options,
           createdAt: new Date(),
@@ -1923,6 +1925,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         await this.saveHITLState(taskId, {
           stage: 'post_intent',
           status: 'awaiting',
+          agentName: this.agentName || this.config.name || 'Agent',
           question,
           options,
           createdAt: new Date(),

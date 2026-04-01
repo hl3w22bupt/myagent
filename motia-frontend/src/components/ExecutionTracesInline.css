@@ -475,6 +475,17 @@
   border-color: #BFDBFE;
 }
 
+/* 收起状态的按钮样式 - 使用橙色区分 */
+.trace-details-toggle.collapsed {
+  color: #F59E0B;
+  border-color: #FED7AA;
+}
+
+.trace-details-toggle.collapsed:hover {
+  background: #FFFBEB;
+  border-color: #FCD34D;
+}
+
 /* ===== 数据详情 ===== */
 .trace-details-content {
   margin-top: 12px;

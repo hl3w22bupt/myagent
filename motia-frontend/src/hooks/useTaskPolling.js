@@ -79,16 +79,25 @@ export const useTaskPolling = (taskId, interval = 2000) => {
     refresh();
   }, [taskId]);
 
-  // 轮询逻辑
+  // 轮询逻辑（智能停止）
   useEffect(() => {
     if (!taskId) return;
+
+    // ✅ 智能停止：任务已完成或失败时停止轮询
+    if (task?.status === 'completed' || task?.status === 'failed') {
+      console.log('[useTaskPolling] Task finished, stopping poll:', {
+        taskId,
+        status: task?.status
+      });
+      return;
+    }
 
     const pollTimer = setInterval(() => {
       refresh();
     }, interval);
 
     return () => clearInterval(pollTimer);
-  }, [taskId, interval, refresh]);
+  }, [taskId, interval, refresh, task?.status]);
 
   return {
     task,

@@ -544,7 +544,7 @@ function ExecutionTracesInline({ taskId }) {
                             )}
                             {(trace.inputData || trace.outputData || trace.error || trace.errorData || trace.metadata) && (
                               <button
-                                className="trace-details-toggle"
+                                className={`trace-details-toggle ${expandedDetails.has(uniqueId) ? 'collapsed' : ''}`}
                                 onClick={() => toggleDetail(uniqueId)}
                               >
                                 {expandedDetails.has(uniqueId) ? '收起' : '查看数据'}
