@@ -1519,7 +1519,18 @@ ${userRequest}
       // ⭐ 构建意图分析的 system prompt，包含用户画像信息
       // 用户画像有助于理解用户偏好和沟通风格
       let intentSystemPrompt = `You are an intent analyzer. Your task is to determine the user's intent from their request.
-Analyze the task description and categorize it appropriately. Provide confidence scores to indicate certainty.`;
+Analyze the task description and categorize it appropriately.
+
+**Confidence Evaluation Criteria:**
+- **High confidence (0.7-1.0)**: The request is specific and clear with sufficient detail
+  - Examples: "Create a Python function to sort a list", "Summarize this article about AI"
+  - Has specific task, domain, and clear requirements
+- **Low confidence (< 0.7)**: The request is vague, ambiguous, or missing key information
+  - Examples: "帮我", "make a video", "fix it"
+  - Lacks specific task details, domain context, or clear requirements
+  - Requires clarification before execution
+
+Important: A vague "help me" request should get LOW confidence because it's unclear what to do, even if you can classify the general category.`;
 
       // ⭐ 追加用户画像到意图分析 prompt
       const profileText = this.getUserProfileText(context);

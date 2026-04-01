@@ -3687,32 +3687,32 @@ function TaskDetail() {
                 </div>
               </div>
             )}
+
+            {/* HITL 澄清模态框 */}
+            <ClarificationModal
+              open={clarificationModalOpen}
+              onClose={() => setClarificationModalOpen(false)}
+              question={hitlState?.question || ''}
+              options={hitlState?.options}
+              onSubmit={async (decision, feedback) => {
+                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+                const response = await fetch(`${API_BASE_URL}/api/tasks/${id}/hitl`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ decision, feedback }),
+                });
+
+                if (!response.ok) {
+                  throw new Error('Failed to submit clarification');
+                }
+
+                const result = await response.json();
+                console.log('[HITL] Clarification submitted:', result);
+              }}
+            />
           </div>
         </div>
       </div>
-
-      {/* HITL 澄清模态框 */}
-      <ClarificationModal
-        open={clarificationModalOpen}
-        onClose={() => setClarificationModalOpen(false)}
-        question={hitlState?.question || ''}
-        options={hitlState?.options}
-        onSubmit={async (decision, feedback) => {
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-          const response = await fetch(`${API_BASE_URL}/api/tasks/${id}/hitl`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ decision, feedback }),
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to submit clarification');
-          }
-
-          const result = await response.json();
-          console.log('[HITL] Clarification submitted:', result);
-        }}
-      />
     )
 }
 
