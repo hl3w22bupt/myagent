@@ -274,13 +274,13 @@ const getStatusConfig = (status) => {
       }
     case 'idle':
       return {
-        label: '空闲中',
+        label: '等待中',
         color: '#6B7280',
         bgColor: '#F3F4F6',
         icon: (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 6v6M9 12h6" strokeLinecap="round"/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
           </svg>
         )
       }
