@@ -12,6 +12,9 @@ import './ClarificationWaitingCard.css';
  * - onExpand: 点击展开时的回调函数
  */
 const ClarificationWaitingCard = ({ agentName, question, onExpand }) => {
+  // 调试日志
+  console.log('[ClarificationWaitingCard] Rendered with:', { agentName, question })
+
   // 截取问题预览（最多 50 个字符）
   const questionPreview = question.length > 50
     ? `${question.substring(0, 50)}...`

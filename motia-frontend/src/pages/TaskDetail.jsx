@@ -41,16 +41,21 @@ const formatAgentHookMessage = (event) => {
       // 获取 agent 类型信息
       const subjectTitle = data?.subjectTitle || 'Agent'
       const subjectSubTitle = data?.subjectSubTitle
-      const agentDisplayName = subjectSubTitle ? `${subjectTitle} / ${subjectSubTitle}` : subjectTitle
+
+      // 避免重复显示 "Agent / Agent"
+      let agentDisplayName = subjectTitle
+      if (subjectSubTitle && subjectSubTitle !== subjectTitle && subjectSubTitle !== 'Agent') {
+        agentDisplayName = `${subjectTitle} · ${subjectSubTitle}`
+      }
 
       if (stage === 'pre') {
         // Agent pre hook - 显示 agent 类型和任务内容
         const taskContent = data?.task || ''
-        return `[🤖 ${agentDisplayName} 启动]：${taskContent}`
+        return `[🤖 ${agentDisplayName}] ${taskContent}`
       } else if (stage === 'post') {
         // Agent post hook - 任务完成
         const success = data?.success ? '✅ 成功' : '❌ 失败'
-        return `[🤖 ${agentDisplayName} 完成]：${success}`
+        return `[🤖 ${agentDisplayName}] ${success}`
       }
       break
 
@@ -127,6 +132,10 @@ const formatAgentHookMessage = (event) => {
       } else {
         return `[❓ 需要澄清]：${question}`
       }
+
+    case 'user_clarification':
+      const clarification = data?.clarification || '用户提供澄清'
+      return `[✅ 用户澄清]：${clarification}`
 
     default:
       console.warn('[formatAgentHookMessage] 未知事件类型:', type)
@@ -240,6 +249,18 @@ const getStatusConfig = (status) => {
           </svg>
         )
       }
+    case 'clarification_provided':
+      return {
+        label: '已澄清',
+        color: '#B45309', // 深橙色文字
+        bgColor: '#FEF3C7', // 浅橙黄色背景
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        )
+      }
     case 'running':
       return {
         label: '执行中',
@@ -257,9 +278,9 @@ const getStatusConfig = (status) => {
         color: '#6B7280',
         bgColor: '#F3F4F6',
         icon: (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v6l4 2"/>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 6v6M9 12h6" strokeLinecap="round"/>
           </svg>
         )
       }
@@ -372,6 +393,15 @@ function TaskDetail() {
 
   // HITL 轮询 Hook
   const { task: polledTask, hitlState } = useTaskPolling(id, 2000)
+
+  // 调试日志
+  useEffect(() => {
+    console.log('[TaskDetail] HITL state updated:', {
+      taskId: id,
+      hitlState,
+      shouldShowCard: hitlState?.status === 'awaiting'
+    })
+  }, [hitlState, id])
 
   // 表格状态管理
   const [tableSearchQuery, setTableSearchQuery] = useState('')
@@ -2763,6 +2793,15 @@ function TaskDetail() {
         )
       }
 
+      if (message.type === 'user_clarification') {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        )
+      }
+
       // 标准类型：task, agent, skill
       if (message.type === 'task') {
         return (
@@ -3530,7 +3569,7 @@ function TaskDetail() {
               </div>
 
               {/* HITL 澄清等待卡片 */}
-              {hitlState?.status === 'awaiting' && task?.status === 'running' && (
+              {hitlState?.status === 'awaiting' && (
                 <ClarificationWaitingCard
                   agentName={hitlState.agentName || task.metadata?.subagent || 'Agent'}
                   question={hitlState.question || '请提供更多信息'}

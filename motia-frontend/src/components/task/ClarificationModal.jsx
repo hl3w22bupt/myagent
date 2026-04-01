@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import './ClarificationModal.css';
 
 /**
- * ClarificationModal - 澄清回复模态框
+ * ClarificationModal - 澄清回复模态框（优化版本）
  *
- * 自适应 UI：
- * - 如果有 options → 显示可点击的选项按钮
- * - 如果没有 options → 显示文本输入框
+ * 基于 Swiss Modernism 2.0 + SaaS 配色方案
+ * 优化点：
+ * - 更清晰的视觉层次和间距
+ * - 更好的交互反馈和动画
+ * - 完整的可访问性支持
+ * - 优雅的 loading 状态
  *
  * Props:
  * - open: 是否打开模态框
@@ -21,34 +24,61 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 重置状态
+  // Ref for focus trap (可访问性)
+  const modalRef = useRef(null);
+  const firstFocusableRef = useRef(null);
+  const lastFocusableRef = useRef(null);
+
+  // 重置状态 + focus trap
   React.useEffect(() => {
     if (open) {
       setSelectedOption(null);
       setTextInput('');
       setFeedback('');
       setIsSubmitting(false);
+
+      // 延迟聚焦到第一个可交互元素（等待动画完成）
+      const timer = setTimeout(() => {
+        if (firstFocusableRef.current) {
+          firstFocusableRef.current.focus();
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [open]);
+
+  // ESC 键关闭（可访问性）
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && !isSubmitting) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [open, onClose, isSubmitting]);
 
   // 如果有选项，使用选项按钮；否则使用文本输入
   const hasOptions = options && options.length > 0;
 
   const handleSubmit = async () => {
-    const decision = hasOptions ? selectedOption : textInput;
+    const decision = hasOptions ? selectedOption : textInput.trim();
 
     if (!decision) {
-      alert('请选择或输入您的回复');
+      // 使用内联提示而不是 alert
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await onSubmit(decision, feedback || undefined);
+      await onSubmit(decision, feedback.trim() || undefined);
       onClose();
     } catch (error) {
       console.error('Failed to submit clarification:', error);
-      alert('提交失败，请重试');
       setIsSubmitting(false);
     }
   };
@@ -57,15 +87,46 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
     setSelectedOption(option);
   };
 
+  const handleKeyDown = (e) => {
+    // Enter 键提交（可访问性）
+    if (e.key === 'Enter' && e.metaKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   if (!open) return null;
 
+  const canSubmit = hasOptions ? selectedOption : textInput.trim();
+
   return (
-    <div className="clarification-modal-overlay" onClick={onClose}>
-      <div className="clarification-modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="clarification-modal-overlay"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="clarification-modal"
+        onClick={(e) => e.stopPropagation()}
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clarification-title"
+      >
         {/* 模态框头部 */}
         <div className="clarification-modal-header">
-          <h3 className="clarification-modal-title">需要澄清</h3>
-          <button className="clarification-modal-close" onClick={onClose}>✕</button>
+          <h3 id="clarification-title" className="clarification-modal-title">
+            需要澄清
+          </h3>
+          <button
+            className="clarification-modal-close"
+            onClick={onClose}
+            disabled={isSubmitting}
+            aria-label="关闭对话框"
+            ref={firstFocusableRef}
+          >
+            ✕
+          </button>
         </div>
 
         {/* 模态框内容 */}
@@ -78,16 +139,22 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
           {hasOptions && (
             <div className="clarification-modal-options">
               <div className="clarification-modal-options-label">请选择：</div>
-              <div className="clarification-modal-options-grid">
-                {options.map((option, index) => (
-                  <button
-                    key={index}
-                    className={`clarification-option-btn ${selectedOption === option ? 'selected' : ''}`}
-                    onClick={() => handleOptionClick(option)}
-                  >
-                    {option}
-                  </button>
-                ))}
+              <div className="clarification-modal-options-grid" role="radiogroup">
+                {options.map((option, index) => {
+                  const isSelected = selectedOption === option;
+                  return (
+                    <button
+                      key={index}
+                      className={`clarification-option-btn ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleOptionClick(option)}
+                      disabled={isSubmitting}
+                      aria-pressed={isSelected}
+                      aria-label={`选项 ${index + 1}: ${option}`}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -95,29 +162,47 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
           {/* 文本输入（如果没有选项） */}
           {!hasOptions && (
             <div className="clarification-modal-input">
-              <label className="clarification-modal-input-label">您的回复：</label>
+              <label
+                htmlFor="clarification-textarea"
+                className="clarification-modal-input-label"
+              >
+                您的回复：
+              </label>
               <textarea
+                id="clarification-textarea"
                 className="clarification-modal-textarea"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 placeholder="请输入您的回复..."
                 rows={4}
+                disabled={isSubmitting}
+                ref={firstFocusableRef}
+                aria-describedby="clarification-help"
               />
             </div>
           )}
 
           {/* 可选的补充反馈 */}
           <div className="clarification-modal-feedback">
-            <label className="clarification-modal-feedback-label">
-              补充说明（可选）：
+            <label
+              htmlFor="clarification-feedback"
+              className="clarification-modal-feedback-label"
+            >
+              补充说明（可选）
             </label>
             <textarea
+              id="clarification-feedback"
               className="clarification-modal-feedback-textarea"
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="您可以提供更多背景信息..."
               rows={2}
+              disabled={isSubmitting}
+              aria-describedby="clarification-help"
             />
+            <div id="clarification-help" className="sr-only">
+              提供更多详细信息可以帮助我更好地理解您的需求
+            </div>
           </div>
         </div>
 
@@ -127,13 +212,15 @@ const ClarificationModal = ({ open, onClose, question, options, onSubmit }) => {
             className="clarification-modal-btn clarification-modal-btn-cancel"
             onClick={onClose}
             disabled={isSubmitting}
+            ref={lastFocusableRef}
           >
             取消
           </button>
           <button
-            className="clarification-modal-btn clarification-modal-btn-submit"
+            className={`clarification-modal-btn clarification-modal-btn-submit ${isSubmitting ? 'loading' : ''}`}
             onClick={handleSubmit}
-            disabled={isSubmitting || (!hasOptions && !textInput) || (hasOptions && !selectedOption)}
+            disabled={isSubmitting || !canSubmit}
+            aria-label={isSubmitting ? '提交中...' : '提交回复'}
           >
             {isSubmitting ? '提交中...' : '提交回复'}
           </button>

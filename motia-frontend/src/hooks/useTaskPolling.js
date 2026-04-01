@@ -22,8 +22,8 @@ export const useTaskPolling = (taskId, interval = 2000) => {
     if (!taskId) return null;
 
     try {
-      const response = await tasksAPI.getTask(taskId);
-      return response.data;
+      const response = await tasksAPI.getTaskDetails(taskId);
+      return response;
     } catch (err) {
       console.error('[useTaskPolling] Failed to fetch task:', err);
       throw err;
@@ -37,10 +37,14 @@ export const useTaskPolling = (taskId, interval = 2000) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/contexts/${taskId}`);
       if (!response.ok) {
+        console.error('[useTaskPolling] API response not OK:', response.status);
         return null;
       }
-      const data = await response.json();
-      return data.hitlState || null;
+      const result = await response.json();
+      console.log('[useTaskPolling] HITL API response:', result);
+      const hitlState = result.data?.hitlState || null;
+      console.log('[useTaskPolling] Extracted HITL state:', hitlState);
+      return hitlState;
     } catch (err) {
       console.error('[useTaskPolling] Failed to fetch HITL state:', err);
       return null;

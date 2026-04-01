@@ -1,216 +1,456 @@
+/* ============================================================================
+   ClarificationModal - 优化版本
+   基于 Swiss Modernism 2.0 + SaaS 配色方案
+   ============================================================================ */
+
+/* ------------------------------------------------------------
+   Overlay - 背景遮罩
+   ------------------------------------------------------------ */
 .clarification-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6); /* 更深的背景，更好的对比度 */
+  backdrop-filter: blur(4px); /* 添加模糊效果，更现代 */
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  animation: fadeIn 150ms ease-out;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------
+   Modal Container - 主容器
+   ------------------------------------------------------------ */
 .clarification-modal {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  max-width: 600px;
-  width: 90%;
+  border-radius: 16px; /* 更大的圆角，更现代 */
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.15),
+    0 12px 24px -4px rgba(15, 23, 42, 0.1); /* 更深的阴影 */
+  max-width: 560px;
+  width: calc(100% - 32px); /* 移动端更好的间距 */
   max-height: 90vh;
   overflow-y: auto;
+  animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ------------------------------------------------------------
+   Header - 头部
+   ------------------------------------------------------------ */
 .clarification-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #E5E7EB;
+  padding: 24px 28px; /* 更大的内边距 */
+  border-bottom: 1px solid #E2E8F0; /* SaaS 标准边框色 */
 }
 
 .clarification-modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: #111827;
+  color: #1E293B; /* SaaS 标准文字色 */
   margin: 0;
+  letter-spacing: -0.01em; /* 更紧凑的字间距 */
 }
 
 .clarification-modal-close {
   background: none;
   border: none;
-  font-size: 24px;
-  color: #9CA3AF;
+  font-size: 22px;
+  color: #94A3B8; /* 中性灰色 */
   cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  transition: all 0.2s;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* 更平滑的过渡 */
+  line-height: 1;
 }
 
 .clarification-modal-close:hover {
-  background: #F3F4F6;
-  color: #374151;
+  background: #F1F5F9;
+  color: #475569;
+  transform: scale(1.05); /* 微妙的缩放效果 */
 }
 
+.clarification-modal-close:active {
+  transform: scale(0.95);
+}
+
+/* ------------------------------------------------------------
+   Body - 内容区
+   ------------------------------------------------------------ */
 .clarification-modal-body {
-  padding: 24px;
+  padding: 28px; /* 统一的内边距 */
 }
 
+/* Question - 问题显示 */
 .clarification-modal-question {
   font-size: 15px;
-  color: #374151;
-  line-height: 1.5;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #FFFBEB;
-  border-left: 4px solid #F59E0B;
-  border-radius: 6px;
+  color: #334155; /* 更深的文字色，更好的对比度 */
+  line-height: 1.6;
+  margin-bottom: 24px; /* 更大的间距 */
+  padding: 20px;
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF7E0 100%); /* 渐变背景 */
+  border-left: 4px solid #F97316; /* 使用橙色 CTA 色 */
+  border-radius: 8px;
+  font-weight: 500; /* 更粗的字重 */
 }
 
+.clarification-modal-question strong {
+  color: #9A3412; /* 深橙色 */
+  font-weight: 600;
+}
+
+/* Options - 选项按钮 */
 .clarification-modal-options {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .clarification-modal-options-label {
   font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 12px;
+  font-weight: 600;
+  color: #1E293B;
+  margin-bottom: 16px; /* 增加间距 */
+  letter-spacing: -0.01em;
 }
 
 .clarification-modal-options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* 稍大的最小宽度 */
   gap: 12px;
 }
 
 .clarification-option-btn {
-  padding: 12px 16px;
-  border: 2px solid #E5E7EB;
+  padding: 14px 18px; /* 更大的内边距 */
+  border: 2px solid #E2E8F0; /* SaaS 标准边框色 */
   background: white;
-  border-radius: 8px;
+  border-radius: 10px; /* 更大的圆角 */
   cursor: pointer;
   font-size: 14px;
-  color: #374151;
-  transition: all 0.2s;
+  color: #334155;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加点击涟漪效果 */
+.clarification-option-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.1) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.clarification-option-btn:hover::before {
+  opacity: 1;
 }
 
 .clarification-option-btn:hover {
-  border-color: #F59E0B;
-  background: #FFFBEB;
+  border-color: #3B82F6; /* 使用蓝色主色 */
+  background: #EFF6FF; /* 浅蓝色背景 */
+  transform: translateY(-1px); /* 微妙的上移效果 */
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .clarification-option-btn.selected {
-  border-color: #F59E0B;
-  background: #FEF3C7;
-  color: #92400E;
-  font-weight: 500;
+  border-color: #2563EB; /* 更深的蓝色 */
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%); /* 渐变背景 */
+  color: #1E3A8A; /* 深蓝色文字 */
+  font-weight: 600;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); /* 外发光效果 */
 }
 
+.clarification-option-btn.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: #2563EB;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* Text Input - 文本输入 */
 .clarification-modal-input {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .clarification-modal-input-label {
   display: block;
   font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 8px;
+  font-weight: 600;
+  color: #1E293B;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
 }
 
 .clarification-modal-textarea {
   width: 100%;
-  padding: 12px;
-  border: 2px solid #E5E7EB;
-  border-radius: 8px;
+  padding: 14px 16px; /* 更大的内边距 */
+  border: 2px solid #E2E8F0;
+  border-radius: 10px;
   font-size: 14px;
   font-family: inherit;
+  line-height: 1.5;
+  color: #1E293B;
   resize: vertical;
-  min-height: 100px;
-  transition: border-color 0.2s;
+  min-height: 120px;
+  transition: all 0.2s;
+  background: #F8FAFC; /* 浅灰背景 */
+}
+
+.clarification-modal-textarea::placeholder {
+  color: #94A3B8;
 }
 
 .clarification-modal-textarea:focus {
   outline: none;
   border-color: #3B82F6;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); /* Focus ring 效果 */
 }
 
+/* Feedback - 补充说明 */
 .clarification-modal-feedback {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .clarification-modal-feedback-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
-  font-weight: 500;
-  color: #6B7280;
-  margin-bottom: 8px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.clarification-modal-feedback-label::before {
+  content: 'ℹ️';
+  font-size: 14px;
 }
 
 .clarification-modal-feedback-textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  padding: 12px 14px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
   font-size: 13px;
   font-family: inherit;
+  line-height: 1.5;
+  color: #475569;
   resize: vertical;
-  min-height: 60px;
-  transition: border-color 0.2s;
+  min-height: 80px;
+  transition: all 0.2s;
+  background: #F8FAFC;
+}
+
+.clarification-modal-feedback-textarea::placeholder {
+  color: #94A3B8;
+  font-style: italic; /* 斜体表示可选 */
 }
 
 .clarification-modal-feedback-textarea:focus {
   outline: none;
-  border-color: #D1D5DB;
+  border-color: #CBD5E1;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.1);
 }
 
+/* ------------------------------------------------------------
+   Footer - 底部操作区
+   ------------------------------------------------------------ */
 .clarification-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #E5E7EB;
-  background: #F9FAFB;
-  border-radius: 0 0 12px 12px;
+  padding: 20px 28px; /* 更大的内边距 */
+  border-top: 1px solid #E2E8F0;
+  background: linear-gradient(to bottom, #FFFFFF 0%, #F8FAFC 100%); /* 渐变背景 */
+  border-radius: 0 0 16px 16px;
 }
 
 .clarification-modal-btn {
-  padding: 10px 20px;
-  border-radius: 6px;
+  padding: 12px 24px; /* 更大的内边距 */
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600; /* 更粗的字重 */
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
+  min-width: 100px; /* 确保按钮宽度一致 */
+  letter-spacing: -0.01em;
 }
 
 .clarification-modal-btn-cancel {
   background: white;
-  color: #374151;
-  border: 1px solid #D1D5DB;
+  color: #475569;
+  border: 1px solid #CBD5E1;
 }
 
 .clarification-modal-btn-cancel:hover {
-  background: #F3F4F6;
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  transform: translateY(-1px);
+}
+
+.clarification-modal-btn-cancel:active {
+  transform: translateY(0);
 }
 
 .clarification-modal-btn-submit {
-  background: #3B82F6;
+  background: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%); /* 渐变背景 */
   color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25); /* 添加阴影 */
 }
 
 .clarification-modal-btn-submit:hover:not(:disabled) {
-  background: #2563EB;
+  background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.clarification-modal-btn-submit:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
 }
 
 .clarification-modal-btn-submit:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
+  background: #94A3B8;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------
+   Loading State - 加载状态
+   ------------------------------------------------------------ */
+.clarification-modal-btn.loading {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+.clarification-modal-btn.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  border-radius: inherit;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+/* ------------------------------------------------------------
+   Responsive Design - 响应式设计
+   ------------------------------------------------------------ */
+@media (max-width: 640px) {
+  .clarification-modal {
+    width: calc(100% - 16px);
+    max-height: 95vh;
+  }
+
+  .clarification-modal-header {
+    padding: 20px;
+  }
+
+  .clarification-modal-body {
+    padding: 20px;
+  }
+
+  .clarification-modal-footer {
+    padding: 16px 20px;
+  }
+
+  .clarification-modal-options-grid {
+    grid-template-columns: 1fr; /* 移动端单列 */
+    gap: 10px;
+  }
+
+  .clarification-option-btn {
+    padding: 12px 14px;
+  }
+
+  .clarification-modal-btn {
+    flex: 1;
+    padding: 12px 16px;
+  }
+}
+
+/* ------------------------------------------------------------
+   Accessibility - 可访问性
+   ------------------------------------------------------------ */
+/* Focus visible for keyboard navigation */
+.clarification-modal-btn:focus-visible,
+.clarification-option-btn:focus-visible,
+.clarification-modal-close:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .clarification-modal,
+  .clarification-modal-btn,
+  .clarification-option-btn,
+  .clarification-modal-close {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .clarification-modal {
+    border: 2px solid #1E293B;
+  }
+
+  .clarification-option-btn {
+    border-width: 3px;
+  }
+
+  .clarification-modal-textarea,
+  .clarification-modal-feedback-textarea {
+    border-width: 2px;
+  }
 }
