@@ -192,7 +192,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Verify HITL state is awaiting
-      const taskContext = await contextManager.getContext(taskId);
+      let taskContext = await contextManager.getContext(taskId);
       expect(taskContext?.hitlState?.status).toBe('awaiting');
 
       // Simulate user responding
@@ -518,7 +518,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Verify HITL state exists
-      const taskContext = await contextManager.getContext(taskId);
+      let taskContext = await contextManager.getContext(taskId);
       expect(taskContext?.hitlState).toBeDefined();
 
       // Respond with skip

@@ -18,6 +18,8 @@
 - ✅ **并行执行**: 多个迭代并行执行
 - ✅ **子工作流**: 工作流嵌套调用
 - ✅ **输入输出映射**: 灵活的数据流转
+- ✅ **反馈循环**: 自动重试、人工介入（HITL）、回滚
+- ✅ **Agent 验证**: 初始化时验证 agent 引用，防止配置错误
 
 ---
 
@@ -654,6 +656,63 @@ steps:
           label: "中止"
           action: abort
 ```
+
+#### 5.6 Agent 验证 (Agent Validation)
+
+⭐ **NEW**: Workflow System 在初始化时会自动验证 agent 引用，防止配置错误。
+
+**验证规则**:
+- 所有步骤的 `agent` 字段必须存在
+- Agent 名称必须匹配以下之一：
+  - 可用的 subagent（在 `subagents/` 目录中定义）
+  - `master`（如果启用了 master agent）
+- 验证在 workflow 加载时进行（"fail fast" 原则）
+
+**验证失败示例**:
+```yaml
+# ❌ 错误：agent 不存在
+steps:
+  - id: step1
+    agent: non-existent-agent  # 这个 agent 不存在
+    input:
+      task: "Do something"
+```
+
+**错误信息**:
+```json
+{
+  "error": "Workflow \"my-workflow\" failed validation:\n  [step1] agent: Agent \"non-existent-agent\" not found. Available agents: code-reviewer, data-analyst, developer-engineer, master"
+}
+```
+
+**正确配置示例**:
+```yaml
+# ✅ 正确：使用存在的 agent
+steps:
+  - id: step1
+    agent: developer-engineer  # 这个 agent 存在
+    input:
+      task: "Write code"
+```
+
+**可用的 Agents**:
+- `master` - Master agent（如果启用）
+- `developer-engineer` - 代码开发
+- `code-reviewer` - 代码审查
+- `data-analyst` - 数据分析
+- `security-auditor` - 安全审计
+- `myagent-system-guide` - 系统指南
+- `emotional-girlfriend-gentle` - 情感陪伴（温柔型）
+- `emotional-girlfriend-lively` - 情感陪伴（活泼型）
+- `emotional-girlfriend-sweet` - 情感陪伴（甜美型）
+
+**双重错误报告**:
+1. **服务端日志**: 开发者可以在服务启动时看到详细的验证错误
+2. **用户 API**: 用户通过 `/api/contexts/{taskId}` 可以看到详细的失败原因
+
+**向后兼容**:
+- 如果 workflow loader 没有提供 agent 列表，验证会被跳过
+- 这确保了旧代码不会因为新增验证而中断
 
 ---
 
