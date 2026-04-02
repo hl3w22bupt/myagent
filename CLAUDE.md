@@ -18,6 +18,7 @@
 - `API_REFERENCE.md` - All API endpoints
 - `docs/reference/architecture/README.md` - Architecture overview
 - `docs/reference/architecture/agent-system.md` - Agent system details
+- `docs/reference/architecture/workflow-system.md` - Workflow system & feedback loop
 
 **For Claude Code**: Use `/agents` → `myagent-developer` subagent (auto-loads cursor rules)
 

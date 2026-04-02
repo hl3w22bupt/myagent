@@ -241,14 +241,14 @@ export class LLMClient {
   ): Promise<void> {
     // Debug: 检查为什么 trace 没有被发送
     if (!this.streams?.executionTraces) {
-      console.warn('[LLMClient] ❌ Trace not sent: missing streams.executionTraces', {
+      console.debug('[LLMClient] ℹ️ Trace not sent: missing streams.executionTraces', {
         hasStreams: !!this.streams,
         traceContext: this.traceContext,
       });
       return;
     }
     if (!this.traceContext?.taskId) {
-      console.warn('[LLMClient] ❌ Trace not sent: missing traceContext.taskId', {
+      console.debug('[LLMClient] ℹ️ Trace not sent: missing traceContext.taskId', {
         hasStreams: !!this.streams?.executionTraces,
         traceContext: this.traceContext,
       });

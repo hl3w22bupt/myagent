@@ -1,0 +1,51 @@
+name: "full-hitl-test"
+description: "完整的 HITL 测试工作流"
+
+input_schema:
+  test_scenario:
+    type: string
+    required: true
+
+steps:
+  # Step 1: 准备测试环境（会成功）
+  - id: setup
+    name: "准备测试环境"
+    agent: developer-engineer
+    input:
+      task: "准备一个简单的测试环境，只需要说 '环境准备完成'"
+    output:
+      setup_result: "output"
+
+  # Step 2: 执行测试（会失败，触发 HITL）
+  - id: execute-test
+    name: "执行测试"
+    depends_on: [setup]
+    # 故意使用不存在的 agent 来触发失败
+    agent: non-existent-agent-will-fail
+    on_failure: hitl
+    hitl:
+      pollInterval: 5000
+      timeout: 300000
+      question: "测试执行失败（预期行为），请选择处理方式"
+      options:
+        - id: skip-and-continue
+          label: "跳过测试，继续"
+          description: "忽略此失败，继续到下一步"
+          action: skip
+          style: primary
+        - id: abort
+          label: "中止工作流"
+          description: "停止执行"
+          action: abort
+          style: danger
+    input:
+      task: "这一步会失败，因为 agent 不存在"
+
+  # Step 3: 清理（总是执行）
+  - id: cleanup
+    name: "清理资源"
+    agent: developer-engineer
+    depends_on: [execute-test]
+    always_run: true
+    input:
+      task: "清理测试资源，回复 '清理完成'"

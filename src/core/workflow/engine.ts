@@ -9,16 +9,21 @@ import { WorkflowConfig, WorkflowOptions, WorkflowResult, WorkflowStep, OutputMa
 import { WorkflowContext } from './context';
 import { TemplateEngine } from '../config/template-engine';
 import { setAgentStreams, getAgentStreams } from '../agent/hooks/progress-notify';
+import { retryOperation, isDefaultRetryableError } from '../agent/retry';
+import { ContextManager } from '../context/manager';
 
 export class WorkflowEngine {
   private agentManager: AgentManager;
   private workflows: Map<string, WorkflowConfig>;
+  private failedWorkflows: Map<string, string>; // workflow name -> error message
   private streams: any = null;
   private logger: any;
+  private internalExecutionSteps: any[] = [];  // ⭐ Track execution steps
 
   constructor(agentManager: AgentManager, logger: any = console) {
     this.agentManager = agentManager;
     this.workflows = new Map();
+    this.failedWorkflows = new Map();
     this.logger = logger;
   }
 
@@ -47,6 +52,21 @@ export class WorkflowEngine {
   }
 
   /**
+   * Register a failed workflow (validation failed)
+   */
+  registerFailedWorkflow(name: string, error: string): void {
+    this.failedWorkflows.set(name, error);
+    this.logger.debug(`[WorkflowEngine] Registered failed workflow: ${name}`);
+  }
+
+  /**
+   * Get failed workflow error message
+   */
+  getFailedWorkflowError(name: string): string | undefined {
+    return this.failedWorkflows.get(name);
+  }
+
+  /**
    * List all registered workflows
    */
   listWorkflows(): Array<{ name: string; config: WorkflowConfig }> {
@@ -65,6 +85,17 @@ export class WorkflowEngine {
     const workflow = this.workflows.get(workflowName);
 
     if (!workflow) {
+      // Check if this workflow failed validation
+      const failedError = this.failedWorkflows.get(workflowName);
+      if (failedError) {
+        return {
+          success: false,
+          error: `Workflow "${workflowName}" failed validation:\n${failedError}`,
+          executionTime: 0,
+          steps: [],
+        };
+      }
+
       return {
         success: false,
         error: `Workflow not found: ${workflowName}`,
@@ -82,7 +113,8 @@ export class WorkflowEngine {
       input
     );
 
-    const executionSteps: any[] = [];
+    // ⭐ Clear internal execution steps tracking
+    this.internalExecutionSteps = [];
     let lastCompletedStepResult: any = null;  // Track the last completed step result
 
     try {
@@ -90,8 +122,9 @@ export class WorkflowEngine {
       const sortedSteps = this.topologicalSort(workflow.steps);
 
       for (const step of sortedSteps) {
-        const stepResult = await this.executeStep(step, context, workflow, options);
-        executionSteps.push(stepResult);
+        // ⭐ Use executeStepWithRetry instead of executeStep
+        const stepResult = await this.executeStepWithRetry(step, context, workflow, options);
+        this.internalExecutionSteps.push(stepResult);
 
         // Track the last successfully completed step result
         // This will be used as the workflow's final output (like single agent)
@@ -124,7 +157,7 @@ export class WorkflowEngine {
         success: true,
         output: finalOutput,
         executionTime: Date.now() - startTime,
-        steps: executionSteps,
+        steps: this.internalExecutionSteps,
         context: context.toJSON(),
       };
     } catch (error: any) {
@@ -132,7 +165,7 @@ export class WorkflowEngine {
         success: false,
         error: error.message,
         executionTime: Date.now() - startTime,
-        steps: executionSteps,
+        steps: this.internalExecutionSteps,
         context: context.toJSON(),
       };
     }
@@ -214,7 +247,11 @@ export class WorkflowEngine {
       if (!this.streams) {
         this.streams = getAgentStreams();
       }
-      setAgentStreams(this.streams);
+      // Only set global streams if this.streams is valid
+      // Avoid clearing global streams with undefined
+      if (this.streams) {
+        setAgentStreams(this.streams);
+      }
 
       // Get hook manager
       const hookManager = this.agentManager.getHookManager();
@@ -600,5 +637,453 @@ export class WorkflowEngine {
   async getStatus(taskId: string): Promise<any> {
     // TODO: Implement status tracking
     return { taskId, status: 'unknown' };
+  }
+
+  // =========================================================================
+  // ⭐ WORKFLOW FEEDBACK LOOP METHODS
+  // =========================================================================
+
+  /**
+   * Execute step with retry and failure handling
+   * This is the main entry point for feedback loop functionality
+   */
+  private async executeStepWithRetry(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions
+  ): Promise<any> {
+    // If retry is configured, use retry logic
+    if (step.retry && step.retry.maxRetries && step.retry.maxRetries > 0) {
+      return await this.executeStepWithRetryLogic(step, context, workflow, options);
+    }
+
+    // Otherwise, execute directly
+    return await this.executeStep(step, context, workflow, options);
+  }
+
+  /**
+   * Execute step with retry logic
+   */
+  private async executeStepWithRetryLogic(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions
+  ): Promise<any> {
+    const retryConfig = {
+      maxRetries: step.retry?.maxRetries || 0,
+      baseDelay: step.retry?.delayMs || 1000,
+      maxDelay: step.retry?.maxDelayMs || 30000,
+      exponentialBackoff: step.retry?.exponentialBackoff !== false,
+      jitterFactor: step.retry?.jitterFactor || 0.1,
+    };
+
+    const result = await retryOperation(
+      async () => await this.executeStep(step, context, workflow, options),
+      {
+        ...retryConfig,
+        isRetryable: step.retry?.isRetryable || isDefaultRetryableError,
+      }
+    );
+
+    if (result.success) {
+      return result.data;
+    }
+
+    // All retries exhausted, handle failure
+    const failureError = result.error || new Error('Step failed after retries');
+    return await this.handleStepFailure(step, context, workflow, options, failureError);
+  }
+
+  /**
+   * Handle step failure
+   * Determines what to do when a step fails based on on_failure configuration
+   */
+  private async handleStepFailure(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions,
+    error: Error
+  ): Promise<any> {
+    this.logger.warn('[WorkflowEngine] Step failed', {
+      stepId: step.id,
+      error: error.message,
+    });
+
+    const handler = step.on_failure || 'abort';  // Default: abort workflow
+
+    switch (handler) {
+      case 'retry':
+        // This shouldn't normally happen (retries are in executeStepWithRetryLogic)
+        // But if on_failure: retry is set without retry config, try once more
+        this.logger.info('[WorkflowEngine] Retry requested without retry config, executing once');
+        return await this.executeStep(step, context, workflow, options);
+
+      case 'skip':
+        // Skip this step and continue
+        this.logger.info('[WorkflowEngine] Skipping failed step', { stepId: step.id });
+        return {
+          stepId: step.id,
+          status: 'skipped',
+          reason: 'Failed and skipped',
+          error: error.message,
+        };
+
+      case 'rollback':
+        // Rollback to specified step
+        return await this.handleRollback(step, context, workflow, options);
+
+      case 'hitl':
+        // Request Human-In-The-Loop
+        return await this.handleHITL(step, context, workflow, options, error);
+
+      default:
+        // Abort workflow
+        throw new Error(`Step ${step.id} failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle rollback to a previous step
+   */
+  private async handleRollback(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions
+  ): Promise<any> {
+    // Get rollback configuration
+    const rollbackConfig = step.rollbackConfig;
+    if (!rollbackConfig?.targetStepId) {
+      throw new Error(`Rollback requested but no targetStepId specified for step ${step.id}`);
+    }
+
+    const targetStep = workflow.steps.find(s => s.id === rollbackConfig.targetStepId);
+    if (!targetStep) {
+      throw new Error(`Rollback target step not found: ${rollbackConfig.targetStepId}`);
+    }
+
+    this.logger.info('[WorkflowEngine] Rolling back to step', {
+      from: step.id,
+      to: rollbackConfig.targetStepId,
+      clearContext: rollbackConfig.clearContext,
+    });
+
+    // Clear context if configured
+    if (rollbackConfig.clearContext) {
+      // WorkflowContext doesn't have clear(), so we create a new one
+      const newContext = new WorkflowContext(context['workflowId'] + '-reset', {});
+      Object.assign(context, newContext);
+      this.logger.debug('[WorkflowEngine] Context cleared before rollback');
+    }
+
+    // Get steps from target step onwards (including target step)
+    const stepsFromTarget = this.getStepsFrom(workflow.steps, rollbackConfig.targetStepId);
+
+    // Re-execute from target step
+    for (const stepToExecute of stepsFromTarget) {
+      const stepResult = await this.executeStepWithRetry(stepToExecute, context, workflow, options);
+      this.internalExecutionSteps.push(stepResult);
+
+      // Stop if step failed and not always_run
+      if (stepResult.status === 'failed' && !stepToExecute.always_run) {
+        this.logger.warn('[WorkflowEngine] Step failed during rollback re-execution', {
+          stepId: stepToExecute.id
+        });
+        break;
+      }
+    }
+
+    return {
+      stepId: step.id,
+      status: 'completed',  // Rollback itself completed
+      rollbackTo: rollbackConfig.targetStepId,
+      message: `Rolled back to ${rollbackConfig.targetStepId} and re-executed`,
+    };
+  }
+
+  /**
+   * Handle HITL (Human-In-The-Loop)
+   * Saves HITL state, polls for response, and executes action
+   */
+  private async handleHITL(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions,
+    error: Error
+  ): Promise<any> {
+    this.logger.info('[WorkflowEngine] Requesting HITL', {
+      stepId: step.id,
+      workflowName: workflow.name,
+      error: error.message,
+    });
+
+    // Build question for human
+    const question = step.hitl?.question || `步骤 "${step.name || step.id}" 执行失败：\n\n${error.message}\n\n请选择处理方式：`;
+
+    // Get HITL options (with defaults)
+    const defaultHITLOptions = [
+      {
+        id: 'retry',
+        label: '重试',
+        description: '重新执行此步骤',
+        action: 'retry' as const,
+        params: { stepId: step.id },
+      },
+      {
+        id: 'skip',
+        label: '跳过',
+        description: '跳过此步骤，继续下一步',
+        action: 'skip' as const,
+        params: { stepId: step.id },
+      },
+      {
+        id: 'abort',
+        label: '中止',
+        description: '中止整个工作流',
+        action: 'abort' as const,
+        params: { stepId: step.id },
+      },
+    ];
+
+    const hitlOptions = step.hitl?.options || defaultHITLOptions;
+
+    // Save HITL state to TaskContext (reuse existing mechanism)
+    const contextManager = new ContextManager();
+    const taskId = options.taskId || `workflow-${Date.now()}`;
+
+    // Get existing context and update it
+    const existingContext = await contextManager.getContext(taskId);
+    if (existingContext) {
+      // Create HITL state with workflow-specific fields
+      const hitlState: any = {
+        stage: 'in_execution',  // Workflow is executing when failure occurs
+        status: 'awaiting',
+        agentName: `Workflow:${workflow.name}`,
+        question,
+        options: hitlOptions.map(opt => opt.label),
+        createdAt: new Date(),
+        // Workflow-specific fields
+        workflowName: workflow.name,
+        stepId: step.id,
+        failureReason: error.message,
+        retryAttempt: 0,
+      };
+
+      existingContext.hitlState = hitlState;
+      await contextManager.saveContext(existingContext);
+    } else {
+      // If no context exists, create a new one
+      this.logger.warn('[WorkflowEngine] No existing context found, HITL may not work properly', { taskId });
+    }
+
+    // Send notification via Stream (reuse existing mechanism)
+    const streams = getAgentStreams();
+    if (streams?.taskExecution) {
+      const event = {
+        type: 'awaiting_clarification',  // Reuse existing type
+        progressType: 'hitl',
+        status: 'awaiting_clarification',
+        taskId,
+        sessionId: options.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          workflowName: workflow.name,
+          stepId: step.id,
+          question,
+          options: hitlOptions,
+          error: error.message,
+        }
+      };
+
+      const groupId = taskId;
+      const timestamp = Date.now();
+      const entryId = `workflow-hitl-${groupId}-${timestamp}`;
+
+      await streams.taskExecution.set(groupId, entryId, {
+        ...event,
+        category: 'workflow_hook',
+      });
+
+      this.logger.debug('[WorkflowEngine] HITL notification sent', { taskId, stepId: step.id });
+    }
+
+    // Poll for HITL response (reuse Agent polling logic)
+    const pollInterval = step.hitl?.pollInterval || 10000;  // 10 seconds
+    const timeout = step.hitl?.timeout || (7 * 24 * 60 * 60 * 1000);  // 7 days
+    const startTime = Date.now();
+
+    this.logger.info('[WorkflowEngine] Starting HITL polling', {
+      stepId: step.id,
+      pollInterval,
+      timeout,
+    });
+
+    while (Date.now() - startTime < timeout) {
+      try {
+        const updatedContext = await contextManager.getContext(taskId);
+
+        if (updatedContext?.hitlState?.status === 'completed' && updatedContext.hitlState.response) {
+          this.logger.info('[WorkflowEngine] HITL response received', {
+            taskId,
+            response: updatedContext.hitlState.response,
+          });
+
+          // Clear HITL state (use delete like Agent does)
+          const contextToClear = await contextManager.getContext(taskId);
+          if (contextToClear && contextToClear.hitlState) {
+            delete contextToClear.hitlState;
+            await contextManager.saveContext(contextToClear);
+          }
+
+          // Execute action based on response
+          return await this.executeHITLAction(step, context, workflow, options, updatedContext.hitlState.response);
+        }
+
+        // Still awaiting, wait and retry
+        this.logger.debug('[WorkflowEngine] Still waiting for HITL', {
+          stepId: step.id,
+          elapsed: Date.now() - startTime,
+        });
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      } catch (pollError) {
+        this.logger.error('[WorkflowEngine] Error polling HITL status', {
+          stepId: step.id,
+          error: pollError,
+        });
+        // Wait and retry on error
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+    }
+
+    // Timeout - abort workflow
+    this.logger.warn('[WorkflowEngine] HITL timeout, aborting workflow', {
+      stepId: step.id,
+      timeout,
+    });
+
+    return {
+      stepId: step.id,
+      status: 'failed',
+      error: `HITL timeout after ${timeout}ms`,
+    };
+  }
+
+  /**
+   * Execute action after HITL response
+   */
+  private async executeHITLAction(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions,
+    response: any
+  ): Promise<any> {
+    // The response from the API is in the format: { content: string, feedback?: string, timestamp: Date }
+    // For workflow HITL, we expect content to be JSON: { action: string, params?: any }
+    // For Agent HITL, content is plain text
+
+    const responseContent = response?.content || '';
+    let action: string;
+    let params: any = {};
+
+    // Try to parse as JSON (for workflow HITL)
+    try {
+      const parsed = JSON.parse(responseContent);
+      action = parsed.action || 'abort';
+      params = parsed.params || {};
+    } catch {
+      // Not JSON, treat as plain text (for Agent HITL compatibility)
+      // Map common text responses to actions
+      const lowerContent = responseContent.toLowerCase();
+      if (lowerContent.includes('retry') || lowerContent.includes('重试') || lowerContent.includes('再试')) {
+        action = 'retry';
+      } else if (lowerContent.includes('skip') || lowerContent.includes('跳过')) {
+        action = 'skip';
+      } else if (lowerContent.includes('rollback') || lowerContent.includes('回滚')) {
+        action = 'rollback';
+      } else {
+        action = 'abort';
+      }
+    }
+
+    switch (action) {
+      case 'retry': {
+        this.logger.info('[WorkflowEngine] Retrying step after HITL', {
+          stepId: step.id,
+          response: responseContent,
+        });
+        return await this.executeStep(step, context, workflow, options);
+      }
+
+      case 'skip': {
+        this.logger.info('[WorkflowEngine] Skipping step after HITL', {
+          stepId: step.id,
+          response: responseContent,
+        });
+        return {
+          stepId: step.id,
+          status: 'skipped',
+          reason: 'Skipped after HITL',
+        };
+      }
+
+      case 'rollback': {
+        const targetStepId = params?.targetStepId;
+        if (!targetStepId) {
+          throw new Error('Rollback action requires targetStepId in params');
+        }
+
+        this.logger.info('[WorkflowEngine] Rolling back after HITL', {
+          stepId: step.id,
+          targetStepId,
+          response: responseContent,
+        });
+
+        // Create temporary rollback config
+        const rollbackConfig = {
+          targetStepId,
+          clearContext: false,
+        };
+
+        // Temporarily set rollbackConfig on step
+        const originalRollbackConfig = step.rollbackConfig;
+        step.rollbackConfig = rollbackConfig;
+
+        const result = await this.handleRollback(step, context, workflow, options);
+
+        // Restore original rollbackConfig
+        step.rollbackConfig = originalRollbackConfig;
+
+        return result;
+      }
+
+      case 'abort':
+      default: {
+        this.logger.info('[WorkflowEngine] Aborting workflow after HITL', {
+          stepId: step.id,
+          reason: response?.feedback || responseContent,
+        });
+        throw new Error(`Workflow aborted after HITL: ${response?.feedback || responseContent}`);
+      }
+    }
+  }
+
+  /**
+   * Get steps starting from a specific step (inclusive)
+   * Used for rollback re-execution
+   */
+  private getStepsFrom(allSteps: WorkflowStep[], fromStepId: string): WorkflowStep[] {
+    const fromIndex = allSteps.findIndex(s => s.id === fromStepId);
+    if (fromIndex === -1) {
+      throw new Error(`Step not found: ${fromStepId}`);
+    }
+
+    // Return all steps from target step onwards
+    return allSteps.slice(fromIndex);
   }
 }

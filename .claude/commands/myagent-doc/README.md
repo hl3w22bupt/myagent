@@ -23,6 +23,19 @@ myagent-doc:create docs/superpowers/specs/feature-name --source superpowers
 myagent-doc:create openspec/changes/feature-name --date 2026-03-30
 ```
 
+将文档工具的输出转换为 MyAgent 格式。
+
+```bash
+# 从 OpenSpec 创建
+myagent-doc:create openspec/changes/add-validation-hook
+
+# 从 Superpowers 创建
+myagent-doc:create docs/superpowers/specs/feature-name --source superpowers
+
+# 使用自定义日期
+myagent-doc:create openspec/changes/feature-name --date 2026-03-30
+```
+
 **转换规则**:
 
 | 来源 | 输入文件 | 输出文件 |
@@ -38,7 +51,35 @@ myagent-doc:create openspec/changes/feature-name --date 2026-03-30
 
 ---
 
-### 2. `myagent-doc:archive` - 归档提案
+### 2. `myagent-doc:organize` - 整理文档 ⭐ NEW
+
+自动整理文档以符合 MyAgent 文档规范。
+
+```bash
+# 预览将要做的变更
+myagent-doc:organize
+
+# 执行整理
+myagent-doc:organize --execute
+
+# 显示详细信息
+myagent-doc:organize --verbose
+```
+
+**功能**:
+- 自动检测不符合规范的文档位置
+- 根据 `DOCS_CONVENTIONS.md` 规范建议移动操作
+- 支持预览模式（默认）
+- 自动创建必要的目录结构
+
+**自动整理规则**:
+- `docs/api/*.md` → `docs/reference/api/*.md`
+- `docs/plans/*.md` → `docs/archive/YYYY-MM-DD-plans/*.md`
+- `docs/analysis/*.md` → `docs/archive/YYYY-MM-DD-analysis/*.md`
+
+---
+
+### 3. `myagent-doc:archive` - 归档提案
 
 将已完成的提案移动到归档目录。
 
@@ -54,7 +95,7 @@ myagent-doc:archive add-validation-hook
 
 ---
 
-### 3. `myagent-doc:list` - 列出提案
+### 4. `myagent-doc:list` - 列出提案
 
 查看所有提案，可按状态筛选。
 
@@ -71,7 +112,7 @@ myagent-doc:list --status all
 
 ---
 
-### 4. `myagent-doc:update` - 更新状态
+### 5. `myagent-doc:update` - 更新状态
 
 更新提案的状态或元数据。
 

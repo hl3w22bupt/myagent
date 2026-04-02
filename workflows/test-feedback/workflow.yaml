@@ -1,0 +1,68 @@
+# Test Feedback Loop Workflow
+# 实际可用的测试工作流
+
+name: "test-feedback"
+description: "工作流反馈循环测试"
+
+input_schema:
+  test_input:
+    type: string
+    required: true
+
+steps:
+  # Step 1: 简单的分析任务（总是成功）
+  - id: analyze
+    name: "分析需求"
+    agent: developer-engineer
+    retry:
+      maxRetries: 1
+      delayMs: 1000
+    input:
+      requirement: "{{ input.test_input }}"
+    output:
+      analysis: "structuredOutput"
+
+  # Step 2: 实现任务（带重试）
+  - id: implement
+    name: "实现功能"
+    agent: developer-engineer
+    depends_on: [analyze]
+    retry:
+      maxRetries: 2
+      delayMs: 2000
+      exponentialBackoff: true
+    input:
+      requirement: "{{ input.test_input }}"
+      analysis: "{{ analysis }}"
+    output:
+      implementation: "structuredOutput"
+
+  # Step 3: 测试（带 HITL 配置作为示例）
+  # 注意：实际 HITL 触发需要 Agent 执行失败
+  # 这里我们只是配置它，不会真的触发
+  - id: verify
+    name: "验证结果"
+    agent: developer-engineer
+    depends_on: [implement]
+    # on_failure: hitl  # 取消注释以启用 HITL
+    # hitl:
+    #   pollInterval: 10000
+    #   timeout: 60000
+    #   question: "验证失败，请选择处理方式"
+    #   options:
+    #     - id: retry
+    #       label: "重试验证"
+    #       action: retry
+    #     - id: skip
+    #       label: "跳过验证"
+    #       action: skip
+    input:
+      requirement: "{{ input.test_input }}"
+      implementation: "{{ implementation }}"
+
+# Final output mapping
+output:
+  analysis:
+    from: "analysis"
+  implementation:
+    from: "implementation"

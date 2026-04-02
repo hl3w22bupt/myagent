@@ -18,6 +18,8 @@
 - ✅ **并行执行**: 多个迭代并行执行
 - ✅ **子工作流**: 工作流嵌套调用
 - ✅ **输入输出映射**: 灵活的数据流转
+- ✅ **反馈循环**: 自动重试、人工介入（HITL）、回滚
+- ✅ **Agent 验证**: 初始化时验证 agent 引用，防止配置错误
 
 ---
 
@@ -435,6 +437,282 @@ conditions:
     agent: system-agent
     always_run: true  # 即使前面步骤失败也执行
 ```
+
+### 5. 反馈循环 (Feedback Loop)
+
+⭐ **NEW**: Workflow System 现在支持完整的反馈循环机制，包括自动重试、人工介入（HITL）和回滚功能。
+
+#### 5.1 自动重试 (Retry)
+
+当步骤执行失败时，系统可以自动重试。
+
+```yaml
+- id: fetch-api
+  name: "调用外部 API"
+  agent: developer
+  retry:
+    maxRetries: 3              # 最大重试次数（默认 0）
+    delayMs: 5000              # 重试延迟（毫秒）
+    exponentialBackoff: true   # 使用指数退避（默认 true）
+    maxDelayMs: 30000          # 最大延迟（毫秒）
+    jitterFactor: 0.1          # 抖动因子 0-1（默认 0.1）
+    # 可选：自定义重试条件
+    isRetryable: |
+      (error) => {
+        # 只重试网络错误，不重试语法错误
+        return error.message.includes('ECONN') ||
+               error.message.includes('timeout');
+      }
+```
+
+**重试行为**:
+- 网络错误（ECONN、ETIMEDOUT）会自动重试
+- 语法错误不会重试（通常是代码问题，重试无意义）
+- 指数退避：5s → 10s → 20s → 30s（max）
+- 抖动：每次延迟在 ±10% 范围内随机，避免"惊群效应"
+
+#### 5.2 失败处理 (on_failure)
+
+当步骤失败且重试耗尽后，系统可以根据配置采取不同的处理策略。
+
+```yaml
+- id: deploy-prod
+  name: "部署到生产环境"
+  agent: developer
+  on_failure: hitl  # retry | skip | rollback | hitl
+```
+
+**可用策略**:
+
+| 策略 | 说明 | 使用场景 |
+|------|------|----------|
+| `retry` | 再次尝试（即使没有配置 retry） | 临时故障 |
+| `skip` | 跳过此步骤，继续下一步 | 非关键步骤 |
+| `rollback` | 回滚到指定步骤并重新执行 | CI/CD 流水线 |
+| `hitl` | 请求人类决策 | 需要人工判断的场景 |
+
+#### 5.3 人工介入 (HITL - Human-In-The-Loop)
+
+当步骤失败时，系统可以请求人类介入，由人类决定下一步操作。
+
+```yaml
+- id: critical-step
+  name: "关键步骤"
+  agent: developer
+  on_failure: hitl
+  hitl:
+    pollInterval: 10000       # 轮询间隔（毫秒，默认 10s）
+    timeout: 604800000        # 超时时间（毫秒，默认 7 天）
+    question: "步骤执行失败，请选择处理方式"
+    options:
+      - id: retry
+        label: "重试"
+        description: "重新执行此步骤"
+        action: retry
+        style: primary
+      - id: skip
+        label: "跳过"
+        description: "跳过此步骤，继续执行"
+        action: skip
+        style: secondary
+      - id: rollback
+        label: "回滚"
+        description: "回滚到指定步骤"
+        action: rollback
+        params:
+          targetStepId: build
+        style: warning
+      - id: abort
+        label: "中止"
+        description: "中止整个工作流"
+        action: abort
+        style: danger
+```
+
+**HITL 流程**:
+1. 步骤失败 → 保存 HITL 状态到 `TaskContext.hitlState`
+2. 引擎轮询检查状态（每 10 秒）
+3. 人类通过 `/api/tasks/:taskId/hitl` API 响应
+4. 引擎收到响应后执行对应的 action
+5. 清除 HITL 状态，继续执行
+
+**API 响应格式**:
+```bash
+curl -X PUT http://localhost:3000/api/tasks/{taskId}/hitl \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decision": "{\"action\": \"retry\", \"params\": {}}",
+    "feedback": "可选的补充说明"
+  }'
+```
+
+#### 5.4 回滚 (Rollback)
+
+当步骤失败时，系统可以回滚到之前的步骤并重新执行。
+
+```yaml
+- id: deploy-prod
+  name: "部署到生产"
+  agent: developer
+  depends_on: [test, build]
+  on_failure: rollback
+  rollbackConfig:
+    targetStepId: build       # 回滚到此步骤
+    clearContext: false       # 是否清除上下文（默认 false）
+```
+
+**回滚行为**:
+1. 找到 `targetStepId` 对应的步骤
+2. 如果 `clearContext: true`，创建新的 WorkflowContext
+3. 从 `targetStepId` 开始重新执行所有后续步骤
+4. 如果回滚过程中某步骤失败且不是 `always_run`，停止执行
+
+**示例场景**: CI/CD 流水线
+```yaml
+steps:
+  - id: build
+    name: "构建"
+    agent: developer
+
+  - id: test
+    name: "测试"
+    agent: developer
+    depends_on: [build]
+
+  - id: deploy-staging
+    name: "部署到测试环境"
+    agent: developer
+    depends_on: [test]
+
+  - id: smoke-test
+    name: "冒烟测试"
+    agent: developer
+    depends_on: [deploy-staging]
+    on_failure: rollback
+    rollbackConfig:
+      targetStepId: build  # 冒烟测试失败，回滚到构建阶段
+
+  - id: deploy-prod
+    name: "部署到生产"
+    agent: developer
+    depends_on: [smoke-test]
+```
+
+#### 5.5 组合使用
+
+反馈循环机制可以组合使用，实现复杂的容错逻辑。
+
+**示例: 先重试，再 HITL**:
+```yaml
+- id: api-call
+  agent: developer
+  retry:
+    maxRetries: 3           # 先自动重试 3 次
+    delayMs: 5000
+  on_failure: hitl         # 重试耗尽后，请求人类决策
+  hitl:
+    options:
+      - id: retry-manual
+        label: "手动重试"
+        action: retry
+      - id: abort
+        label: "中止"
+        action: abort
+```
+
+**示例: 多步骤工作流的不同容错策略**:
+```yaml
+steps:
+  - id: analyze
+    name: "需求分析"
+    agent: analyzer
+    retry:
+      maxRetries: 1
+
+  - id: develop
+    name: "开发功能"
+    agent: developer
+    depends_on: [analyze]
+    on_failure: rollback
+    rollbackConfig:
+      targetStepId: analyze  # 开发失败，重新分析
+
+  - id: test
+    name: "测试"
+    agent: tester
+    depends_on: [develop]
+    # 测试失败不重试，直接请求人工决策
+    on_failure: hitl
+    hitl:
+      question: "测试失败，是否继续部署？"
+      options:
+        - id: continue
+          label: "忽略测试失败，继续部署"
+          action: skip
+        - id: fix
+          label: "修复后重试"
+          action: retry
+        - id: abort
+          label: "中止"
+          action: abort
+```
+
+#### 5.6 Agent 验证 (Agent Validation)
+
+⭐ **NEW**: Workflow System 在初始化时会自动验证 agent 引用，防止配置错误。
+
+**验证规则**:
+- 所有步骤的 `agent` 字段必须存在
+- Agent 名称必须匹配以下之一：
+  - 可用的 subagent（在 `subagents/` 目录中定义）
+  - `master`（如果启用了 master agent）
+- 验证在 workflow 加载时进行（"fail fast" 原则）
+
+**验证失败示例**:
+```yaml
+# ❌ 错误：agent 不存在
+steps:
+  - id: step1
+    agent: non-existent-agent  # 这个 agent 不存在
+    input:
+      task: "Do something"
+```
+
+**错误信息**:
+```json
+{
+  "error": "Workflow \"my-workflow\" failed validation:\n  [step1] agent: Agent \"non-existent-agent\" not found. Available agents: code-reviewer, data-analyst, developer-engineer, master"
+}
+```
+
+**正确配置示例**:
+```yaml
+# ✅ 正确：使用存在的 agent
+steps:
+  - id: step1
+    agent: developer-engineer  # 这个 agent 存在
+    input:
+      task: "Write code"
+```
+
+**可用的 Agents**:
+- `master` - Master agent（如果启用）
+- `developer-engineer` - 代码开发
+- `code-reviewer` - 代码审查
+- `data-analyst` - 数据分析
+- `security-auditor` - 安全审计
+- `myagent-system-guide` - 系统指南
+- `emotional-girlfriend-gentle` - 情感陪伴（温柔型）
+- `emotional-girlfriend-lively` - 情感陪伴（活泼型）
+- `emotional-girlfriend-sweet` - 情感陪伴（甜美型）
+
+**双重错误报告**:
+1. **服务端日志**: 开发者可以在服务启动时看到详细的验证错误
+2. **用户 API**: 用户通过 `/api/contexts/{taskId}` 可以看到详细的失败原因
+
+**向后兼容**:
+- 如果 workflow loader 没有提供 agent 列表，验证会被跳过
+- 这确保了旧代码不会因为新增验证而中断
 
 ---
 

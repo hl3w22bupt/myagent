@@ -61,7 +61,7 @@ let _agentManager: AgentManager | null = null;
  * Scans the subagents/ directory for all directories containing an agent.yaml file.
  * This allows automatic discovery without hardcoding subagent names.
  */
-function discoverSubagents(): string[] {
+export function discoverSubagents(): string[] {
   const subagentsDir = resolve(process.cwd(), 'subagents');
   if (!existsSync(subagentsDir)) {
     console.warn('[MasterAgent] Subagents directory not found:', subagentsDir);

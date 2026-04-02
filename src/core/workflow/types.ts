@@ -36,6 +36,97 @@ export interface ParallelConfig {
   merge_to?: string;
 }
 
+// ⭐ Feedback Loop Configuration
+
+/**
+ * Retry Configuration
+ */
+export interface RetryConfig {
+  /** Maximum retry attempts (default: 0, no retry) */
+  maxRetries?: number;
+
+  /** Delay before retry in milliseconds (default: 1000) */
+  delayMs?: number;
+
+  /** Use exponential backoff (default: true) */
+  exponentialBackoff?: boolean;
+
+  /** Maximum delay in milliseconds (default: 30000) */
+  maxDelayMs?: number;
+
+  /** Jitter factor 0-1 (default: 0.1) */
+  jitterFactor?: number;
+
+  /** Custom retryable error checker (optional) */
+  isRetryable?: (error: Error) => boolean;
+}
+
+/**
+ * Failure Handler Strategy
+ */
+export type FailureHandler =
+  | 'retry'        // Retry using retry config
+  | 'skip'         // Skip this step, continue to next
+  | 'rollback'     // Rollback to specified step
+  | 'hitl';        // Request Human-In-The-Loop
+
+/**
+ * Rollback Configuration
+ */
+export interface RollbackConfig {
+  /** Target step ID to rollback to */
+  targetStepId: string;
+
+  /** Clear context before rollback (default: false) */
+  clearContext?: boolean;
+
+  /** Reset retry counters (default: true) */
+  resetRetries?: boolean;
+}
+
+/**
+ * HITL (Human-In-The-Loop) Configuration
+ */
+export interface HITLConfig {
+  /** HITL timeout in milliseconds (default: 7 days) */
+  timeout?: number;
+
+  /** Polling interval in milliseconds (default: 10000 = 10s) */
+  pollInterval?: number;
+
+  /** Options for human decision maker */
+  options?: HITLOption[];
+
+  /** Question to ask human (optional, auto-generated if not provided) */
+  question?: string;
+
+  /** Additional context for human (optional) */
+  context?: Record<string, any>;
+}
+
+/**
+ * HITL Option
+ */
+export interface HITLOption {
+  /** Option ID */
+  id: string;
+
+  /** Display label */
+  label: string;
+
+  /** Option description */
+  description?: string;
+
+  /** Action to execute if this option is selected */
+  action: 'retry' | 'skip' | 'rollback' | 'abort';
+
+  /** Action parameters */
+  params?: Record<string, any>;
+
+  /** Style hint for UI (optional) */
+  style?: 'primary' | 'secondary' | 'danger' | 'warning';
+}
+
 // Workflow step
 export interface WorkflowStep {
   id: string;
@@ -54,6 +145,19 @@ export interface WorkflowStep {
   next_step?: string;
   max_iterations?: number;
   always_run?: boolean;
+
+  // ⭐ Feedback Loop Configuration
+  /** Retry configuration for automatic retries on failure */
+  retry?: RetryConfig;
+
+  /** Failure handling strategy */
+  on_failure?: FailureHandler;
+
+  /** Rollback configuration (used when on_failure is 'rollback') */
+  rollbackConfig?: RollbackConfig;
+
+  /** HITL configuration (used when on_failure is 'hitl') */
+  hitl?: HITLConfig;
 }
 
 // Input/Output schema
