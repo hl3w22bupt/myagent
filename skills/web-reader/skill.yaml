@@ -1,0 +1,28 @@
+name: web-reader
+version: 1.0.0
+description: "快速准确地读取网页内容。支持提取文章标题、正文、发布时间等。"
+tags: [web, http, scraper, content-extraction]
+type: pure-script
+
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+      description: "要读取的网页 URL"
+    task:
+      type: string
+      description: "自然语言任务（例如：'读取 https://example.com 的内容'）"
+    timeout:
+      type: integer
+      description: "请求超时时间（秒，默认 20）"
+      default: 20
+    return_format:
+      type: string
+      description: "返回格式：markdown 或 text（默认 markdown）"
+      enum: ["markdown", "text"]
+      default: "markdown"
+
+execution:
+  handler: handler.py
+  function: execute

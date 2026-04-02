@@ -12,6 +12,12 @@ anthropic==0.40.0
 # HTTP clients
 httpx==0.25.2
 aiohttp==3.9.1
+requests==2.31.0
+
+# Web scraping
+beautifulsoup4==4.12.3
+html2text==2020.1.16
+lxml>=5.3.0
 
 # Web search
 ddgs>=9.0.0
