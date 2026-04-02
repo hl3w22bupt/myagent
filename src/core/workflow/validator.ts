@@ -6,13 +6,28 @@
  * - Detects conflicts with reserved names
  * - Detects undefined field references
  * - Detects cyclic dependencies
+ * - Validates agent references against available subagents
  */
 
 import { ValidationError, WorkflowConfig, WorkflowStep } from './types';
 
 const RESERVED_NAMES = ['input', 'output', 'env', 'loop', 'workflow', 'iteration'];
 
+export interface AgentValidationOptions {
+  /** Available subagent names (e.g., ['developer-engineer', 'code-reviewer']) */
+  availableSubagents?: string[];
+
+  /** Whether master agent is available */
+  hasMasterAgent?: boolean;
+}
+
 export class WorkflowValidator {
+  private options: AgentValidationOptions;
+
+  constructor(options?: AgentValidationOptions) {
+    this.options = options || {};
+  }
+
   /**
    * Validate a workflow configuration
    */
@@ -30,6 +45,59 @@ export class WorkflowValidator {
     // 3. Check cyclic dependencies
     const cyclicErrors = this.validateDependencies(config);
     errors.push(...cyclicErrors);
+
+    // 4. Check agent references
+    const agentErrors = this.validateAgentReferences(config);
+    errors.push(...agentErrors);
+
+    return errors;
+  }
+
+  /**
+   * Validate agent references against available subagents
+   */
+  private validateAgentReferences(config: WorkflowConfig): ValidationError[] {
+    const errors: ValidationError[] = [];
+
+    // Skip validation if no agent list provided (backward compatibility)
+    if (!this.options.availableSubagents && !this.options.hasMasterAgent) {
+      return errors;
+    }
+
+    // Build set of valid agent names
+    const validAgents = new Set<string>();
+
+    // Add 'master' if master agent is available
+    if (this.options.hasMasterAgent) {
+      validAgents.add('master');
+    }
+
+    // Add all available subagents
+    if (this.options.availableSubagents) {
+      this.options.availableSubagents.forEach(agent => validAgents.add(agent));
+    }
+
+    // Validate each step's agent
+    for (const step of config.steps) {
+      if (!step.agent) {
+        errors.push({
+          stepId: step.id,
+          field: 'agent',
+          error: 'Agent field is required',
+        });
+        continue;
+      }
+
+      // Check if agent exists
+      if (!validAgents.has(step.agent)) {
+        const availableList = Array.from(validAgents).sort().join(', ');
+        errors.push({
+          stepId: step.id,
+          field: 'agent',
+          error: `Agent "${step.agent}" not found. Available agents: ${availableList || 'none'}`,
+        });
+      }
+    }
 
     return errors;
   }

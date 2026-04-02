@@ -18,7 +18,8 @@ import * as fs from 'fs/promises';
 import { WorkflowEngine } from './engine';
 import { WorkflowConfig } from './types';
 import { ConfigLoader } from '../config/config-loader';
-import { WorkflowValidator } from './validator';
+import { WorkflowValidator, AgentValidationOptions } from './validator';
+import { discoverSubagents } from '../../index';
 
 export class WorkflowLoader {
   private engine: WorkflowEngine;
@@ -32,6 +33,18 @@ export class WorkflowLoader {
   }
 
   /**
+   * Get master agent configuration availability
+   */
+  private hasMasterAgentConfig(): boolean {
+    // Try to get the agent manager from engine
+    const agentManager = (this.engine as any).agentManager;
+    if (agentManager && agentManager.config) {
+      return !!agentManager.config.masterAgentConfig;
+    }
+    return false;
+  }
+
+  /**
    * Load workflows from a directory (scans for workflow.yaml files)
    */
   async loadFromDirectory(workflowsDir: string): Promise<Record<string, WorkflowConfig>> {
@@ -40,6 +53,17 @@ export class WorkflowLoader {
 
     try {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
+
+      // Discover available agents for validation
+      const availableSubagents = discoverSubagents();
+      const hasMasterAgent = this.hasMasterAgentConfig();
+
+      // Update validator with agent information
+      const validationOptions: AgentValidationOptions = {
+        availableSubagents,
+        hasMasterAgent,
+      };
+      this.validator = new WorkflowValidator(validationOptions);
 
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
@@ -51,10 +75,15 @@ export class WorkflowLoader {
           const config = await this.configLoader.load<WorkflowConfig>(workflowFile);
           const workflowName = this.slugify(entry.name);
 
-          // Validate
+          // Validate with agent checking
           const errors = this.validator.validate(config);
           if (errors.length > 0) {
             console.error(`[WorkflowLoader] ✗ Workflow "${workflowName}" validation failed:`, errors);
+
+            // Register failed workflow with detailed error message
+            const errorDetails = errors.map(e => `  [${e.stepId}] ${e.field}: ${e.error}`).join('\n');
+            this.engine.registerFailedWorkflow(workflowName, errorDetails);
+
             continue;
           }
 
@@ -90,6 +119,17 @@ export class WorkflowLoader {
     const config = await this.configLoader.load<{ version?: string; workflows?: Record<string, WorkflowConfig> }>(fullPath);
 
     const workflows = config.workflows || {};
+
+    // Discover available agents for validation
+    const availableSubagents = discoverSubagents();
+    const hasMasterAgent = this.hasMasterAgentConfig();
+
+    // Update validator with agent information
+    const validationOptions: AgentValidationOptions = {
+      availableSubagents,
+      hasMasterAgent,
+    };
+    this.validator = new WorkflowValidator(validationOptions);
 
     // Validate each workflow
     for (const [name, workflowConfig] of Object.entries(workflows)) {

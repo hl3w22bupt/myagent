@@ -275,7 +275,7 @@ describe('Workflow Feedback Loop E2E', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with skip
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {
@@ -329,7 +329,7 @@ describe('Workflow Feedback Loop E2E', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with abort
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {

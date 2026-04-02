@@ -15,6 +15,7 @@ import { ContextManager } from '../context/manager';
 export class WorkflowEngine {
   private agentManager: AgentManager;
   private workflows: Map<string, WorkflowConfig>;
+  private failedWorkflows: Map<string, string>; // workflow name -> error message
   private streams: any = null;
   private logger: any;
   private internalExecutionSteps: any[] = [];  // ⭐ Track execution steps
@@ -22,6 +23,7 @@ export class WorkflowEngine {
   constructor(agentManager: AgentManager, logger: any = console) {
     this.agentManager = agentManager;
     this.workflows = new Map();
+    this.failedWorkflows = new Map();
     this.logger = logger;
   }
 
@@ -50,6 +52,21 @@ export class WorkflowEngine {
   }
 
   /**
+   * Register a failed workflow (validation failed)
+   */
+  registerFailedWorkflow(name: string, error: string): void {
+    this.failedWorkflows.set(name, error);
+    this.logger.debug(`[WorkflowEngine] Registered failed workflow: ${name}`);
+  }
+
+  /**
+   * Get failed workflow error message
+   */
+  getFailedWorkflowError(name: string): string | undefined {
+    return this.failedWorkflows.get(name);
+  }
+
+  /**
    * List all registered workflows
    */
   listWorkflows(): Array<{ name: string; config: WorkflowConfig }> {
@@ -68,6 +85,17 @@ export class WorkflowEngine {
     const workflow = this.workflows.get(workflowName);
 
     if (!workflow) {
+      // Check if this workflow failed validation
+      const failedError = this.failedWorkflows.get(workflowName);
+      if (failedError) {
+        return {
+          success: false,
+          error: `Workflow "${workflowName}" failed validation:\n${failedError}`,
+          executionTime: 0,
+          steps: [],
+        };
+      }
+
       return {
         success: false,
         error: `Workflow not found: ${workflowName}`,
@@ -984,14 +1012,15 @@ export class WorkflowEngine {
     }
 
     switch (action) {
-      case 'retry':
+      case 'retry': {
         this.logger.info('[WorkflowEngine] Retrying step after HITL', {
           stepId: step.id,
           response: responseContent,
         });
         return await this.executeStep(step, context, workflow, options);
+      }
 
-      case 'skip':
+      case 'skip': {
         this.logger.info('[WorkflowEngine] Skipping step after HITL', {
           stepId: step.id,
           response: responseContent,
@@ -1001,8 +1030,9 @@ export class WorkflowEngine {
           status: 'skipped',
           reason: 'Skipped after HITL',
         };
+      }
 
-      case 'rollback':
+      case 'rollback': {
         const targetStepId = params?.targetStepId;
         if (!targetStepId) {
           throw new Error('Rollback action requires targetStepId in params');
@@ -1030,14 +1060,16 @@ export class WorkflowEngine {
         step.rollbackConfig = originalRollbackConfig;
 
         return result;
+      }
 
       case 'abort':
-      default:
+      default: {
         this.logger.info('[WorkflowEngine] Aborting workflow after HITL', {
           stepId: step.id,
           reason: response?.feedback || responseContent,
         });
         throw new Error(`Workflow aborted after HITL: ${response?.feedback || responseContent}`);
+      }
     }
   }
 

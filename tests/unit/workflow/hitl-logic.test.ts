@@ -192,7 +192,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Verify HITL state is awaiting
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       expect(taskContext?.hitlState?.status).toBe('awaiting');
 
       // Simulate user responding
@@ -298,7 +298,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with retry action
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {
@@ -355,7 +355,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with skip action
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {
@@ -407,7 +407,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with abort action
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {
@@ -465,7 +465,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Respond with text instead of JSON
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       if (taskContext?.hitlState) {
         taskContext.hitlState.status = 'completed';
         taskContext.hitlState.response = {
@@ -518,7 +518,7 @@ describe('Workflow HITL Logic', () => {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Verify HITL state exists
-      let taskContext = await contextManager.getContext(taskId);
+      const taskContext = await contextManager.getContext(taskId);
       expect(taskContext?.hitlState).toBeDefined();
 
       // Respond with skip

@@ -8,14 +8,14 @@ steps:
   # Step 1: 简单的任务（应该成功）
   - id: step1
     name: "第一步 - 分析任务"
-    agent: developer
+    agent: developer-engineer
     input:
       task: "简单分析：1+1等于多少？"
 
   # Step 2: 会失败的任务，触发 HITL
   - id: step2
     name: "第二步 - 模拟失败"
-    agent: developer
+    agent: developer-engineer
     depends_on: [step1]
     on_failure: hitl
     hitl:
@@ -44,7 +44,7 @@ steps:
   # Step 3: 如果前面跳过或成功，执行这步
   - id: step3
     name: "第三步 - 总结"
-    agent: developer
+    agent: developer-engineer
     depends_on: [step2]
     input:
       task: "总结前面的执行结果"
