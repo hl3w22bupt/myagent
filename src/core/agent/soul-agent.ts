@@ -1067,7 +1067,7 @@ ${this.soulConfig.goal}
       try {
         await dataStore.initialize();
         await dataStore.updateTask(this.soulState.currentTask, {
-          status: 'cancelled',
+          status: 'failed',
           error: 'Cancelled by user message (priority)'
         });
         console.log(`[SoulAgent] ✅ Cancelled task: ${this.soulState.currentTask}`);
