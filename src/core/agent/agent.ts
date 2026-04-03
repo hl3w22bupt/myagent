@@ -302,6 +302,10 @@ export class Agent {
     // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
     const effectiveTaskId = taskId || context?.taskId;
 
+    // ⭐ NEW: Clear any lingering HITL state before execution
+    // This handles cases where HITL state was left over from previous executions
+    await this.cleanupLingeringHITLState(effectiveTaskId);
+
     // Extract emit function from context for event emission
     if (context?.emit) {
       this.emit = context.emit;
@@ -2102,6 +2106,34 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
       }
     } catch (error) {
       console.error('[Agent] Failed to clear HITL state', { taskId, error });
+    }
+  }
+
+  /**
+   * Clean up any lingering HITL state before execution.
+   *
+   * This handles cases where HITL state was left over from previous executions
+   * (e.g., timeout + resume, or failed cleanup).
+   * Ensures we don't show stale "awaiting clarification" cards for completed tasks.
+   */
+  private async cleanupLingeringHITLState(taskId: string): Promise<void> {
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext && taskContext.hitlState && taskContext.hitlState.status === 'awaiting') {
+        console.log('[Agent] Found lingering HITL state, cleaning up', {
+          taskId,
+          hitlState: taskContext.hitlState
+        });
+
+        delete taskContext.hitlState;
+        await contextManager.saveContext(taskContext);
+        console.log('[Agent] Lingering HITL state cleaned', { taskId });
+      }
+    } catch (error) {
+      // Don't block execution if cleanup fails
+      console.error('[Agent] Failed to cleanup lingering HITL state', { taskId, error });
     }
   }
 
