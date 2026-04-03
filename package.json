@@ -81,7 +81,7 @@
     "sql.js": "^1.13.0",
     "uuid": "^9.0.1",
     "ws": "^8.16.0",
-    "zod": "^4.1.12"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@motiadev/workbench": "0.17.11-beta.193",

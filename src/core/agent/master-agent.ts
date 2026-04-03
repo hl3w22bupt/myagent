@@ -1493,6 +1493,7 @@ Important rules:
       systemPrompt,
       availableSkills: config.agent.available_skills || config.agent.availableSkills,
       constraints: config.agent.constraints,
+      validation: config.agent.validation,  // ValidationHook configuration
     };
   }
 

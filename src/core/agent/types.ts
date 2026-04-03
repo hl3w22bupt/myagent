@@ -82,6 +82,22 @@ export interface AgentConfig {
     /** Vector dimensions (default: 1536) */
     embeddingDimensions?: number;
   };
+
+  /** Validation Hook configuration for output validation */
+  validation?: {
+    /** Validation strategy: strict (throws error) or fallback (sanitizes output) */
+    strategy?: 'strict' | 'fallback';
+    /** Schema validation rules (validates output structure) */
+    schema?: Record<string, any>;
+    /** Required field paths (dot notation for nested fields) */
+    required?: string[];
+    /** Format validation rules (regex patterns) */
+    formats?: Array<{
+      field: string;
+      pattern: string | RegExp;
+      message?: string;
+    }>;
+  };
 }
 
 /**

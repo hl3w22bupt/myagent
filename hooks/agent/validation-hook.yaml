@@ -1,0 +1,35 @@
+type: validation
+enabled: false  # Default off, configure per subagent
+description: "Validates Agent output against schema and format rules"
+config:
+  strategy: strict  # strict | fallback
+
+  # Schema validation example (validates output structure)
+  schema:
+    userStories:
+      type: array
+      items:
+        type: object
+        required: [id, title, priority]
+        properties:
+          id:
+            type: string
+            pattern: "^[A-Z]{2}-\\d+$"
+          title:
+            type: string
+            minLength: 10
+          priority:
+            type: string
+            enum: [P0, P1, P2, P3]
+
+  # Completeness validation (required fields)
+  required:
+    - userStories
+    - personas
+    - requirements
+
+  # Format validation (regex patterns)
+  formats:
+    - field: userStories[].id
+      pattern: "^[A-Z]{2}-\\d+$"
+      message: "User story ID must match format: XX-123"

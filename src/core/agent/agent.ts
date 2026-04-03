@@ -594,7 +594,10 @@ export class Agent {
         const executionTime = Date.now() - startTime;
 
         // Clean markdown code blocks from LLM response
-        const cleanOutput = this.extractCleanContent(llmResponse.content);
+        let cleanOutput = this.extractCleanContent(llmResponse.content);
+
+        // Validate output if validation is configured
+        cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
           success: true,
@@ -687,7 +690,10 @@ export class Agent {
         const executionTime = Date.now() - startTime;
 
         // Clean markdown code blocks from LLM response
-        const cleanOutput = this.extractCleanContent(llmResponse.content);
+        let cleanOutput = this.extractCleanContent(llmResponse.content);
+
+        // Validate output if validation is configured
+        cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
           success: true,
@@ -2458,6 +2464,55 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
     } catch (error) {
       console.error('[Agent] Failed to record knowledge retrieval trace:', error);
     }
+  }
+
+  /**
+   * Validate Agent output using ValidationHook if configured.
+   *
+   * This method checks if the Agent has validation configuration in agent.yaml
+   * and validates the output against the configured rules.
+   *
+   * @param output - The output to validate
+   * @param taskId - Task identifier for error messages
+   * @returns Validated (possibly sanitized) output
+   * @throws ValidationError if validation fails in strict mode
+   */
+  private async validateOutput(output: any, taskId?: string): Promise<any> {
+    if (!this.config.validation) {
+      // No validation configured, return output as-is
+      return output;
+    }
+
+    // Lazy import ValidationHook to avoid circular dependencies
+    const { ValidationHook } = await import('../hook/validation/validation-hook');
+
+    // Create ValidationHook instance with agent's validation config
+    const validationHook = new ValidationHook(this.config.validation);
+
+    // Validate the output
+    const validationResult = await validationHook.validate(output);
+
+    if (!validationResult.valid) {
+      const strategy = this.config.validation.strategy || 'strict';
+
+      if (strategy === 'fallback') {
+        // Fallback mode: log errors and sanitize output
+        console.warn(
+          `[ValidationHook] Output validation failed for task ${taskId}, sanitizing output`,
+          { errors: validationResult.errors, warnings: validationResult.warnings }
+        );
+        return validationHook.sanitizeOutput(output);
+      } else {
+        // Strict mode: throw validation error
+        const { ValidationError } = await import('../hook/validation/validation-hook');
+        throw new ValidationError(
+          validationResult.errors || ['Unknown validation error'],
+          `Output validation failed for task ${taskId}`
+        );
+      }
+    }
+
+    return output;
   }
 
 }
