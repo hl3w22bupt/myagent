@@ -205,11 +205,13 @@ WorkflowEngine.executeStep(step, context)
 - ✅ `saveHITLState()` - 保存 HITL 状态
 - ✅ `pollHITLResult()` - 轮询等待响应
 - ✅ `clearHITLState()` - 清理 HITL 状态
+- ✅ `checkIntentClarification()` - 意图澄清判断逻辑
+  - 调用 LLM 判断是否需要澄清
+  - 生成澄清问题
+  - Fallback 规则处理
+- ✅ 完整测试套件（7个单元测试）
 
-**待实现**：
-- ❌ `checkIntentClarification()` - 意图澄清判断逻辑
-  - 需要调用 LLM 判断是否需要澄清
-  - 需要生成澄清问题
+**完成度**: 100% ✅（2026-04-03）
 
 ### Workflow 层 HITL
 
@@ -317,53 +319,26 @@ steps:
 **不是**：创建新的 InterventionHook
 **而是**：补充 Agent 层 HITL 的触发逻辑
 
-1. **实现 `checkIntentClarification()`** ⭐ 高优先级
-   ```typescript
-   private async checkIntentClarification(
-     intent: any,
-     task: string,
-     taskId: string,
-     context: any
-   ): Promise<{ needs: boolean; question?: string; options?: string[] }> {
-     
-     // 1. 检查 confidence
-     if (intent.confidence < 0.7) {
-       // 2. 调用 LLM 判断是否需要澄清
-       const clarification = await this.llm.generate([
-         {
-           role: 'system',
-           content: '分析以下任务，判断是否需要向用户澄清...'
-         },
-         {
-           role: 'user',
-           content: `任务: "${task}"\n意图分析: ${JSON.stringify(intent)}`
-         }
-       ]);
-       
-       const result = JSON.parse(clarification);
-       
-       if (result.needs_clarification) {
-         // 3. 触发 HITL
-         await this.saveHITLState(taskId, {
-           stage: 'post_intent',
-           status: 'awaiting',
-           question: result.question,
-           options: result.options,
-         });
-         
-         // 4. 轮询等待
-         const clarificationResult = await this.pollHITLResult(taskId);
-         
-         // 5. 更新 task
-         task = task + '\n\n用户澄清：' + clarificationResult.content;
-       }
-     }
-     
-     return { needs: false };
-   }
-   ```
+**已完成** ✅ (2026-04-03)：
 
-2. **配置 Agent Hook（可选）**
+1. ✅ **实现 `checkIntentClarification()`**
+   - 完整的 LLM 判断逻辑
+   - 澄清问题生成
+   - Fallback 规则处理
+   - 代码位置：`src/core/agent/agent.ts:1750-1986`
+
+2. ✅ **编写测试套件**
+   - 7 个单元测试覆盖所有场景
+   - 测试文件：`tests/unit/agent/intent-clarification.test.ts`
+   - 测试通过：7/7 ✅
+
+3. ✅ **测试环境支持**
+   - 添加 `enableHITLInTest` 标志
+   - 移除 `NODE_ENV === 'test'` 硬编码跳过
+
+**可选工作**（低优先级）：
+
+4. ⏳ **配置 Agent Hook（可选）**
    ```yaml
    # hooks/agent/hitl-webhook.yaml
    type: hitl_webhook
@@ -416,5 +391,12 @@ steps:
 
 ---
 
-**文档状态**: ✅ 已澄清
-**下一步**: 实现 Agent 层意图澄清功能
+**文档状态**: ✅ 已实现
+**完成日期**: 2026-04-03
+**实现状态**:
+- ✅ 核心逻辑已实现
+- ✅ 测试套件已完成（7/7 通过）
+- ✅ 文档已更新
+
+**分支**: `feature/agent-intent-clarification`
+**提交**: c273fc7
