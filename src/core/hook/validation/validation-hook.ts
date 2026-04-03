@@ -367,8 +367,8 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook.
    */
   async onAgentCreate(
-    config: AgentConfig,
-    sessionId: string
+    _config: AgentConfig,
+    _sessionId: string
   ): Promise<{ abort?: boolean; reason?: string } | undefined> {
     // Validation hook doesn't need to intervene in agent creation
     return undefined;
@@ -379,8 +379,8 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook.
    */
   async onAgentAcquire(
-    agent: any,
-    sessionId: string
+    _agent: any,
+    _sessionId: string
   ): Promise<void | undefined> {
     // Validation hook doesn't need to track agent acquisition
     return undefined;
@@ -391,9 +391,9 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook (validation happens after task completion).
    */
   async onTaskStart(
-    task: string,
-    taskId: string,
-    context: Partial<any>
+    _task: string,
+    _taskId: string,
+    _context: Partial<any>
   ): Promise<{ modifiedTask?: string } | undefined> {
     // Validation hook doesn't modify task before execution
     return undefined;
@@ -447,7 +447,7 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook.
    */
   async onAgentStatusCheck(
-    agent: any
+    _agent: any
   ): Promise<void | undefined> {
     // Validation hook doesn't monitor agent status
     return undefined;
@@ -458,7 +458,7 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook.
    */
   async onAgentDestroy(
-    sessionId: string
+    _sessionId: string
   ): Promise<void | undefined> {
     // Validation hook doesn't need cleanup
     return undefined;
@@ -469,9 +469,9 @@ export class ValidationHook extends BaseAgentHook {
    * No-op for validation hook.
    */
   async onAwaitingHITL(
-    question: string,
-    options?: string[],
-    agentContext?: {
+    _question: string,
+    _options?: string[],
+    _agentContext?: {
       agentName: string;
       sessionId: string;
       taskId: string;
