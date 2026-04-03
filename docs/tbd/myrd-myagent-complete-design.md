@@ -3726,15 +3726,148 @@ export interface WorkflowStep {
 
 ---
 
-## 10. 相关文档
+## 10. 实施进度跟踪
+
+> **最后更新**: 2026-04-03
+> **当前版本**: v0.1 → v0.2 (部分实施)
+
+### 10.1 已完成功能 ✅
+
+#### Workflow Feedback Loop 系统 (2026-04-02)
+
+**PR #76**: feat(workflow): implement feedback loop with retry, HITL, rollback & agent validation
+
+**核心功能**:
+- ✅ **重试机制**: 指数退避 + 抖动，可配置重试次数
+- ✅ **HITL（人机交互）**: 7天超时，10秒轮询间隔
+- ✅ **回滚机制**: 自动执行已定义的回滚步骤
+- ✅ **失败工作流跟踪**: 记录失败原因和上下文
+
+**Agent 验证**:
+- ✅ 工作流初始化时验证 agent 引用
+- ✅ 双重错误报告：服务器日志 + API 响应
+- ✅ 清晰的错误提示（包含可用 agent 列表）
+
+**测试覆盖**:
+- ✅ Agent 验证：10 个测试用例
+- ✅ HITL 逻辑：状态保存、轮询、动作执行、超时处理
+- ✅ Workflow 核心：57 个测试用例
+
+**文档更新**:
+- ✅ `docs/reference/architecture/workflow-system.md`: 新增 Agent Validation 章节
+- ✅ `docs/reference/api/hitl-api.md`: HITL API 文档
+- ✅ 文档结构按 DOCS_CONVENTIONS.md 规范整理
+
+**工具支持**:
+- ✅ `myagent-doc:organize`: 自动文档组织命令
+
+**相关文件**:
+- `src/core/workflow/engine.ts` (+497 行)
+- `src/core/workflow/types.ts` (+104 行)
+- `src/core/workflow/validator.ts` (+68 行)
+- `src/core/workflow/loader.ts` (+44 行)
+- `tests/unit/workflow/agent-validation.test.ts` (新增)
+
+---
+
+### 10.2 待办工作 🔴 P0
+
+#### 输出验证器 (ValidationHook)
+
+**提案**: `docs/proposals/2026-03-29-add-validation-hook/`
+**状态**: in-progress
+**预估时间**: 2-3 天
+
+**需要实现**:
+- ValidationHook (onTaskComplete 时验证)
+- SchemaValidator (Zod JSON Schema 验证)
+- CompletenessValidator (必填字段检查)
+- FormatValidator (URL、Email、正则表达式验证)
+- 配置接口 (agent.yaml)
+- 错误处理和降级策略
+
+#### 知识库管理完善
+
+**文档**: `docs/tbd/AGENT_PLATFORM_ARCHITECTURE.md` §2.1
+**状态**: 基础 RAG 已实现 (40%)
+**预估时间**: 1-2 周
+
+**需要补充**:
+- 安全加固（Collection 隔离、ACL、速率限制）
+- 性能优化（LRU 缓存、批量检索）
+- 测试覆盖（单元测试、集成测试、故障注入）
+
+#### 人工干预机制完善 (InterventionHook)
+
+**文档**: `docs/tbd/AGENT_PLATFORM_ARCHITECTURE.md` §2.3
+**状态**: Workflow HITL 已实现 (30%)
+**预估时间**: 3-5 天
+
+**需要补充**:
+- 扩展为通用 Hook 机制
+- API 端点（请求、决策、状态查询）
+- 安全验证（HMAC 签名、防重放）
+
+---
+
+### 10.3 待办工作 🟡 P1
+
+#### 并行委派
+
+**预估时间**: 3-5 天
+- 扩展 MasterAgent 支持多 subagent 并行执行
+- 结果聚合策略
+- 部分失败处理
+
+#### 自定义融合策略
+
+**预估时间**: 2-3 天
+- CustomFusionHook
+- 自定义融合逻辑接口
+- 示例融合策略
+
+---
+
+### 10.4 整体进度
+
+| 模块 | 完成度 | 状态 |
+|------|--------|------|
+| Workflow 反馈循环 | 100% | ✅ 已完成 |
+| Agent 验证 | 100% | ✅ 已完成 |
+| HITL（Workflow 级别） | 100% | ✅ 已完成 |
+| 输出验证器 | 0% | 🔨 进行中 |
+| 知识库管理 | 40% | 🔨 部分完成 |
+| 人工干预（通用 Hook） | 30% | 🔨 部分完成 |
+| 并行委派 | 0% | 📋 待开始 |
+| 自定义融合 | 0% | 📋 待开始 |
+
+---
+
+### 10.5 建议实施顺序
+
+**立即开始（本周）**:
+1. 输出验证器 - 2-3 天
+
+**短期（1-2 周内）**:
+2. 知识库管理完善 - 1-2 周
+3. 人工干预机制完善 - 3-5 天
+
+**中期（1 个月内）**:
+4. 并行委派 - 3-5 天
+5. 自定义融合策略 - 2-3 天
+
+---
+
+## 11. 相关文档
 
 - [AGENT_PLATFORM_ARCHITECTURE.md](./AGENT_PLATFORM_ARCHITECTURE.md) - Agent 平台架构
 - [workflow-feedback-loop-design.md](./workflow-feedback-loop-design.md) - Workflow Feedback Loop 详细设计
 - [workflow-system.md](../reference/architecture/workflow-system.md) - Workflow 系统文档
+- [work-progress.md](../reference/work-progress.md) - 详细工作进度跟踪
 - [coding-agent-platform-vision.md](./coding-agent-platform-vision.md) - 代码生成平台愿景
 - [ai-rd-platform-concept.md](./ai-rd-platform-concept.md) - AI 研发平台概念
 
 ---
 
-**文档状态**: 🟡 设计阶段
-**下一步**: 开始实施 Phase 1（MyRD 基础框架 + MyAgent Workflow 类型扩展）
+**文档状态**: 🟢 部分实施 (v0.2)
+**下一步**: 实施输出验证器 (ValidationHook)
