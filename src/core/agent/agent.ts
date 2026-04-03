@@ -1754,10 +1754,10 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
     context: any
   ): Promise<{ needs: boolean; question?: string; options?: string[]; clarification?: string; feedback?: string }> {
     // Skip HITL if:
-    // 1. Test environment
-    // 2. Explicitly disabled via context.skipHITL
-    // 3. Disabled in agent config (this.enableClarification = false)
-    if (process.env.NODE_ENV === 'test' || context?.skipHITL || !this.enableClarification) {
+    // 1. Explicitly disabled via context.skipHITL
+    // 2. Disabled in agent config (this.enableClarification = false)
+    // Note: Don't skip in test environment - allow testing with context.enableHITLInTest
+    if ((context?.skipHITL && !context?.enableHITLInTest) || !this.enableClarification) {
       return { needs: false };
     }
 
