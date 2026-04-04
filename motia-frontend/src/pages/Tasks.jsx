@@ -424,10 +424,6 @@ function Tasks() {
 
   return (
     <div className="tasks">
-      <div className="tasks-header">
-        <h1>任务列表</h1>
-      </div>
-
       {/* 筛选和排序 */}
       <div className="filter-bar">
         <div className="filter-group filter-search">

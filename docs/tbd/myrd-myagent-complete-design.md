@@ -3809,6 +3809,60 @@ export interface WorkflowStep {
 
 ---
 
+#### HITL Step（显式人工卡点）(2026-04-04)
+
+**PR #78**: feat: implement HITL Step feature and fix retry button alignment
+
+**核心功能**:
+- ✅ **显式人工卡点**: 在 workflow 中使用 `type: hitl` 定义人工检查点
+- ✅ **上下文显示**: 显示前一步的输出（支持字段过滤）
+- ✅ **多路径决策**: 支持 continue、abort、retry 三种动作
+- ✅ **重试支持**: retry 动作可指定重试的步骤
+- ✅ **复用 HITL 基础设施**: 复用 TaskContext.hitlState、Stream 事件、API
+
+**Workflow 示例**:
+```yaml
+- id: code-review
+  type: hitl
+  hitlStep:
+    question: "代码已生成，请审核质量并决定下一步："
+    context:
+      from_step: generate-code
+    options:
+      - id: approve
+        label: "批准"
+        action: continue
+        style: primary
+      - id: retry
+        label: "重新生成"
+        action: retry
+        retry_step: generate-code
+        style: secondary
+      - id: abort
+        label: "中止"
+        action: abort
+        style: danger
+```
+
+**实现细节**:
+- `WorkflowEngine.executeHITLStep()`: HITL 步骤执行逻辑
+  - 获取前一步输出（支持字段过滤）
+  - 保存 HITL 状态到 TaskContext
+  - 发送 Stream 事件通知前端
+  - 轮询决策（5秒间隔，7天超时）
+  - 执行决策动作
+- `WorkflowEngine.executeHITLStepAction()`: 动作执行
+  - continue: 继续下一步（可选设置上下文变量）
+  - abort: 中止 workflow
+  - retry: 重新执行指定步骤
+
+**相关文件**:
+- `src/core/workflow/types.ts` (+26 行) - HITLStepConfig 类型定义
+- `src/core/workflow/engine.ts` (+270 行) - HITL 步骤执行逻辑
+- `workflows/test-hitl-step/workflow.yaml` (新增) - 测试 workflow
+
+---
+
 ### 10.2 待办工作 🔴 P0
 
 #### 知识库管理完善
@@ -3822,16 +3876,19 @@ export interface WorkflowStep {
 - 性能优化（LRU 缓存、批量检索）
 - 测试覆盖（单元测试、集成测试、故障注入）
 
-#### 人工干预机制完善 (HITL Step)
+#### 人工干预机制完善 (HITL Step) ✅ 已完成
+
+**PR #78**: feat: implement HITL Step feature and fix retry button alignment
 
 **文档**: `docs/tbd/intervention-mechanism-enhancement.md`
-**状态**: Workflow 失败 HITL 已实现 (30%)
-**预估时间**: 2-3 天
+**状态**: 已完成 (100%)
 
-**需要补充**:
-- 在 Workflow 中支持 `type: hitl` step 类型（显式人工卡点）
-- 复用现有 HITL 机制（TaskContext.hitlState、Stream 事件、/api/tasks/:id/hitl）
-- 支持上下文显示（显示前一步输出）、多路径决策（set_context）
+**已实现**:
+- ✅ 在 Workflow 中支持 `type: hitl` step 类型（显式人工卡点）
+- ✅ 复用现有 HITL 机制（TaskContext.hitlState、Stream 事件、/api/tasks/:id/hitl）
+- ✅ 支持上下文显示（显示前一步输出）、多路径决策（set_context）
+- ✅ 支持三种动作：continue、abort、retry
+- ✅ 支持重试指定步骤功能
 
 **简化方案**：
 - ✅ 不需要 InterventionHook
@@ -3870,8 +3927,8 @@ export interface WorkflowStep {
 | HITL（Workflow 失败） | 100% | ✅ 已完成 |
 | **输出验证器** | **100%** | **✅ 已完成** |
 | 步骤级验证配置 | 100% | ✅ 已完成 |
+| **HITL Step（显式卡点）** | **100%** | **✅ 已完成** |
 | 知识库管理 | 40% | 🔨 部分完成 |
-| HITL Step（显式卡点） | 30% | 🔨 部分完成 |
 | 并行委派 | 0% | 📋 待开始 |
 | 自定义融合 | 0% | 📋 待开始 |
 
@@ -3881,11 +3938,10 @@ export interface WorkflowStep {
 
 **立即开始（本周）**:
 1. 知识库管理完善 - 1-2 周
-2. HITL Step（显式人工卡点）- 2-3 天
 
 **中期（1 个月内）**:
-3. 并行委派 - 3-5 天
-4. 自定义融合策略 - 2-3 天
+2. 并行委派 - 3-5 天
+3. 自定义融合策略 - 2-3 天
 
 ---
 

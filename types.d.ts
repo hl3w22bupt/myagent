@@ -24,6 +24,7 @@ declare module 'motia' {
     'SoulPeriodicCheck': CronHandler<{ topic: 'soul.agent.execute'; data: never }>
     'soul-cleanup-cron': CronHandler<never>
     'workflows-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'workflow-detail-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'traces-submit-api': ApiRouteHandler<Record<string, unknown>, unknown, { topic: 'execution.trace.created'; data: { traceId: string; level: 'task' | 'agent' | 'skill' | 'tool-call' | 'agent-internal' | 'skill-internal'; taskId: string; agentId?: string; skillName?: string; parentTraceId?: string; stage: 'pre' | 'processing' | 'post' | 'intent_analysis' | 'ptc_planning' | 'llm_call' | 'skill_generation'; purpose?: string; status: 'started' | 'running' | 'completed' | 'failed' | 'retried'; inputData?: string; outputData?: string; error?: string; errorStack?: string; retryCount: number; maxRetries: number; executionTime?: number; timestamp: string; metadata?: { llmCalls?: number; skillCalls?: number; totalTokens?: number; sessionId?: string; data?: unknown; llmProvider?: string; llmModel?: string; llmRequest?: { messages?: Array<{ role: string; content: string }>; maxTokens?: number; temperature?: number }; llmResponse?: { content?: string; promptTokens?: number; completionTokens?: number; totalTokens?: number } } } }>
     'execution-traces-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'token-usage-api': ApiRouteHandler<Record<string, unknown>, unknown, never>

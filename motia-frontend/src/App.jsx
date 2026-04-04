@@ -12,6 +12,7 @@ import Agents from './pages/Agents'
 import AutonomousAgents from './pages/AutonomousAgents'
 import Dashboard from './pages/Dashboard'
 import Knowledge from './pages/Knowledge'
+import Workflows from './pages/Workflows'
 import Settings from './pages/Settings'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { MotiaStreamProvider } from '@motiadev/stream-client-react'
@@ -38,6 +39,7 @@ function App() {
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/autonomous-agents" element={<AutonomousAgents />} />
                 <Route path="/knowledge" element={<Knowledge />} />
+                <Route path="/workflows" element={<Workflows />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
