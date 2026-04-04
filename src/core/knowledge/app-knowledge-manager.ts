@@ -3,16 +3,26 @@
  *
  * Manages relationships between applications and knowledge collections.
  * Allows apps to be configured with multiple knowledge bases for RAG.
+ *
+ * Security features:
+ * - Input validation (via security module)
+ * - Rate limiting (optional)
+ * - Audit logging
  */
 
 import { Pool } from 'pg';
+import {
+  validateCollectionName,
+  validateAppId,
+  validateFieldName,
+} from './security/index';
 
 let pool: Pool | null = null;
 
 /**
  * Initialize the database pool
  */
-function getPool(): Pool {
+export function getPool(): Pool {
   if (!pool) {
     const config = {
       host: process.env.PG_HOST || process.env.DB_HOST || 'localhost',
@@ -53,6 +63,13 @@ export interface AppKnowledgeMapping {
 export async function getAppKnowledgeCollections(
   appId: string
 ): Promise<AppKnowledgeMapping[]> {
+  // ⭐ Security: Validate app ID
+  const validation = validateAppId(appId);
+  if (!validation.valid) {
+    console.error(`[AppKnowledgeManager] Invalid app ID: ${appId}`, validation.error);
+    throw new Error(`Invalid app ID: ${validation.error}`);
+  }
+
   const pool = getPool();
 
   const query = `
@@ -101,6 +118,27 @@ export async function addAppKnowledgeCollection(
   enabled: boolean = true,
   priority: number = 0
 ): Promise<AppKnowledgeMapping> {
+  // ⭐ Security: Validate all inputs
+  const appIdValidation = validateAppId(appId);
+  if (!appIdValidation.valid) {
+    throw new Error(`Invalid app ID: ${appIdValidation.error}`);
+  }
+
+  const collectionValidation = validateCollectionName(collectionName);
+  if (!collectionValidation.valid) {
+    throw new Error(`Invalid collection name: ${collectionValidation.error}`);
+  }
+
+  const contentFieldValidation = validateFieldName(contentField);
+  if (!contentFieldValidation.valid) {
+    throw new Error(`Invalid content field name: ${contentFieldValidation.error}`);
+  }
+
+  const embeddingFieldValidation = validateFieldName(embeddingField);
+  if (!embeddingFieldValidation.valid) {
+    throw new Error(`Invalid embedding field name: ${embeddingFieldValidation.error}`);
+  }
+
   const pool = getPool();
 
   // ⭐ Auto-detect embedding dimensions when adding new collection
@@ -255,10 +293,19 @@ export async function detectTableDimensions(
 ): Promise<number | null> {
   const pool = getPool();
 
+  // Validate and sanitize table/column names
+  // Allow letters, numbers, underscore, hyphen (but not starting with hyphen to avoid SQL injection)
+  const isValidName = (name: string) => /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(name);
+  if (!isValidName(tableName) || !isValidName(embeddingField)) {
+    console.warn(`[AppKnowledgeManager] Invalid table or column name: ${tableName}.${embeddingField}`);
+    return null;
+  }
+
+  // Use double quotes to safely quote identifiers (handles special characters like hyphens)
   const query = `
-    SELECT ${embeddingField}
-    FROM ${tableName}
-    WHERE ${embeddingField} IS NOT NULL
+    SELECT "${embeddingField}"
+    FROM "${tableName}"
+    WHERE "${embeddingField}" IS NOT NULL
     LIMIT 1
   `;
 

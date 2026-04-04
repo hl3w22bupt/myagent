@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import { systemAPI, tasksAPI, skillsAPI, agentsAPI, favoritesAPI } from '../services/api'
@@ -183,6 +183,73 @@ const FavoriteHtmlPreview = ({ renderUrl }) => {
   )
 }
 
+const FavoriteMarkdownPreview = ({ renderUrl }) => {
+  const [content, setContent] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const fetchMarkdown = async () => {
+      if (!renderUrl) {
+        setError(true)
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(false)
+
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+        const response = await fetch(`${API_BASE_URL}${renderUrl}`)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const text = await response.text()
+        setContent(text)
+      } catch (err) {
+        console.error('[FavoriteMarkdownPreview] Fetch error:', err)
+        setError(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMarkdown()
+  }, [renderUrl])
+
+  if (loading) {
+    return (
+      <div className="favorite-preview favorite-preview-markdown">
+        <div className="media-loading">加载中...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="favorite-preview favorite-preview-markdown">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    )
+  }
+
+  // 动态导入 HtmlRenderer 组件来渲染 Markdown
+  const HtmlRenderer = React.lazy(() => import('../components/HtmlRenderer'))
+
+  return (
+    <div className="favorite-preview favorite-preview-markdown">
+      <Suspense fallback={<div className="media-loading">加载中...</div>}>
+        <HtmlRenderer content={content} type="markdown" />
+      </Suspense>
+    </div>
+  )
+}
+
 function Home() {
   const navigate = useNavigate()
   const [systemInfo, setSystemInfo] = useState(null)
@@ -336,8 +403,13 @@ function Home() {
             <FavoriteImagePreview path={path} getMediaBlobUrl={getMediaBlobUrl} />
           )
         case 'code':
-          // 如果有 renderUrl，说明是可渲染的 HTML
+          // 如果有 renderUrl，根据 renderType 渲染
           if (favorite.renderUrl) {
+            if (favorite.renderType === 'markdown') {
+              return (
+                <FavoriteMarkdownPreview renderUrl={favorite.renderUrl} />
+              )
+            }
             return (
               <FavoriteHtmlPreview renderUrl={favorite.renderUrl} />
             )
@@ -579,6 +651,79 @@ function Home() {
         sandbox="allow-scripts allow-same-origin allow-forms"
         title="HTML 预览"
       />
+    )
+  }
+
+  // 模态框 Markdown 预览组件
+  const ModalMarkdownPreview = ({ renderUrl }) => {
+    const [content, setContent] = useState('')
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(false)
+
+    useEffect(() => {
+      const fetchMarkdown = async () => {
+        if (!renderUrl) {
+          setError(true)
+          setLoading(false)
+          return
+        }
+
+        setLoading(true)
+        setError(false)
+
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+          const response = await fetch(`${API_BASE_URL}${renderUrl}`)
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
+
+          const text = await response.text()
+          setContent(text)
+        } catch (err) {
+          console.error('[ModalMarkdownPreview] Fetch error:', err)
+          setError(true)
+        } finally {
+          setLoading(false)
+        }
+      }
+
+      fetchMarkdown()
+    }, [renderUrl])
+
+    if (loading) {
+      return (
+        <div className="media-modal-loading">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <p>加载中...</p>
+        </div>
+      )
+    }
+
+    if (error) {
+      return (
+        <div className="media-modal-error">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 8v4M12 16h.01" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <p>Markdown 加载失败</p>
+        </div>
+      )
+    }
+
+    // 动态导入 HtmlRenderer 组件来渲染 Markdown
+    const HtmlRenderer = React.lazy(() => import('../components/HtmlRenderer'))
+
+    return (
+      <div className="media-modal-markdown">
+        <Suspense fallback={<div className="media-modal-loading"><p>加载中...</p></div>}>
+          <HtmlRenderer content={content} type="markdown" />
+        </Suspense>
+      </div>
     )
   }
 
@@ -967,7 +1112,11 @@ function Home() {
               )}
               {modalMedia.artifactType === 'code' && (
                 modalMedia.renderUrl ? (
-                  <ModalHtmlPreview renderUrl={modalMedia.renderUrl} />
+                  modalMedia.renderType === 'markdown' ? (
+                    <ModalMarkdownPreview renderUrl={modalMedia.renderUrl} />
+                  ) : (
+                    <ModalHtmlPreview renderUrl={modalMedia.renderUrl} />
+                  )
                 ) : (
                   <div className="media-modal-code">
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

@@ -67,6 +67,7 @@
     "@motiadev/plugin-observability": "0.17.11-beta.193",
     "@motiadev/plugin-states": "0.17.11-beta.193",
     "@types/handlebars": "^4.0.40",
+    "@types/lru-cache": "^7.10.9",
     "@types/pg": "^8.16.0",
     "axios": "^1.6.2",
     "bullmq": "^5.1.8",
