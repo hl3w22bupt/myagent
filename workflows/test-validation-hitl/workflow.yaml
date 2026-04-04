@@ -1,0 +1,59 @@
+name: "test-validation-hitl"
+description: "测试 validation 失败时是否触发 HITL"
+
+steps:
+  # Step 1: Agent 返回不符合 schema 的输出（应该失败）
+  - id: validate-test
+    name: "Validation 测试步骤"
+    agent: validation-tester
+    validation:
+      strategy: strict
+      schema:
+        summary:
+          type: string
+          minLength: 20
+        insights:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        score:
+          type: number
+          min: 0
+          max: 100
+      required: [summary, insights, score]
+      formats:
+        - field: summary
+          pattern: "^(Analysis|Summary|Report)"
+          message: "Summary must start with Analysis, Summary, or Report"
+    on_failure: hitl
+    hitl:
+      pollInterval: 5000
+      timeout: 120000
+      question: "输出验证失败！Schema 要求包含 summary, insights, score 字段，但 Agent 返回的输出不符合要求。请选择处理方式："
+      options:
+        - id: retry
+          label: "重新生成"
+          description: "让 Agent 重新生成输出"
+          action: retry
+          style: primary
+        - id: manual-fix
+          label: "手动修正"
+          description: "手动提供正确的输出"
+          action: skip
+          style: secondary
+        - id: abort
+          label: "中止工作流"
+          description: "停止执行"
+          action: abort
+          style: danger
+    input:
+      task: "返回JSON格式，包含 summary（摘要）, insights（见解）, score（评分）三个字段"
+
+  # Step 2: 如果前面成功或跳过，执行这步
+  - id: post-process
+    name: "后处理"
+    agent: developer-engineer
+    depends_on: [validate-test]
+    input:
+      task: "处理前面的输出，说：处理完成"

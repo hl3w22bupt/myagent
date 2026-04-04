@@ -79,6 +79,11 @@ export class WorkflowValidator {
 
     // Validate each step's agent
     for (const step of config.steps) {
+      // Skip agent validation for HITL steps (type='hitl')
+      if (step.type === 'hitl') {
+        continue;
+      }
+
       if (!step.agent) {
         errors.push({
           stepId: step.id,

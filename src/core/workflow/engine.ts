@@ -11,6 +11,9 @@ import { TemplateEngine } from '../config/template-engine';
 import { setAgentStreams, getAgentStreams } from '../agent/hooks/progress-notify';
 import { retryOperation, isDefaultRetryableError } from '../agent/retry';
 import { ContextManager } from '../context/manager';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import * as yaml from 'js-yaml';
 
 export class WorkflowEngine {
   private agentManager: AgentManager;
@@ -71,6 +74,44 @@ export class WorkflowEngine {
    */
   listWorkflows(): Array<{ name: string; config: WorkflowConfig }> {
     return Array.from(this.workflows.entries()).map(([name, config]) => ({ name, config }));
+  }
+
+  /**
+   * Load subagent configuration from subagents/{name}/agent.yaml
+   * Returns validation configuration and other subagent-specific settings
+   */
+  private loadSubagentConfig(subagentName: string): any {
+    const subagentDir = join(process.cwd(), 'subagents', subagentName);
+    const configPath = join(subagentDir, 'agent.yaml');
+
+    if (!existsSync(configPath)) {
+      this.logger.warn(`[WorkflowEngine] Subagent config not found: ${configPath}`);
+      return null;
+    }
+
+    try {
+      const configContent = readFileSync(configPath, 'utf-8');
+      const config = yaml.load(configContent) as any;
+
+      // Extract validation configuration
+      const subagentConfig: any = {
+        name: subagentName,
+        systemPrompt: config.agent?.system_prompt || config.agent?.systemPrompt,
+        availableSkills: config.agent?.available_skills || config.agent?.availableSkills,
+        constraints: config.agent?.constraints,
+        validation: config.agent?.validation,  // ← 关键：提取 validation 配置
+      };
+
+      this.logger.info(`[WorkflowEngine] Loaded subagent config: ${subagentName}`, {
+        hasValidation: !!subagentConfig.validation,
+        validationStrategy: subagentConfig.validation?.strategy,
+      });
+
+      return subagentConfig;
+    } catch (error: any) {
+      this.logger.error(`[WorkflowEngine] Failed to load subagent config for ${subagentName}:`, error.message);
+      return null;
+    }
   }
 
   /**
@@ -143,9 +184,15 @@ export class WorkflowEngine {
       const lastAgentResult = lastCompletedStepResult?.output;
       const finalOutput = lastAgentResult?.structuredOutput || lastAgentResult?.output || null;
 
+      // Check if any step failed
+      const hasFailedStep = this.internalExecutionSteps.some(step => step.status === 'failed');
+      const workflowSuccess = !hasFailedStep;
+
       this.logger.debug('[WorkflowEngine] Workflow execution completed', {
         workflowName: workflow.name,
-        success: true,
+        success: workflowSuccess,
+        hasFailedStep,
+        failedStepCount: this.internalExecutionSteps.filter(s => s.status === 'failed').length,
         finalOutputType: lastAgentResult?.structuredOutput ? 'structured' : (lastAgentResult?.output ? 'text' : 'none'),
         hasOutput: !!finalOutput,
         hasStructuredOutput: !!lastAgentResult?.structuredOutput,
@@ -154,7 +201,7 @@ export class WorkflowEngine {
       });
 
       return {
-        success: true,
+        success: workflowSuccess,
         output: finalOutput,
         executionTime: Date.now() - startTime,
         steps: this.internalExecutionSteps,
@@ -203,6 +250,11 @@ export class WorkflowEngine {
     }
 
     try {
+      // ⭐ Handle HITL step
+      if (step.type === 'hitl') {
+        return await this.executeHITLStep(step, context, workflow, options, startTime);
+      }
+
       // Handle parallel execution
       if (step.parallel) {
         const result = await this.executeParallel(step, context, options);
@@ -235,10 +287,24 @@ export class WorkflowEngine {
       // This ensures each step has its own agent instance for proper trace aggregation
       const sessionId = `workflow-${workflow.name}-${step.id}-${options.taskId || Date.now()}`;
 
-      // Acquire the subagent directly (not through MasterAgent)
-      const agent = await this.agentManager.acquire(sessionId, {
+      // Build acquire options
+      const acquireOptions: any = {
         agentType: step.agent as 'agent' | 'master',
-      });
+      };
+
+      // Apply validation from workflow step configuration (primary source)
+      if (step.validation) {
+        acquireOptions.validation = step.validation;
+        this.logger.info(`[WorkflowEngine] Applied step-level validation for ${step.agent}`, {
+          strategy: step.validation.strategy,
+          hasSchema: !!step.validation.schema,
+          hasRequired: !!step.validation.required,
+          hasFormats: !!step.validation.formats,
+        });
+      }
+
+      // Acquire the subagent directly (not through MasterAgent)
+      const agent = await this.agentManager.acquire(sessionId, acquireOptions);
 
       // Set agent name for trace display (e.g., "developer-engineer")
       (agent as any).agentName = step.agent;
@@ -314,12 +380,8 @@ export class WorkflowEngine {
       };
     } catch (error: any) {
       context.setStepStatus(step.id, 'failed');
-      return {
-        stepId: step.id,
-        status: 'failed',
-        error: error.message,
-        executionTime: Date.now() - startTime,
-      };
+      // Handle failure based on on_failure configuration
+      return await this.handleStepFailure(step, context, workflow, options, error);
     }
   }
 
@@ -342,6 +404,9 @@ export class WorkflowEngine {
       const batch = iterations.slice(i, i + concurrency);
       const batchResults = await Promise.all(
         batch.map(async (iteration, index) => {
+          if (!step.agent) {
+            throw new Error(`Step ${step.id} does not have an agent configured`);
+          }
           const agent = await this.agentManager.acquire(step.agent);
 
           // Create context for this iteration
@@ -1000,7 +1065,7 @@ export class WorkflowEngine {
       // Not JSON, treat as plain text (for Agent HITL compatibility)
       // Map common text responses to actions
       const lowerContent = responseContent.toLowerCase();
-      if (lowerContent.includes('retry') || lowerContent.includes('重试') || lowerContent.includes('再试')) {
+      if (lowerContent.includes('retry') || lowerContent.includes('重试') || lowerContent.includes('再试') || lowerContent.includes('重新生成') || lowerContent.includes('重新') || lowerContent.includes('再次')) {
         action = 'retry';
       } else if (lowerContent.includes('skip') || lowerContent.includes('跳过')) {
         action = 'skip';
@@ -1016,7 +1081,11 @@ export class WorkflowEngine {
         this.logger.info('[WorkflowEngine] Retrying step after HITL', {
           stepId: step.id,
           response: responseContent,
+          feedback: response?.feedback,
         });
+
+        // Simply re-execute the step (it will use the same agent instance)
+        // In a real implementation, you might want to pass the feedback to the agent
         return await this.executeStep(step, context, workflow, options);
       }
 
@@ -1085,5 +1154,272 @@ export class WorkflowEngine {
 
     // Return all steps from target step onwards
     return allSteps.slice(fromIndex);
+  }
+
+  /**
+   * Execute HITL (Human-In-The-Loop) step
+   * Saves HITL state, polls for response, and executes action
+   */
+  private async executeHITLStep(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions,
+    startTime: number
+  ): Promise<any> {
+    this.logger.info('[WorkflowEngine] Executing HITL step', {
+      stepId: step.id,
+      stepName: step.name,
+    });
+
+    const hitlStep = step.hitlStep!;
+    const taskId = options.taskId || `workflow-${Date.now()}`;
+
+    // 1. Get context output from previous step (if configured)
+    let contextOutput: any = null;
+    if (hitlStep.context?.from_step) {
+      const fromStepId = hitlStep.context.from_step;
+      const fromStep = this.internalExecutionSteps.find(s => s.stepId === fromStepId);
+      if (fromStep?.output) {
+        contextOutput = fromStep.output;
+
+        // If show_fields is specified, only show specific fields
+        if (hitlStep.context.show_fields) {
+          contextOutput = hitlStep.context.show_fields.reduce((acc, field) => {
+            if (field in contextOutput) {
+              acc[field] = contextOutput[field];
+            }
+            return acc;
+          }, {} as any);
+        }
+      }
+    }
+
+    // 2. Save HITL state to TaskContext (reuse existing mechanism)
+    const contextManager = new ContextManager();
+    const existingContext = await contextManager.getContext(taskId);
+
+    if (existingContext) {
+      existingContext.hitlState = {
+        stage: 'in_execution',
+        status: 'awaiting',
+        agentName: `Workflow:${workflow.name}`,
+        question: hitlStep.question,
+        options: hitlStep.options.map(opt => opt.label),  // Only store labels
+        createdAt: new Date(),
+        workflowName: workflow.name,
+        stepId: step.id,
+        retryAttempt: 0,
+        // Attach additional fields for HITL Step
+        ...(contextOutput && { contextOutput }),
+        optionsFull: hitlStep.options,  // Store full options for internal use
+      } as any;
+
+      await contextManager.saveContext(existingContext);
+    } else {
+      this.logger.warn('[WorkflowEngine] No existing context found for HITL step', { taskId });
+    }
+
+    // 3. Send Stream event (reuse existing mechanism)
+    const streams = getAgentStreams();
+    if (streams?.taskExecution) {
+      const event = {
+        type: 'awaiting_clarification' as const,
+        progressType: 'hitl' as const,
+        status: 'awaiting_clarification' as const,
+        taskId,
+        sessionId: options.sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          stage: 'in_execution',
+          agentName: `Workflow:${workflow.name}`,
+          question: hitlStep.question,
+          options: hitlStep.options.map(opt => opt.label),
+          context: contextOutput,  // Attach context
+        }
+      };
+
+      const groupId = taskId;
+      const timestamp = Date.now();
+      const entryId = `workflow-hitl-${groupId}-${timestamp}`;
+
+      await streams.taskExecution.set(groupId, entryId, {
+        ...event,
+        category: 'workflow_hook',
+      });
+    }
+
+    // 4. Poll for decision (reuse existing HITL polling logic)
+    const pollInterval = 5000;  // 5 seconds
+    const timeout = 7 * 24 * 60 * 60 * 1000;  // 7 days (same as existing HITL)
+    const pollingStartTime = Date.now();
+
+    while (Date.now() - pollingStartTime < timeout) {
+      // Wait for poll interval
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      // Check status
+      const updatedContext = await contextManager.getContext(taskId);
+      if (!updatedContext?.hitlState) {
+        continue;
+      }
+
+      const hitlState = updatedContext.hitlState;
+
+      // Check if response is received
+      if (hitlState.status === 'completed' && hitlState.response) {
+        this.logger.info('[WorkflowEngine] HITL decision received', {
+          stepId: step.id,
+          decision: hitlState.response.content,
+        });
+
+        // Clear HITL state
+        delete updatedContext.hitlState;
+        await contextManager.saveContext(updatedContext);
+
+        // Execute decision action
+        return await this.executeHITLStepAction(
+          step,
+          context,
+          workflow,
+          options,
+          startTime,
+          hitlState.response,
+          contextOutput
+        );
+      }
+    }
+
+    // Timeout
+    this.logger.warn('[WorkflowEngine] HITL step timeout', {
+      stepId: step.id,
+    });
+
+    return {
+      stepId: step.id,
+      status: 'failed',
+      error: 'HITL timeout: no decision received',
+      executionTime: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Execute HITL step decision action
+   */
+  private async executeHITLStepAction(
+    step: WorkflowStep,
+    context: WorkflowContext,
+    workflow: WorkflowConfig,
+    options: WorkflowOptions,
+    startTime: number,
+    response: any,
+    contextOutput?: any
+  ): Promise<any> {
+    const hitlStep = step.hitlStep!;
+    // response.content contains the label of the selected option
+    const selectedOption = hitlStep.options.find(opt => opt.label === response.content);
+
+    if (!selectedOption) {
+      return {
+        stepId: step.id,
+        status: 'failed',
+        error: `Invalid decision: ${response.content}`,
+        executionTime: Date.now() - startTime,
+      };
+    }
+
+    this.logger.info('[WorkflowEngine] Executing HITL action', {
+      stepId: step.id,
+      action: selectedOption.action,
+    });
+
+    // Execute based on action type
+    switch (selectedOption.action) {
+      case 'continue': {
+        // Continue to next step
+        // Set context variables if configured
+        if (selectedOption.set_context) {
+          Object.keys(selectedOption.set_context!).forEach(key => {
+            context.set(`variables.${key}`, selectedOption.set_context![key]);
+          });
+        }
+
+        return {
+          stepId: step.id,
+          status: 'completed',
+          output: {
+            decision: selectedOption.id,
+            label: selectedOption.label,
+            context: contextOutput,
+            // Include user modifications if allowed
+            modifiedOutput: response.modifiedOutput,
+          },
+          executionTime: Date.now() - startTime,
+        };
+      }
+
+      case 'abort': {
+        // Abort workflow
+        return {
+          stepId: step.id,
+          status: 'failed',
+          error: `Aborted by HITL: ${selectedOption.label}`,
+          executionTime: Date.now() - startTime,
+        };
+      }
+
+      case 'retry': {
+        // Retry specified step
+        const retryStepId = selectedOption.retry_step || step.id;
+        this.logger.info('[WorkflowEngine] Retrying step after HITL', {
+          retryStepId,
+        });
+
+        // Find the step to retry
+        const retryStep = workflow.steps.find(s => s.id === retryStepId);
+        if (!retryStep) {
+          return {
+            stepId: step.id,
+            status: 'failed',
+            error: `Retry step not found: ${retryStepId}`,
+            executionTime: Date.now() - startTime,
+          };
+        }
+
+        // Re-execute the step recursively
+        const retryResult = await this.executeStep(retryStep, context, workflow, options);
+
+        // If retry succeeded, mark current HITL step as completed
+        if (retryResult.status === 'completed') {
+          return {
+            stepId: step.id,
+            status: 'completed',
+            output: {
+              decision: selectedOption.id,
+              label: selectedOption.label,
+              retriedStep: retryStepId,
+              retryResult: retryResult.output,
+            },
+            executionTime: Date.now() - startTime,
+          };
+        } else {
+          return {
+            stepId: step.id,
+            status: 'failed',
+            error: `Retry failed: ${retryResult.error}`,
+            executionTime: Date.now() - startTime,
+          };
+        }
+      }
+
+      default: {
+        return {
+          stepId: step.id,
+          status: 'failed',
+          error: `Unknown action: ${selectedOption.action}`,
+          executionTime: Date.now() - startTime,
+        };
+      }
+    }
   }
 }

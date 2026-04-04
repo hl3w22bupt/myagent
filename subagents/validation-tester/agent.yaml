@@ -1,0 +1,49 @@
+name: Validation Tester
+description: Test agent for ValidationHook - returns structured JSON output
+
+agent:
+  system_prompt: |
+    You are a test agent that validates ValidationHook functionality.
+
+    IMPORTANT: Always return your response as a valid JSON object with these fields:
+    - summary: a string (at least 20 characters)
+    - insights: an array of strings (at least 1 item)
+    - score: a number between 0-100
+
+    Example:
+    {
+      "summary": "Analysis completed successfully",
+      "insights": ["First insight", "Second insight"],
+      "score": 85
+    }
+
+  available_skills: []  # Empty = no skills, forces direct LLM response
+
+  validation:
+    strategy: strict  # Will throw error if validation fails
+
+    schema:
+      summary:
+        type: string
+        minLength: 20
+
+      insights:
+        type: array
+        minItems: 1
+        items:
+          type: string
+
+      score:
+        type: number
+        min: 0
+        max: 100
+
+    required:
+      - summary
+      - insights
+      - score
+
+    formats:
+      - field: summary
+        pattern: "^(Analysis|Summary|Report)"
+        message: "Summary must start with Analysis/Summary/Report"

@@ -15,6 +15,32 @@ export interface StepCondition {
   value: any;
 }
 
+/**
+ * Validation Rule Format
+ */
+export interface ValidationFormatRule {
+  field: string;
+  pattern: string | RegExp;
+  message?: string;
+}
+
+/**
+ * Step-level Validation Configuration
+ */
+export interface StepValidation {
+  /** Validation strategy: strict (throws error) or fallback (sanitizes output) */
+  strategy?: 'strict' | 'fallback';
+
+  /** Schema validation using Zod-like structure */
+  schema?: Record<string, any>;
+
+  /** Required fields */
+  required?: string[];
+
+  /** Format validation rules */
+  formats?: ValidationFormatRule[];
+}
+
 export interface MultiCondition {
   all?: StepCondition[];
   any?: StepCondition[];
@@ -127,12 +153,60 @@ export interface HITLOption {
   style?: 'primary' | 'secondary' | 'danger' | 'warning';
 }
 
+/**
+ * HITL Step Configuration (explicit human-in-the-loop step)
+ */
+export interface HITLStepConfig {
+  /** Question to ask human */
+  question: string;
+
+  /** Context configuration */
+  context?: {
+    /** Show output from previous step */
+    from_step?: string;
+    /** Only show specific fields from the output */
+    show_fields?: string[];
+  };
+
+  /** Options for human to choose from */
+  options: HITLStepOption[];
+}
+
+/**
+ * HITL Step Option
+ */
+export interface HITLStepOption {
+  /** Option ID */
+  id: string;
+
+  /** Display label */
+  label: string;
+
+  /** Option description */
+  description?: string;
+
+  /** Action to execute if this option is selected */
+  action: 'continue' | 'abort' | 'retry';
+
+  /** Style hint for UI (optional) */
+  style?: 'primary' | 'secondary' | 'danger' | 'warning';
+
+  /** When action='retry', which step to retry (defaults to current step) */
+  retry_step?: string;
+
+  /** Set context variables for subsequent steps */
+  set_context?: Record<string, any>;
+
+  /** Allow user to modify output before continuing */
+  allow_modify?: boolean;
+}
+
 // Workflow step
 export interface WorkflowStep {
   id: string;
   name?: string;
-  agent: string;
-  type?: 'agent' | 'subworkflow';
+  agent?: string;  // Made optional since hitl steps don't require an agent
+  type?: 'agent' | 'subworkflow' | 'hitl';
   subworkflow?: string;
   depends_on?: string[];
   input?: Record<string, any>;
@@ -153,11 +227,17 @@ export interface WorkflowStep {
   /** Failure handling strategy */
   on_failure?: FailureHandler;
 
+  /** Step-level validation configuration (primary source for validation rules) */
+  validation?: StepValidation;
+
   /** Rollback configuration (used when on_failure is 'rollback') */
   rollbackConfig?: RollbackConfig;
 
   /** HITL configuration (used when on_failure is 'hitl') */
   hitl?: HITLConfig;
+
+  /** ⭐ HITL step configuration (when type='hitl') */
+  hitlStep?: HITLStepConfig;
 }
 
 // Input/Output schema

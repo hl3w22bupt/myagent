@@ -1,0 +1,8 @@
+type: validation
+enabled: true  # Enable globally, actual validation rules come from AgentConfig.validation (set by workflow steps)
+description: "Validates Agent output against schema and format rules"
+config:
+  # Default config is minimal - actual rules come from AgentConfig.validation
+  # which is populated from workflow step configurations
+  strategy: strict  # strict | fallback
+

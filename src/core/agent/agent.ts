@@ -22,6 +22,7 @@ import Handlebars from 'handlebars';
 import { KnowledgeBase } from '../knowledge/knowledge-base';
 import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
 import { RequestRewriter } from './request-rewriter';
+import { ValidationHook, ValidationError } from '../hook/validation/validation-hook';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -301,6 +302,10 @@ export class Agent {
 
     // ✅ 确保 taskId 总是有值的（保持 traces API 关联）
     const effectiveTaskId = taskId || context?.taskId;
+
+    // ⭐ NEW: Clear any lingering HITL state before execution
+    // This handles cases where HITL state was left over from previous executions
+    await this.cleanupLingeringHITLState(effectiveTaskId);
 
     // Extract emit function from context for event emission
     if (context?.emit) {
@@ -594,7 +599,13 @@ export class Agent {
         const executionTime = Date.now() - startTime;
 
         // Clean markdown code blocks from LLM response
-        const cleanOutput = this.extractCleanContent(llmResponse.content);
+        let cleanOutput = this.extractCleanContent(llmResponse.content);
+
+        // Validate output if validation is configured
+        // Note: validateOutput() handles strict/fallback strategies internally:
+        // - Strict mode: throws ValidationError
+        // - Fallback mode: returns sanitized output
+        cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
           success: true,
@@ -687,7 +698,13 @@ export class Agent {
         const executionTime = Date.now() - startTime;
 
         // Clean markdown code blocks from LLM response
-        const cleanOutput = this.extractCleanContent(llmResponse.content);
+        let cleanOutput = this.extractCleanContent(llmResponse.content);
+
+        // Validate output if validation is configured
+        // Note: validateOutput() handles strict/fallback strategies internally:
+        // - Strict mode: throws ValidationError
+        // - Fallback mode: returns sanitized output
+        cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
           success: true,
@@ -1148,7 +1165,12 @@ export class Agent {
       };
 
     } catch (error: any) {
-      // Record error in conversation history
+      // ValidationError should propagate to caller (strict mode validation failure)
+      if (error.code === 'VALIDATION_ERROR') {
+        throw error;
+      }
+
+      // Other errors: record and return failure result
       this.state.conversationHistory.push({
         role: 'assistant',
         content: `Error: ${error.message}`,
@@ -2100,6 +2122,34 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
   }
 
   /**
+   * Clean up any lingering HITL state before execution.
+   *
+   * This handles cases where HITL state was left over from previous executions
+   * (e.g., timeout + resume, or failed cleanup).
+   * Ensures we don't show stale "awaiting clarification" cards for completed tasks.
+   */
+  private async cleanupLingeringHITLState(taskId: string): Promise<void> {
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext && taskContext.hitlState && taskContext.hitlState.status === 'awaiting') {
+        console.log('[Agent] Found lingering HITL state, cleaning up', {
+          taskId,
+          hitlState: taskContext.hitlState
+        });
+
+        delete taskContext.hitlState;
+        await contextManager.saveContext(taskContext);
+        console.log('[Agent] Lingering HITL state cleaned', { taskId });
+      }
+    } catch (error) {
+      // Don't block execution if cleanup fails
+      console.error('[Agent] Failed to cleanup lingering HITL state', { taskId, error });
+    }
+  }
+
+  /**
    * 获取格式化后的用户画像文本
    *
    * 用于其他 LLM 调用（如 Summarizer、RequestRewriter、意图分析等）
@@ -2458,6 +2508,73 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
     } catch (error) {
       console.error('[Agent] Failed to record knowledge retrieval trace:', error);
     }
+  }
+
+  /**
+   * Validate Agent output using ValidationHook if configured.
+   *
+   * This method checks if the Agent has validation configuration in agent.yaml
+   * and validates the output against the configured rules.
+   *
+   * @param output - The output to validate
+   * @param taskId - Task identifier for error messages
+   * @returns Validated (possibly sanitized) output
+   * @throws ValidationError if validation fails in strict mode
+   */
+  private async validateOutput(output: any, taskId?: string): Promise<any> {
+    console.log(`[Agent] validateOutput called for task ${taskId}`, {
+      hasValidation: !!this.config.validation,
+      validationStrategy: this.config.validation?.strategy,
+      hasSchema: !!this.config.validation?.schema,
+    });
+
+    if (!this.config.validation) {
+      // No validation configured, return output as-is
+      console.log(`[Agent] No validation configured for task ${taskId}, skipping validation`);
+      return output;
+    }
+
+    // Create ValidationHook instance with agent's validation config
+    const validationHook = new ValidationHook(this.config.validation);
+
+    console.log(`[Agent] Validating output for task ${taskId}...`, {
+      outputType: typeof output,
+      outputKeys: typeof output === 'object' && output !== null ? Object.keys(output) : 'N/A',
+    });
+
+    // Validate the output
+    const validationResult = await validationHook.validate(output);
+
+    console.log(`[Agent] Validation result for task ${taskId}`, {
+      valid: validationResult.valid,
+      errors: validationResult.errors,
+      warnings: validationResult.warnings,
+    });
+
+    if (!validationResult.valid) {
+      const strategy = this.config.validation.strategy || 'strict';
+
+      if (strategy === 'fallback') {
+        // Fallback mode: log errors and sanitize output
+        console.warn(
+          `[ValidationHook] Output validation failed for task ${taskId}, sanitizing output`,
+          { errors: validationResult.errors, warnings: validationResult.warnings }
+        );
+        return validationHook.sanitizeOutput(output);
+      } else {
+        // Strict mode: throw validation error
+        console.error(`[Agent] VALIDATION FAILED - Throwing ValidationError for task ${taskId}`, {
+          errors: validationResult.errors,
+          strategy: this.config.validation?.strategy,
+        });
+        throw new ValidationError(
+          validationResult.errors || ['Unknown validation error'],
+          `Output validation failed for task ${taskId}`
+        );
+      }
+    }
+
+    return output;
   }
 
 }

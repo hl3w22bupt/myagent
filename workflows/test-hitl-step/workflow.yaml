@@ -1,0 +1,65 @@
+name: "test-hitl-step"
+description: "测试 HITL Step 功能（显式人工卡点）"
+
+steps:
+  # Step 1: Agent 生成代码
+  - id: generate-code
+    name: "生成代码"
+    agent: developer-engineer
+    input:
+      task: "写一个简单的 TypeScript 函数，实现两数相加"
+
+  # ⭐ HITL Step: 代码审查
+  - id: code-review
+    name: "代码审查"
+    type: hitl
+    hitlStep:
+      question: "代码已生成，请审核质量并决定下一步："
+      context:
+        from_step: generate-code
+      options:
+        - id: approve
+          label: "批准"
+          description: "代码质量合格，继续下一步"
+          action: continue
+          style: primary
+        - id: retry
+          label: "重新生成"
+          description: "质量不合格，要求 Agent 重新生成"
+          action: retry
+          retry_step: generate-code
+          style: secondary
+        - id: abort
+          label: "中止"
+          description: "中止工作流"
+          action: abort
+          style: danger
+
+  # Step 2: 如果审查通过，添加测试
+  - id: add-tests
+    name: "添加测试"
+    agent: developer-engineer
+    depends_on: [code-review]
+    input:
+      task: "为上面的代码添加单元测试"
+
+  # ⭐ HITL Step: 测试结果确认
+  - id: test-approval
+    name: "测试结果确认"
+    type: hitl
+    hitlStep:
+      question: "测试已添加，是否完成？"
+      context:
+        from_step: add-tests
+      options:
+        - id: complete
+          label: "完成"
+          description: "测试通过，工作流完成"
+          action: continue
+          style: primary
+        - id: fix
+          label: "修复测试"
+          description: "测试失败，重新添加测试"
+          action: retry
+          retry_step: add-tests
+          style: warning
