@@ -3,9 +3,20 @@
  *
  * Manages relationships between applications and knowledge collections.
  * Allows apps to be configured with multiple knowledge bases for RAG.
+ *
+ * Security features:
+ * - Input validation (via security module)
+ * - Rate limiting (optional)
+ * - Audit logging
  */
 
 import { Pool } from 'pg';
+import {
+  validateCollectionName,
+  validateAppId,
+  validateFieldName,
+  checkRetrievalRateLimit,
+} from './security';
 
 let pool: Pool | null = null;
 
@@ -53,6 +64,13 @@ export interface AppKnowledgeMapping {
 export async function getAppKnowledgeCollections(
   appId: string
 ): Promise<AppKnowledgeMapping[]> {
+  // ⭐ Security: Validate app ID
+  const validation = validateAppId(appId);
+  if (!validation.valid) {
+    console.error(`[AppKnowledgeManager] Invalid app ID: ${appId}`, validation.error);
+    throw new Error(`Invalid app ID: ${validation.error}`);
+  }
+
   const pool = getPool();
 
   const query = `
@@ -101,6 +119,27 @@ export async function addAppKnowledgeCollection(
   enabled: boolean = true,
   priority: number = 0
 ): Promise<AppKnowledgeMapping> {
+  // ⭐ Security: Validate all inputs
+  const appIdValidation = validateAppId(appId);
+  if (!appIdValidation.valid) {
+    throw new Error(`Invalid app ID: ${appIdValidation.error}`);
+  }
+
+  const collectionValidation = validateCollectionName(collectionName);
+  if (!collectionValidation.valid) {
+    throw new Error(`Invalid collection name: ${collectionValidation.error}`);
+  }
+
+  const contentFieldValidation = validateFieldName(contentField);
+  if (!contentFieldValidation.valid) {
+    throw new Error(`Invalid content field name: ${contentFieldValidation.error}`);
+  }
+
+  const embeddingFieldValidation = validateFieldName(embeddingField);
+  if (!embeddingFieldValidation.valid) {
+    throw new Error(`Invalid embedding field name: ${embeddingFieldValidation.error}`);
+  }
+
   const pool = getPool();
 
   // ⭐ Auto-detect embedding dimensions when adding new collection
