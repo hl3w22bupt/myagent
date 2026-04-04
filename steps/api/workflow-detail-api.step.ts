@@ -99,6 +99,7 @@ export const handler = async (request: any, { logger }: any) => {
           input_schema: workflow.input_schema,
           output_schema: workflow.output_schema,
           step_count: stepCount,
+          yaml: yamlContent, // 添加原始 YAML 内容
         },
       },
     };

@@ -57,7 +57,7 @@ export class KnowledgeCache {
       max: this.config.maxItems,
       ttl: this.config.ttl,
       updateAgeOnGet: true, // Refresh TTL on cache hit
-      dispose: (value, key) => {
+      dispose: (_value, _key) => {
         this.stats.evictions++;
       },
     });
@@ -145,7 +145,7 @@ export class KnowledgeCache {
         if (params.collectionName === collectionName) {
           keysToDelete.push(key);
         }
-      } catch (e) {
+      } catch {
         // Invalid key, skip
       }
     }

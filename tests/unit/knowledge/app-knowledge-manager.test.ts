@@ -14,11 +14,11 @@ import {
   detectTableDimensions,
   closePool as closeAppKnowledgePool,
 } from '../../../src/core/knowledge/app-knowledge-manager';
+import { getDataStore } from '../../../src/core/database/data-store';
 
 // Get test database connection - use existing connection from jest setup
 const getTestPool = (): Pool => {
   // Access the global pool from jest setup
-  const { getDataStore } = require('../../../src/core/database/data-store');
   const dataStore = getDataStore();
   return (dataStore as any).pool;
 };

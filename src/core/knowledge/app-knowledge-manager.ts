@@ -15,15 +15,14 @@ import {
   validateCollectionName,
   validateAppId,
   validateFieldName,
-  checkRetrievalRateLimit,
-} from './security';
+} from './security/index';
 
 let pool: Pool | null = null;
 
 /**
  * Initialize the database pool
  */
-function getPool(): Pool {
+export function getPool(): Pool {
   if (!pool) {
     const config = {
       host: process.env.PG_HOST || process.env.DB_HOST || 'localhost',

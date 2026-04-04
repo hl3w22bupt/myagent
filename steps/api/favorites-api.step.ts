@@ -198,23 +198,42 @@ export const handler = async (request: any, { logger }: any) => {
       type,
     });
 
-    // 为 HTML 类型的产物添加 renderUrl
-    // 支持两种情况：
+    // 为 HTML/Markdown 类型的产物添加 renderUrl
+    // 支持以下情况：
     // 1. artifactType === 'html'
-    // 2. artifactType === 'code' 且 metadata.language === 'html'
+    // 2. artifactType === 'markdown'
+    // 3. artifactType === 'code' 且 metadata.language === 'html'
+    // 4. artifactType === 'code' 且 metadata.language === 'markdown' 或 'md'
     const enrichedFavorites = result.favorites.map((favorite: any) => {
-      const shouldRender =
+      const shouldRenderHtml =
         (favorite.artifactType === 'html' && favorite.path) ||
         (favorite.artifactType === 'code' &&
          favorite.metadata?.language === 'html' &&
          favorite.path);
 
-      if (shouldRender) {
+      const shouldRenderMarkdown =
+        (favorite.artifactType === 'markdown' && favorite.path) ||
+        (favorite.artifactType === 'code' &&
+         (favorite.metadata?.language === 'markdown' ||
+          favorite.metadata?.language === 'md') &&
+         favorite.path);
+
+      if (shouldRenderHtml) {
         return {
           ...favorite,
           renderUrl: `/media?path=${encodeURIComponent(favorite.path)}`,
+          renderType: 'html',
         };
       }
+
+      if (shouldRenderMarkdown) {
+        return {
+          ...favorite,
+          renderUrl: `/media?path=${encodeURIComponent(favorite.path)}`,
+          renderType: 'markdown',
+        };
+      }
+
       return favorite;
     });
 

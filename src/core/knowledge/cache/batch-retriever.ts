@@ -7,7 +7,6 @@
 
 import type { KnowledgeEntry } from '../interfaces/knowledge-entry.interface';
 import type { RetrieveOptions } from '../interfaces/knowledge-entry.interface';
-import type { VectorStoreConfig } from '../interfaces/adapter-config.interface';
 import { getGlobalCache } from './knowledge-cache';
 import type { KnowledgeCache } from './knowledge-cache';
 
@@ -103,7 +102,7 @@ export class BatchRetriever {
           collectionName: request.collectionName,
           query: request.query,
           limit: request.options?.limit,
-          threshold: request.options?.minScore,
+          threshold: request.options?.threshold,
         });
 
         if (cached) {
@@ -137,7 +136,7 @@ export class BatchRetriever {
                 collectionName: request.collectionName,
                 query: request.query,
                 limit: request.options?.limit,
-                threshold: request.options?.minScore,
+                threshold: request.options?.threshold,
               },
               retrievedResults
             );
@@ -193,7 +192,7 @@ export class BatchRetriever {
           collectionName,
           query,
           limit: options.limit,
-          threshold: options.minScore,
+          threshold: options.threshold,
         });
 
         if (cached) {
@@ -219,7 +218,7 @@ export class BatchRetriever {
                 collectionName,
                 query,
                 limit: options.limit,
-                threshold: options.minScore,
+                threshold: options.threshold,
               },
               results
             );

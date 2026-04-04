@@ -11,6 +11,8 @@
 import { RetrievalCoordinator } from '../../../src/core/knowledge/coordinator/retrieval-coordinator';
 import type { VectorStoreConfig } from '../../../src/core/knowledge/interfaces/adapter-config.interface';
 import type { KnowledgeEntry } from '../../../src/core/knowledge/interfaces/vector-store.interface';
+import { PostgresVectorStore } from '../../../src/core/knowledge/adapters/postgres-adapter';
+import { getLanceDBAdapter } from '../../../src/core/knowledge/loaders/lancedb-loader';
 
 // Mock PostgresVectorStore
 jest.mock('../../../src/core/knowledge/adapters/postgres-adapter', () => ({
@@ -45,11 +47,11 @@ describe('RetrievalCoordinator', () => {
     });
 
     // Setup mock stores
-    const { PostgresVectorStore } = require('../../../src/core/knowledge/adapters/postgres-adapter');
+    const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
     mockPostgresStore = new PostgresVectorStore();
 
     // Mock LanceDB adapter
-    const { getLanceDBAdapter } = require('../../../src/core/knowledge/loaders/lancedb-loader');
+    const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
     getLanceDBAdapter.mockResolvedValue(
       class MockLanceDBVectorStore {
         retrieve = jest.fn();
@@ -127,12 +129,12 @@ describe('RetrievalCoordinator', () => {
       ];
 
       // First call gets PostgresVectorStore
-      const { PostgresVectorStore } = require('../../../src/core/knowledge/adapters/postgres-adapter');
+      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
       const mockStore1 = new PostgresVectorStore();
       mockStore1.retrieve.mockResolvedValue(postgresResults);
 
       // Second call gets LanceDBVectorStore
-      const { getLanceDBAdapter } = require('../../../src/core/knowledge/loaders/lancedb-loader');
+      const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
       const MockLanceDBAdapter = await getLanceDBAdapter();
       const mockStore2 = new MockLanceDBAdapter();
       mockStore2.retrieve.mockResolvedValue(lancedbResults);
@@ -204,11 +206,11 @@ describe('RetrievalCoordinator', () => {
         { content: 'PG Result', similarity: 0.9, metadata: {} },
       ];
 
-      const { PostgresVectorStore } = require('../../../src/core/knowledge/adapters/postgres-adapter');
+      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
       const mockStore1 = new PostgresVectorStore();
       mockStore1.retrieve.mockResolvedValue(postgresResults);
 
-      const { getLanceDBAdapter } = require('../../../src/core/knowledge/loaders/lancedb-loader');
+      const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
       const MockLanceDBAdapter = await getLanceDBAdapter();
       const mockStore2 = new MockLanceDBAdapter();
       mockStore2.retrieve.mockRejectedValue(new Error('LanceDB failed'));
@@ -392,7 +394,7 @@ describe('RetrievalCoordinator', () => {
       await coordinator.close();
 
       // Retrieve again should create new store
-      const { PostgresVectorStore } = require('../../../src/core/knowledge/adapters/postgres-adapter');
+      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
       const newInstance = new PostgresVectorStore();
 
       mockPostgresStore.retrieve.mockResolvedValue([]);

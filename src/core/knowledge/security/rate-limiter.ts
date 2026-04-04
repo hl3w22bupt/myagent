@@ -115,11 +115,11 @@ export class RateLimiter {
     const now = Date.now();
     const expiredKeys: string[] = [];
 
-    for (const [key, record] of this.requests.entries()) {
+    Array.from(this.requests.entries()).forEach(([key, record]) => {
       if (now - record.windowStart > this.config.windowMs) {
         expiredKeys.push(key);
       }
-    }
+    });
 
     for (const key of expiredKeys) {
       this.requests.delete(key);
@@ -226,8 +226,8 @@ export function resetRateLimit(appId: string, type: 'retrieval' | 'ingestion' = 
  * Close all rate limiters
  */
 export function closeAllLimiters(): void {
-  for (const limiter of limiters.values()) {
+  Array.from(limiters.values()).forEach(limiter => {
     limiter.destroy();
-  }
+  });
   limiters.clear();
 }

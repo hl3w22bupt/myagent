@@ -5,8 +5,6 @@
  * and ensure security.
  */
 
-import { getPool } from '../app-knowledge-manager';
-
 /**
  * Validation result
  */

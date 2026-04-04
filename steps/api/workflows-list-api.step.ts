@@ -63,7 +63,7 @@ export const handler = async (request: any, { logger }: any) => {
           });
         } catch (error) {
           // Skip invalid workflow directories
-          logger.warn('[WorkflowsAPI] Failed to load workflow', { dir, error: error.message });
+          logger.warn('[WorkflowsAPI] Failed to load workflow', { dir, error: error instanceof Error ? error.message : String(error) });
           continue;
         }
       }
