@@ -3728,10 +3728,49 @@ export interface WorkflowStep {
 
 ## 10. 实施进度跟踪
 
-> **最后更新**: 2026-04-03
+> **最后更新**: 2026-04-04
 > **当前版本**: v0.1 → v0.2 (部分实施)
 
 ### 10.1 已完成功能 ✅
+
+#### 步骤级验证配置系统 (2026-04-04)
+
+**PR #78**: feat: implement step-level validation configuration for workflows
+
+**核心功能**:
+- ✅ **步骤级验证配置**: 在 workflow step 中配置验证规则（schema、required、formats）
+- ✅ **ValidationHook 与 HITL 集成**: 验证失败自动触发 HITL 人工介入
+- ✅ **两层验证架构**: Agent 层通用能力 + Step 层业务规则
+- ✅ **根级别验证支持**: 支持原始类型输出的验证
+
+**验证器实现**:
+- ✅ SchemaValidator (Zod JSON Schema 验证)
+- ✅ CompletenessValidator (必填字段检查)
+- ✅ FormatValidator (URL、Email、正则表达式验证)
+- ✅ 支持 strict 和 fallback 两种策略
+
+**配置接口**:
+- ✅ Workflow step 级别验证配置 (step.validation)
+- ✅ Agent 配置传递机制 (AgentManager.acquire)
+- ✅ 错误处理和降级策略
+
+**测试覆盖**:
+- ✅ 端到端测试：validation → failure → HITL → polling
+- ✅ Workflow 步骤失败检测和成功判断
+- ✅ HITL 动作匹配（支持中英文关键词）
+
+**相关文件**:
+- `src/core/workflow/types.ts` (+26 行) - StepValidation 接口
+- `src/core/workflow/engine.ts` (+50 行) - 步骤验证配置加载
+- `src/core/agent/manager.ts` (+12 行) - validation 参数支持
+- `src/core/agent/agent.ts` (+80 行) - validateOutput 方法
+- `src/core/hook/validation/validation-hook.ts` (+150 行) - 三种验证器实现
+- `src/core/agent/master-agent.ts` (+5 行) - 传递验证配置到子 agent
+- `steps/api/agents-api.step.ts` (+8 行) - API 元数据加载验证配置
+- `workflows/test-validation-hitl/workflow.yaml` (新增) - 测试 workflow
+- `subagents/validation-tester/agent.yaml` (新增) - 测试 agent
+
+---
 
 #### Workflow Feedback Loop 系统 (2026-04-02)
 
@@ -3772,20 +3811,6 @@ export interface WorkflowStep {
 
 ### 10.2 待办工作 🔴 P0
 
-#### 输出验证器 (ValidationHook)
-
-**提案**: `docs/proposals/2026-03-29-add-validation-hook/`
-**状态**: in-progress
-**预估时间**: 2-3 天
-
-**需要实现**:
-- ValidationHook (onTaskComplete 时验证)
-- SchemaValidator (Zod JSON Schema 验证)
-- CompletenessValidator (必填字段检查)
-- FormatValidator (URL、Email、正则表达式验证)
-- 配置接口 (agent.yaml)
-- 错误处理和降级策略
-
 #### 知识库管理完善
 
 **文档**: `docs/tbd/AGENT_PLATFORM_ARCHITECTURE.md` §2.1
@@ -3797,16 +3822,24 @@ export interface WorkflowStep {
 - 性能优化（LRU 缓存、批量检索）
 - 测试覆盖（单元测试、集成测试、故障注入）
 
-#### 人工干预机制完善 (InterventionHook)
+#### 人工干预机制完善 (HITL Step)
 
-**文档**: `docs/tbd/AGENT_PLATFORM_ARCHITECTURE.md` §2.3
-**状态**: Workflow HITL 已实现 (30%)
-**预估时间**: 3-5 天
+**文档**: `docs/tbd/intervention-mechanism-enhancement.md`
+**状态**: Workflow 失败 HITL 已实现 (30%)
+**预估时间**: 2-3 天
 
 **需要补充**:
-- 扩展为通用 Hook 机制
-- API 端点（请求、决策、状态查询）
-- 安全验证（HMAC 签名、防重放）
+- 在 Workflow 中支持 `type: hitl` step 类型（显式人工卡点）
+- 复用现有 HITL 机制（TaskContext.hitlState、Stream 事件、/api/tasks/:id/hitl）
+- 支持上下文显示（显示前一步输出）、多路径决策（set_context）
+
+**简化方案**：
+- ✅ 不需要 InterventionHook
+- ✅ 不需要新的 API 端点
+- ✅ 不需要复杂的签名验证
+- ✅ 只需在 workflow 中添加 `type: hitl` step
+
+**详细设计**: `docs/tbd/intervention-mechanism-enhancement.md`
 
 ---
 
@@ -3834,10 +3867,11 @@ export interface WorkflowStep {
 |------|--------|------|
 | Workflow 反馈循环 | 100% | ✅ 已完成 |
 | Agent 验证 | 100% | ✅ 已完成 |
-| HITL（Workflow 级别） | 100% | ✅ 已完成 |
-| 输出验证器 | 0% | 🔨 进行中 |
+| HITL（Workflow 失败） | 100% | ✅ 已完成 |
+| **输出验证器** | **100%** | **✅ 已完成** |
+| 步骤级验证配置 | 100% | ✅ 已完成 |
 | 知识库管理 | 40% | 🔨 部分完成 |
-| 人工干预（通用 Hook） | 30% | 🔨 部分完成 |
+| HITL Step（显式卡点） | 30% | 🔨 部分完成 |
 | 并行委派 | 0% | 📋 待开始 |
 | 自定义融合 | 0% | 📋 待开始 |
 
@@ -3846,21 +3880,19 @@ export interface WorkflowStep {
 ### 10.5 建议实施顺序
 
 **立即开始（本周）**:
-1. 输出验证器 - 2-3 天
-
-**短期（1-2 周内）**:
-2. 知识库管理完善 - 1-2 周
-3. 人工干预机制完善 - 3-5 天
+1. 知识库管理完善 - 1-2 周
+2. HITL Step（显式人工卡点）- 2-3 天
 
 **中期（1 个月内）**:
-4. 并行委派 - 3-5 天
-5. 自定义融合策略 - 2-3 天
+3. 并行委派 - 3-5 天
+4. 自定义融合策略 - 2-3 天
 
 ---
 
 ## 11. 相关文档
 
 - [AGENT_PLATFORM_ARCHITECTURE.md](./AGENT_PLATFORM_ARCHITECTURE.md) - Agent 平台架构
+- [intervention-mechanism-enhancement.md](./intervention-mechanism-enhancement.md) - HITL Step 详细设计
 - [workflow-feedback-loop-design.md](./workflow-feedback-loop-design.md) - Workflow Feedback Loop 详细设计
 - [workflow-system.md](../reference/architecture/workflow-system.md) - Workflow 系统文档
 - [work-progress.md](../reference/work-progress.md) - 详细工作进度跟踪
@@ -3870,4 +3902,4 @@ export interface WorkflowStep {
 ---
 
 **文档状态**: 🟢 部分实施 (v0.2)
-**下一步**: 实施输出验证器 (ValidationHook)
+**下一步**: 完善知识库管理（安全加固、性能优化、测试覆盖）

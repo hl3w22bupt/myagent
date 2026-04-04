@@ -305,12 +305,12 @@
 
 /* 重试按钮样式 */
 .retry-button {
-  padding: 0.625rem;
+  padding: 0.375rem;  /* 与 .status 的 padding 相同 */
   background-color: transparent;
   color: var(--text-muted);
   border: 1px solid transparent;
   border-radius: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.75rem;  /* 与 .status 的 font-size 相同 */
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -318,6 +318,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
+  height: 1.5rem;  /* 24px，强制与 .status 完全一致 */
+  align-self: center;
+  margin-top: -0.0625rem;  /* 向上微调 1px */
 }
 
 .retry-button:hover:not(:disabled) {
@@ -454,11 +458,13 @@
 }
 
 .status {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 0.375rem 0.75rem;
   border-radius: 0.5rem;
   font-weight: 500;
   font-size: 0.75rem;
+  line-height: 1;  /* 确保文本垂直居中 */
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.025em;
