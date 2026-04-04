@@ -255,10 +255,19 @@ export async function detectTableDimensions(
 ): Promise<number | null> {
   const pool = getPool();
 
+  // Validate and sanitize table/column names
+  // Allow letters, numbers, underscore, hyphen (but not starting with hyphen to avoid SQL injection)
+  const isValidName = (name: string) => /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(name);
+  if (!isValidName(tableName) || !isValidName(embeddingField)) {
+    console.warn(`[AppKnowledgeManager] Invalid table or column name: ${tableName}.${embeddingField}`);
+    return null;
+  }
+
+  // Use double quotes to safely quote identifiers (handles special characters like hyphens)
   const query = `
-    SELECT ${embeddingField}
-    FROM ${tableName}
-    WHERE ${embeddingField} IS NOT NULL
+    SELECT "${embeddingField}"
+    FROM "${tableName}"
+    WHERE "${embeddingField}" IS NOT NULL
     LIMIT 1
   `;
 
