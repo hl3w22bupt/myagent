@@ -99,7 +99,7 @@ function Skills() {
             className={`filter-tab ${filter === 'openclaw' ? 'active' : ''}`}
             onClick={() => setFilter('openclaw')}
           >
-            OpenClaw
+            OpenClaw Skills
             <span className="filter-count">{stats.openclawCount}</span>
           </button>
         </div>

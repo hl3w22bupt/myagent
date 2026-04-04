@@ -4,12 +4,11 @@
  * Provides endpoint to list all available workflows
  */
 
-import { getAgentManager } from '../../src/index';
-import { WorkflowEngine } from '../../src/core/workflow/engine';
-import { getWorkflowLoader } from '../../src/core/workflow/loader';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { parse } from 'yaml';
 import { ApiRouteConfig } from 'motia';
-
-let workflowEngine: WorkflowEngine | null = null;
+const WORKFLOWS_DIR = join(process.cwd(), 'workflows');
 
 /**
  * Workflows API configuration.
@@ -34,31 +33,48 @@ export const handler = async (request: any, { logger }: any) => {
   logger.info('Workflows API: Received request');
 
   try {
-    // Initialize Workflow Engine if needed
-    if (!workflowEngine) {
-      const agentManager = getAgentManager();
-      workflowEngine = new WorkflowEngine(agentManager);
+    // Read workflow directories
+    const workflowDirs = await fs.readdir(WORKFLOWS_DIR);
+    const workflows = [];
 
-      // Load workflows from config
-      const workflowLoader = getWorkflowLoader(workflowEngine);
-      await workflowLoader.loadFromDefaults();
+    for (const dir of workflowDirs) {
+      const dirPath = join(WORKFLOWS_DIR, dir);
+      const stat = await fs.stat(dirPath);
 
-      logger.info('[WorkflowsAPI] Workflow engine initialized');
+      if (stat.isDirectory()) {
+        try {
+          const yamlPath = join(dirPath, 'workflow.yaml');
+          const yamlContent = await fs.readFile(yamlPath, 'utf-8');
+          const workflow = parse(yamlContent);
+
+          const stepCount = workflow.steps?.length || 0;
+
+          workflows.push({
+            name: workflow.name,
+            description: workflow.description,
+            input_schema: workflow.input_schema,
+            output_schema: workflow.output_schema,
+            step_count: stepCount,
+          });
+
+          logger.info('[WorkflowsAPI] Loaded workflow', {
+            name: workflow.name,
+            stepCount,
+          });
+        } catch (error) {
+          // Skip invalid workflow directories
+          logger.warn('[WorkflowsAPI] Failed to load workflow', { dir, error: error.message });
+          continue;
+        }
+      }
     }
-
-    const workflows = workflowEngine.listWorkflows();
 
     return {
       status: 200,
       body: {
         success: true,
         count: workflows.length,
-        workflows: workflows.map(w => ({
-          name: w.name,
-          description: w.config.description,
-          input_schema: w.config.input_schema,
-          output_schema: w.config.output_schema,
-        })),
+        workflows,
       },
     };
   } catch (error: any) {
