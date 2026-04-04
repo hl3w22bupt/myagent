@@ -973,6 +973,7 @@ ${task}
         sandbox: this.config.sandbox,
         constraints: config?.constraints, // 传递 constraints 包含 enableClarification
         knowledgeBase: this.config.knowledgeBase,  // ⭐ 传递 knowledgeBase 配置给 subagent（用于 RAG）
+        validation: config?.validation,  // ⭐ 传递 validation 配置给 subagent（用于 ValidationHook）
       },
       subagentSessionId
     );

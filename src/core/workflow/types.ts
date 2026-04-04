@@ -15,6 +15,32 @@ export interface StepCondition {
   value: any;
 }
 
+/**
+ * Validation Rule Format
+ */
+export interface ValidationFormatRule {
+  field: string;
+  pattern: string | RegExp;
+  message?: string;
+}
+
+/**
+ * Step-level Validation Configuration
+ */
+export interface StepValidation {
+  /** Validation strategy: strict (throws error) or fallback (sanitizes output) */
+  strategy?: 'strict' | 'fallback';
+
+  /** Schema validation using Zod-like structure */
+  schema?: Record<string, any>;
+
+  /** Required fields */
+  required?: string[];
+
+  /** Format validation rules */
+  formats?: ValidationFormatRule[];
+}
+
 export interface MultiCondition {
   all?: StepCondition[];
   any?: StepCondition[];
@@ -152,6 +178,9 @@ export interface WorkflowStep {
 
   /** Failure handling strategy */
   on_failure?: FailureHandler;
+
+  /** Step-level validation configuration (primary source for validation rules) */
+  validation?: StepValidation;
 
   /** Rollback configuration (used when on_failure is 'rollback') */
   rollbackConfig?: RollbackConfig;

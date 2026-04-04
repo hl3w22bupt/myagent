@@ -99,11 +99,10 @@ describe('ValidationHook Integration Tests', () => {
         content: 'Short',
       });
 
-      const result = await agent.run('Test task', 'test-task-2');
-
-      // Agent should return a failure result, not throw
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Output validation failed');
+      // Strict mode: should throw ValidationError
+      await expect(
+        agent.run('Test task', 'test-task-2')
+      ).rejects.toThrow('Output validation failed');
     });
 
     it('should sanitize output in fallback mode', async () => {
@@ -205,9 +204,8 @@ describe('ValidationHook Integration Tests', () => {
         content: 'Any output is fine',
       });
 
+      // Should pass because field doesn't exist (validation skipped)
       const result = await agent.run('Test task', 'test-task-6');
-
-      // Should pass because field doesn't exist
       expect(result.success).toBe(true);
     });
   });

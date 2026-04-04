@@ -48,6 +48,14 @@ export interface AcquireOptions {
 
   /** Optional: Specific subagents to delegate to (bypasses intelligent analysis) */
   delegateTo?: string[];
+
+  /** Optional: Validation configuration (from subagent agent.yaml) */
+  validation?: {
+    strategy?: 'strict' | 'fallback';
+    schema?: Record<string, any>;
+    required?: string[];
+    formats?: Array<{ field: string; pattern: string | RegExp; message?: string }>;
+  };
 }
 
 /**
@@ -176,9 +184,15 @@ export class AgentManager {
       });
     } else {
       const baseConfig = this.config.agentConfig;
-      config = options?.availableSkills
-        ? { ...baseConfig, availableSkills: options.availableSkills }
-        : baseConfig;
+      // Merge both availableSkills and validation from options
+      const mergedConfig: AgentConfig = { ...baseConfig };
+      if (options?.availableSkills) {
+        mergedConfig.availableSkills = options.availableSkills;
+      }
+      if (options?.validation) {
+        mergedConfig.validation = options.validation;
+      }
+      config = mergedConfig;
     }
 
     // Debug logging

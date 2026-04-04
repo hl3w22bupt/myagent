@@ -22,6 +22,7 @@ import Handlebars from 'handlebars';
 import { KnowledgeBase } from '../knowledge/knowledge-base';
 import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
 import { RequestRewriter } from './request-rewriter';
+import { ValidationHook, ValidationError } from '../hook/validation/validation-hook';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -601,6 +602,9 @@ export class Agent {
         let cleanOutput = this.extractCleanContent(llmResponse.content);
 
         // Validate output if validation is configured
+        // Note: validateOutput() handles strict/fallback strategies internally:
+        // - Strict mode: throws ValidationError
+        // - Fallback mode: returns sanitized output
         cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
@@ -697,6 +701,9 @@ export class Agent {
         let cleanOutput = this.extractCleanContent(llmResponse.content);
 
         // Validate output if validation is configured
+        // Note: validateOutput() handles strict/fallback strategies internally:
+        // - Strict mode: throws ValidationError
+        // - Fallback mode: returns sanitized output
         cleanOutput = await this.validateOutput(cleanOutput, effectiveTaskId);
 
         return {
@@ -1158,7 +1165,12 @@ export class Agent {
       };
 
     } catch (error: any) {
-      // Record error in conversation history
+      // ValidationError should propagate to caller (strict mode validation failure)
+      if (error.code === 'VALIDATION_ERROR') {
+        throw error;
+      }
+
+      // Other errors: record and return failure result
       this.state.conversationHistory.push({
         role: 'assistant',
         content: `Error: ${error.message}`,
@@ -2510,19 +2522,34 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
    * @throws ValidationError if validation fails in strict mode
    */
   private async validateOutput(output: any, taskId?: string): Promise<any> {
+    console.log(`[Agent] validateOutput called for task ${taskId}`, {
+      hasValidation: !!this.config.validation,
+      validationStrategy: this.config.validation?.strategy,
+      hasSchema: !!this.config.validation?.schema,
+    });
+
     if (!this.config.validation) {
       // No validation configured, return output as-is
+      console.log(`[Agent] No validation configured for task ${taskId}, skipping validation`);
       return output;
     }
-
-    // Lazy import ValidationHook to avoid circular dependencies
-    const { ValidationHook } = await import('../hook/validation/validation-hook');
 
     // Create ValidationHook instance with agent's validation config
     const validationHook = new ValidationHook(this.config.validation);
 
+    console.log(`[Agent] Validating output for task ${taskId}...`, {
+      outputType: typeof output,
+      outputKeys: typeof output === 'object' && output !== null ? Object.keys(output) : 'N/A',
+    });
+
     // Validate the output
     const validationResult = await validationHook.validate(output);
+
+    console.log(`[Agent] Validation result for task ${taskId}`, {
+      valid: validationResult.valid,
+      errors: validationResult.errors,
+      warnings: validationResult.warnings,
+    });
 
     if (!validationResult.valid) {
       const strategy = this.config.validation.strategy || 'strict';
@@ -2536,7 +2563,10 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         return validationHook.sanitizeOutput(output);
       } else {
         // Strict mode: throw validation error
-        const { ValidationError } = await import('../hook/validation/validation-hook');
+        console.error(`[Agent] VALIDATION FAILED - Throwing ValidationError for task ${taskId}`, {
+          errors: validationResult.errors,
+          strategy: this.config.validation?.strategy,
+        });
         throw new ValidationError(
           validationResult.errors || ['Unknown validation error'],
           `Output validation failed for task ${taskId}`

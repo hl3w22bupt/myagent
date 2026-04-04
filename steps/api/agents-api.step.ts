@@ -138,6 +138,11 @@ function loadSubagentsMetadata(): any[] {
               agentData.constraints = agentConfig.agent.constraints;
             }
 
+            // Extract validation config if available
+            if (agentConfig.agent && agentConfig.agent.validation) {
+              agentData.validation = agentConfig.agent.validation;
+            }
+
             subagents.push(agentData);
             console.log(`[Subagents API] Loaded subagent: ${agentData.name}`);
           } catch (error: any) {

@@ -11,6 +11,9 @@ import { TemplateEngine } from '../config/template-engine';
 import { setAgentStreams, getAgentStreams } from '../agent/hooks/progress-notify';
 import { retryOperation, isDefaultRetryableError } from '../agent/retry';
 import { ContextManager } from '../context/manager';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import * as yaml from 'js-yaml';
 
 export class WorkflowEngine {
   private agentManager: AgentManager;
@@ -71,6 +74,44 @@ export class WorkflowEngine {
    */
   listWorkflows(): Array<{ name: string; config: WorkflowConfig }> {
     return Array.from(this.workflows.entries()).map(([name, config]) => ({ name, config }));
+  }
+
+  /**
+   * Load subagent configuration from subagents/{name}/agent.yaml
+   * Returns validation configuration and other subagent-specific settings
+   */
+  private loadSubagentConfig(subagentName: string): any {
+    const subagentDir = join(process.cwd(), 'subagents', subagentName);
+    const configPath = join(subagentDir, 'agent.yaml');
+
+    if (!existsSync(configPath)) {
+      this.logger.warn(`[WorkflowEngine] Subagent config not found: ${configPath}`);
+      return null;
+    }
+
+    try {
+      const configContent = readFileSync(configPath, 'utf-8');
+      const config = yaml.load(configContent) as any;
+
+      // Extract validation configuration
+      const subagentConfig: any = {
+        name: subagentName,
+        systemPrompt: config.agent?.system_prompt || config.agent?.systemPrompt,
+        availableSkills: config.agent?.available_skills || config.agent?.availableSkills,
+        constraints: config.agent?.constraints,
+        validation: config.agent?.validation,  // ← 关键：提取 validation 配置
+      };
+
+      this.logger.info(`[WorkflowEngine] Loaded subagent config: ${subagentName}`, {
+        hasValidation: !!subagentConfig.validation,
+        validationStrategy: subagentConfig.validation?.strategy,
+      });
+
+      return subagentConfig;
+    } catch (error: any) {
+      this.logger.error(`[WorkflowEngine] Failed to load subagent config for ${subagentName}:`, error.message);
+      return null;
+    }
   }
 
   /**
@@ -143,9 +184,15 @@ export class WorkflowEngine {
       const lastAgentResult = lastCompletedStepResult?.output;
       const finalOutput = lastAgentResult?.structuredOutput || lastAgentResult?.output || null;
 
+      // Check if any step failed
+      const hasFailedStep = this.internalExecutionSteps.some(step => step.status === 'failed');
+      const workflowSuccess = !hasFailedStep;
+
       this.logger.debug('[WorkflowEngine] Workflow execution completed', {
         workflowName: workflow.name,
-        success: true,
+        success: workflowSuccess,
+        hasFailedStep,
+        failedStepCount: this.internalExecutionSteps.filter(s => s.status === 'failed').length,
         finalOutputType: lastAgentResult?.structuredOutput ? 'structured' : (lastAgentResult?.output ? 'text' : 'none'),
         hasOutput: !!finalOutput,
         hasStructuredOutput: !!lastAgentResult?.structuredOutput,
@@ -154,7 +201,7 @@ export class WorkflowEngine {
       });
 
       return {
-        success: true,
+        success: workflowSuccess,
         output: finalOutput,
         executionTime: Date.now() - startTime,
         steps: this.internalExecutionSteps,
@@ -235,10 +282,24 @@ export class WorkflowEngine {
       // This ensures each step has its own agent instance for proper trace aggregation
       const sessionId = `workflow-${workflow.name}-${step.id}-${options.taskId || Date.now()}`;
 
-      // Acquire the subagent directly (not through MasterAgent)
-      const agent = await this.agentManager.acquire(sessionId, {
+      // Build acquire options
+      const acquireOptions: any = {
         agentType: step.agent as 'agent' | 'master',
-      });
+      };
+
+      // Apply validation from workflow step configuration (primary source)
+      if (step.validation) {
+        acquireOptions.validation = step.validation;
+        this.logger.info(`[WorkflowEngine] Applied step-level validation for ${step.agent}`, {
+          strategy: step.validation.strategy,
+          hasSchema: !!step.validation.schema,
+          hasRequired: !!step.validation.required,
+          hasFormats: !!step.validation.formats,
+        });
+      }
+
+      // Acquire the subagent directly (not through MasterAgent)
+      const agent = await this.agentManager.acquire(sessionId, acquireOptions);
 
       // Set agent name for trace display (e.g., "developer-engineer")
       (agent as any).agentName = step.agent;
@@ -314,12 +375,8 @@ export class WorkflowEngine {
       };
     } catch (error: any) {
       context.setStepStatus(step.id, 'failed');
-      return {
-        stepId: step.id,
-        status: 'failed',
-        error: error.message,
-        executionTime: Date.now() - startTime,
-      };
+      // Handle failure based on on_failure configuration
+      return await this.handleStepFailure(step, context, workflow, options, error);
     }
   }
 
@@ -1000,7 +1057,7 @@ export class WorkflowEngine {
       // Not JSON, treat as plain text (for Agent HITL compatibility)
       // Map common text responses to actions
       const lowerContent = responseContent.toLowerCase();
-      if (lowerContent.includes('retry') || lowerContent.includes('重试') || lowerContent.includes('再试')) {
+      if (lowerContent.includes('retry') || lowerContent.includes('重试') || lowerContent.includes('再试') || lowerContent.includes('重新生成') || lowerContent.includes('重新') || lowerContent.includes('再次')) {
         action = 'retry';
       } else if (lowerContent.includes('skip') || lowerContent.includes('跳过')) {
         action = 'skip';
@@ -1016,7 +1073,11 @@ export class WorkflowEngine {
         this.logger.info('[WorkflowEngine] Retrying step after HITL', {
           stepId: step.id,
           response: responseContent,
+          feedback: response?.feedback,
         });
+
+        // Simply re-execute the step (it will use the same agent instance)
+        // In a real implementation, you might want to pass the feedback to the agent
         return await this.executeStep(step, context, workflow, options);
       }
 

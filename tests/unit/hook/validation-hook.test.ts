@@ -109,6 +109,22 @@ describe('SchemaValidator', () => {
 
     expect(result.valid).toBe(true);
   });
+
+  it('should handle invalid schema config gracefully', () => {
+    const schema = {
+      field: {
+        type: 'invalid_type' as any,  // 不支持的 type
+      },
+    };
+    const validator = new SchemaValidator(schema);
+
+    const result = validator.validate({ field: 'test' });
+
+    // 不支持的 type 默认为 z.any()，所以验证应该通过
+    // 但我们验证的是不会崩溃
+    expect(result.valid).toBe(true);
+    expect(result.errors).toBeUndefined();
+  });
 });
 
 describe('CompletenessValidator', () => {

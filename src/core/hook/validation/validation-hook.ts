@@ -20,8 +20,8 @@
  */
 
 import { z } from 'zod';
-import { BaseAgentHook } from '@/core/agent/hooks/base';
-import type { AgentResult, AgentConfig } from '@/core/agent/types';
+import { BaseAgentHook } from '../../agent/hooks/base';
+import type { AgentResult, AgentConfig } from '../../agent/types';
 
 // ============================================================================
 // Types and Interfaces
@@ -140,8 +140,29 @@ export class SchemaValidator implements Validator {
 
   validate(output: any): ValidationResult {
     try {
-      // Convert YAML config to Zod schema
-      const zodSchema = this.yamlToZod(this.schema);
+      // Special handling for root-level validation:
+      // If output is a primitive value (not an object) and schema has only one field,
+      // unwrap the schema and validate the root value directly
+      // Example: schema={output: {type: 'string'}} and output="hello" → validate "hello" as string
+      const keys = Object.keys(this.schema);
+      let zodSchema: z.ZodTypeAny;
+
+      if (keys.length === 1 && typeof output !== 'object' && output !== null) {
+        // Unwrap single-field schema for primitive outputs
+        const fieldDef = this.schema[keys[0]];
+        // Only unwrap if the field definition is also for a primitive type (not object)
+        if (fieldDef.type !== 'object') {
+          // Direct validation of root value using field definition
+          zodSchema = this.convertDefinition(fieldDef);
+        } else {
+          // Object type: use standard object validation
+          zodSchema = this.yamlToZod(this.schema);
+        }
+      } else {
+        // Multiple fields OR object output: use standard object validation
+        zodSchema = this.yamlToZod(this.schema);
+      }
+
       const parsed = zodSchema.safeParse(output);
 
       if (parsed.success) {
@@ -289,7 +310,17 @@ export class FormatValidator implements Validator {
     const errors: string[] = [];
 
     for (const rule of this.rules) {
-      const value = this.getNestedValue(output, rule.field);
+      // Special handling for root-level validation:
+      // If field is "output" (common pattern for single-field schema) and output is not an object,
+      // validate the root value directly
+      // Example: field="output" and output="US-123" → validate "US-123"
+      let value: any;
+      if (rule.field === 'output' && typeof output !== 'object') {
+        value = output;
+      } else {
+        value = this.getNestedValue(output, rule.field);
+      }
+
       const pattern = typeof rule.pattern === 'string'
         ? new RegExp(rule.pattern)
         : rule.pattern;
