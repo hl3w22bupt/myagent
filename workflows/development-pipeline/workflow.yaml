@@ -1,0 +1,67 @@
+name: "development-pipeline"
+description: "多 Agent 协作开发流程"
+
+input_schema:
+  requirement:
+    type: string
+    required: true
+
+output_schema:
+  requirement: object
+  architecture: object
+  implementation: object
+  test: object
+
+steps:
+  - id: product-manager
+    name: "需求分析"
+    agent: developer-engineer
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      requirement: "structuredOutput"
+
+  - id: architect
+    name: "架构设计"
+    agent: developer-engineer
+    depends_on: [product-manager]
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      architecture: "structuredOutput"
+
+  - id: developer
+    name: "代码生成"
+    agent: developer-engineer
+    depends_on: [architect]
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      implementation: "structuredOutput"
+    on_failure:
+      action: retry
+      retry:
+        maxAttempts: 3
+
+  - id: tester
+    name: "测试验证"
+    agent: developer-engineer
+    depends_on: [developer]
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      test: "structuredOutput"
+    on_failure:
+      action: rollback
+      rollback_to: developer
+      message: "测试失败，重新开发"
+
+output:
+  requirement:
+    from: "requirement"
+  architecture:
+    from: "architecture"
+  implementation:
+    from: "implementation"
+  test:
+    from: "test"

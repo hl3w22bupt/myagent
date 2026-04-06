@@ -564,8 +564,10 @@ Always prioritize available skills over direct computation or common knowledge.`
         lines.push(`#`);
         lines.push(`# PREVIOUS OUTPUT TYPES → CONVERSION (implement inline):`);
         lines.push(`#   - Table (dict with 'columns'/'rows'): Format as markdown list`);
-        lines.push(`#   - Object (dict): Convert to JSON string`);
         lines.push(`#   - File (dict with 'path'): Extract the path value`);
+        lines.push(`#   - Conversation (dict with 'result'/'session_id'): Extract conversation result`);
+        lines.push(`#   - Code block (dict with 'code'): Extract code`);
+        lines.push(`#   - Generic Object (dict): Convert to JSON string`);
         lines.push(`#   - String: Use as-is`);
         lines.push(`#`);
         lines.push(`# ⚠️ IMPORTANT: Check the skill's schema to know which parameter receives the formatted content!`);
@@ -590,6 +592,15 @@ Always prioritize available skills over direct computation or common knowledge.`
         lines.push(`    elif isinstance(raw_content, dict) and 'path' in raw_content:`);
         lines.push(`        # File result - extract path`);
         lines.push(`        formatted_content = raw_content['path']`);
+        lines.push(`    elif isinstance(raw_content, dict) and 'result' in raw_content and 'session_id' in raw_content:`);
+        lines.push(`        # Conversation response from claude-code-cli - extract result text`);
+        lines.push(`        formatted_content = raw_content.get('result', str(raw_content))`);
+        lines.push(`    elif isinstance(raw_content, dict) and 'code' in raw_content:`);
+        lines.push(`        # Code block result`);
+        lines.push(`        formatted_content = raw_content.get('code', str(raw_content))`);
+        lines.push(`    elif isinstance(raw_content, dict) and 'content' in raw_content and isinstance(raw_content['content'], str):`);
+        lines.push(`        # Nested content field (common in tool outputs)`);
+        lines.push(`        formatted_content = raw_content['content']`);
         lines.push(`    elif isinstance(raw_content, dict):`);
         lines.push(`        # Generic dict - convert to JSON string`);
         lines.push(`        import json`);

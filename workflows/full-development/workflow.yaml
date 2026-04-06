@@ -1,0 +1,32 @@
+name: "full-development"
+description: "完整研发流程"
+
+input_schema:
+  requirement:
+    type: string
+    required: true
+
+output_schema:
+  plan: object
+  architecture: object
+  implementation: object
+
+steps:
+  - id: developer
+    name: "代码生成"
+    agent: developer-engineer
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      artifacts: "structuredOutput"
+
+    # 失败重试
+    on_failure:
+      action: retry
+    retry:
+      maxAttempts: 3
+
+# Map intermediate variables to final output
+output:
+  implementation:
+    from: "artifacts"
