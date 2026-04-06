@@ -321,6 +321,10 @@
 }
 
 /* Table Columns */
+.workflow-id {
+  width: 260px;
+}
+
 .workflow-name {
   font-weight: 600;
   color: #1E293B;
@@ -334,6 +338,17 @@
 .workflow-steps {
   text-align: center;
   white-space: nowrap;
+}
+
+.id-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #F1F5F9;
+  color: #475569;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #E2E8F0;
 }
 
 .step-badge {

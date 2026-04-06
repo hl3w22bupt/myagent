@@ -170,6 +170,7 @@ function Workflows() {
           <table className="workflows-table">
             <thead>
               <tr>
+                <th>ID</th>
                 <th>名称</th>
                 <th>描述</th>
                 <th>步骤数</th>
@@ -178,7 +179,10 @@ function Workflows() {
             </thead>
             <tbody>
               {paginatedWorkflows.map((workflow, index) => (
-                <tr key={workflow.name || index}>
+                <tr key={workflow.id || workflow.name || index}>
+                  <td className="workflow-id">
+                    <code className="id-badge">{workflow.id || '-'}</code>
+                  </td>
                   <td className="workflow-name">
                     <strong>{workflow.name}</strong>
                   </td>

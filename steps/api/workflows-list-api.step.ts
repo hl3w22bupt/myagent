@@ -50,6 +50,7 @@ export const handler = async (request: any, { logger }: any) => {
           const stepCount = workflow.steps?.length || 0;
 
           workflows.push({
+            id: dir, // 使用目录名作为 ID
             name: workflow.name,
             description: workflow.description,
             input_schema: workflow.input_schema,
