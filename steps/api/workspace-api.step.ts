@@ -86,7 +86,14 @@ function validatePath(workspace: string): boolean {
   const allowedPrefixes = [
     '/tmp/myagent-workspaces',
     '/tmp/test-',
-    '/tmp/test',
+    '/tmp/final-test',  // ExternalAgent 测试
+    '/tmp/calculator-final',  // ExternalAgent 测试
+    '/tmp/todo-manager-test',  // ExternalAgent 测试
+    '/tmp/calculator-test',
+    '/tmp/hello-test',
+    '/tmp/quick-test',
+    '/tmp/todo-manager',
+    '/tmp/log-analyzer',
     '/tmp/toolcall',
     '/tmp/fileops',
     '/tmp/complex',

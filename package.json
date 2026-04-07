@@ -4,7 +4,7 @@
   "description": "Motia-based Distributed Agent System with PTC Support",
   "type": "module",
   "scripts": {
-    "postinstall": "motia install",
+    "postinstall": "motia install && npm run precompile:knowledge",
     "setup": "bash scripts/setup-environment.sh",
     "setup:hooks": "bash scripts/setup-git-hooks.sh",
     "check:python-env": "bash scripts/check-python-env.sh",
@@ -13,7 +13,8 @@
     "start": "motia start",
     "build:postgres": "tsc src/core/database/postgres-store.ts --outDir .motia/compiled/src/core/database --module ESNext --target ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports",
     "build:ts": "tsc",
-    "generate-types": "motia generate-types",
+    "generate-types": "npm run precompile:knowledge && motia generate-types",
+    "precompile:knowledge": "bash scripts/precompile-knowledge.sh",
     "build": "tsc && motia build",
     "clean": "rm -rf dist node_modules python_modules .motia .mermaid .venv",
     "pre-commit": "bash scripts/pre-commit-check.sh",

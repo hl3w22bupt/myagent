@@ -48,6 +48,12 @@ declare module 'motia' {
     'skills-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'skill-details-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-table-schema-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-update-apps-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-test-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-list-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-delete-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
+    'knowledge-datasources-add-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'knowledge-collections-api': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user': ApiRouteHandler<Record<string, unknown>, unknown, never>
     'get-user-sessions': ApiRouteHandler<Record<string, unknown>, unknown, never>
