@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react'
-import { ChevronRightIcon, ChevronDownIcon, ArrowPathIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import {
+  ChevronRightIcon,
+  ChevronDownIcon,
+  ArrowPathIcon,
+  XMarkIcon,
+  DocumentIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  CodeBracketIcon,
+  PhotoIcon,
+  MusicalNoteIcon,
+  VideoCameraIcon,
+  DocumentTextIcon
+} from '@heroicons/react/24/outline'
 import CodePlayer from './CodePlayer'
 import './WorkspaceTab.css'
 
@@ -68,13 +81,40 @@ const WorkspaceTab = ({ taskId }) => {
   const getFileIcon = (fileName) => {
     const ext = fileName.split('.').pop()?.toLowerCase()
 
-    const icons = {
-      'txt': '📄', 'md': '📝', 'py': '🐍', 'js': '📜',
-      'ts': '📘', 'json': '📋', 'html': '🌐', 'css': '🎨',
-      'jpg': '🖼️', 'png': '🖼️', 'svg': '🖼️', 'pdf': '📕'
+    const iconMap = {
+      // 代码文件
+      'js': CodeBracketIcon,
+      'jsx': CodeBracketIcon,
+      'ts': CodeBracketIcon,
+      'tsx': CodeBracketIcon,
+      'py': CodeBracketIcon,
+      'html': CodeBracketIcon,
+      'css': CodeBracketIcon,
+      'json': DocumentTextIcon,
+      // 文本文件
+      'txt': DocumentTextIcon,
+      'md': DocumentTextIcon,
+      // 图片文件
+      'jpg': PhotoIcon,
+      'jpeg': PhotoIcon,
+      'png': PhotoIcon,
+      'svg': PhotoIcon,
+      'gif': PhotoIcon,
+      'webp': PhotoIcon,
+      // 视频文件
+      'mp4': VideoCameraIcon,
+      'webm': VideoCameraIcon,
+      'mov': VideoCameraIcon,
+      // 音频文件
+      'mp3': MusicalNoteIcon,
+      'wav': MusicalNoteIcon,
+      'ogg': MusicalNoteIcon,
+      // PDF
+      'pdf': DocumentIcon,
     }
 
-    return icons[ext] || '📄'
+    const IconComponent = iconMap[ext] || DocumentIcon
+    return <IconComponent className="file-icon-svg" />
   }
 
   const getLanguage = (fileName) => {
@@ -179,7 +219,7 @@ const WorkspaceTab = ({ taskId }) => {
 
     const parts = file.relativePath.split('/')
     const fileName = parts[parts.length - 1] || file.relativePath
-    const indent = level * 20
+    const indent = level * 16
     const isSelected = selectedFile?.relativePath === file.relativePath
 
     return (
@@ -189,9 +229,11 @@ const WorkspaceTab = ({ taskId }) => {
           style={{ paddingLeft: `${indent}px` }}
           onClick={() => handleFileClick(file)}
         >
-          <span className="file-icon">{getFileIcon(fileName)}</span>
+          <div className="file-icon-wrapper">
+            {getFileIcon(fileName)}
+          </div>
           <span className="file-name">{fileName}</span>
-          <span className="file-info">({formatFileSize(file.size || 0)})</span>
+          <span className="file-info">{formatFileSize(file.size || 0)}</span>
         </div>
       </div>
     )
@@ -249,12 +291,20 @@ const WorkspaceTab = ({ taskId }) => {
               className="folder-row"
               onClick={() => toggleFolder(folderPath)}
             >
-              {isExpanded ? (
-                <ChevronDownIcon className="chevron-icon" />
-              ) : (
-                <ChevronRightIcon className="chevron-icon" />
-              )}
-              <span className="folder-icon">📁</span>
+              <div className="folder-chevron">
+                {isExpanded ? (
+                  <ChevronDownIcon className="chevron-icon" />
+                ) : (
+                  <ChevronRightIcon className="chevron-icon" />
+                )}
+              </div>
+              <div className="folder-icon-wrapper">
+                {isExpanded ? (
+                  <FolderOpenIcon className="folder-icon-svg" />
+                ) : (
+                  <FolderIcon className="folder-icon-svg" />
+                )}
+              </div>
               <span className="folder-name">{name}</span>
             </div>
             {isExpanded && (
@@ -334,11 +384,13 @@ const WorkspaceTab = ({ taskId }) => {
           <div className="file-preview-panel">
             <div className="preview-header">
               <div className="preview-title">
-                <span className="preview-icon">{getFileIcon(selectedFile.name)}</span>
+                <div className="preview-icon-wrapper">
+                  {getFileIcon(selectedFile.name)}
+                </div>
                 <span className="preview-filename">{selectedFile.name}</span>
               </div>
               <button onClick={closePreview} className="close-preview-btn">
-                <XMarkIcon className="w-5 h-5" />
+                <XMarkIcon className="close-icon-svg" />
               </button>
             </div>
 

@@ -1,9 +1,97 @@
+/* ========================================
+   Workspace Tab - Modern Professional Design
+   Swiss Modernism + Minimalism
+   ======================================== */
+
 .workspace-tab {
-  padding: 20px;
+  padding: 24px;
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: #FFFFFF;
 }
+
+/* ========================================
+   Header Section
+   ======================================== */
+
+.workspace-header {
+  margin-bottom: 24px;
+}
+
+.workspace-header h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+}
+
+.workspace-path {
+  display: block;
+  padding: 8px 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 12px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.refresh-btn:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.refresh-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* ========================================
+   Summary Section
+   ======================================== */
+
+.workspace-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.workspace-summary span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ========================================
+   Content Layout
+   ======================================== */
 
 .workspace-content {
   display: flex;
@@ -15,10 +103,149 @@
 .file-list {
   flex: 1;
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid #E2E8F0;
   border-radius: 8px;
   overflow: hidden;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========================================
+   File Tree Structure
+   ======================================== */
+
+.folder-item,
+.file-item {
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.folder-item:last-child,
+.file-item:last-child {
+  border-bottom: none;
+}
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color 200ms ease;
+  gap: 8px;
+}
+
+.folder-row:hover {
+  background: #F8FAFC;
+}
+
+.folder-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chevron-icon {
+  width: 14px;
+  height: 14px;
+  color: #64748B;
+  transition: transform 200ms ease;
+}
+
+.folder-icon-wrapper {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-icon-svg {
+  width: 18px;
+  height: 18px;
+  color: #64748B;
+  transition: color 200ms ease;
+}
+
+.folder-row:hover .folder-icon-svg {
+  color: #3B82F6;
+}
+
+.folder-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-children {
+  background: #FAFAFA;
+}
+
+/* ========================================
+   File Items
+   ======================================== */
+
+.file-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  transition: background-color 200ms ease;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.file-row:hover {
+  background: #F8FAFC;
+}
+
+.file-row.selected {
+  background: #EFF6FF;
+  border-left: 3px solid #3B82F6;
+}
+
+.file-icon-wrapper {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-icon-svg {
+  width: 18px;
+  height: 18px;
+  color: #64748B;
+  transition: color 200ms ease;
+}
+
+.file-row:hover .file-icon-svg {
+  color: #3B82F6;
+}
+
+.file-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 400;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-info {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #94A3B8;
+  font-weight: 400;
+  flex-shrink: 0;
 }
 
 /* ========================================
@@ -28,63 +255,84 @@
 .file-preview-panel {
   width: 60%;
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid #E2E8F0;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #E5E7EB;
-  background: #F9FAFB;
+  padding: 16px;
+  border-bottom: 1px solid #E2E8F0;
+  background: #F8FAFC;
 }
 
 .preview-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
 
-.preview-icon {
-  font-size: 18px;
+.preview-icon-wrapper {
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-icon-wrapper .file-icon-svg {
+  width: 20px;
+  height: 20px;
+  color: #64748B;
 }
 
 .preview-filename {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
-  color: #111827;
+  color: #0F172A;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .close-preview-btn {
-  padding: 4px;
+  padding: 6px;
   background: transparent;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  color: #6B7280;
-  transition: all 150ms ease;
+  color: #64748B;
+  transition: all 200ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-preview-btn:hover {
-  background: #E5E7EB;
-  color: #111827;
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+.close-icon-svg {
+  width: 20px;
+  height: 20px;
 }
 
 .preview-content {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: 20px;
+  background: #FFFFFF;
 }
 
 .preview-loading,
@@ -93,7 +341,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #6B7280;
+  color: #64748B;
   font-size: 14px;
 }
 
@@ -112,6 +360,7 @@
   max-width: 100%;
   max-height: 600px;
   object-fit: contain;
+  border-radius: 4px;
 }
 
 .preview-video,
@@ -131,7 +380,7 @@
   justify-content: center;
   gap: 16px;
   height: 100%;
-  color: #6B7280;
+  color: #64748B;
 }
 
 .preview-unsupported {
@@ -140,32 +389,89 @@
 
 .download-btn,
 .download-link {
-  padding: 8px 16px;
-  background: #2563EB;
+  padding: 10px 20px;
+  background: #3B82F6;
   color: #FFFFFF;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   text-decoration: none;
   font-size: 14px;
+  font-weight: 500;
+  transition: background-color 200ms ease;
+  display: inline-block;
 }
 
 .download-btn:hover,
 .download-link:hover {
-  background: #1D4ED8;
+  background: #2563EB;
 }
 
 /* ========================================
-   File Selection State
+   Empty & Error States
    ======================================== */
 
-.file-row.selected {
-  background: #DBEAFE;
-  border-left: 3px solid #2563EB;
+.error-message {
+  padding: 24px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  color: #991B1B;
+  text-align: center;
+}
+
+.error-message button {
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: #DC2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 200ms ease;
+}
+
+.error-message button:hover {
+  background: #B91C1C;
+}
+
+.empty-state,
+.empty-files {
+  padding: 60px 20px;
+  text-align: center;
+  color: #64748B;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.empty-state p {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #64748B;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: #94A3B8;
+  margin-top: 12px;
 }
 
 /* ========================================
-   Responsive
+   Responsive Design
    ======================================== */
 
 @media (max-width: 1024px) {
@@ -177,196 +483,31 @@
     width: 100%;
     height: 400px;
   }
+
+  .workspace-tab {
+    padding: 16px;
+  }
 }
 
-.workspace-header {
-  margin-bottom: 16px;
+/* ========================================
+   Accessibility
+   ======================================== */
+
+/* Focus states for keyboard navigation */
+.file-row:focus-visible,
+.folder-row:focus-visible,
+.refresh-btn:focus-visible,
+.close-preview-btn:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
 }
 
-.workspace-header h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.workspace-path {
-  display: block;
-  padding: 6px 12px;
-  background: #F3F4F6;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 13px;
-  color: #374151;
-  margin-bottom: 12px;
-  word-break: break-all;
-}
-
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.refresh-btn:hover {
-  background: #F9FAFB;
-  border-color: #9CA3AF;
-}
-
-.refresh-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.workspace-summary {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #F9FAFB;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #374151;
-}
-
-.file-list {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.folder-item,
-.file-item {
-  border-bottom: 1px solid #F3F4F6;
-}
-
-.folder-item:last-child,
-.file-item:last-child {
-  border-bottom: none;
-}
-
-.folder-row {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
-
-.folder-row:hover {
-  background: #F9FAFB;
-}
-
-.chevron-icon {
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-
-.folder-icon {
-  font-size: 18px;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-
-.folder-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #111827;
-}
-
-.folder-children {
-  background: #FAFAFA;
-}
-
-.file-row {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  transition: background 150ms ease;
-}
-
-.file-row:hover {
-  background: #F9FAFB;
-}
-
-.file-icon {
-  font-size: 18px;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-
-.file-name {
-  flex: 1;
-  font-size: 14px;
-  color: #374151;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-info {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #6B7280;
-  flex-shrink: 0;
-}
-
-.error-message {
-  padding: 20px;
-  background: #FEF2F2;
-  border: 1px solid #FECACA;
-  border-radius: 8px;
-  color: #991B1B;
-  text-align: center;
-}
-
-.error-message button {
-  margin-top: 12px;
-  padding: 8px 16px;
-  background: #DC2626;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.empty-state,
-.empty-files {
-  padding: 60px 20px;
-  text-align: center;
-  color: #6B7280;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.empty-state h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.empty-state p {
-  margin: 4px 0;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.empty-hint {
-  font-size: 13px;
-  color: #9CA3AF;
-  margin-top: 12px;
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .file-row,
+  .folder-row,
+  .refresh-btn,
+  .close-preview-btn {
+    transition: none;
+  }
 }
