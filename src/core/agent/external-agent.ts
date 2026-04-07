@@ -60,6 +60,13 @@ export class ExternalAgent extends Agent {
     }
 
     try {
+      // Set PATH to include npx
+      const originalPath = process.env.PATH || '';
+      const homebrewPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin';
+      if (!originalPath.includes(homebrewPath.split(':')[0])) {
+        process.env.PATH = `${homebrewPath}:${originalPath}`;
+      }
+
       // Import acpx runtime
       const { createAcpRuntime, createAgentRegistry, createFileSessionStore } = await import('acpx/runtime');
 
@@ -205,10 +212,13 @@ export class ExternalAgent extends Agent {
   private buildAgentCommand(): string {
     const { type, args = [] } = this.externalConfig!;
 
+    // Use absolute paths to avoid PATH issues
+    const npxPath = '/opt/homebrew/bin/npx';
+
     // Map agent type to ACP-compatible command
     // acpx uses adapter packages for some agents
     const agentCommands: Record<string, string> = {
-      claude: 'npx -y @agentclientprotocol/claude-agent-acp@latest',
+      claude: `${npxPath} -y @agentclientprotocol/claude-agent-acp@latest`,
       codex: 'codex --acp',
       cursor: 'cursor-agent acp',
       openclaw: 'openclaw',
