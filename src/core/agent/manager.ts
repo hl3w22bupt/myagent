@@ -13,7 +13,8 @@
 
 import { Agent } from './agent';
 import { MasterAgent } from './master-agent';
-import { AgentConfig, MasterAgentConfig } from './types';
+import { ExternalAgent } from './external-agent';
+import { AgentConfig, MasterAgentConfig, ExternalAgentConfig } from './types';
 import { AgentHookManager } from './hooks/manager';
 
 /**
@@ -32,8 +33,11 @@ export interface AgentManagerConfig {
   /** Optional: MasterAgent configuration for delegation */
   masterAgentConfig?: MasterAgentConfig;
 
-  /** Optional: Default agent type ('agent' or 'master') */
-  defaultAgentType?: 'agent' | 'master';
+  /** Optional: ExternalAgent configuration for external agents */
+  externalAgentConfig?: ExternalAgentConfig;
+
+  /** Optional: Default agent type ('agent', 'master', or 'external') */
+  defaultAgentType?: 'agent' | 'master' | 'external';
 }
 
 /**
@@ -41,7 +45,7 @@ export interface AgentManagerConfig {
  */
 export interface AcquireOptions {
   /** Agent type to create */
-  agentType?: 'agent' | 'master';
+  agentType?: 'agent' | 'master' | 'external';
 
   /** Optional: Available skills to filter (whitelist) */
   availableSkills?: string[];
@@ -72,8 +76,8 @@ export interface AcquireOptions {
  * - Agent Hook execution during lifecycle events
  */
 export class AgentManager {
-  private sessions: Map<string, Agent | MasterAgent> = new Map();
-  private sessionTypes: Map<string, 'agent' | 'master'> = new Map();
+  private sessions: Map<string, Agent | MasterAgent | ExternalAgent> = new Map();
+  private sessionTypes: Map<string, 'agent' | 'master' | 'external'> = new Map();
   private lastActivity: Map<string, number> = new Map();
   private config: AgentManagerConfig;
   private cleanupTimer?: NodeJS.Timeout;
@@ -167,8 +171,16 @@ export class AgentManager {
       'agent';
 
     // Determine config to use and merge availableSkills if provided
-    let config: AgentConfig | MasterAgentConfig;
-    if (agentType === 'master') {
+    let config: AgentConfig | MasterAgentConfig | ExternalAgentConfig;
+    if (agentType === 'external') {
+      // ExternalAgent requires externalAgentConfig
+      if (!this.config.externalAgentConfig) {
+        throw new Error(
+          'Cannot create ExternalAgent: externalAgentConfig not provided in AgentManagerConfig'
+        );
+      }
+      config = this.config.externalAgentConfig;
+    } else if (agentType === 'master') {
       const baseConfig = this.config.masterAgentConfig!;
       const masterConfig: MasterAgentConfig = {
         ...baseConfig,
@@ -227,10 +239,13 @@ export class AgentManager {
       );
     }
 
-    // Create new Agent or MasterAgent
-    let agent: Agent | MasterAgent;
+    // Create new Agent, MasterAgent, or ExternalAgent
+    let agent: Agent | MasterAgent | ExternalAgent;
 
-    if (agentType === 'master') {
+    if (agentType === 'external') {
+      // Create ExternalAgent
+      agent = new ExternalAgent(config as ExternalAgentConfig, sessionId);
+    } else if (agentType === 'master') {
       // Validate masterAgentConfig exists
       if (!this.config.masterAgentConfig) {
         throw new Error(

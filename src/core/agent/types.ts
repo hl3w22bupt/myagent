@@ -101,6 +101,25 @@ export interface AgentConfig {
 }
 
 /**
+ * Configuration for ExternalAgent (extends Agent).
+ */
+export interface ExternalAgentConfig extends AgentConfig {
+  /** External agent configuration (required for ExternalAgent) */
+  externalAgent: {
+    /** Agent type (claude, codex, gemini, cursor, etc.) */
+    type: 'claude' | 'codex' | 'gemini' | 'cursor' | 'pi' | 'openclaw';
+    /** Protocol type (acp, stdio) */
+    protocol?: 'acp' | 'stdio';
+    /** Timeout in milliseconds */
+    timeout?: number;
+    /** Working directory (optional) */
+    workingDirectory?: string;
+    /** Additional command-line arguments */
+    args?: string[];
+  };
+}
+
+/**
  * Configuration for MasterAgent (extends Agent).
  */
 export interface MasterAgentConfig extends AgentConfig {
@@ -209,6 +228,11 @@ export interface AgentResult {
     };
     /** HITL flag - indicates if task was paused for clarification */
     hitl?: boolean;
+    /** External agent type (for ExternalAgent) */
+    externalAgent?: string;
+    /** ACP stop reason (for ExternalAgent) */
+    stopReason?: string;
+    [key: string]: any; // Allow additional metadata fields
   };
 
   /** Structured output from skill execution (at root level, not in metadata) */

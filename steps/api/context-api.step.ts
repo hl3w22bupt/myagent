@@ -49,6 +49,9 @@ export const handler = async (
       };
     }
 
+    // 从 tasks 表获取 task metadata（包含 delegates, externalAgent, workspace 等）
+    const task = await unifiedStore.getTask(taskId);
+
     // 构建 conversationHistory（Agent 使用的扁平格式）
     const conversationHistory = contextManager.getConversationHistoryForAgent(context);
 
@@ -57,6 +60,8 @@ export const handler = async (
       contextType: context.metadata?.type || 'standard',
       roundsCount: context.conversationRounds.length,
       historyCount: conversationHistory.length,
+      hasTaskMetadata: !!task?.metadata,
+      taskMetadataKeys: task?.metadata ? Object.keys(task.metadata) : [],
     });
 
     return {
@@ -66,6 +71,11 @@ export const handler = async (
         data: {
           ...context,
           conversationHistory, // 添加对话历史（Agent 格式）
+          // 合并 task 表的 metadata（包含 delegates, externalAgent, workspace 等）
+          metadata: {
+            ...context.metadata,
+            ...(task?.metadata || {}),
+          },
         },
       },
     };
