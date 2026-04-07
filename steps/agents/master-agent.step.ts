@@ -638,9 +638,12 @@ export const handler = async (
     // Update status to running
     await updateStream('running', { currentStep: 'Acquiring agent' });
 
-    // Always use MasterAgent for all requests
-    logger.info('Acquiring MasterAgent', {
+    // Determine agent type (default to master for backward compatibility)
+    const agentType = input.agentType || 'master';
+
+    logger.info('Acquiring Agent', {
       sessionId,
+      agentType,
       delegateTo: input.delegateTo,
       availableSkills: input.availableSkills,
       skillCount: input.availableSkills?.length || 0
@@ -649,17 +652,18 @@ export const handler = async (
     logger.debug('[master-agent.step] Input received:', {
       taskId,
       sessionId,
+      'input.agentType': input.agentType,
       'input.delegateTo': input.delegateTo,
       'input.availableSkills': input.availableSkills,
     });
 
-    // Get MasterAgent from Manager
-    // each session has independent MasterAgent instance
+    // Get Agent from Manager (Agent, MasterAgent, or ExternalAgent)
+    // each session has independent Agent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
     // Note: Only pass availableSkills if it's a non-empty array
     // Empty array means "use all skills" (not "restrict to no skills")
     const acquireOptions: any = {
-      agentType: 'master',
+      agentType,
     };
     if (input.availableSkills && input.availableSkills.length > 0) {
       acquireOptions.availableSkills = input.availableSkills;
