@@ -345,6 +345,41 @@ export class ExternalAgent extends Agent {
 
       // Handle different stop reasons
       if (stopReason === 'end_turn') {
+        // ⭐ 检测输出中是否包含提问（即使 stopReason 是 end_turn）
+        // Claude Code 有时会在正常结束时提问，而不是返回 awaiting_input
+        const hasQuestion = this.detectQuestionInOutput(output);
+
+        if (hasQuestion) {
+          console.log(`[ExternalAgent ${this.sessionId}] Question detected in output, converting to clarification request`);
+
+          return {
+            success: false,
+            error: 'External agent needs clarification',
+            clarification: {
+              needs: true,
+              question: output, // 使用完整的输出作为问题上下文
+              stage: 'in_execution',
+            },
+            steps: [...steps, {
+              type: 'clarification',
+              content: 'External agent requested clarification',
+              timestamp: Date.now(),
+              metadata: {
+                outputLength: output.length,
+                detectedQuestions: true,
+              },
+            }],
+            executionTime,
+            sessionId: this.sessionId,
+            metadata: {
+              externalAgent: this.externalConfig!.type,
+              stopReason,
+              workspace: this.currentWorkspace,
+              detectedQuestion: true,
+            },
+          };
+        }
+
         return {
           success: true,
           output: output,
@@ -362,8 +397,8 @@ export class ExternalAgent extends Agent {
           sessionId: this.sessionId,
           metadata: {
             externalAgent: this.externalConfig!.type,
-            workspace: this.currentWorkspace, // ← 包含实际使用的 workspace
-            fileOperations: fileOperations, // ← 添加文件操作信息
+            workspace: this.currentWorkspace,
+            fileOperations: fileOperations,
             toolCallsCount: toolCalls.length,
           },
         };
@@ -495,6 +530,64 @@ export class ExternalAgent extends Agent {
         metadata: {},
       };
     }
+  }
+
+  /**
+   * Detect if the output contains questions requiring clarification.
+   *
+   * This handles the case where Claude Code asks questions in its output
+   * instead of returning stopReason='awaiting_input'.
+   *
+   * @param output - The output text from the external agent
+   * @returns true if questions are detected, false otherwise
+   */
+  private detectQuestionInOutput(output: string): boolean {
+    if (!output || output.length < 10) {
+      return false;
+    }
+
+    // Patterns that indicate questions/clarification needed
+    const questionPatterns = [
+      // Chinese question markers
+      /请问.*/,
+      /您想要.*/,
+      /需要.*吗[？?]?/,
+      /是否.*/,
+      /哪个.*/,
+
+      // Direct questions ending with ?
+      /\?[^？]*/,  // English question mark
+      /\？/,       // Chinese question mark
+
+      // Explicit clarification requests
+      /请告诉我/,
+      /请描述/,
+      /请说明/,
+      /我想了解/,
+
+      // Multiple questions (3+ question marks)
+      /\?.*\?.*\?/,
+
+      // Short questions (less than 100 chars with question mark)
+      /^.{1,100}[?？]$/,
+
+      // Common question phrases
+      /什么类型/,
+      /哪个选项/,
+      /如何.*\?/,
+      /怎么.*\?/,
+      /为什么.*\?/,
+    ];
+
+    // Check if any pattern matches
+    for (const pattern of questionPatterns) {
+      if (pattern.test(output)) {
+        console.log(`[ExternalAgent ${this.sessionId}] Question detected with pattern:`, pattern);
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
