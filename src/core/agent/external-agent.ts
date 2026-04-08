@@ -431,8 +431,6 @@ export class ExternalAgent extends Agent {
 
             // 2. 发送到 executionTraces stream
             if (streams?.executionTraces) {
-              const clarificationTraceId = `hitl-${this.sessionId}-${Date.now()}`;
-
               // 开始等待澄清的 trace
               const awaitingTraceId = `awaiting-clarification-${currentTaskId}-${Date.now()}`;
               await streams.executionTraces.set(currentTaskId, awaitingTraceId, {
@@ -692,7 +690,7 @@ export class ExternalAgent extends Agent {
 
       // Direct questions ending with ?
       /\?[^？]*/,  // English question mark
-      /\？/,       // Chinese question mark
+      /？/,       // Chinese question mark
 
       // Explicit clarification requests
       /请告诉我/,
