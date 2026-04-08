@@ -170,7 +170,8 @@ export class ExternalAgent extends Agent {
    * 1. context.environment.workspace (dynamic, per-task)
    * 2. context.environment.workingDirectory (dynamic, per-task)
    * 3. externalAgent.workingDirectory (static, from config)
-   * 4. Create temporary directory (auto-generated)
+   * 4. Default workspace: /tmp/myagent-workspace (shared default)
+   * 5. Create temporary directory (fallback, auto-generated)
    */
   private resolveWorkspace(context?: any): string {
     console.log(`[ExternalAgent ${this.sessionId}] Resolving workspace`, {
@@ -195,16 +196,25 @@ export class ExternalAgent extends Agent {
       return this.externalConfig.workingDirectory;
     }
 
-    // 3. Create temporary workspace
-    const tempDir = join('/tmp/myagent-workspaces', `workspace-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    // 3. Use default shared workspace
+    const defaultWorkspace = '/tmp/myagent-workspace';
 
-    // Ensure directory exists
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
+    // Ensure default workspace exists
+    if (!existsSync(defaultWorkspace)) {
+      mkdirSync(defaultWorkspace, { recursive: true });
+      console.log(`[ExternalAgent ${this.sessionId}] Created default workspace: ${defaultWorkspace}`);
     }
 
-    console.log(`[ExternalAgent ${this.sessionId}] Created temporary workspace: ${tempDir}`);
-    return tempDir;
+    console.log(`[ExternalAgent ${this.sessionId}] Using default workspace: ${defaultWorkspace}`);
+    return defaultWorkspace;
+
+    // 4. Fallback: Create temporary workspace (should rarely reach here)
+    // This is kept as a safety net, but should almost never be used
+    // const tempDir = join('/tmp/myagent-workspaces', `workspace-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    // if (!existsSync(tempDir)) {
+    //   mkdirSync(tempDir, { recursive: true });
+    // }
+    // return tempDir;
   }
 
   /**

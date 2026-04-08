@@ -343,7 +343,8 @@ const WorkspaceTab = ({ taskId }) => {
           <div className="empty-icon">📁</div>
           <h3>暂无 Workspace</h3>
           <p>此任务未指定 workspace 目录</p>
-          <p className="empty-hint">可以通过 environment.workspace 参数指定工作目录，或使用 ExternalAgent 自动创建</p>
+          <p className="empty-hint">系统将使用默认工作目录：/tmp/myagent-workspace</p>
+          <p className="empty-hint">可通过 environment.workspace 参数指定自定义工作目录</p>
         </div>
       </div>
     )
