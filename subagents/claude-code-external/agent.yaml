@@ -38,8 +38,8 @@ agent:
     # Protocol: acp (Agent Client Protocol) or stdio
     protocol: acp
 
-    # Timeout in milliseconds (default: 5 minutes)
-    timeout: 300000
+    # Timeout in milliseconds (default: 30 minutes for complex tasks)
+    timeout: 1800000
 
     # Working directory for Claude Code (default: current directory)
     working_directory: /Users/leo/workspace/myagent

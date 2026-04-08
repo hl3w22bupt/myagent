@@ -17,7 +17,7 @@ steps:
     externalAgent:
       type: claude
       protocol: acp
-      timeout: 300000
+      timeout: 1800000  # 30 minutes
     input:
       requirement: "{{ input.requirement }}"
     output:
@@ -30,7 +30,7 @@ steps:
     externalAgent:
       type: claude
       protocol: acp
-      timeout: 300000
+      timeout: 1800000  # 30 minutes
     input:
       requirement: "{{ input.requirement }}"
       plan: "{{ planResult }}"

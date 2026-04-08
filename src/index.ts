@@ -150,7 +150,7 @@ export function getAgentManager(): AgentManager {
     externalAgent: {
       type: (process.env.EXTERNAL_AGENT_TYPE || 'claude') as 'claude' | 'codex' | 'gemini' | 'cursor' | 'pi' | 'openclaw',
       protocol: 'acp',
-      timeout: parseInt(process.env.EXTERNAL_AGENT_TIMEOUT || '300000'), // 5 minutes
+      timeout: parseInt(process.env.EXTERNAL_AGENT_TIMEOUT || '1800000'), // 30 minutes (default)
       workingDirectory: process.env.EXTERNAL_AGENT_WORKSPACE || '/tmp/myagent-workspaces',
       args: [],
     },
