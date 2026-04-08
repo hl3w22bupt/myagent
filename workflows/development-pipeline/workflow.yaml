@@ -1,5 +1,5 @@
 name: "development-pipeline"
-description: "多 Agent 协作开发流程"
+description: "多 Agent 协作开发流程（使用 Claude Code External Agent）"
 
 input_schema:
   requirement:
@@ -15,7 +15,11 @@ output_schema:
 steps:
   - id: product-manager
     name: "需求分析"
-    agent: developer-engineer
+    agent: claude-code-external
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 300000
     input:
       requirement: "{{ input.requirement }}"
     output:
@@ -23,8 +27,12 @@ steps:
 
   - id: architect
     name: "架构设计"
-    agent: developer-engineer
+    agent: claude-code-external
     depends_on: [product-manager]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 300000
     input:
       requirement: "{{ input.requirement }}"
     output:
@@ -32,8 +40,12 @@ steps:
 
   - id: developer
     name: "代码生成"
-    agent: developer-engineer
+    agent: claude-code-external
     depends_on: [architect]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 300000
     input:
       requirement: "{{ input.requirement }}"
     output:
@@ -45,8 +57,12 @@ steps:
 
   - id: tester
     name: "测试验证"
-    agent: developer-engineer
+    agent: claude-code-external
     depends_on: [developer]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 300000
     input:
       requirement: "{{ input.requirement }}"
     output:

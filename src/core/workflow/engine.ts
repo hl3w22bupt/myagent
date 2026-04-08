@@ -288,9 +288,22 @@ export class WorkflowEngine {
       const sessionId = `workflow-${workflow.name}-${step.id}-${options.taskId || Date.now()}`;
 
       // Build acquire options
-      const acquireOptions: any = {
-        agentType: step.agent as 'agent' | 'master',
-      };
+      const acquireOptions: any = {};
+
+      // Check if this step uses an external agent
+      if (step.externalAgent) {
+        // Use external agent type
+        acquireOptions.agentType = 'external';
+        acquireOptions.externalAgentConfig = step.externalAgent;
+
+        this.logger.info(`[WorkflowEngine] Using external agent for step ${step.id}`, {
+          type: step.externalAgent.type,
+          protocol: step.externalAgent.protocol,
+        });
+      } else {
+        // Use regular subagent
+        acquireOptions.agentType = step.agent as 'agent' | 'master';
+      }
 
       // Apply validation from workflow step configuration (primary source)
       if (step.validation) {

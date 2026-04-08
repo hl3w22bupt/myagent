@@ -60,6 +60,15 @@ export interface AcquireOptions {
     required?: string[];
     formats?: Array<{ field: string; pattern: string | RegExp; message?: string }>;
   };
+
+  /** Optional: External agent configuration (when agentType='external') */
+  externalAgentConfig?: {
+    type: string;
+    protocol?: 'acp' | 'stdio';
+    timeout?: number;
+    workingDirectory?: string;
+    args?: string[];
+  };
 }
 
 /**
@@ -174,12 +183,22 @@ export class AgentManager {
     let config: AgentConfig | MasterAgentConfig | ExternalAgentConfig;
     if (agentType === 'external') {
       // ExternalAgent requires externalAgentConfig
-      if (!this.config.externalAgentConfig) {
+      // Priority: options.externalAgentConfig > this.config.externalAgentConfig
+      const externalAgentConfig = options?.externalAgentConfig || this.config.externalAgentConfig;
+      if (!externalAgentConfig) {
         throw new Error(
-          'Cannot create ExternalAgent: externalAgentConfig not provided in AgentManagerConfig'
+          'Cannot create ExternalAgent: externalAgentConfig not provided in options or AgentManagerConfig'
         );
       }
-      config = this.config.externalAgentConfig;
+
+      // Build ExternalAgentConfig with minimal base config
+      config = {
+        systemPrompt: 'External Agent',
+        availableSkills: [],
+        sandbox: { type: 'local', local: {} },
+        llm: { provider: 'anthropic', model: 'unused', apiKey: 'unused' },
+        externalAgent: externalAgentConfig,
+      } as ExternalAgentConfig;
     } else if (agentType === 'master') {
       const baseConfig = this.config.masterAgentConfig!;
       const masterConfig: MasterAgentConfig = {
