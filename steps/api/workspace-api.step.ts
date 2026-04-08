@@ -141,7 +141,9 @@ export const handler = async (
     }
 
     // 从 task metadata 获取 workspace
-    const workspace = task.metadata?.workspace;
+    // 优先从顶层 metadata.workspace 获取（ExternalAgent 的任务）
+    // 如果没有，再从 metadata.environment.workspace 获取（其他 Agent 的任务）
+    const workspace = task.metadata?.workspace || task.metadata?.environment?.workspace;
 
     if (!workspace) {
       return {
