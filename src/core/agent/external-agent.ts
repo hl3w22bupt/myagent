@@ -8,6 +8,7 @@ import { Agent } from './agent';
 import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { ContextManager } from '../context/manager';
 
 /**
  * ExternalAgent class.
@@ -350,34 +351,168 @@ export class ExternalAgent extends Agent {
         const hasQuestion = this.detectQuestionInOutput(output);
 
         if (hasQuestion) {
-          console.log(`[ExternalAgent ${this.sessionId}] Question detected in output, converting to clarification request`);
+          console.log(`[ExternalAgent ${this.sessionId}] Question detected in output, triggering HITL clarification`);
 
-          return {
-            success: false,
-            error: 'External agent needs clarification',
-            clarification: {
-              needs: true,
-              question: output, // 使用完整的输出作为问题上下文
+          const currentTaskId = taskId || `task-${Date.now()}`;
+          const question = output; // 使用完整的输出作为问题上下文
+
+          try {
+            // 1. 保存 HITL 状态到数据库
+            await this.saveHITLStateInternal(currentTaskId, {
               stage: 'in_execution',
-            },
-            steps: [...steps, {
-              type: 'clarification',
-              content: 'External agent requested clarification',
-              timestamp: Date.now(),
+              status: 'awaiting',
+              agentName: `External Agent (${this.externalConfig!.type})`,
+              question,
+              options: [], // External Agent 的提问通常不是选择题
+              createdAt: new Date(),
+            });
+
+            console.log(`[ExternalAgent ${this.sessionId}] HITL state saved, starting to poll`, { currentTaskId });
+
+            // 2. 触发 Agent Hook 通知
+            try {
+              await this.hookManager.executeHook('onAwaitingHITL', question, [], {
+                agentName: `External Agent (${this.externalConfig!.type})`,
+                sessionId: this.sessionId,
+                taskId: currentTaskId,
+                externalAgent: this.externalConfig!.type,
+              });
+            } catch (hookError) {
+              console.warn('[ExternalAgent] HITL hook execution failed', { error: hookError });
+            }
+
+            // 3. 轮询等待用户响应
+            console.log(`[ExternalAgent ${this.sessionId}] Starting to poll for HITL response`, { currentTaskId });
+            const clarificationResponse = await this.pollHITLResultInternal(currentTaskId);
+
+            // 4. 清除 HITL 状态
+            await this.clearHITLStateInternal(currentTaskId);
+
+            console.log(`[ExternalAgent ${this.sessionId}] HITL clarification received, resuming execution`, {
+              currentTaskId,
+              clarification: clarificationResponse.content,
+            });
+
+            // ⭐ 发送澄清事件到 taskExecution 和 executionTraces stream
+            const { getAgentStreams } = await import('../agent/hooks/progress-notify.js');
+            const streams = getAgentStreams();
+
+            // 1. 发送到 taskExecution stream
+            if (streams?.taskExecution) {
+              const clarificationMessage = clarificationResponse.feedback
+                ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
+                : clarificationResponse.content;
+
+              const clarificationEvent = {
+                type: 'user_clarification',
+                status: 'clarification_provided',
+                taskId: currentTaskId,
+                sessionId: this.sessionId,
+                timestamp: new Date().toISOString(),
+                data: {
+                  clarification: clarificationMessage,
+                  originalQuestion: question,
+                  stage: 'in_execution',
+                  agentType: `External Agent (${this.externalConfig!.type})`,
+                }
+              };
+
+              const clarificationEntryId = `user-clarification-${currentTaskId}-${Date.now()}`;
+              await streams.taskExecution.set(currentTaskId, clarificationEntryId, {
+                ...clarificationEvent,
+                category: 'agent_hook',
+              });
+
+              console.log('[ExternalAgent] User clarification notification sent to taskExecution', {
+                currentTaskId,
+                clarification: clarificationMessage,
+              });
+            }
+
+            // 2. 发送到 executionTraces stream
+            if (streams?.executionTraces) {
+              const clarificationTraceId = `hitl-${this.sessionId}-${Date.now()}`;
+
+              // 开始等待澄清的 trace
+              const awaitingTraceId = `awaiting-clarification-${currentTaskId}-${Date.now()}`;
+              await streams.executionTraces.set(currentTaskId, awaitingTraceId, {
+                traceId: awaitingTraceId,
+                level: 'agent',
+                taskId: currentTaskId,
+                agentId: this.sessionId,
+                stage: 'processing',
+                purpose: 'hitl_clarification',
+                status: 'started',
+                inputData: JSON.stringify({
+                  question: question.substring(0, 500) + (question.length > 500 ? '...' : ''),
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+
+              console.log('[ExternalAgent] Awaiting clarification trace sent', {
+                currentTaskId,
+                traceId: awaitingTraceId,
+              });
+
+              // 收到澄清的 trace
+              const receivedTraceId = `clarification-provided-${currentTaskId}-${Date.now()}`;
+              await streams.executionTraces.set(currentTaskId, receivedTraceId, {
+                traceId: receivedTraceId,
+                level: 'agent',
+                taskId: currentTaskId,
+                agentId: this.sessionId,
+                parentTraceId: awaitingTraceId,
+                stage: 'processing',
+                purpose: 'hitl_clarification',
+                status: 'completed',
+                inputData: JSON.stringify({
+                  clarification: clarificationResponse.content.substring(0, 500) + (clarificationResponse.content.length > 500 ? '...' : ''),
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+
+              console.log('[ExternalAgent] Clarification provided trace sent', {
+                currentTaskId,
+                traceId: receivedTraceId,
+              });
+            }
+
+            // 5. 使用用户的澄清继续执行
+            console.log(`[ExternalAgent ${this.sessionId}] Sending clarification to external agent`);
+            const continuedResult = await this.handleHITLInput(clarificationResponse.content);
+
+            // 6. 返回继续执行的结果
+            return {
+              success: continuedResult.success,
+              output: continuedResult.output || clarificationResponse.content,
+              steps: [...steps, ...continuedResult.steps, {
+                type: 'clarification',
+                content: 'User clarification received and execution resumed',
+                timestamp: Date.now(),
+              }],
+              executionTime: Date.now() - startTime + continuedResult.executionTime,
+              sessionId: this.sessionId,
               metadata: {
-                outputLength: output.length,
-                detectedQuestions: true,
+                externalAgent: this.externalConfig!.type,
+                workspace: this.currentWorkspace,
+                clarification: clarificationResponse.content,
               },
-            }],
-            executionTime,
-            sessionId: this.sessionId,
-            metadata: {
-              externalAgent: this.externalConfig!.type,
-              stopReason,
-              workspace: this.currentWorkspace,
-              detectedQuestion: true,
-            },
-          };
+            };
+
+          } catch (error: any) {
+            console.error(`[ExternalAgent ${this.sessionId}] HITL clarification failed:`, error);
+            return {
+              success: false,
+              error: `HITL clarification failed: ${error.message}`,
+              steps,
+              executionTime: Date.now() - startTime,
+              sessionId: this.sessionId,
+              metadata: {
+                externalAgent: this.externalConfig!.type,
+                hitlError: error.message,
+              },
+            };
+          }
         }
 
         return {
@@ -588,6 +723,89 @@ export class ExternalAgent extends Agent {
     }
 
     return false;
+  }
+
+  /**
+   * Save HITL state to TaskContext (Internal implementation).
+   */
+  private async saveHITLStateInternal(taskId: string, hitlState: any): Promise<void> {
+    try {
+      console.log('[ExternalAgent] saveHITLStateInternal called', { taskId, hitlState });
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext) {
+        taskContext.hitlState = hitlState;
+        await contextManager.saveContext(taskContext);
+        console.log('[ExternalAgent] HITL state saved successfully');
+      } else {
+        console.warn('[ExternalAgent] TaskContext not found, cannot save HITL state');
+      }
+    } catch (error) {
+      console.error('[ExternalAgent] Failed to save HITL state:', error);
+    }
+  }
+
+  /**
+   * Poll internally waiting for HITL clarification result (Internal implementation).
+   */
+  private async pollHITLResultInternal(taskId: string): Promise<{ content: string; feedback?: string }> {
+    const POLL_INTERVAL = 2000; // 2 seconds
+    const TIMEOUT = 600 * 1000; // 10 minutes
+    const startTime = Date.now();
+
+    console.log('[ExternalAgent] Starting HITL polling', { taskId, POLL_INTERVAL, TIMEOUT });
+
+    while (Date.now() - startTime < TIMEOUT) {
+      try {
+        const contextManager = new ContextManager();
+        const taskContext = await contextManager.getContext(taskId);
+
+        if (!taskContext?.hitlState) {
+          console.warn('[ExternalAgent] HITL state not found during polling', { taskId });
+          return { content: '' };
+        }
+
+        if (taskContext.hitlState.status === 'completed' && taskContext.hitlState.response) {
+          console.log('[ExternalAgent] HITL response received', {
+            taskId,
+            response: taskContext.hitlState.response.content,
+          });
+          return {
+            content: taskContext.hitlState.response.content,
+            feedback: taskContext.hitlState.response.feedback,
+          };
+        }
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      } catch (error) {
+        console.error('[ExternalAgent] Error during HITL polling:', error);
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      }
+    }
+
+    // Timeout - return empty result
+    console.warn('[ExternalAgent] HITL polling timeout', { taskId });
+    return { content: '' };
+  }
+
+  /**
+   * Clear HITL state (Internal implementation).
+   */
+  private async clearHITLStateInternal(taskId: string): Promise<void> {
+    try {
+      const contextManager = new ContextManager();
+      const taskContext = await contextManager.getContext(taskId);
+
+      if (taskContext && taskContext.hitlState) {
+        taskContext.hitlState = undefined;
+        await contextManager.saveContext(taskContext);
+        console.log('[ExternalAgent] HITL state cleared');
+      }
+    } catch (error) {
+      console.error('[ExternalAgent] Failed to clear HITL state:', error);
+    }
   }
 
   /**

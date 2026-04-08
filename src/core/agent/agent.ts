@@ -2069,9 +2069,9 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         const taskContext = await contextManager.getContext(taskId);
 
         if (!taskContext?.hitlState) {
-          console.warn('[Agent] HITL state not found during polling', { taskId });
-          // Return empty result to continue execution
-          return { content: '' };
+          console.warn('[Agent] HITL state not found during polling, stopping polling', { taskId });
+          // HITL state was cleared, throw error to stop polling
+          throw new Error(`HITL state cleared for task ${taskId}`);
         }
 
         if (taskContext.hitlState.status === 'completed' && taskContext.hitlState.response) {

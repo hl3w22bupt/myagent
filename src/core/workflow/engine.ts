@@ -322,6 +322,13 @@ export class WorkflowEngine {
       // Set agent name for trace display (e.g., "developer-engineer")
       (agent as any).agentName = step.agent;
 
+      // Set hookManager to agent so it can trigger its own hooks
+      const hookManager = this.agentManager.getHookManager();
+      if (agent.setHookManager && hookManager) {
+        agent.setHookManager(hookManager);
+        this.logger.debug('[WorkflowEngine] HookManager set on agent', { sessionId, stepId: step.id });
+      }
+
       // Set agent streams for progress notifications
       if (!this.streams) {
         this.streams = getAgentStreams();
@@ -331,9 +338,6 @@ export class WorkflowEngine {
       if (this.streams) {
         setAgentStreams(this.streams);
       }
-
-      // Get hook manager
-      const hookManager = this.agentManager.getHookManager();
 
       // Call agent pre hook (onTaskStart)
       if (hookManager) {
