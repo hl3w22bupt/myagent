@@ -45,7 +45,7 @@ dotenv.config();
 import { AgentManager } from './core/agent/manager';
 import { resolve } from 'path';
 import { existsSync, readdirSync } from 'fs';
-import type { MasterAgentConfig } from './core/agent/types';
+import type { MasterAgentConfig, ExternalAgentConfig } from './core/agent/types';
 
 /**
  * Global AgentManager singleton.
@@ -135,6 +135,27 @@ export function getAgentManager(): AgentManager {
     subagents: discoverSubagents(),
   };
 
+  // Prepare ExternalAgent configuration
+  const externalAgentConfig: ExternalAgentConfig = {
+    systemPrompt: 'External coding agent',
+    llm: {
+      provider: 'anthropic',
+      model: 'unused',
+      apiKey: 'unused',
+    },
+    sandbox: {
+      type: 'local',
+      local: {},
+    },
+    externalAgent: {
+      type: (process.env.EXTERNAL_AGENT_TYPE || 'claude') as 'claude' | 'codex' | 'gemini' | 'cursor' | 'pi' | 'openclaw',
+      protocol: 'acp',
+      timeout: parseInt(process.env.EXTERNAL_AGENT_TIMEOUT || '1800000'), // 30 minutes (default)
+      workingDirectory: process.env.EXTERNAL_AGENT_WORKSPACE || '/tmp/myagent-workspaces',
+      args: [],
+    },
+  };
+
   _agentManager = new AgentManager({
     sessionTimeout: parseInt(process.env.SESSION_TIMEOUT || '1800000'), // 30 minutes
     maxSessions: parseInt(process.env.MAX_SESSIONS || '1000'),
@@ -182,6 +203,7 @@ export function getAgentManager(): AgentManager {
       },
     },
     masterAgentConfig, // Optional: Enable MasterAgent support
+    externalAgentConfig, // Optional: Enable ExternalAgent support
     defaultAgentType: 'agent', // Default to regular Agent for backward compatibility
   });
 

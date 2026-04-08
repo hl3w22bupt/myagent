@@ -201,6 +201,26 @@ export interface HITLStepOption {
   allow_modify?: boolean;
 }
 
+/**
+ * External Agent Configuration for Workflow Steps
+ */
+export interface ExternalAgentConfig {
+  /** Agent type: claude, codex, cursor, openclaw, pi, gemini */
+  type: string;
+
+  /** Protocol: acp (Agent Client Protocol) or stdio */
+  protocol?: 'acp' | 'stdio';
+
+  /** Timeout in milliseconds (default: 300000 = 5 minutes) */
+  timeout?: number;
+
+  /** Working directory for the external agent (optional) */
+  workingDirectory?: string;
+
+  /** Additional command-line arguments (optional) */
+  args?: string[];
+}
+
 // Workflow step
 export interface WorkflowStep {
   id: string;
@@ -219,6 +239,9 @@ export interface WorkflowStep {
   next_step?: string;
   max_iterations?: number;
   always_run?: boolean;
+
+  /** External agent configuration (if using external agent) */
+  externalAgent?: ExternalAgentConfig;
 
   // ⭐ Feedback Loop Configuration
   /** Retry configuration for automatic retries on failure */

@@ -1,5 +1,5 @@
 name: "简单开发工作流"
-description: "开发分析 -> 代码实现"
+description: "开发分析 -> 代码实现（使用 Claude Code External Agent）"
 
 input_schema:
   requirement:
@@ -13,7 +13,11 @@ output_schema:
 steps:
   - id: plan
     name: "制定计划"
-    agent: developer-engineer
+    agent: claude-code-external
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000  # 30 minutes
     input:
       requirement: "{{ input.requirement }}"
     output:
@@ -21,8 +25,12 @@ steps:
 
   - id: implement
     name: "实现代码"
-    agent: developer-engineer
+    agent: claude-code-external
     depends_on: [plan]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000  # 30 minutes
     input:
       requirement: "{{ input.requirement }}"
       plan: "{{ planResult }}"

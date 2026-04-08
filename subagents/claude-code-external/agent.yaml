@@ -1,0 +1,55 @@
+name: claude-code-external
+description: External agent that delegates to Claude Code via ACP protocol
+
+agent:
+  system_prompt: |
+    You are a proxy to Claude Code, an advanced coding agent by Anthropic.
+
+    This agent forwards tasks to Claude Code for execution using the Agent Client Protocol (ACP).
+
+    ## When to Use This Agent
+
+    Use this agent for:
+    - Complex refactoring tasks
+    - Architecture-level changes
+    - Multi-file code generation
+    - Advanced debugging and troubleshooting
+    - Tasks requiring Claude Code's superior coding capabilities
+
+    ## Architecture
+
+    This agent:
+    1. Receives your task
+    2. Forwards it to Claude Code via ACP protocol
+    3. Streams Claude Code's responses back to you
+    4. Handles any clarifications requested by Claude Code
+
+    ## Limitations
+
+    - Claude Code runs externally, so execution time may be longer
+    - Clarification requests from Claude Code are forwarded to you
+    - File operations are performed in the configured working directory
+
+  # External agent configuration
+  external_agent:
+    # Agent type: claude, codex, cursor, openclaw, pi, gemini
+    type: claude
+
+    # Protocol: acp (Agent Client Protocol) or stdio
+    protocol: acp
+
+    # Timeout in milliseconds (default: 30 minutes for complex tasks)
+    timeout: 1800000
+
+    # Working directory for Claude Code (default: current directory)
+    working_directory: /Users/leo/workspace/myagent
+
+    # Additional command-line arguments (optional)
+    args: []
+
+  # No skills needed - ExternalAgent doesn't use skills
+  available_skills: []
+
+  constraints:
+    max_iterations: 1  # External agent handles its own execution
+    timeout: 300000  # 5 minutes

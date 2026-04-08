@@ -1,5 +1,5 @@
 name: "full-development"
-description: "完整研发流程"
+description: "完整研发流程（使用 Claude Code External Agent）"
 
 input_schema:
   requirement:
@@ -14,7 +14,11 @@ output_schema:
 steps:
   - id: developer
     name: "代码生成"
-    agent: developer-engineer
+    agent: claude-code-external
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000  # 30 minutes
     input:
       requirement: "{{ input.requirement }}"
     output:

@@ -12,6 +12,7 @@ import PtcCodeTab from '../components/PtcCodeTab'
 import ArtifactsTab from '../components/ArtifactsTab'
 import ContextTab from '../components/ContextTab'
 import TokenUsageTab from '../components/TokenUsageTab'
+import WorkspaceTab from '../components/WorkspaceTab'
 import ClarificationWaitingCard from '../components/task/ClarificationWaitingCard'
 import ClarificationModal from '../components/task/ClarificationModal'
 import { useTaskPolling } from '../hooks/useTaskPolling'
@@ -2693,6 +2694,15 @@ function TaskDetail() {
             Context
           </button>
           <button
+            className={`tab-button ${activeTab === 'workspace' ? 'active' : ''}`}
+            onClick={() => setActiveTab('workspace')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="tab-icon">
+              <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z" />
+            </svg>
+            Workspace
+          </button>
+          <button
             className={`tab-button ${activeTab === 'token-usage' ? 'active' : ''}`}
             onClick={() => setActiveTab('token-usage')}
           >
@@ -2727,6 +2737,9 @@ function TaskDetail() {
           </div>
           <div className={`tab-panel ${activeTab === 'context' ? 'active' : ''}`}>
             <ContextTab taskId={id} />
+          </div>
+          <div className={`tab-panel ${activeTab === 'workspace' ? 'active' : ''}`}>
+            <WorkspaceTab taskId={id} />
           </div>
           <div className={`tab-panel ${activeTab === 'token-usage' ? 'active' : ''}`}>
             <TokenUsageTab taskId={id} />

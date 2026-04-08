@@ -19,6 +19,7 @@
     "test:check-env": "bash ../tests/frontend/check-env.sh"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@motiadev/stream-client-react": "^0.17.14-beta.196",
     "@types/react-syntax-highlighter": "^15.5.13",
     "axios": "^1.13.2",
