@@ -6,7 +6,6 @@
  */
 
 import { Agent } from './agent';
-import { ExternalAgent } from './external-agent';
 import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
 import { getAgentStreams } from './hooks/progress-notify';
 import { RequestRewriter } from './request-rewriter';
@@ -21,7 +20,7 @@ import * as yaml from 'js-yaml';
  * Master Agent with delegation capabilities.
  */
 export class MasterAgent extends Agent {
-  private subagents: Map<string, Agent | ExternalAgent>;
+  private subagents: Map<string, Agent>;
   private subagentConfigs: Map<string, any>;
   private cacheVersion: string; // Cache version based on subagents config
   private masterConfig: MasterAgentConfig; // Store typed config
@@ -340,8 +339,6 @@ export class MasterAgent extends Agent {
             .filter((s) => s.delegateTo != null)
             .map((s) => s.delegateTo as string),
           skillNames: result.metadata.skillNames,
-          // 传递子代理的完整 metadata（包括 ExternalAgent 的 workspace 信息）
-          ...result.metadata,
         },
         structuredOutput: result.structuredOutput,
         structuredOutputs: (result as any).structuredOutputs,
@@ -967,50 +964,19 @@ ${task}
     // Using independent namespace to distinguish from master agent
     const subagentSessionId = `subagent-${subagentKey}-${Date.now()}`;
 
-    // ⭐ Check if this is an external agent (has external_agent config)
-    console.log(`[MasterAgent] Checking if ${name} is an external agent`, {
-      has_AgentField: !!config._agent,
-      'config._agent keys': config._agent ? Object.keys(config._agent) : 'no _agent field',
-      'config._agent.external_agent': config._agent?.external_agent,
-    });
-
-    const isExternalAgent = !!config._agent?.external_agent;
-
-    let subagent: Agent | ExternalAgent;
-
-    if (isExternalAgent) {
-      // Create ExternalAgent with external_agent config
-      // Note: ExternalAgent is statically imported at the top of the file
-      subagent = new ExternalAgent(
-        {
-          name,
-          systemPrompt: config.systemPrompt,
-          availableSkills: filteredSkills,
-          externalAgent: config._agent.external_agent,  // Pass external_agent config from original agent config
-        },
-        subagentSessionId
-      );
-
-      console.log(`[MasterAgent] Created ExternalAgent: ${name}`, {
-        subagentSessionId,
-        externalAgentType: config._agent.external_agent.type,
-      });
-    } else {
-      // Create regular Agent
-      subagent = new Agent(
-        {
-          name,  // Set name for getSubjectInfo() to use as subjectSubTitle
-          systemPrompt: config.systemPrompt,  // No fallback - must exist
-          availableSkills: filteredSkills,  // Use filtered skills (intersection with MasterAgent's constraint)
-          llm: this.config.llm,
-          sandbox: this.config.sandbox,
-          constraints: config?.constraints, // 传递 constraints 包含 enableClarification
-          knowledgeBase: this.config.knowledgeBase,  // ⭐ 传递 knowledgeBase 配置给 subagent（用于 RAG）
-          validation: config?.validation,  // ⭐ 传递 validation 配置给 subagent（用于 ValidationHook）
-        },
-        subagentSessionId
-      );
-    }
+    const subagent = new Agent(
+      {
+        name,  // Set name for getSubjectInfo() to use as subjectSubTitle
+        systemPrompt: config.systemPrompt,  // No fallback - must exist
+        availableSkills: filteredSkills,  // Use filtered skills (intersection with MasterAgent's constraint)
+        llm: this.config.llm,
+        sandbox: this.config.sandbox,
+        constraints: config?.constraints, // 传递 constraints 包含 enableClarification
+        knowledgeBase: this.config.knowledgeBase,  // ⭐ 传递 knowledgeBase 配置给 subagent（用于 RAG）
+        validation: config?.validation,  // ⭐ 传递 validation 配置给 subagent（用于 ValidationHook）
+      },
+      subagentSessionId
+    );
 
     this.subagents.set(subagentKey, subagent);
 
@@ -1018,7 +984,6 @@ ${task}
       subagentSessionId,
       masterSessionId: this.sessionId,
       workflowStepId,
-      isExternalAgent,
       'skills count': filteredSkills.length,
       'skills': filteredSkills,
     });
@@ -1251,14 +1216,6 @@ ${task}
       // Note: task already includes the current message, formattedHistory contains full history
       const result = await subagent.run(task, taskId, subagentContext);
 
-      console.log('[MasterAgent] Subagent result received', {
-        subagentName,
-        'result.success': result.success,
-        'result.hasMetadata': !!result.metadata,
-        'result.metadata keys': result.metadata ? Object.keys(result.metadata) : 'no metadata',
-        'result.metadata': result.metadata,
-      });
-
       // Call onTaskComplete hook
       if (this.hookManager) {
         console.log(`[MasterAgent] Calling subagent onTaskComplete hook`, {
@@ -1284,8 +1241,6 @@ ${task}
           metadata: {
             delegates: [subagentName],
             skillNames: result.metadata?.skillNames,
-            // 传递子代理的完整 metadata（包括 ExternalAgent 的 workspace 信息）
-            ...result.metadata,
           },
           structuredOutput: result.structuredOutput,
           structuredOutputs: (result as any).structuredOutputs,
@@ -1301,8 +1256,6 @@ ${task}
         metadata: {
           delegates: [subagentName],
           skillNames: result.metadata?.skillNames,
-          // 传递子代理的完整 metadata（包括 ExternalAgent 的 workspace 信息）
-          ...result.metadata,
         },
         structuredOutput: result.structuredOutput,
         structuredOutputs: (result as any).structuredOutputs,
@@ -1542,8 +1495,6 @@ Important rules:
       availableSkills: config.agent.available_skills || config.agent.availableSkills,
       constraints: config.agent.constraints,
       validation: config.agent.validation,  // ValidationHook configuration
-      // ⭐ Keep the original agent config for external agent detection
-      _agent: config.agent,  // Store original agent config with _ prefix
     };
   }
 

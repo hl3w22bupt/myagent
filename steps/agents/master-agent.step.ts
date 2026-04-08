@@ -638,12 +638,9 @@ export const handler = async (
     // Update status to running
     await updateStream('running', { currentStep: 'Acquiring agent' });
 
-    // Determine agent type (default to master for backward compatibility)
-    const agentType = input.agentType || 'master';
-
-    logger.info('Acquiring Agent', {
+    // Always use MasterAgent for all requests
+    logger.info('Acquiring MasterAgent', {
       sessionId,
-      agentType,
       delegateTo: input.delegateTo,
       availableSkills: input.availableSkills,
       skillCount: input.availableSkills?.length || 0
@@ -652,18 +649,17 @@ export const handler = async (
     logger.debug('[master-agent.step] Input received:', {
       taskId,
       sessionId,
-      'input.agentType': input.agentType,
       'input.delegateTo': input.delegateTo,
       'input.availableSkills': input.availableSkills,
     });
 
-    // Get Agent from Manager (Agent, MasterAgent, or ExternalAgent)
-    // each session has independent Agent instance
+    // Get MasterAgent from Manager
+    // each session has independent MasterAgent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
     // Note: Only pass availableSkills if it's a non-empty array
     // Empty array means "use all skills" (not "restrict to no skills")
     const acquireOptions: any = {
-      agentType,
+      agentType: 'master',
     };
     if (input.availableSkills && input.availableSkills.length > 0) {
       acquireOptions.availableSkills = input.availableSkills;
@@ -1069,7 +1065,7 @@ export const handler = async (
     });
 
     // Emit completion event
-    // 调试：检查 result.structuredOutputs 和 metadata
+    // 调试：检查 result.structuredOutputs
     logger.debug('[master-agent] About to emit completion event:', {
       taskId,
       'result keys': Object.keys(result),
@@ -1077,10 +1073,6 @@ export const handler = async (
       'result.structuredOutputs type': Array.isArray((result as any).structuredOutputs) ? 'array' : typeof (result as any).structuredOutputs,
       'result.structuredOutputs length': (result as any).structuredOutputs?.length,
       'result has structuredOutputs': 'structuredOutputs' in result,
-      'result.metadata': result.metadata,
-      'result.metadata delegates': result.metadata?.delegates,
-      'result.metadata workspace': result.metadata?.workspace,
-      'result.metadata externalAgent': result.metadata?.externalAgent,
     });
 
     await emit({

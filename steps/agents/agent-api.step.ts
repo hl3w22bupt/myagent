@@ -95,13 +95,6 @@ export const bodySchema = z.object({
   subagent: z.string().optional().describe('Specific subagent to use'),
 
   /**
-   * Optional: Agent type to use for execution.
-   * When specified, the task will be executed by this agent type.
-   * Supported values: 'agent' (default), 'master', 'external'
-   */
-  agentType: z.enum(['agent', 'master', 'external']).optional().describe('Agent type to use (agent/master/external)'),
-
-  /**
    * Optional: Whether to rewrite the request using conversation history (default: true).
    * When false, the original request will be used as-is without context enhancement.
    * This is useful for integrations (e.g., MyEcho) that manage their own conversation context.
@@ -180,7 +173,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, delegateTo, environment, userId, userContext, subagent, agentType, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
+  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, delegateTo, environment, userId, userContext, subagent, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -204,7 +197,6 @@ export const handler = async (request: any, { emit, logger }: any) => {
     skills: availableSkills,
     useDelegation,
     delegateTo,
-    agentType,
     hasEnvironment: !!environment,
     environmentKeys: environment ? Object.keys(environment) : [],
     userId,
@@ -258,7 +250,6 @@ export const handler = async (request: any, { emit, logger }: any) => {
       userId, // MyEcho: User ID for profile accumulation
       userContext, // MyEcho: User configuration bundle
       subagent, // MyEcho: Direct subagent selection
-      agentType, // Agent type selection (agent/master/external)
       rewriteRequest, // Request rewriting control (default: true)
       workflow, // Workflow name to execute (if specified)
       workflowInput: workflow_input, // Workflow input parameters (if specified)
@@ -281,7 +272,6 @@ export const handler = async (request: any, { emit, logger }: any) => {
       availableSkills,
       userId,
       subagent,
-      agentType,
       rewriteRequest,
     },
   };

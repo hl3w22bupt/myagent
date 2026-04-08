@@ -288,22 +288,9 @@ export class WorkflowEngine {
       const sessionId = `workflow-${workflow.name}-${step.id}-${options.taskId || Date.now()}`;
 
       // Build acquire options
-      const acquireOptions: any = {};
-
-      // Check if this step uses an external agent
-      if (step.externalAgent) {
-        // Use external agent type
-        acquireOptions.agentType = 'external';
-        acquireOptions.externalAgentConfig = step.externalAgent;
-
-        this.logger.info(`[WorkflowEngine] Using external agent for step ${step.id}`, {
-          type: step.externalAgent.type,
-          protocol: step.externalAgent.protocol,
-        });
-      } else {
-        // Use regular subagent
-        acquireOptions.agentType = step.agent as 'agent' | 'master';
-      }
+      const acquireOptions: any = {
+        agentType: step.agent as 'agent' | 'master',
+      };
 
       // Apply validation from workflow step configuration (primary source)
       if (step.validation) {
@@ -322,13 +309,6 @@ export class WorkflowEngine {
       // Set agent name for trace display (e.g., "developer-engineer")
       (agent as any).agentName = step.agent;
 
-      // Set hookManager to agent so it can trigger its own hooks
-      const hookManager = this.agentManager.getHookManager();
-      if (agent.setHookManager && hookManager) {
-        agent.setHookManager(hookManager);
-        this.logger.debug('[WorkflowEngine] HookManager set on agent', { sessionId, stepId: step.id });
-      }
-
       // Set agent streams for progress notifications
       if (!this.streams) {
         this.streams = getAgentStreams();
@@ -338,6 +318,9 @@ export class WorkflowEngine {
       if (this.streams) {
         setAgentStreams(this.streams);
       }
+
+      // Get hook manager
+      const hookManager = this.agentManager.getHookManager();
 
       // Call agent pre hook (onTaskStart)
       if (hookManager) {
