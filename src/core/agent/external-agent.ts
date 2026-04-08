@@ -7,7 +7,6 @@
 import { Agent } from './agent';
 import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
 import { mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
 import { ContextManager } from '../context/manager';
 
 /**
@@ -441,47 +440,24 @@ export class ExternalAgent extends Agent {
 
             // 2. 发送到 executionTraces stream
             if (streams?.executionTraces) {
-              // 开始等待澄清的 trace
-              const awaitingTraceId = `awaiting-clarification-${currentTaskId}-${Date.now()}`;
-              await streams.executionTraces.set(currentTaskId, awaitingTraceId, {
-                traceId: awaitingTraceId,
+              const clarificationTraceId = `hitl-clarification-${currentTaskId}-${Date.now()}`;
+              await streams.executionTraces.set(currentTaskId, clarificationTraceId, {
+                traceId: clarificationTraceId,
                 level: 'agent',
                 taskId: currentTaskId,
                 agentId: this.sessionId,
-                stage: 'processing',
-                purpose: 'hitl_clarification',
-                status: 'started',
+                stage: 'hitl-clarification',
+                status: 'resolved',
                 inputData: JSON.stringify({
                   question: question.substring(0, 500) + (question.length > 500 ? '...' : ''),
-                  timestamp: new Date().toISOString(),
-                }),
-              });
-
-              console.log('[ExternalAgent] Awaiting clarification trace sent', {
-                currentTaskId,
-                traceId: awaitingTraceId,
-              });
-
-              // 收到澄清的 trace
-              const receivedTraceId = `clarification-provided-${currentTaskId}-${Date.now()}`;
-              await streams.executionTraces.set(currentTaskId, receivedTraceId, {
-                traceId: receivedTraceId,
-                level: 'agent',
-                taskId: currentTaskId,
-                agentId: this.sessionId,
-                parentTraceId: awaitingTraceId,
-                stage: 'processing',
-                purpose: 'hitl_clarification',
-                status: 'completed',
-                inputData: JSON.stringify({
                   clarification: clarificationResponse.content.substring(0, 500) + (clarificationResponse.content.length > 500 ? '...' : ''),
                   timestamp: new Date().toISOString(),
                 }),
               });
 
-              console.log('[ExternalAgent] Clarification provided trace sent', {
+              console.log('[ExternalAgent] HITL clarification trace sent', {
                 currentTaskId,
-                traceId: receivedTraceId,
+                traceId: clarificationTraceId,
               });
             }
 
