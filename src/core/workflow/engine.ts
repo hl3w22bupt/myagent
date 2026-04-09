@@ -14,6 +14,8 @@ import { ContextManager } from '../context/manager';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
+import { ArtifactCollector } from '../agent/artifact-collector';
+import { AgentArtifacts } from '../agent/artifacts';
 
 export class WorkflowEngine {
   private agentManager: AgentManager;
@@ -281,7 +283,7 @@ export class WorkflowEngine {
 
       // Regular agent call - directly use the subagent
       const renderedInput = this.renderInput(step.input || {}, context);
-      const taskDescription = this.formatTaskDescription(step.name || step.id, renderedInput, context);
+      const taskDescription = this.formatTaskDescription(step, renderedInput, context, workflow);
 
       // Create a unique sessionId for each workflow step
       // This ensures each step has its own agent instance for proper trace aggregation
@@ -385,6 +387,32 @@ export class WorkflowEngine {
       // Extract outputs
       if (step.output) {
         this.extractOutputs(result, step.output, context);
+      }
+
+      // ⭐ 处理产物信息
+      // 1. 如果 Agent 已经返回 artifacts，直接使用
+      // 2. 如果有 fileOperations 但没有 artifacts，自动转换
+      // 3. 如果有 workspace 但没有产物信息，扫描 workspace
+      let artifacts = result.artifacts;
+
+      if (!artifacts && result.metadata?.fileOperations) {
+        // 从 fileOperations 转换
+        artifacts = ArtifactCollector.fromFileOperations(
+          result.metadata.fileOperations,
+          result.metadata.workspace
+        );
+        result.artifacts = artifacts;  // 缓存到 result 中
+      } else if (!artifacts && result.metadata?.workspace) {
+        // 扫描 workspace（可选，性能考虑）
+        // 这里暂时不自动扫描，避免性能问题
+        // 如果需要，可以在 workflow yaml 中配置 scanWorkspace: true
+      }
+
+      // 保存产物到 context，供下一个 step 使用
+      if (artifacts) {
+        // 保存到 variables 中
+        context.set(`variables.steps.${step.id}.artifacts`, artifacts);
+        context.set(`variables.${step.id}.artifacts`, artifacts);  // 简写
       }
 
       context.setStepStatus(step.id, 'completed');
@@ -563,9 +591,23 @@ export class WorkflowEngine {
 
   /**
    * Format task as natural language description from rendered input
+   * ⭐ 增强：自动注入依赖 step 的产物信息
    */
-  private formatTaskDescription(stepName: string, renderedInput: Record<string, any>, _context: WorkflowContext): string {
-    const parts: string[] = [stepName];
+  private formatTaskDescription(
+    step: WorkflowStep,
+    renderedInput: Record<string, any>,
+    context: WorkflowContext,
+    workflow: WorkflowConfig
+  ): string {
+    const parts: string[] = [step.name || step.id];
+
+    // ⭐ 自动添加依赖 step 的产物信息
+    if (step.depends_on && step.depends_on.length > 0) {
+      const artifactsInfo = this.buildArtifactsInfoFromDependencies(step.depends_on, context);
+      if (artifactsInfo) {
+        parts.push(artifactsInfo);
+      }
+    }
 
     // Add input values
     for (const [key, value] of Object.entries(renderedInput)) {
@@ -576,6 +618,50 @@ export class WorkflowEngine {
     }
 
     return parts.join('\n');
+  }
+
+  /**
+   * 从依赖的 steps 构建产物信息
+   */
+  private buildArtifactsInfoFromDependencies(
+    dependencies: string[],
+    context: WorkflowContext
+  ): string | null {
+    const infoParts: string[] = [];
+
+    for (const depStepId of dependencies) {
+      // 获取产物信息（从 variables 中获取）
+      const artifacts = context.get(`variables.steps.${depStepId}.artifacts`) as AgentArtifacts;
+
+      if (!artifacts || !artifacts.allFiles || artifacts.allFiles.length === 0) {
+        continue;
+      }
+
+      infoParts.push(`\n[Previous step: ${depStepId}]`);
+
+      if (artifacts.workspace) {
+        infoParts.push(`Workspace: ${artifacts.workspace}`);
+      }
+
+      infoParts.push(`Files created (${artifacts.allFiles.length}):`);
+
+      // 按类型分组显示
+      for (const [type, files] of Object.entries(artifacts.files || {})) {
+        if (files && (files as any[]).length > 0) {
+          infoParts.push(`  ${type} (${(files as any[]).length}):`);
+          for (const file of files as any[]) {
+            infoParts.push(`    - ${file.relativePath || file.name}`);
+          }
+        }
+      }
+
+      // 添加统计信息
+      if (artifacts.summary) {
+        infoParts.push(`Summary: ${artifacts.summary.totalFiles} files, ${artifacts.summary.totalSize} bytes`);
+      }
+    }
+
+    return infoParts.length > 0 ? infoParts.join('\n') : null;
   }
 
   /**

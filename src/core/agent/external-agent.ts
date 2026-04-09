@@ -8,6 +8,7 @@ import { Agent } from './agent';
 import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
 import { mkdirSync, existsSync } from 'fs';
 import { ContextManager } from '../context/manager';
+import { ArtifactCollector } from './artifact-collector';
 
 /**
  * ExternalAgent class.
@@ -499,6 +500,12 @@ export class ExternalAgent extends Agent {
           }
         }
 
+        // ⭐ 使用 ArtifactCollector 转换为统一的产物格式
+        const artifacts = ArtifactCollector.fromFileOperations(
+          fileOperations,
+          this.currentWorkspace
+        );
+
         return {
           success: true,
           output: output,
@@ -517,9 +524,10 @@ export class ExternalAgent extends Agent {
           metadata: {
             externalAgent: this.externalConfig!.type,
             workspace: this.currentWorkspace,
-            fileOperations: fileOperations,
+            fileOperations: fileOperations,  // 保留原始数据
             toolCallsCount: toolCalls.length,
           },
+          artifacts,  // ⭐ 新增：统一的产物信息
         };
       } else if (stopReason === 'awaiting_input') {
         return {
