@@ -1,0 +1,16 @@
+name: test-artifacts-workflow
+description: 测试产物在 workflow step 之间传递的工作流
+
+steps:
+  - id: create-plan
+    name: "创建计划文档"
+    agent: developer-engineer
+    input:
+      task: "创建一个简单的 TypeScript Hello World 项目的计划文档，包括项目结构和实现步骤"
+
+  - id: implement
+    name: "实现代码"
+    agent: developer-engineer
+    depends_on: [create-plan]
+    input:
+      task: "根据上一个 step 创建的计划文档，实现 TypeScript Hello World 项目"
