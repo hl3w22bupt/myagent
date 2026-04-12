@@ -1,0 +1,89 @@
+name: "Git 驱动开发工作流"
+description: "git clone -> plan -> implement -> commit/push/PR"
+
+input_schema:
+  requirement:
+    type: string
+    required: true
+
+output_schema:
+  clone: object
+  plan: object
+  implementation: object
+  pr: object
+
+steps:
+  # Step 1: Clone repository into workspace
+  - id: clone
+    name: "克隆仓库"
+    type: git-clone
+    gitClone:
+      url: "{{ variables.environment.githubUrl }}"
+      token: "{{ variables.environment.githubToken }}"
+      branch: "{{ variables.environment.branch }}"
+    output:
+      cloneResult: "structuredOutput"
+
+  # Step 2: Analyze requirement and create plan
+  - id: plan
+    name: "制定计划，不要直接写代码"
+    agent: claude-code-external
+    depends_on: [clone]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      planResult: "structuredOutput"
+
+  # Step 3: Implement code changes
+  - id: implement
+    name: "参考制定的计划，开始实现代码"
+    agent: claude-code-external
+    depends_on: [plan]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000
+    input:
+      requirement: "{{ input.requirement }}"
+      plan: "{{ planResult }}"
+    output:
+      implementationResult: "structuredOutput"
+
+  # Step 4: Commit, push, and create PR (使用 ExternalAgent 避免 PTC 代码生成问题)
+  - id: publish
+    name: |
+      你是一个 Git 发布专员。请执行以下操作：
+      1. 运行 `git status` 和 `git diff --stat` 查看所有变更
+      2. 运行 `git diff` 查看详细变更内容
+      3. 使用 `git add` 暂存相关文件（不要添加无关文件）
+      4. 使用 Conventional Commits 格式生成 commit message 并 `git commit`
+      5. 运行 `git push origin <current-branch>` 推送
+      6. 使用 `gh pr create` 创建 PR，title 使用 commit message，body 总结所有变更
+      7. 报告 PR URL
+
+      注意：只分析变更和执行 git 操作，不要修改代码
+    agent: claude-code-external
+    depends_on: [implement]
+    externalAgent:
+      type: claude
+      protocol: acp
+      timeout: 1800000
+    input:
+      requirement: "{{ input.requirement }}"
+    output:
+      publishResult: "structuredOutput"
+
+# Map to final output
+output:
+  clone:
+    from: "cloneResult"
+  plan:
+    from: "planResult"
+  implementation:
+    from: "implementationResult"
+  pr:
+    from: "publishResult"

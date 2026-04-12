@@ -212,13 +212,25 @@ export class ArtifactCollector {
     const fileName = op.name || path.basename(filePath);
     const artifactType = this.getArtifactType(fileName) || 'other';
 
+    // Try to get actual file size from disk
+    let fileSize = op.size || 0;
+    if (!fileSize) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fileSize = fs.statSync(filePath).size;
+        }
+      } catch {
+        // File may not exist yet, keep size as 0
+      }
+    }
+
     return {
       type: artifactType,
       path: filePath,
       name: fileName,
       relativePath: workspace ? path.relative(workspace, filePath) : undefined,
       operation: op.type === 'write' || op.type === 'create' ? 'created' : 'modified',
-      size: op.size || 0,
+      size: fileSize,
     };
   }
 

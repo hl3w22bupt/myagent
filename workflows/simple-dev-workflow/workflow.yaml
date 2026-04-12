@@ -12,7 +12,7 @@ output_schema:
 
 steps:
   - id: plan
-    name: "制定计划"
+    name: "制定计划，不要直接写代码"
     agent: claude-code-external
     externalAgent:
       type: claude
@@ -24,7 +24,7 @@ steps:
       planResult: "structuredOutput"
 
   - id: implement
-    name: "实现代码"
+    name: "参考制定的计划，开始实现代码"
     agent: claude-code-external
     depends_on: [plan]
     externalAgent:

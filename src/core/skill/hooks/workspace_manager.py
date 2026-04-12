@@ -1,7 +1,8 @@
 """
-Workspace Manager for Skill Artifacts
+Workspace Manager for Task and Skill Artifacts
 
-Manages per-task workspace creation, cleanup, and artifact scanning/transferring.
+Manages task-level workspace creation, cleanup, and artifact scanning.
+All tasks (workflow steps or single tasks) share a task-level workspace.
 """
 import os
 import shutil
@@ -10,9 +11,9 @@ from typing import Dict, List, Optional, Tuple
 
 
 class WorkspaceManager:
-    """管理 per-task workspace 的创建、清理和产物扫描"""
+    """管理 Task Level workspace 的创建、清理和产物扫描"""
 
-    WORKSPACE_ROOT = "tmp-workspace"
+    WORKSPACE_ROOT = "/tmp/myagent-workspace"  # ✅ 统一为绝对路径
 
     # 文件类型映射
     ARTIFACT_TYPES: Dict[str, List[str]] = {
@@ -34,18 +35,52 @@ class WorkspaceManager:
     ]
 
     @staticmethod
-    def get_workspace_dir(task_id: str, skill_name: str) -> str:
+    def get_task_workspace(task_id: str) -> str:
         """
-        获取 workspace 目录路径
+        获取 Task Level workspace 路径（所有 skills 共享）
+
+        Args:
+            task_id: Task identifier
+
+        Returns:
+            绝对路径，格式为 /tmp/myagent-workspace/{task_id}/
+        """
+        return os.path.join(WorkspaceManager.WORKSPACE_ROOT, task_id)
+
+    @staticmethod
+    def create_task_workspace(task_id: str) -> str:
+        """
+        创建 Task Level workspace
+
+        Args:
+            task_id: Task identifier
+
+        Returns:
+            绝对路径，格式为 /tmp/myagent-workspace/{task_id}/
+        """
+        workspace_dir = WorkspaceManager.get_task_workspace(task_id)
+        print(f"[WorkspaceManager] Creating task workspace: {workspace_dir}")
+        os.makedirs(workspace_dir, exist_ok=True)
+        print(f"[WorkspaceManager] ✓ Task workspace created: {workspace_dir}")
+        return workspace_dir
+
+    @staticmethod
+    def get_skill_workspace(task_id: str, skill_name: str) -> str:
+        """
+        获取 Skill Level workspace 路径（可选，用于 skill 私有文件）
+
+        Note: 大多数情况下应该使用 task workspace，skill workspace 只用于
+              skill 需要私有临时文件的场景
 
         Args:
             task_id: Task identifier
             skill_name: Name of the skill
 
         Returns:
-            Absolute path to workspace directory
+            绝对路径，格式为 /tmp/myagent-workspace/{task_id}/{skill_name}/
         """
-        return os.path.join(WorkspaceManager.WORKSPACE_ROOT, task_id, skill_name)
+        task_workspace = WorkspaceManager.get_task_workspace(task_id)
+        return os.path.join(task_workspace, skill_name)
 
     @staticmethod
     def create_workspace(task_id: str, skill_name: str) -> str:
@@ -59,32 +94,46 @@ class WorkspaceManager:
         Returns:
             Absolute path to created workspace directory
         """
-        workspace_dir = WorkspaceManager.get_workspace_dir(task_id, skill_name)
+        workspace_dir = WorkspaceManager.get_skill_workspace(task_id, skill_name)
         print(f"[WorkspaceManager] Creating workspace directory: {workspace_dir}")
         os.makedirs(workspace_dir, exist_ok=True)
         print(f"[WorkspaceManager] ✓ Workspace created: {workspace_dir}")
         return workspace_dir
 
     @staticmethod
-    def cleanup_workspace(task_id: str, skill_name: Optional[str] = None):
+    def cleanup_task_workspace(task_id: str, force: bool = False) -> bool:
         """
-        清理 workspace 目录
+        清理 Task Level workspace
 
         Args:
             task_id: Task identifier
-            skill_name: Optional skill name. If None, cleans entire task directory
+            force: True=强制清理, False=只清理默认 workspace
+
+        Returns:
+            是否成功清理
         """
         try:
-            if skill_name:
-                workspace_dir = WorkspaceManager.get_workspace_dir(task_id, skill_name)
-                if os.path.exists(workspace_dir):
-                    shutil.rmtree(workspace_dir)
+            task_workspace = WorkspaceManager.get_task_workspace(task_id)
+
+            # 判断是否为默认 workspace
+            is_default = task_workspace.startswith(WorkspaceManager.WORKSPACE_ROOT)
+
+            if not is_default and not force:
+                print(f"[WorkspaceManager] Preserving user-specified workspace: {task_workspace}")
+                return False
+
+            if os.path.exists(task_workspace):
+                print(f"[WorkspaceManager] Cleaning up task workspace: {task_workspace}")
+                shutil.rmtree(task_workspace)
+                print(f"[WorkspaceManager] ✓ Task workspace cleaned: {task_workspace}")
+                return True
             else:
-                task_dir = os.path.join(WorkspaceManager.WORKSPACE_ROOT, task_id)
-                if os.path.exists(task_dir):
-                    shutil.rmtree(task_dir)
+                print(f"[WorkspaceManager] Task workspace does not exist: {task_workspace}")
+                return False
+
         except Exception as e:
             print(f"[WorkspaceManager] Warning: Failed to cleanup workspace: {e}")
+            return False
 
     @staticmethod
     def _should_skip_file(filename: str) -> bool:
@@ -118,6 +167,20 @@ class WorkspaceManager:
             if ext in extensions:
                 return artifact_type
         return None
+
+    @staticmethod
+    def scan_task_artifacts(task_id: str) -> Dict[str, List[str]]:
+        """
+        扫描 Task Level workspace 中的产物文件，按类型分类
+
+        Args:
+            task_id: Task identifier
+
+        Returns:
+            Dict mapping artifact types to lists of relative file paths
+        """
+        task_workspace = WorkspaceManager.get_task_workspace(task_id)
+        return WorkspaceManager.scan_artifacts(task_workspace)
 
     @staticmethod
     def scan_artifacts(workspace_dir: str) -> Dict[str, List[str]]:
@@ -156,56 +219,6 @@ class WorkspaceManager:
                     artifacts[artifact_type].append(rel_path)
 
         # 移除空列表
-        return {k: v for k, v in artifacts.items() if v}
-
-    @staticmethod
-    def scan_task_artifacts(task_dir: str) -> Dict[str, List[Tuple[str, str]]]:
-        """
-        扫描整个task目录中的产物文件，按类型分类
-
-        Args:
-            task_dir: Task-level workspace directory (contains skill subdirectories)
-
-        Returns:
-            Dict mapping artifact types to lists of (relative_path, skill_name) tuples
-        """
-        if not os.path.exists(task_dir):
-            return {}
-
-        artifacts: Dict[str, List[Tuple[str, str]]] = {
-            "videos": [],
-            "images": [],
-            "audios": [],
-            "codes": [],
-        }
-
-        # Walk through all skill subdirectories
-        for skill_name in os.listdir(task_dir):
-            skill_path = os.path.join(task_dir, skill_name)
-            if not os.path.isdir(skill_path):
-                continue
-
-            # Skip certain directories
-            if WorkspaceManager._should_skip_file(skill_name):
-                continue
-
-            # Scan this skill directory
-            for root, dirs, files in os.walk(skill_path):
-                # Filter out directories to skip
-                dirs[:] = [d for d in dirs if not WorkspaceManager._should_skip_file(d)]
-
-                for filename in files:
-                    if WorkspaceManager._should_skip_file(filename):
-                        continue
-
-                    artifact_type = WorkspaceManager._get_artifact_type(filename)
-                    if artifact_type and artifact_type in artifacts:
-                        # Get relative path from task_dir
-                        full_path = os.path.join(root, filename)
-                        rel_path = os.path.relpath(full_path, task_dir)
-                        artifacts[artifact_type].append((rel_path, skill_name))
-
-        # Remove empty lists
         return {k: v for k, v in artifacts.items() if v}
 
     @staticmethod

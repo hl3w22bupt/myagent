@@ -4,6 +4,21 @@
   border-radius: 8px;
   background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+  transition: all 0.3s ease;
+}
+
+/* Resolved state (human) */
+.clarification-waiting-card.clarification-card--resolved {
+  border-color: #10B981;
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+/* Timeout state */
+.clarification-waiting-card.clarification-card--timeout {
+  border-color: #94A3B8;
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.1);
 }
 
 .clarification-card-header {
@@ -18,7 +33,15 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #F59E0B; /* 橙色，与卡片边框一致 */
+  color: #F59E0B;
+}
+
+.clarification-card-icon.icon-resolved {
+  color: #10B981;
+}
+
+.clarification-card-icon.icon-timeout {
+  color: #94A3B8;
 }
 
 .clarification-card-content {
@@ -31,6 +54,14 @@
   font-size: 16px;
   color: #92400E;
   margin-bottom: 4px;
+}
+
+.clarification-card-title.title-resolved {
+  color: #065F46;
+}
+
+.clarification-card-title.title-timeout {
+  color: #475569;
 }
 
 .clarification-card-agent {

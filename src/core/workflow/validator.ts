@@ -79,8 +79,8 @@ export class WorkflowValidator {
 
     // Validate each step's agent
     for (const step of config.steps) {
-      // Skip agent validation for HITL steps (type='hitl')
-      if (step.type === 'hitl') {
+      // Skip agent validation for HITL steps and git-clone steps (no agent needed)
+      if (step.type === 'hitl' || step.type === 'git-clone') {
         continue;
       }
 

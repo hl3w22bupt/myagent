@@ -324,6 +324,15 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
   const sessionId = input.sessionId;
   const messageId = input.messageId;  // Extract messageId for tracking
 
+  // [IPC-DEBUG] Entry timestamp for latency tracking
+  const handlerEntryTime = Date.now();
+  logger.info('[IPC-DEBUG] Task Result Handler: ENTERED', {
+    taskId,
+    sessionId,
+    isFailedEvent,
+    handlerEntryTime,
+  });
+
   // Log messageId for debugging (always log to see if it's present)
   logger.info('Task Result Handler: Received input', {
     taskId,
@@ -616,13 +625,29 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
           // 处理 text 类型
           // 如果有 output_files，优先创建 file 类型的 artifact（而不是 text）
-          const outputFiles = structuredResult?.output_files as Array<{type: string; 'file-type': string; path: string}> | undefined;
-          if (outputFiles && outputFiles.length > 0 && resultType === 'text') {
+          // output_files 可能是 string[] (路径数组) 或 Array<{path: string, type: string}>
+          const rawOutputFiles = structuredResult?.output_files;
+          const outputFiles: Array<{path: string; type?: string; 'file-type'?: string}> = [];
+          if (Array.isArray(rawOutputFiles)) {
+            for (const item of rawOutputFiles) {
+              if (typeof item === 'string') {
+                outputFiles.push({ path: item });
+              } else if (item && typeof item === 'object' && item.path) {
+                outputFiles.push(item as any);
+              }
+            }
+          }
+          if (outputFiles.length > 0 && resultType === 'text') {
             // Create file artifacts for each output file
             // 对于多 skill 场景，同一文件可能被多个 skill 处理，只保留一个 artifact（最后一个）
             for (const file of outputFiles) {
-              const fileType = file['file-type'] || 'unknown';
+              const fileType = file['file-type'] || file.type || 'unknown';
               const filePath = file.path;
+
+              if (!filePath) {
+                logger.warn('Skipping output_file with missing path', { fileType });
+                continue;
+              }
 
               // 检查是否已存在相同路径的 artifact
               const existingArtifacts = await store.getArtifacts(taskId);
@@ -1139,7 +1164,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           completedAt: new Date(),
         });
 
-        logger.info('Task record updated in database', {
+        logger.info('[IPC-DEBUG] Task record updated in database', {
           taskId,
           finalStatus,
           hasOutputHistory: !!(latestTask?.metadata?.outputHistory),
@@ -1158,7 +1183,11 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     } catch (error: any) {
       logger.warn('Failed to update task record in database', {
         error: error.message,
+        stack: error.stack?.split('\n').slice(0, 5),
         taskId,
+        hasNormalizedOutput: !!normalizedResult.output,
+        hasNormalizedError: !!normalizedResult.error,
+        hasStructuredOutput: !!(normalizedResult as any).structuredOutput,
       });
       // Don't throw - continue execution even if database update fails
     }
@@ -1346,7 +1375,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
           : new Date(finalTask.createdAt).toISOString(),
       });
 
-      logger.info('✅ Task result pushed to stream', {
+      logger.info('[IPC-DEBUG] ✅ Task result pushed to stream', {
         taskId,
         sessionId,
         status: finalTask.status,

@@ -12,9 +12,14 @@ import { PTCGenerationOptions, PTCResult } from './types';
 import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
 import { ContextManager } from '../context/manager';
 import Handlebars from 'handlebars';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 // 对话历史配置（与 agent.ts 保持一致）
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
+
+// 自然语言参数名约定：这些参数接收自然语言描述，skill 内部会用 LLM 解析
+const NATURAL_LANGUAGE_PARAMS = new Set(['task', 'text', 'query', 'description']);
 
 /**
  * Simplified Skill Metadata for PTC Generator.
@@ -444,73 +449,6 @@ Always prioritize available skills over direct computation or common knowledge.`
   }
 
   /**
-   * Generate explicit schema-to-schema mapping instructions for multi-skill chaining.
-   * This tells LLM exactly which output fields map to which input fields.
-   *
-   * @param selectedSkills - Skills selected for execution
-   * @param skillsDetails - Full skill metadata including schemas
-   * @returns Schema mapping instructions as a formatted string
-   */
-  private generateSchemaMappingInstructions(
-    selectedSkills: string[],
-    skillsDetails: SkillMetadata[]
-  ): string {
-    if (selectedSkills.length <= 1) {
-      return '';
-    }
-
-    const lines: string[] = [
-      '',
-      '# CRITICAL - SKILL OUTPUT/INPUT SCHEMA MAPPING:',
-      '# When chaining skills, pass the OUTPUT from previous skill to INPUT of next skill',
-      '#',
-      '# 🔥 CRITICAL - DATA TYPE CONVERSION:',
-      '# Different skills return different data formats. You MUST convert before passing to next skill:',
-      '#   - Table data (dict with columns/rows): Use format_table_as_markdown() to convert to string',
-      '#   - Object (dict): Convert to JSON string using json.dumps()',
-      '#   - File result (dict with path): Extract the path value as string',
-      '#   - String: Pass directly',
-      '# See the multi-skill execution example below for complete formatting code.',
-      ''
-    ];
-
-    for (let i = 0; i < selectedSkills.length - 1; i++) {
-      const currentSkill = skillsDetails[i];
-      const nextSkill = skillsDetails[i + 1];
-      const currentTaskParam = this.findTaskParameter(selectedSkills[i]);
-      const nextTaskParam = this.findTaskParameter(selectedSkills[i + 1]);
-
-      lines.push(`# ${selectedSkills[i]} → ${selectedSkills[i + 1]}:`);
-
-      // Get output schema from current skill
-      const outputSchema = currentSkill.metadata?.output_schema;
-      if (outputSchema?.properties) {
-        const outputFields = Object.keys(outputSchema.properties);
-        lines.push(`#   Output fields: ${outputFields.length > 0 ? outputFields.join(', ') : '(no schema defined)'}`);
-      } else {
-        lines.push('#   Output fields: (no output_schema defined)');
-      }
-
-      // Get input schema from next skill (excluding main task param)
-      const inputSchema = nextSkill.metadata?.input_schema;
-      if (inputSchema?.properties) {
-        const inputFields = Object.keys(inputSchema.properties)
-          .filter(f => f !== nextTaskParam);  // Skip the main task param
-        lines.push(`#   Input fields (excluding main param '${nextTaskParam}'): ${inputFields.length > 0 ? inputFields.join(', ') : '(none)'}`);
-      } else {
-        lines.push(`#   Input fields: (no input_schema defined)`);
-      }
-
-      // Generate explicit mapping instruction
-      lines.push(`#   Mapping: result${i + 1}['content'] → ${nextTaskParam}`);
-      lines.push(`#   Example: ${nextTaskParam}='${currentTaskParam}'`);  // Use previous result's content
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
    * Generate skill execution example for multi-skill chaining.
    * Shows the LLM exactly how to call multiple skills in sequence.
    *
@@ -537,14 +475,29 @@ Always prioritize available skills over direct computation or common knowledge.`
       const prevResultVar = i > 0 ? `result${i}` : null;
 
       if (i === 0) {
-        // First skill - use the task description directly
+        // First skill - show structured parameter usage
+        const skillMeta = this.skills.get(skillName);
+        const directParams = skillMeta ? this.findDirectParameters(skillMeta) : [];
+
         lines.push(`# Step 1: Call ${skillName}`);
+        lines.push(`# Follow the Skill Invocation Methodology:`);
+        lines.push(`#   ${skillName} structured parameters: ${directParams.length > 0 ? directParams.join(', ') : '(check schema)'}`);
+        lines.push(`#   ${skillName} fallback parameter: '${taskParam}'`);
         lines.push(`${resultVar} = await execute_with_retry(`);
         lines.push(`    execute_func=executor.execute,`);
-        lines.push(`    skill_name='${skillName}',  # ← REAL skill name, not placeholder`);
+        lines.push(`    skill_name='${skillName}',`);
         lines.push(`    input_data={`);
-        lines.push(`        '${taskParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',`);
-        lines.push(`        # Add other parameters based on skill schema...`);
+        if (directParams.length > 0) {
+          // Show structured params as the primary approach
+          for (const p of directParams.slice(0, 3)) {
+            lines.push(`        '${p}': extracted_value,  # Extract from task or use exact value`);
+          }
+          if (directParams.length > 3) {
+            lines.push(`        # ... other params from schema`);
+          }
+        } else {
+          lines.push(`        '${taskParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',`);
+        }
         lines.push(`    }`);
         lines.push(`)`);
         // Add error handling for first skill
@@ -556,67 +509,40 @@ Always prioritize available skills over direct computation or common knowledge.`
         lines.push(`    # Exit early - don't continue with remaining skills`);
         lines.push(`    return`);
       } else {
-        // Subsequent skills - chain from previous result WITH FORMAT CONVERSION
+        // Subsequent skills - chain from previous result
+        // Get structured parameters for this skill (for the example)
+        const skillMeta = this.skills.get(skillName);
+        const directParams = skillMeta ? this.findDirectParameters(skillMeta) : [];
+
         lines.push('');
         lines.push(`# Step ${i + 1}: Call ${skillName} (receives output from step ${i})`);
-        lines.push(`# 🔥 CRITICAL: Format the previous skill output for ${skillName}`);
-        lines.push(`# Different skills return different data formats - convert before passing:`);
+        lines.push(`# Follow the Skill Invocation Methodology:`);
+        lines.push(`#   1. Extract EXACT values from ${prevResultVar}['content']`);
+        lines.push(`#   2. Pass them as STRUCTURED parameters to ${skillName}`);
+        lines.push(`#   3. Check ${skillName}'s schema above for parameter names`);
         lines.push(`#`);
-        lines.push(`# PREVIOUS OUTPUT TYPES → CONVERSION (implement inline):`);
-        lines.push(`#   - Table (dict with 'columns'/'rows'): Format as markdown list`);
-        lines.push(`#   - File (dict with 'path'): Extract the path value`);
-        lines.push(`#   - Conversation (dict with 'result'/'session_id'): Extract conversation result`);
-        lines.push(`#   - Code block (dict with 'code'): Extract code`);
-        lines.push(`#   - Generic Object (dict): Convert to JSON string`);
-        lines.push(`#   - String: Use as-is`);
+        lines.push(`# ${skillName} structured parameters: ${directParams.length > 0 ? directParams.join(', ') : '(check schema)'}`);
+        lines.push(`# ${skillName} fallback parameter: '${taskParam}' (only if you can't determine exact values)`);
         lines.push(`#`);
-        lines.push(`# ⚠️ IMPORTANT: Check the skill's schema to know which parameter receives the formatted content!`);
-        lines.push(`#   - For ${skillName}:`);
-        lines.push(`#     - Main task parameter: '${taskParam}'`);
-        lines.push(`#     - If skill has 'content' parameter (like tool-write), pass formatted content there`);
-        lines.push(`#     - Otherwise pass to the main task parameter`);
+        lines.push(`# ⚠️ NEVER pass parameters that don't exist in ${skillName}'s schema!`);
         lines.push(`#`);
         lines.push(`# 🔥 CRITICAL: Only proceed if previous step succeeded`);
         lines.push(`if ${prevResultVar}['success']:`);
-        lines.push(`    # Format previous output for ${skillName} - IMPLEMENT INLINE`);
-        lines.push(`    raw_content = ${prevResultVar}['content']`);
+        lines.push(`    # Extract exact values from previous output for ${skillName}'s structured parameters`);
+        lines.push(`    prev_output = ${prevResultVar}['content']`);
         lines.push(``);
-        lines.push(`    # Apply smart formatting based on content type`);
-        lines.push(`    if isinstance(raw_content, dict) and 'columns' in raw_content and 'rows' in raw_content:`);
-        lines.push(`        # Table data - format as markdown list`);
-        lines.push(`        lines = []`);
-        lines.push(`        for row in raw_content['rows'][:10]:  # Limit to first 10 rows`);
-        lines.push(`            if len(row) >= 2:`);
-        lines.push(`                lines.append(f"- **{row[0]}**: {row[1]}")`);
-        lines.push(`        formatted_content = '\\n'.join(lines)`);
-        lines.push(`    elif isinstance(raw_content, dict) and 'path' in raw_content:`);
-        lines.push(`        # File result - extract path`);
-        lines.push(`        formatted_content = raw_content['path']`);
-        lines.push(`    elif isinstance(raw_content, dict) and 'result' in raw_content and 'session_id' in raw_content:`);
-        lines.push(`        # Conversation response from claude-code-cli - extract result text`);
-        lines.push(`        formatted_content = raw_content.get('result', str(raw_content))`);
-        lines.push(`    elif isinstance(raw_content, dict) and 'code' in raw_content:`);
-        lines.push(`        # Code block result`);
-        lines.push(`        formatted_content = raw_content.get('code', str(raw_content))`);
-        lines.push(`    elif isinstance(raw_content, dict) and 'content' in raw_content and isinstance(raw_content['content'], str):`);
-        lines.push(`        # Nested content field (common in tool outputs)`);
-        lines.push(`        formatted_content = raw_content['content']`);
-        lines.push(`    elif isinstance(raw_content, dict):`);
-        lines.push(`        # Generic dict - convert to JSON string`);
-        lines.push(`        import json`);
-        lines.push(`        formatted_content = json.dumps(raw_content, ensure_ascii=False, indent=2)`);
-        lines.push(`    else:`);
-        lines.push(`        # Already a string or other type`);
-        lines.push(`        formatted_content = str(raw_content)`);
-        lines.push(``);
-        lines.push(`    # Now call next skill with formatted content`);
+        lines.push(`    # Now call ${skillName} with structured parameters from schema`);
         lines.push(`    ${resultVar} = await execute_with_retry(`);
         lines.push(`        execute_func=executor.execute,`);
-        lines.push(`        skill_name='${skillName}',  # ← REAL skill name`);
+        lines.push(`        skill_name='${skillName}',`);
         lines.push(`        input_data={`);
-        lines.push(`            '${taskParam}': '''TASK DESCRIPTION FOR ${skillName}''',  # Main task parameter`);
-        lines.push(`            'content': formatted_content,  # ✅ Pass formatted content to 'content' parameter`);
-        lines.push(`            # Add other parameters based on skill schema...`);
+        if (directParams.length > 0) {
+          for (const p of directParams) {
+            lines.push(`            '${p}': extracted_value_for_${p},  # Extract from prev_output`);
+          }
+        } else {
+          lines.push(`            '${taskParam}': '''TASK DESCRIPTION FOR ${skillName}''',`);
+        }
         lines.push(`        }`);
         lines.push(`    )`);
         lines.push(`else:`);
@@ -674,51 +600,6 @@ Always prioritize available skills over direct computation or common knowledge.`
     console.info('[PTC Generator] Parameter mapping:', {
       mapping: paramMapping
     });
-
-    // Build skills block for prompt
-    const skillsBlock = skillsDetails
-      .map((skill) => {
-        const taskParam = this.findTaskParameter(skill.name);
-
-        let skillInfo = `${skill.name}:
-  Description: ${skill.description}
-  Tags: ${skill.tags.join(', ')}
-  Task Parameter: ${taskParam}`;
-
-        // Add input schema if available
-        if (skill.metadata && skill.metadata.input_schema) {
-          const schema = skill.metadata.input_schema;
-          if (schema.properties && Object.keys(schema.properties).length > 0) {
-            skillInfo += '\n  Parameters:';
-            for (const [paramName, paramInfo] of Object.entries(schema.properties)) {
-              const info = paramInfo as { type?: string; description?: string; default?: any };
-              const required = schema.required?.includes(paramName);
-              const paramType = info.type || 'any';
-              const paramDesc = info.description || '';
-              const defaultValue = info.default !== undefined ? ` (default: ${info.default})` : '';
-              const marker = paramName === taskParam ? ' ← MAIN TASK PARAMETER' : '';
-              skillInfo += `\n    - ${paramName}${marker} (${paramType})${required ? ' [REQUIRED]' : ''}${defaultValue}: ${paramDesc}`;
-            }
-          }
-        }
-
-        // Add output schema if available - NEW for multi-skill chaining
-        if (skill.metadata && skill.metadata.output_schema) {
-          const schema = skill.metadata.output_schema;
-          if (schema.properties && Object.keys(schema.properties).length > 0) {
-            skillInfo += '\n  Output Fields:';
-            for (const [fieldName, fieldInfo] of Object.entries(schema.properties)) {
-              const info = fieldInfo as { type?: string; description?: string };
-              const fieldType = info.type || 'any';
-              const fieldDesc = info.description || '';
-              skillInfo += `\n    - ${fieldName} (${fieldType}): ${fieldDesc}`;
-            }
-          }
-        }
-
-        return skillInfo;
-      })
-      .join('\n\n');
 
     // Build context section
     let contextSection = '';
@@ -877,11 +758,16 @@ You MUST follow these guidelines when generating code:
       });
     }
 
-    // Define firstSkillParam for use in the prompt template below
-    // This is the parameter name for the main input of the first selected skill
-    const firstSkillParam = selectedSkills.length > 0
+    const _firstSkillParam = selectedSkills.length > 0
       ? this.findTaskParameter(selectedSkills[0])
       : 'task';  // fallback for no skills case
+
+    // Load skill invocation methodology template
+    const methodologyTemplate = this.loadSkillInvocationPrompt();
+    const skillsBlockForTemplate = this.buildSkillsBlockForTemplate(skillsDetails);
+    const methodologySection = methodologyTemplate
+      ? methodologyTemplate.replace('{{SKILLS_BLOCK}}', skillsBlockForTemplate)
+      : '';
 
     const prompt = `CRITICAL LANGUAGE REQUIREMENT:
 - You MUST generate Python code ONLY
@@ -901,285 +787,39 @@ IMPORTANT - Code structure requirements:
 - DO NOT import asyncio
 - Just write the logic code that goes inside the async function
 
-${agentSystemPromptSection}${userProfileSection}<skills>
-${skillsBlock}
-</skills>
-
-${(() => {
-  // Generate EXACT code templates for each selected skill
-  if (selectedSkills.length > 0) {
-    // Check if environment is provided
-    const hasEnvironment = options?.environment && Object.keys(options.environment).length > 0;
-    const envComment = hasEnvironment ? `\n        # ⭐ CRITICAL: environment parameter provided in <context> - MUST include it!` : '';
-
-    return `<exact_code_templates>
-FOR EACH SELECTED SKILL, USE THIS EXACT CODE TEMPLATE:
-
-${selectedSkills.map(skill => {
-  const param = this.findTaskParameter(skill);
-  return `# === ${skill} ===
-# REQUIRED PARAMETER NAME: '${param}'
-# DO NOT use 'task' - use '${param}' instead!${envComment}
-result = await execute_with_retry(
-    execute_func=executor.execute,
-    skill_name='${skill}',
-    input_data={
-        '${param}': 'PASTE_ACTUAL_TEXT_HERE',  # ← Use '${param}', NOT 'task'!${hasEnvironment ? `
-        'environment': {  # ⭐ MANDATORY: Extract from <environment> section above
-            'project_dir': 'value_from_environment',
-            'language': 'value_from_environment',
-            # ... include all environment key-value pairs
-        },` : ''}
-        # Add other optional parameters if mentioned in task
-    }
-)
-
-if result['success']:
-    print(result['content'])
-else:
-    error = result['content'].get('message', 'Unknown error') if isinstance(result['content'], dict) else str(result['content'])
-    print(f"Error: {error}")
-
-`;
-}).join('')}
-</exact_code_templates>
-
-`;
-  }
-  return '';
-})()}
-${this.generateSchemaMappingInstructions(selectedSkills, skillsDetails)}
-
-<available_skills>
-${skillsDetails.map(skill => `- ${skill.name}: ${skill.description}
-  Tags: ${skill.tags.join(', ')}
-  Task Parameter: ${this.findTaskParameter(skill.name)}`).join('\n')}
-</available_skills>
-
-CRITICAL LANGUAGE REQUIREMENT:
-- You MUST generate Python code ONLY
-- Even if the task mentions TypeScript, JavaScript, or other languages
-- This is a Python-only execution environment
-- If the task asks for TypeScript/JavaScript code, you should:
-  1. Generate Python equivalent code
-  2. Add comments explaining the Python implementation
-  3. Focus on logic/algorithm rather than language-specific syntax
-
-Generate Python code to accomplish the task.
-
-IMPORTANT - Code structure requirements:
-- The code will be wrapped in an async main() function automatically
-- DO NOT include 'async def main()' or 'if __name__ == "__main__"'
-- DO NOT include 'asyncio.run()' - it will be called automatically
-- DO NOT import asyncio
-- Just write the logic code that goes inside the async function
+${agentSystemPromptSection}${userProfileSection}
+${methodologySection}
 
 ${
   selectedSkills.length > 0
-    ? (() => {
-        // Build parameter mapping instructions for each selected skill
-        const skillParamInstructions = skillsDetails.map((skill, index) => {
-          const taskParam = this.findTaskParameter(skill.name);
-          return `# Skill ${index + 1}: ${skill.name}
-# - Use '${taskParam}' parameter for the main task
-# - Check the skill's parameter schema above for other required/optional parameters
-# - EXTRACT ALL PARAMETERS from the task description (e.g., duration, fps, resolution)`;
-        }).join('\n\n');
-
-        // firstSkillParam is already defined outside (line ~768)
-
-        // Build skill-specific parameter extraction instructions
-        // Generic approach: LLM extracts parameters based on schema
-        const skillsWithParams = skillsDetails.filter(skill =>
-          skill.metadata?.input_schema?.properties &&
-          Object.keys(skill.metadata.input_schema.properties).length > 1
-        );
-
-        let skillParamExtraction = '';
-        if (skillsWithParams.length > 0) {
-          skillParamExtraction = `
-# PARAMETER EXTRACTION FROM NATURAL LANGUAGE:
-# The following skills have additional parameters:
-# - [REQUIRED]: MUST extract from task, fail if missing
-# - (default: X): Optional, extract if present, otherwise use default
-# - No default, not required: Extract if present, otherwise omit
-#
-${skillsWithParams.map(skill => {
-  const schema = skill.metadata!.input_schema;
-  const taskParam = this.findTaskParameter(skill.name);
-  const params = Object.entries(schema.properties)
-    .filter(([name]) => name !== taskParam)
-    .map(([name, info]: [string, any]) => {
-      const required = schema.required?.includes(name) ? ' [REQUIRED]' : '';
-      const def = info.default !== undefined ? ` (default: ${info.default})` : '';
-      return `    - ${name} (${info.type})${required}${def}: ${info.description || 'No description'}`;
-    });
-
-  return `# ${skill.name}:
-#   Main parameter: ${taskParam}
-#   Additional parameters:
-${params.join('\n')}
-#   Example: If task says "duration 15s", extract: 'duration': 15`;
-}).join('\n\n')}
-#
-# EXTRACTION STRATEGY:
-# 1. REQUIRED parameters: MUST extract from task or report error
-# 2. Optional parameters with defaults: Extract if mentioned, otherwise use default
-# 3. Optional parameters without defaults: Extract if mentioned, otherwise omit entirely
-# 4. Match values to parameter types (e.g., "15s" → duration=15, "1080p" → resolution="1920x1080")
-`;
-        }
-
-        // Build skill-specific content preparation instructions
-        // Generic approach: Based on skill tags and description
-        let skillContentPrep = '';
-        const skillsNeedingDetailedContent = skillsDetails.filter(skill =>
-          skill.tags.includes('visualization') ||
-          skill.tags.includes('infographic') ||
-          (skill.description.toLowerCase().includes('detailed content') ||
-           skill.description.toLowerCase().includes('structured'))
-        );
-
-        if (skillsNeedingDetailedContent.length > 0) {
-          skillContentPrep = `
-# CRITICAL - CONTENT PREPARATION FOR VISUALIZATION SKILLS:
-# The following skills require DETAILED, STRUCTURED content for best results:
-${skillsNeedingDetailedContent.map(skill =>
-  `# - ${skill.name}: ${skill.description}`
-).join('\n')}
-#
-# When the task provides a brief instruction, you MUST:
-# 1. INTELLIGENTLY EXPAND the content based on domain knowledge
-# 2. Generate a DETAILED, STRUCTURED description with all necessary elements
-# 3. Use proper formatting: numbered lists, bullet points, clear stages
-#
-# Example (WRONG - too brief):
-#   content='生成软件生命周期图'  # ❌ Too brief!
-#
-# Example (CORRECT - expanded):
-#   content='''
-#   软件生命周期包括以下阶段：
-#   1. 需求分析：明确用户需求和系统目标
-#   2. 系统设计：架构设计、技术选型
-#   3. 编码实现：开发功能模块
-#   4. 测试验证：单元测试、集成测试
-#   5. 部署上线：发布到生产环境
-#   6. 运维监控：系统维护和性能监控
-#   '''  # ✅ Detailed and structured!
-`;
-        }
-
-        return `CRITICAL - SKILL EXECUTION IS MANDATORY:
+    ? `CRITICAL - SKILL EXECUTION IS MANDATORY:
 You have selected skills: ${selectedSkills.join(', ')}
 You MUST use these skills - DO NOT write native Python code!
 
-${selectedSkills.includes('volcano-tts') ? `
-⚠️⚠️⚠️ URGENT WARNING FOR volcano-tts: ⚠️⚠️⚠️
-volcano-tts REQUIRES the 'text' parameter - NOT 'task'!
-WRONG:   input_data={'task': '我是最棒的'}     ← This will FAIL with "文本内容不能为空"
-CORRECT: input_data={'text': '我是最棒的'}     ← Use 'text' parameter!
-Memorize this: volcano-tts = 'text' parameter
+Follow the Skill Invocation Methodology above for correct parameter passing.
 
-` : ''}${skillParamInstructions}
+IMPORTANT - DO NOT CREATE THESE OBJECTS YOURSELF:
+The following variables are ALREADY AVAILABLE as global variables (created by the sandbox wrapper):
+- executor: SkillExecutor instance (ready to use)
+- execute_with_retry: async retry wrapper function
+- task_id: Current task ID from MOTIA_TASK_ID env var
+- notify_hook_api_url: Notify API URL from MOTIA_NOTIFY_API_URL env var
+- STRUCTURED_OUTPUT_DIR: Directory for structured output files
 
-CRITICAL - PARAMETER EXTRACTION REQUIREMENTS:
-For each skill, you MUST extract ALL mentioned parameters from the task:
-1. SCAN the task description for parameter values (duration, fps, resolution, etc.)
-2. EXTRACT numeric values with their units
-3. PASS as SEPARATE parameters in input_data (NOT just in the task string)
-4. Use DEFAULT values for unspecified parameters based on skill schema
-
-from core.skill.executor import SkillExecutor
-from core.sandbox.retry_utils import execute_with_retry
-from core.skill.adapters.virtual_skill_registry import create_virtual_registry
-import os
-
-# Get notify API URL from environment
-notify_hook_api_url = os.getenv('MOTIA_NOTIFY_API_URL')
-task_id = os.getenv('MOTIA_TASK_ID')  # Task ID for tracking and file naming
-
-# Create virtual registry for Claude Skills support
-# This enables discovery and execution of Claude Skills (SKILL.md files)
-virtual_registry = __import__('asyncio').run(create_virtual_registry())
-
-# Create SkillExecutor with virtual registry support (includes Claude Skills)
-executor = SkillExecutor(notify_hook_api_url=notify_hook_api_url, virtual_registry=virtual_registry)
-
-# CRITICAL - Skill execution with RETRY logic:
-# All skill executions MUST use execute_with_retry() function
-# This implements orchestration-layer retry with exponential backoff
-
-# execute_with_retry() signature:
-#   result = await execute_with_retry(
-#       execute_func=executor.execute,
-#       skill_name='skill-name',
-#       input_data={
-#           '${firstSkillParam}': 'THE ACTUAL TASK FROM <task> SECTION ABOVE',  # CRITICAL: Use the mapped parameter name!
-#           'param2': 'value2'
-#       },
-#       max_attempts=3  # Max 3 retry attempts
-#   )
+DO NOT import SkillExecutor, create_virtual_registry, or call asyncio.run()!
+DO NOT create executor or virtual_registry yourself!
+Just use 'executor' and 'execute_with_retry' directly.
 
 # Result format (unified):
 #   {
 #       'success': bool,
-#       'content': any,  # Actual output data
+#       'content': any,
 #       'result_type': str,
 #       'metadata': dict,
-#       'attempts': int  # Number of attempts made
+#       'attempts': int
 #   }
 
-# 🔥 CRITICAL - PARAMETER NAME MAPPING FOR SELECTED SKILLS:
-# EACH skill uses a DIFFERENT parameter name for the main input!
-# You MUST use the EXACT parameter name shown below:
-${selectedSkills.map((skill, i) => {
-  const param = this.findTaskParameter(skill);
-  return `#   ${i + 1}. ${skill}: use '${param}' parameter (NOT 'task' unless specified)`;
-}).join('\n')}
-#
-# ⚠️ DO NOT assume all skills use 'task' parameter!
-# ⚠️ ALWAYS check the parameter name for each skill before writing code!
-#
-${skillContentPrep}
-${skillParamExtraction}
-# CRITICAL - HOW TO PASS USER TASK TO SKILLS:
-# You MUST use the '${firstSkillParam}' field to pass the actual user request
-# Copy the COMPLETE task description from the <task> section above
-# DO NOT use placeholders like 'task description' or 'detailed task'
-#
-# CRITICAL: EXTRACT AND PASS STRUCTURED PARAMETERS:
-# Check the skill's parameter schema above:
-# - [REQUIRED] parameters: MUST extract from task
-# - Optional with defaults: Extract if mentioned, otherwise use default
-# - Optional without defaults: Extract if mentioned, otherwise omit
-#
-# CRITICAL: The MAIN PARAMETER NAME varies by skill!
-# - Check "Task Parameter" above to find the correct name (task, text, query, content, etc.)
-# - For volcano-tts: use 'text' parameter
-# - For web-search: use 'query' parameter
-# - For video-generation: use 'task' parameter
-#
-# Example 1 (WRONG - using wrong parameter name):
-#   input_data={'task': '我是最棒的'}  # ❌ volcano-tts needs 'text', not 'task'!
-#
-# Example 2 (CORRECT - using correct parameter name 'text' for volcano-tts):
-#   input_data={
-#       'text': '我是最棒的',  # ✅ Correct parameter for volcano-tts!
-#       'voice_type': 'BV001_streaming',  # Optional: extracted if mentioned
-#       'speed': 1.3  # Optional: uses default if not specified
-#   }
-#
-# Example 3 (CORRECT - only required parameter, use defaults):
-#   input_data={
-#       '${firstSkillParam}': '我是最棒的'  # Use the correct parameter name for THIS skill
-#       # Optional params with defaults will use their defaults
-#   }
-#
-# MANDATORY: You must call execute_with_retry with the selected skill
-# DO NOT write any Python code directly - ONLY call skills!
-
-${this.generateMultiSkillExecutionExample(selectedSkills, skillsDetails)}`;
-      })()
+${this.generateMultiSkillExecutionExample(selectedSkills, skillsDetails)}`
     : `CRITICAL - NO SKILLS SELECTED:
 This is a FALLBACK path - solve the task directly with native Python code.
 DO NOT try to call executor.execute() - no skills are available.
@@ -1238,110 +878,26 @@ IMPORTANT GUIDELINES:
 
 Code requirements:
 
-CRITICAL - USER TASK MUST BE PASSED CORRECTLY:
-- When calling skills, you MUST pass the ACTUAL task from the <task> section
-- Use the CORRECT parameter name for each skill (check "Task Parameter" above)
-- Different skills use different parameter names (e.g., 'content', 'query', 'description')
-- DO NOT use placeholders like 'task description', 'detailed task', etc.
-- Copy the COMPLETE task text from <task> section to the skill input
-- Example: If <task> says "设计一个iphone17产品的前端介绍页面"
-           Then use: input_data={'task': '设计一个iphone17产品的前端介绍页面'}
-
 General requirements:
 - Use 'await' for any async operations (like skill execution)
 - Print the final result
 - DO NOT use try/except blocks (they are added automatically)
-- Use proper indentation for multi-line dicts/lists:
-  result = await executor.execute('skill-name', {
-      'param1': 'value1',
-      'param2': 'value2'
-  })
 - Only output the code logic, no function definitions or boilerplate
 
-CRITICAL: You MUST wrap your code in \`\`\`python code blocks like this:
-\`\`\`python
-# EXAMPLE: Execute skill with extracted parameters
-# Check the skill's schema and extract parameters from the task:
-# - [REQUIRED]: Must extract from task
-# - Optional with default: Extract if mentioned, or omit (skill uses default)
-# - Optional without default: Extract if mentioned, or omit
-# CRITICAL: Use the ACTUAL parameter name from the skill schema above!
-result = await execute_with_retry(
-    execute_func=executor.execute,
-    skill_name='skill-name',
-    input_data={
-        '${firstSkillParam}': 'Copy actual task from <task> section',  # ← Use the CORRECT parameter name!
-        # 'param1': 'value1',  # Extract if mentioned in task
-        # 'param2': 'value2'   # Or omit - skill will use default if available
-    }
-)
-
-if result['success']:
-    print(result['content'])
-else:
-    error = result['content'].get('message', 'Unknown error')
-    print(f"Error: {error}")
-\`\`\`
-
-# EXAMPLE: Execute skill with simple task (no extra parameters)
-# ⚠️ CRITICAL: Use the CORRECT parameter name for the skill!
-# Check "Task Parameter" in the skill details above - it might be 'task', 'text', 'query', etc.
-\`\`\`python
-result = await execute_with_retry(
-    execute_func=executor.execute,
-    skill_name='skill-name',  # Use exact skill name from selection
-    input_data={
-        '${firstSkillParam}': 'Copy exact task from <task> section'  # ← Use the CORRECT parameter name!
-    }
-)
-
-if result['success']:
-    print(result['content'])
-else:
-    error = result['content'].get('message', 'Unknown error')
-    print(f"Error: {error}")
-\`\`\`
-
-REMINDER: ALWAYS copy the ACTUAL task text from the <task> section above into the correct parameter field!
-DO NOT use placeholder text like 'task description' or 'detailed task'.
-The skill needs the REAL user request to generate correct output.
+CRITICAL: You MUST wrap your code in \`\`\`python code blocks.
 
 IMPORTANT REMINDERS:
 - ALWAYS use execute_with_retry() for skill execution (NEVER call executor.execute directly)
 - Check result['success'] to determine if execution succeeded
 - Extract actual output from result['content'] (NOT result['output'])
-- When passing results to another skill, pass result['content'] (NOT result)
-- Check the skill's input schema to understand expected parameter types
-- ALWAYS use the correct parameter name for each skill (see "Task Parameter" in skill details above)
-- The retry logic will automatically handle transient failures (timeout, network errors)
-- Non-retryable errors (validation, permission, not found) will fail immediately
 
 TIPS FOR FILE/VIDEO GENERATION:
 - Use 'task_id' variable for file naming: f"video_{task_id}.mp4" or f"output_{task_id}.txt"
 - Available environment variables:
-  - MOTIA_TASK_ID: Current task ID (use for file naming to track outputs)
+  - MOTIA_TASK_ID: Current task ID
   - MOTIA_NOTIFY_API_URL: API endpoint for progress notifications
-  - MOTIA_SESSION_ID: Current session ID for multi-turn conversations
+  - MOTIA_SESSION_ID: Current session ID
   - MOTIA_TRACE_ID: Trace ID for debugging
-
-=== ENVIRONMENT PARAMETER PASSING ===
-When the <context> section contains <environment> information:
-1. Extract the ENTIRE environment object as a Python dictionary
-2. Pass it to skills that support environment context using the 'environment' parameter
-
-Example PATTERN for environment-aware skills (like claude-code-cli):
-Python code: environment_dict = {\\n  'project_dir': 'projects/project-a',\\n  'language': 'python',\\n  'framework': 'fastapi',\\n  'branch': 'main'\\n}
-Then: result = await execute_with_retry('claude-code-cli', {'task': task, 'environment': environment_dict})
-
-CRITICAL RULES for environment passing:
-- ALWAYS pass environment as a dictionary to skills that support it
-- DO NOT flatten environment into individual skill parameters
-- Let the skill handler extract what it needs from environment
-- If environment is not provided, omit the 'environment' parameter (skill will use defaults)
-
-Skills that support environment parameter:
-- claude-code-cli: Uses project_dir, language, framework, branch, model, timeout
-- Other skills may also support environment - check their schema
 
 ${executionHistorySection}=== TASK CONTEXT ===
 <context>
@@ -1449,6 +1005,110 @@ Generate production-ready code with proper error handling and async patterns.`;
     }
 
     return code;
+  }
+
+  /**
+   * Load the skill invocation methodology prompt template.
+   * Cached after first read.
+   */
+  private static skillInvocationPromptCache: string | null = null;
+  private loadSkillInvocationPrompt(): string {
+    if (PTCGenerator.skillInvocationPromptCache) {
+      return PTCGenerator.skillInvocationPromptCache;
+    }
+    try {
+      const templatePath = join(__dirname, 'ptc-prompts', 'skill-invocation.md');
+      PTCGenerator.skillInvocationPromptCache = readFileSync(templatePath, 'utf-8');
+      console.log('[PTC Generator] Loaded skill invocation methodology prompt');
+      return PTCGenerator.skillInvocationPromptCache;
+    } catch {
+      console.warn('[PTC Generator] Failed to load skill invocation prompt, using fallback');
+      return '';
+    }
+  }
+
+  /**
+   * Build the {{SKILLS_BLOCK}} content for the skill invocation prompt.
+   * Lists each selected skill's parameters, annotated with type classification.
+   */
+  private buildSkillsBlockForTemplate(skillsDetails: SkillMetadata[]): string {
+    return skillsDetails.map(skill => {
+      const _taskParam = this.findTaskParameter(skill.name);
+
+      let block = `### ${skill.name}\n`;
+      block += `Description: ${skill.description}\n`;
+
+      if (skill.metadata?.input_schema?.properties) {
+        const schema = skill.metadata.input_schema;
+        const props = Object.entries(schema.properties);
+
+        // Classify parameters
+        const directParams: string[] = [];
+        const fallbackParams: string[] = [];
+
+        for (const [paramName] of props) {
+          if (NATURAL_LANGUAGE_PARAMS.has(paramName)) {
+            fallbackParams.push(paramName);
+          } else {
+            directParams.push(paramName);
+          }
+        }
+
+        block += `Parameters:\n`;
+        for (const [paramName, paramInfo] of props) {
+          const info = paramInfo as { type?: string; description?: string; default?: any };
+          const required = schema.required?.includes(paramName);
+          const paramType = info.type || 'any';
+          const paramDesc = info.description || '';
+          const defaultValue = info.default !== undefined ? ` (default: ${info.default})` : '';
+          const category = NATURAL_LANGUAGE_PARAMS.has(paramName) ? '[fallback]' : '[direct]';
+          block += `  - ${paramName} ${category} (${paramType})${required ? ' REQUIRED' : ''}${defaultValue}: ${paramDesc}\n`;
+        }
+      }
+
+      // Add output schema
+      if (skill.metadata?.output_schema?.properties) {
+        const schema = skill.metadata.output_schema;
+        const outputFields = Object.entries(schema.properties)
+          .map(([name, info]: [string, any]) => `  - ${name} (${info.type || 'any'}): ${info.description || ''}`)
+          .join('\n');
+        if (outputFields) {
+          block += `Output:\n${outputFields}\n`;
+        }
+      }
+
+      return block;
+    }).join('\n');
+  }
+
+  /**
+   * Find the direct-mode parameters for a skill.
+   *
+   * Direct mode = structured parameters with exact values (NOT natural language).
+   * Task mode = natural language description that requires internal LLM parsing.
+   *
+   * Rules:
+   * - tool-bash: 'command' + 'args' (direct) vs 'task' (LLM generates command)
+   * - tool-edit: 'file_path' + 'old_string' + 'new_string' (direct) vs 'task' (LLM parses)
+   * - tool-write: 'file_path' + 'content' (direct) vs 'task' (LLM parses)
+   * - tool-read: 'file_path' (direct) vs 'task' (LLM parses)
+   * - Generic: all parameters except 'task' and metadata fields
+   *
+   * @param skill - Skill metadata
+   * @returns Array of parameter names for direct mode
+   */
+  private findDirectParameters(skill: SkillMetadata): string[] {
+    if (!skill.metadata?.input_schema?.properties) {
+      return [];
+    }
+
+    const props = Object.keys(skill.metadata.input_schema.properties);
+    // Exclude natural language 'task' parameter and metadata/context parameters
+    const excludeParams = ['task', 'environment', 'env', 'metadata', 'timeout', 'working_dir'];
+
+    const directParams = props.filter(p => !excludeParams.includes(p));
+
+    return directParams;
   }
 
   /**

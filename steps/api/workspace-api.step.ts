@@ -84,20 +84,8 @@ function getFilesRecursively(dirPath: string, baseDir: string, maxDepth = 10, cu
 function validatePath(workspace: string): boolean {
   // 只允许 /tmp/myagent-workspaces 或用户指定的目录
   const allowedPrefixes = [
-    '/tmp/myagent-workspaces',
-    '/tmp/test-',
-    '/tmp/final-test',  // ExternalAgent 测试
-    '/tmp/calculator-final',  // ExternalAgent 测试
-    '/tmp/todo-manager-test',  // ExternalAgent 测试
-    '/tmp/calculator-test',
-    '/tmp/hello-test',
-    '/tmp/quick-test',
-    '/tmp/todo-manager',
-    '/tmp/log-analyzer',
-    '/tmp/toolcall',
-    '/tmp/fileops',
-    '/tmp/complex',
-    '/tmp/workspace',
+    '/tmp/myagent-workspace',   // 统一默认 workspace
+    '/tmp/',                     // 其他 /tmp 下的路径（含用户指定 workspace）
     '/Users/leo/workspace',
   ];
 
@@ -140,10 +128,16 @@ export const handler = async (
       };
     }
 
-    // 从 task metadata 获取 workspace
-    // 优先从顶层 metadata.workspace 获取（ExternalAgent 的任务）
-    // 如果没有，再从 metadata.environment.workspace 获取（其他 Agent 的任务）
-    const workspace = task.metadata?.workspace || task.metadata?.environment?.workspace;
+    // 从 task metadata 获取 workspace（支持多种来源）
+    // 1. 顶层 metadata.workspace（直接 Agent 任务）
+    // 2. metadata.environment.workspace（通过 environment 传入）
+    // 3. metadata.variables.workflowWorkspace（Workflow 任务）
+    const workspace =
+      task.metadata?.workspace ||
+      task.metadata?.environment?.workspace ||
+      task.metadata?.variables?.workflowWorkspace ||
+      (task.metadata?.variables?.variables as any)?.workspace ||
+      (task.metadata?.variables?.variables as any)?.workflowWorkspace;
 
     if (!workspace) {
       return {

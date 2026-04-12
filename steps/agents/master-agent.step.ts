@@ -167,6 +167,10 @@ export const handler = async (
   input: any,
   { emit, logger, state: _state, streams: _streams }: any
 ) => {
+  const handlerStartTime = Date.now();
+  const { taskId: _htid, sessionId: _hsid } = input;
+  logger.info('[IPC-DEBUG] master-agent handler ENTERED', { taskId: _htid, sessionId: _hsid, handlerStartTime });
+
   // === Initialize Configurable Hooks ===
   // Load hooks from hooks/ directory on first execution
   if (!(globalThis as any).motiaHooksLoaded) {
@@ -911,7 +915,7 @@ export const handler = async (
       const workflowResult = await workflowEngine.execute(
         (input as any).workflowName,
         workflowInput,
-        { taskId, parentSessionId: sessionId }
+        { taskId, parentSessionId: sessionId, environment: (input as any).environment }
       );
 
       // Convert workflow result to AgentResult format
@@ -1069,18 +1073,12 @@ export const handler = async (
     });
 
     // Emit completion event
-    // 调试：检查 result.structuredOutputs 和 metadata
-    logger.debug('[master-agent] About to emit completion event:', {
+    const emitStart = Date.now();
+    logger.info('[IPC-DEBUG] About to emit agent.task.completed', {
       taskId,
-      'result keys': Object.keys(result),
-      'result.structuredOutputs': (result as any).structuredOutputs,
-      'result.structuredOutputs type': Array.isArray((result as any).structuredOutputs) ? 'array' : typeof (result as any).structuredOutputs,
-      'result.structuredOutputs length': (result as any).structuredOutputs?.length,
-      'result has structuredOutputs': 'structuredOutputs' in result,
-      'result.metadata': result.metadata,
-      'result.metadata delegates': result.metadata?.delegates,
-      'result.metadata workspace': result.metadata?.workspace,
-      'result.metadata externalAgent': result.metadata?.externalAgent,
+      sessionId,
+      success: result.success,
+      emitStart,
     });
 
     await emit({
@@ -1103,6 +1101,13 @@ export const handler = async (
       },
     });
 
+    const emitDuration = Date.now() - emitStart;
+    logger.info('[IPC-DEBUG] emit agent.task.completed RESOLVED', {
+      taskId,
+      emitDuration,
+      emitEnd: Date.now(),
+    });
+
     // Return sessionId so client can continue conversation
     return {
       success: true,
@@ -1113,6 +1118,14 @@ export const handler = async (
       metadata: result.metadata,  // Include metadata with delegates info
       structuredOutput: result.structuredOutput, // Structured output at root level
     };
+
+    // [IPC-DEBUG] Handler about to return - if task-result-handler doesn't process,
+    // the emit above was lost in IPC
+    logger.info('[IPC-DEBUG] master-agent handler RETURNING', {
+      taskId,
+      sessionId,
+      totalDuration: Date.now() - handlerStartTime,
+    });
   } catch (error: any) {
     logger.error('Agent execution failed', {
       error: error.message,

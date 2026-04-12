@@ -23,6 +23,9 @@ import { KnowledgeBase } from '../knowledge/knowledge-base';
 import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
 import { RequestRewriter } from './request-rewriter';
 import { ValidationHook, ValidationError } from '../hook/validation/validation-hook';
+import { resolveWorkspace } from '../workspace/constants';
+import { AgentArtifacts, FileArtifact } from './artifacts';
+import * as path from 'path';
 
 // 对话历史配置
 const MAX_CONVERSATION_MESSAGES = 50;  // 最大保留的对话消息数（约25轮对话）
@@ -44,7 +47,7 @@ export class Agent {
 
   // Dynamic skill discovery
   private skillDiscovery: SkillDiscovery;
-  private static skillsRegistry: Array<{ name: string; description: string; tags: string[] }> = [];
+  private static skillsRegistry: Array<{ name: string; description: string; tags: string[]; metadata?: any }> = [];
 
   // Hook manager for agent lifecycle hooks
   protected hookManager: any = null;
@@ -946,6 +949,10 @@ export class Agent {
         recovered: false,
       };
 
+      // ⭐ Calculate workspace for this task
+      const taskWorkspace = resolveWorkspace(context, taskId || 'unknown');
+      console.log('[Agent] Resolved workspace:', { taskId, workspace: taskWorkspace });
+
       const sandboxResult = await (async () => {
         // If retry is disabled, execute directly
         if (!retryConfig || (retryConfig.maxRetries !== undefined && retryConfig.maxRetries <= 0)) {
@@ -958,6 +965,7 @@ export class Agent {
               traceId: this.sessionId,
               task,
               taskId,
+              workspace: taskWorkspace,  // ⭐ Add workspace to metadata
               maxIterations: this.config.constraints?.maxIterations || 5, // Agent loop support
             },
           });
@@ -975,6 +983,7 @@ export class Agent {
                 traceId: this.sessionId,
                 task,
                 taskId,
+                workspace: taskWorkspace,  // ⭐ Add workspace to metadata
                 retryAttempt: retryInfo.attempts,
                 maxIterations: this.config.constraints?.maxIterations || 5, // Agent loop support
               },
@@ -1142,6 +1151,18 @@ export class Agent {
         'sandboxResult.structuredOutputs length': (sandboxResult as any).structuredOutputs?.length,
       });
 
+      // ⭐ 从 output_files 构建 artifacts
+      const artifacts = this.buildArtifactsFromOutputFiles(
+        (sandboxResult as any).structuredOutputs,
+        taskWorkspace
+      );
+
+      console.log('[Agent] Built artifacts:', {
+        hasArtifacts: !!artifacts,
+        fileCount: artifacts?.allFiles?.length || 0,
+        workspace: taskWorkspace,
+      });
+
       return {
         success: actualSuccess,
         output: sandboxResult.output,
@@ -1157,9 +1178,11 @@ export class Agent {
         metadata: {
           skillNames: ptcResult.selectedSkills,
           artifactType: artifactType, // Add artifact_type to metadata
+          workspace: taskWorkspace,  // ⭐ Add workspace to metadata
           retries: retryInfo.attempts > 1 ? retryInfo : undefined,
           ptcRetries: ptcRetryInfo.attempts > 1 ? ptcRetryInfo : undefined,
         },
+        artifacts,  // ⭐ Add artifacts (may be undefined)
         structuredOutput: sandboxResult.structuredOutput, // Structured output at root level
         structuredOutputs: (sandboxResult as any).structuredOutputs, // All structured outputs
       };
@@ -1169,6 +1192,9 @@ export class Agent {
       if (error.code === 'VALIDATION_ERROR') {
         throw error;
       }
+
+      // ⭐ Calculate workspace even for errors
+      const errorWorkspace = resolveWorkspace(context, taskId || 'unknown');
 
       // Other errors: record and return failure result
       this.state.conversationHistory.push({
@@ -1197,7 +1223,10 @@ export class Agent {
           executionCount: this.state.executionHistory.length,
           variablesCount: this.state.variables.size,
         },
-        metadata: {},
+        metadata: {
+          workspace: errorWorkspace,  // ⭐ Add workspace even for errors
+        },
+        artifacts: undefined,  // ⭐ No artifacts on error
       };
     }
   }
@@ -1255,6 +1284,129 @@ ${reasoning}
 ${historySection}<current_request>
 ${userRequest}
 </current_request>`;
+  }
+
+  /**
+   * 从 structuredOutputs 构建 artifacts
+   *
+   * ⭐ 将 Python skills 返回的 output_files 转换为统一的 AgentArtifacts 格式
+   *
+   * @param structuredOutputs - Sandbox 返回的 structuredOutputs 数组
+   * @param workspace - Task Level workspace（绝对路径）
+   * @returns AgentArtifacts 或 undefined（无产物时）
+   */
+  private buildArtifactsFromOutputFiles(
+    structuredOutputs: any[] | undefined,
+    workspace: string
+  ): AgentArtifacts | undefined {
+    if (!structuredOutputs || structuredOutputs.length === 0) {
+      return undefined;
+    }
+
+    const allFiles: FileArtifact[] = [];
+
+    // 遍历所有 structuredOutputs，收集 output_files
+    for (const output of structuredOutputs) {
+      if (output?.output_files && Array.isArray(output.output_files)) {
+        for (const file of output.output_files) {
+          // file.path 格式: outputs/codes/task-xxx_skill_file.md（相对路径）
+          const fileOrPath = file.path || file.file;
+          if (!fileOrPath) continue;
+
+          // 转换为绝对路径
+          const absolutePath = path.resolve(process.cwd(), fileOrPath);
+
+          // 计算相对于 workspace 的路径
+          const relativePath = path.relative(workspace, absolutePath);
+
+          // 获取文件类型
+          const artifactType = this.getArtifactType(fileOrPath);
+
+          allFiles.push({
+            type: artifactType,
+            path: absolutePath,
+            name: path.basename(fileOrPath),
+            relativePath,
+            operation: 'created' as const,
+            size: file.size || 0,
+          });
+        }
+      }
+    }
+
+    if (allFiles.length === 0) {
+      return undefined;
+    }
+
+    // 按类型分类
+    const filesByType: Record<string, FileArtifact[]> = {
+      videos: [],
+      images: [],
+      audios: [],
+      codes: [],
+      documents: [],
+      data: [],
+      other: [],
+    };
+
+    let totalSize = 0;
+
+    for (const file of allFiles) {
+      if (!filesByType[file.type]) {
+        filesByType[file.type] = [];
+      }
+      filesByType[file.type].push(file);
+      totalSize += file.size || 0;
+    }
+
+    // 计算统计
+    const counts: Record<string, number> = {};
+    for (const type of Object.keys(filesByType)) {
+      counts[type] = filesByType[type].length;
+    }
+
+    return {
+      workspace,
+      files: filesByType,
+      allFiles,
+      summary: {
+        counts: counts as any,
+        totalFiles: allFiles.length,
+        totalSize,
+      },
+    };
+  }
+
+  /**
+   * 获取文件类型（复用 ArtifactCollector 的逻辑）
+   */
+  private getArtifactType(filename: string): 'videos' | 'images' | 'audios' | 'codes' | 'documents' | 'data' | 'other' {
+    const ext = path.extname(filename).toLowerCase();
+
+    const extensions: Record<string, string[]> = {
+      videos: ['.mp4', '.mov', '.avi', '.webm', '.mkv', '.flv'],
+      images: ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp'],
+      audios: ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac'],
+      codes: [
+        '.py', '.js', '.ts', '.jsx', '.tsx',
+        '.json', '.yaml', '.yml', '.toml', '.xml',
+        '.html', '.css', '.md', '.sh', '.sql',
+        '.txt', '.csv', '.tsv', '.ini', '.cfg', '.conf',
+        '.c', '.cpp', '.h', '.hpp', '.java', '.go', '.rs',
+      ],
+      documents: ['.pdf', '.doc', '.docx', '.ppt', '.pptx'],
+      data: ['.csv', '.tsv', '.sql'],
+    };
+
+    // 按优先级检查
+    const typePriority: Array<'data' | 'documents' | 'codes' | 'images' | 'videos' | 'audios'> = ['data', 'documents', 'codes', 'images', 'videos', 'audios'];
+    for (const type of typePriority) {
+      if (extensions[type]?.includes(ext)) {
+        return type;
+      }
+    }
+
+    return 'other';
   }
 
   /**
@@ -1852,54 +2004,48 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         console.log('[Agent HITL] HITL state saved, starting to poll', { taskId });
 
         // 2. Trigger Agent Hook for webhook notifications
-        try {
-          await this.hookManager.executeHook('onAwaitingHITL', question, options, {
-            agentName: this.config.name || 'unknown',
-            sessionId: this.sessionId,
-            taskId,
-            intent,
-          });
-        } catch (hookError) {
-          console.warn('[Agent] HITL hook execution failed', { error: hookError });
-          // Don't fail - hooks are optional
-        }
-
-        // 2. Trigger Agent Hook for webhook notifications
-        try {
-          await this.hookManager.executeHook('onAwaitingHITL', question, options, {
-            agentName: this.config.name || 'unknown',
-            sessionId: this.sessionId,
-            taskId,
-            intent,
-          });
-        } catch (hookError) {
-          console.warn('[Agent] HITL hook execution failed', { error: hookError });
-          // Don't fail - hooks are optional
+        if (this.hookManager) {
+          try {
+            await this.hookManager.executeHook('onAwaitingHITL', question, options, {
+              agentName: this.config.name || 'unknown',
+              sessionId: this.sessionId,
+              taskId,
+              intent,
+            });
+          } catch (hookError) {
+            console.warn('[Agent] HITL hook execution failed', { error: hookError });
+            // Don't fail - hooks are optional
+          }
         }
 
         // 3. Poll internally waiting for human response
         console.log('[Agent HITL] Starting to poll for HITL response', { taskId });
         const clarificationResponse = await this.pollHITLResult(taskId);
+        const resolvedBy = clarificationResponse.resolvedBy; // 'human' | 'timeout'
 
-        // 4. Clear HITL state after getting response
-        await this.clearHITLState(taskId);
+        // 4. Resolve HITL state with resolvedBy marker
+        await this.resolveHITLState(taskId, resolvedBy, clarificationResponse.content);
 
-        console.log('[Agent] HITL clarification received, resuming execution', {
+        console.log('[Agent] HITL clarification resolved', {
           taskId,
           clarification: clarificationResponse.content,
+          resolvedBy,
         });
 
         // ⭐ Send user clarification message to taskExecution stream
         // This displays the user's clarification in the frontend message flow
         const streams = getAgentStreams();
         if (streams?.taskExecution) {
-          const clarificationMessage = clarificationResponse.feedback
-            ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
-            : clarificationResponse.content;
+          const isTimeout = resolvedBy === 'timeout';
+          const clarificationMessage = isTimeout
+            ? '(超时自动继续)'
+            : (clarificationResponse.feedback
+              ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
+              : clarificationResponse.content);
 
           const clarificationEvent = {
-            type: 'user_clarification',
-            status: 'clarification_provided',
+            type: isTimeout ? 'hitl_auto_resolved' : 'user_clarification',
+            status: isTimeout ? 'auto_resolved' : 'clarification_provided',
             taskId,
             sessionId: this.sessionId,
             timestamp: new Date().toISOString(),
@@ -1907,18 +2053,20 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
               clarification: clarificationMessage,
               originalQuestion: question,
               stage: 'post_intent',
+              resolvedBy,
             }
           };
 
-          const clarificationEntryId = `user-clarification-${taskId}-${Date.now()}`;
+          const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${taskId}-${Date.now()}`;
           await streams.taskExecution.set(taskId, clarificationEntryId, {
             ...clarificationEvent,
             category: 'agent_hook',
           });
 
-          console.log('[Agent] User clarification notification sent', {
+          console.log('[Agent] HITL notification sent', {
             taskId,
             clarification: clarificationMessage,
+            resolvedBy,
           });
         }
 
@@ -1926,7 +2074,8 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
         console.log('[Agent HITL] Returning clarification result', {
           needs: false,
           clarification: clarificationResponse.content,
-          feedback: clarificationResponse.feedback
+          feedback: clarificationResponse.feedback,
+          resolvedBy,
         });
         return {
           needs: false,
@@ -1953,25 +2102,31 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
           createdAt: new Date(),
         });
 
-        await this.hookManager.executeHook('onAwaitingHITL', question, options, {
-          agentName: this.config.name || 'unknown',
-          sessionId: this.sessionId,
-          taskId,
-          intent,
-        });
+        if (this.hookManager) {
+          await this.hookManager.executeHook('onAwaitingHITL', question, options, {
+            agentName: this.config.name || 'unknown',
+            sessionId: this.sessionId,
+            taskId,
+            intent,
+          });
+        }
 
         const clarificationResult = await this.pollHITLResult(taskId);
+        const fallbackResolvedBy = clarificationResult.resolvedBy; // 'human' | 'timeout'
 
         // ⭐ Send user clarification message to taskExecution stream (same as normal path)
         const streams = getAgentStreams();
         if (streams?.taskExecution) {
-          const clarificationMessage = clarificationResult.feedback
-            ? `${clarificationResult.content}（备注：${clarificationResult.feedback}）`
-            : clarificationResult.content;
+          const isTimeout = fallbackResolvedBy === 'timeout';
+          const clarificationMessage = isTimeout
+            ? '(超时自动继续)'
+            : (clarificationResult.feedback
+              ? `${clarificationResult.content}（备注：${clarificationResult.feedback}）`
+              : clarificationResult.content);
 
           const clarificationEvent = {
-            type: 'user_clarification',
-            status: 'clarification_provided',
+            type: isTimeout ? 'hitl_auto_resolved' : 'user_clarification',
+            status: isTimeout ? 'auto_resolved' : 'clarification_provided',
             taskId,
             sessionId: this.sessionId,
             timestamp: new Date().toISOString(),
@@ -1979,22 +2134,25 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
               clarification: clarificationMessage,
               originalQuestion: question,
               stage: 'post_intent',
+              resolvedBy: fallbackResolvedBy,
             }
           };
 
-          const clarificationEntryId = `user-clarification-${taskId}-${Date.now()}`;
+          const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${taskId}-${Date.now()}`;
           await streams.taskExecution.set(taskId, clarificationEntryId, {
             ...clarificationEvent,
             category: 'agent_hook',
           });
 
-          console.log('[Agent] User clarification notification sent (fallback path)', {
+          console.log('[Agent] HITL notification sent (fallback path)', {
             taskId,
             clarification: clarificationMessage,
+            resolvedBy: fallbackResolvedBy,
           });
         }
 
-        await this.clearHITLState(taskId);
+        // Resolve HITL state with resolvedBy marker
+        await this.resolveHITLState(taskId, fallbackResolvedBy, clarificationResult.content);
 
         // Return clarification content to be used by RequestRewriter
         return {
@@ -2056,7 +2214,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
    * Polling interval: 2 seconds
    * Timeout: 5 minutes (300 seconds)
    */
-  private async pollHITLResult(taskId: string): Promise<{ content: string; feedback?: string }> {
+  private async pollHITLResult(taskId: string): Promise<{ content: string; feedback?: string; resolvedBy: 'human' | 'timeout' }> {
     const POLL_INTERVAL = 2000; // 2 seconds
     const TIMEOUT = 600 * 1000; // 10 minutes
     const startTime = Date.now();
@@ -2082,6 +2240,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
           return {
             content: taskContext.hitlState.response.content,
             feedback: taskContext.hitlState.response.feedback,
+            resolvedBy: 'human',
           };
         }
 
@@ -2098,26 +2257,35 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
       }
     }
 
-    // Timeout - return empty result to continue execution
-    console.warn('[Agent] HITL polling timeout, continuing execution', { taskId, TIMEOUT });
-    return { content: '' };
+    // Timeout - return empty result with timeout marker
+    console.warn('[Agent] HITL polling timeout, auto-resolving', { taskId, TIMEOUT });
+    return { content: '', resolvedBy: 'timeout' };
   }
 
   /**
-   * Clear HITL state from TaskContext after clarification is received.
+   * Resolve HITL state with resolvedBy marker.
+   *
+   * Writes final state instead of deleting, so frontend can distinguish
+   * human confirmation from timeout auto-resolve.
    */
-  private async clearHITLState(taskId: string): Promise<void> {
+  private async resolveHITLState(taskId: string, resolvedBy: 'human' | 'timeout', response?: string): Promise<void> {
     try {
       const contextManager = new ContextManager();
       const taskContext = await contextManager.getContext(taskId);
 
       if (taskContext && taskContext.hitlState) {
-        delete taskContext.hitlState;
+        taskContext.hitlState = {
+          ...taskContext.hitlState,
+          status: 'completed',
+          resolvedBy,
+          resolvedAt: new Date(),
+          ...(resolvedBy === 'timeout' ? { response: { content: response || '(超时自动继续)', timestamp: new Date() } } : {}),
+        };
         await contextManager.saveContext(taskContext);
-        console.log('[Agent] HITL state cleared', { taskId });
+        console.log('[Agent] HITL state resolved', { taskId, resolvedBy });
       }
     } catch (error) {
-      console.error('[Agent] Failed to clear HITL state', { taskId, error });
+      console.error('[Agent] Failed to resolve HITL state', { taskId, error });
     }
   }
 

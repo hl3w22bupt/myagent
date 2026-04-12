@@ -102,6 +102,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           ...process.env,
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_TASK_ID: options.metadata?.taskId || '',
+          MOTIA_TASK_WORKSPACE: options.metadata?.workspace || '',  // ⭐ Add workspace environment variable
           MOTIA_SKILL_PATH: skillPath,
           MOTIA_NOTIFY_API_URL: 'http://localhost:3000/api/notify',
           MOTIA_TRACE_API_URL: 'http://localhost:3000/api/traces/submit',
