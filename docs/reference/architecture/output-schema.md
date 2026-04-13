@@ -490,12 +490,70 @@ const UnifiedOutputSchema = z.object({
 
 ---
 
+## 📦 Agent Result Artifacts
+
+Agent 执行完成后，除了 `structuredOutput` 外，还可能包含 `artifacts` 字段，记录所有产出文件。
+
+### Artifacts 结构
+
+```typescript
+interface AgentResult {
+  // ... 其他字段 ...
+  
+  // 产物信息（可选）
+  artifacts?: AgentArtifacts;
+  
+  // workspace 路径（在 metadata 中）
+  metadata: {
+    workspace?: string;     // 任务 workspace 路径
+    artifactType?: string;  // 主要产物类型
+    skillNames?: string[];  // 使用的 skill 列表
+  };
+}
+```
+
+### Artifacts 数据结构
+
+```typescript
+interface AgentArtifacts {
+  workspace: string;                        // workspace 绝对路径
+  files: Record<string, FileArtifact[]>;    // 按类型分类
+  allFiles: FileArtifact[];                 // 所有文件列表
+  summary: {
+    counts: Record<string, number>;         // 各类型文件数
+    totalFiles: number;
+    totalSize: number;                      // 总大小（bytes）
+  };
+}
+
+interface FileArtifact {
+  type: 'videos' | 'images' | 'audios' | 'codes' | 'documents' | 'data' | 'other';
+  path: string;           // 绝对路径
+  name: string;           // 文件名
+  relativePath: string;   // 相对于 workspace 的路径
+  operation: 'created' | 'modified' | 'deleted';
+  size: number;           // 文件大小（从磁盘读取）
+}
+```
+
+### Artifacts 来源
+
+| Agent 类型 | 来源 | 收集方式 |
+|-----------|------|---------|
+| 内置 Agent | `structuredOutputs[].output_files` | `buildArtifactsFromOutputFiles()` |
+| ExternalAgent | ACP `tool_call` 事件的文件操作 | `ArtifactCollector.fromFileOperations()` |
+
+详细文档参见 [Workspace 和 Artifacts](./workspace-artifacts.md)。
+
+---
+
 ## 📖 相关文档
 
 - [Skill 开发](../api/plugin-api/custom-skill.md) - 开发新 Skill
 - [Agent 系统](./agent-system.md) - Agent 输出结构
+- [Workspace 和 Artifacts](./workspace-artifacts.md) - Workspace 标准和 Artifacts 系统
 - [Stream 系统](./stream-system.md) - 实时输出传输
 
 ---
 
-**版本**: v1.0 | **更新日期**: 2026-03-29
+**版本**: v1.1 | **更新日期**: 2026-04-11

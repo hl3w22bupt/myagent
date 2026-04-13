@@ -221,12 +221,37 @@ export interface ExternalAgentConfig {
   args?: string[];
 }
 
+/**
+ * Git Clone Step Configuration (when type='git-clone')
+ */
+export interface GitCloneConfig {
+  /** Repository URL (supports {{ environment.githubUrl }} template) */
+  url: string;
+
+  /** Authentication token (supports {{ environment.githubToken }} template) */
+  token?: string;
+
+  /** Branch to checkout (optional, defaults to repo's default branch) */
+  branch?: string;
+
+  /** Target directory name within workspace (optional, defaults to repo name) */
+  targetDir?: string;
+
+  /**
+   * Use git worktree when target directory already exists (default: true).
+   * When true and the repo already exists, creates a new worktree with a
+   * branch name derived from the task content.
+   * Set to false to work directly in the existing repo.
+   */
+  useWorktree?: boolean;
+}
+
 // Workflow step
 export interface WorkflowStep {
   id: string;
   name?: string;
   agent?: string;  // Made optional since hitl steps don't require an agent
-  type?: 'agent' | 'subworkflow' | 'hitl';
+  type?: 'agent' | 'subworkflow' | 'hitl' | 'git-clone';
   subworkflow?: string;
   depends_on?: string[];
   input?: Record<string, any>;
@@ -242,6 +267,9 @@ export interface WorkflowStep {
 
   /** External agent configuration (if using external agent) */
   externalAgent?: ExternalAgentConfig;
+
+  /** Git clone step configuration (when type='git-clone') */
+  gitClone?: GitCloneConfig;
 
   // ⭐ Feedback Loop Configuration
   /** Retry configuration for automatic retries on failure */

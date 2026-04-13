@@ -28,7 +28,7 @@ class TestWorkspaceManager:
 
     def test_workspace_root_constant(self):
         """Test that WORKSPACE_ROOT is set correctly."""
-        assert WorkspaceManager.WORKSPACE_ROOT == "tmp-workspace"
+        assert WorkspaceManager.WORKSPACE_ROOT == "/tmp/myagent-workspace"
 
     def test_artifact_types_mapping(self):
         """Test that ARTIFACT_TYPES contains correct mappings."""
@@ -43,13 +43,13 @@ class TestWorkspaceManager:
         assert ".mp3" in WorkspaceManager.ARTIFACT_TYPES["audios"]
         assert ".py" in WorkspaceManager.ARTIFACT_TYPES["codes"]
 
-    def test_get_workspace_dir(self):
-        """Test get_workspace_dir returns correct path."""
+    def test_get_skill_workspace(self):
+        """Test get_skill_workspace returns correct path."""
         task_id = "test_task_123"
         skill_name = "test-skill"
-        expected = os.path.join("tmp-workspace", task_id, skill_name)
+        expected = os.path.join("/tmp/myagent-workspace", task_id, skill_name)
 
-        result = WorkspaceManager.get_workspace_dir(task_id, skill_name)
+        result = WorkspaceManager.get_skill_workspace(task_id, skill_name)
 
         assert result == expected
 
@@ -70,12 +70,13 @@ class TestWorkspaceManager:
 
         workspace_dir = WorkspaceManager.create_workspace(task_id, skill_name)
 
-        # Should be an absolute path (depends on cwd)
+        # Should be an absolute path under /tmp/myagent-workspace
         assert isinstance(workspace_dir, str)
-        assert workspace_dir.endswith(os.path.join("tmp-workspace", task_id, skill_name))
+        assert os.path.isabs(workspace_dir)
+        assert workspace_dir == os.path.join("/tmp/myagent-workspace", task_id, skill_name)
 
     def test_cleanup_workspace_removes_directory(self):
-        """Test that cleanup_workspace removes the directory."""
+        """Test that cleanup_task_workspace removes the directory."""
         task_id = "test_task_123"
         skill_name = "test-skill"
 
@@ -83,13 +84,13 @@ class TestWorkspaceManager:
         workspace_dir = WorkspaceManager.create_workspace(task_id, skill_name)
         assert os.path.exists(workspace_dir)
 
-        # Cleanup
-        WorkspaceManager.cleanup_workspace(task_id, skill_name)
+        # Cleanup entire task workspace
+        WorkspaceManager.cleanup_task_workspace(task_id)
 
         assert not os.path.exists(workspace_dir)
 
-    def test_cleanup_workspace_with_skill_name_only(self):
-        """Test cleanup_workspace with skill_name only."""
+    def test_cleanup_task_workspace_removes_all_skills(self):
+        """Test cleanup_task_workspace removes entire task directory including all skills."""
         task_id = "test_task_123"
         skill_name = "test-skill"
 
@@ -97,15 +98,17 @@ class TestWorkspaceManager:
         workspace_dir = WorkspaceManager.create_workspace(task_id, skill_name)
         assert os.path.exists(workspace_dir)
 
-        # Cleanup without skill_name should remove entire task directory
-        WorkspaceManager.cleanup_workspace(task_id)
+        # Cleanup entire task workspace should remove everything
+        WorkspaceManager.cleanup_task_workspace(task_id)
 
         assert not os.path.exists(workspace_dir)
+        # Parent task dir should also be gone
+        assert not os.path.exists(WorkspaceManager.get_task_workspace(task_id))
 
     def test_cleanup_nonexistent_workspace_no_error(self):
         """Test that cleaning up non-existent workspace doesn't raise error."""
         # Should not raise any exception
-        WorkspaceManager.cleanup_workspace("nonexistent_task", "nonexistent_skill")
+        WorkspaceManager.cleanup_task_workspace("nonexistent_task")
 
     def test_scan_artifacts_empty_workspace(self):
         """Test scanning empty workspace returns empty dict."""
@@ -397,7 +400,7 @@ class TestWorkspaceManager:
             assert os.path.exists(dest_path)
 
         # Cleanup workspace
-        WorkspaceManager.cleanup_workspace(task_id, skill_name)
+        WorkspaceManager.cleanup_task_workspace(task_id)
 
         # Verify workspace is cleaned
         assert not os.path.exists(workspace_dir)

@@ -150,11 +150,83 @@ const agent = new Agent({
 
 ---
 
+## 🔄 HITL (Human-in-the-Loop) Hook
+
+### 概述
+
+HITL 机制在 Agent 需要用户澄清时触发，用于暂停执行、等待用户输入、然后继续。
+
+### 触发位置
+
+| Agent 类型 | 触发时机 | 检测方式 |
+|-----------|---------|---------|
+| 内置 Agent | 意图分析后，置信度 < 0.7 | LLM 判断 `needs_clarification` |
+| ExternalAgent | 外部 Agent 输出包含提问 | `detectQuestionInOutput()` 字符串模式匹配 |
+
+### HITL 状态
+
+```typescript
+interface HITLState {
+  stage: 'pre_intent' | 'post_intent' | 'in_execution';
+  status: 'awaiting' | 'completed';
+  agentName?: string;
+  question?: string;
+  options?: string[];
+  response?: {
+    content: string;
+    feedback?: string;
+    timestamp: Date;
+  };
+  resolvedBy?: 'human' | 'timeout';  // 解决方式
+  resolvedAt?: Date;                  // 解决时间
+  createdAt: Date;
+}
+```
+
+### `resolvedBy` 字段
+
+HITL 状态完成后记录解决方式：
+
+| 值 | 说明 | 前端展示 |
+|----|------|---------|
+| `human` | 用户通过 UI 提交了澄清回复 | 绿色卡片"已收到澄清回复" |
+| `timeout` | 轮询超时（10 分钟），自动继续 | 灰色卡片"超时自动继续" |
+
+### 流程
+
+```
+Agent 执行
+    ↓
+检测到需要澄清（低置信度 / 外部 Agent 提问）
+    ↓
+saveHITLState() → status: 'awaiting'
+    ↓
+触发 onAwaitingHITL Hook（webhook 通知）
+    ↓
+pollHITLResult()（轮询等待，最多 10 分钟）
+    ↓
+resolveHITLState(resolvedBy) → status: 'completed'
+    ↓
+继续执行 / 超时自动继续
+```
+
+### 前端状态映射
+
+| hitlState.status | hitlState.resolvedBy | 卡片颜色 | 说明 |
+|-----------------|---------------------|---------|------|
+| `awaiting` | - | 橙色 | 等待用户回复 |
+| `completed` | `human` | 绿色 | 已收到用户回复 |
+| `completed` | `timeout` | 灰色 | 超时自动继续 |
+
+---
+
 ## 📖 相关文档
 
 - [Agent 系统](agent-system.md) - Agent 生命周期
+- [External Agent](external-agent.md) - 外部 Agent HITL 检测
+- [Workspace 和 Artifacts](workspace-artifacts.md) - 产物系统
 - [插件开发](../api/plugin-api/README.md) - 开发自定义插件
 
 ---
 
-**版本**: v1.0 | **更新日期**: 2026-03-29
+**版本**: v1.1 | **更新日期**: 2026-04-11

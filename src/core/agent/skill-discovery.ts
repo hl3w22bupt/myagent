@@ -316,13 +316,14 @@ export class SkillDiscovery {
   }
 
   /**
-   * Get skills in the format expected by Agent (simplified).
+   * Get skills in the format expected by Agent (with metadata for PTC).
    */
-  getSkillsRegistry(): Array<{ name: string; description: string; tags: string[] }> {
+  getSkillsRegistry(): Array<{ name: string; description: string; tags: string[]; metadata?: SkillMetadata['metadata'] }> {
     return Array.from(this.skills.values()).map((skill) => ({
       name: skill.name,
       description: skill.description,
       tags: skill.tags,
+      metadata: skill.metadata,
     }));
   }
 

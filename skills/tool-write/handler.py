@@ -185,8 +185,14 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     file_path = params.get("file_path")
     content = params.get("content", "")
 
-    # Get workspace directory
-    workspace_dir = params.get("_workspace_dir") or os.getenv("MOTIA_WORKSPACE_DIR")
+    # ⭐ 兼容 dict 格式的 file_path（PTC 生成代码可能传入完整的 file 对象）
+    if isinstance(file_path, dict):
+        file_path = file_path.get("path") or file_path.get("name", "")
+    elif not isinstance(file_path, str):
+        file_path = str(file_path)
+
+    # ⭐ Get task workspace from environment variable
+    workspace = os.getenv("MOTIA_TASK_WORKSPACE")
 
     if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
@@ -197,20 +203,27 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"success": False, "error": "file_path is required"}
 
-    # Use workspace for relative paths
+    # ⭐ Build full path (handle both absolute and relative paths)
     original_file_path = file_path
-    if workspace_dir and not os.path.isabs(file_path):
-        file_path = os.path.join(workspace_dir, file_path)
+    if os.path.isabs(file_path):
+        # 绝对路径，直接使用
+        full_path = file_path
+    elif workspace:
+        # 相对路径 + workspace
+        full_path = os.path.join(workspace, file_path)
+    else:
+        # 回退到 current directory
+        full_path = file_path
 
     try:
         # Create parent directories if they don't exist
-        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(full_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Write content to file
-        Path(file_path).write_text(content, encoding="utf-8")
+        Path(full_path).write_text(content, encoding="utf-8")
 
         # 推断文件类型
-        mime_type, result_type = _infer_file_type(file_path)[:2]
+        mime_type, result_type = _infer_file_type(full_path)[:2]
         file_size = len(content.encode('utf-8'))
 
         if OUTPUT_BUILDER_AVAILABLE:
@@ -227,12 +240,12 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
                     language = 'html'
                 elif result_type == 'json':
                     language = 'json'
-                output.set_code(content, language, Path(file_path).name)
+                output.set_code(content, language, Path(full_path).name)
             elif result_type in ('image', 'video', 'audio', 'gif'):
                 # 对于媒体文件，使用 set_media
                 from core.skill.output_builder import MediaInfo
                 media_info = MediaInfo(
-                    path=file_path,
+                    path=full_path,
                     mime_type=mime_type,
                     size=file_size
                 )
@@ -241,7 +254,7 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
                 # PDF 等文档
                 from core.skill.output_builder import MediaInfo
                 media_info = MediaInfo(
-                    path=file_path,
+                    path=full_path,
                     mime_type=mime_type,
                     size=file_size
                 )
@@ -249,17 +262,25 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
                 output.set_result_type('report')
             else:
                 # 默认文本
-                output.set_text(f"Successfully wrote {len(content)} characters to {file_path}")
+                output.set_text(f"Successfully wrote {len(content)} characters to {original_file_path}")
 
-            # 添加 output_files 元数据
-            output.set_metadata("output_files", [file_path])
+            # ⭐ 添加 output_files 元数据（使用绝对路径）
+            output.set_metadata("output_files", [{
+                "type": "file",
+                "path": full_path,  # ⭐ 绝对路径
+                "name": Path(full_path).name,
+            }])
             return output.build()
         else:
             return {
                 "success": True,
                 "result_type": result_type,
-                "content": f"Successfully wrote {len(content)} characters to {file_path}",
-                "output_files": [file_path]
+                "content": f"Successfully wrote {len(content)} characters to {original_file_path}",
+                "output_files": [{
+                    "type": "file",
+                    "path": full_path,  # ⭐ 绝对路径
+                    "name": Path(full_path).name,
+                }]
             }
     except Exception as e:
         if OUTPUT_BUILDER_AVAILABLE:

@@ -2739,7 +2739,7 @@ function TaskDetail() {
             <ContextTab taskId={id} />
           </div>
           <div className={`tab-panel ${activeTab === 'workspace' ? 'active' : ''}`}>
-            <WorkspaceTab taskId={id} />
+            <WorkspaceTab taskId={id} taskStatus={task?.status} />
           </div>
           <div className={`tab-panel ${activeTab === 'token-usage' ? 'active' : ''}`}>
             <TokenUsageTab taskId={id} />
@@ -3581,11 +3581,13 @@ function TaskDetail() {
                 <span className="stream-count">{messages.length} 条消息</span>
               </div>
 
-              {/* HITL 澄清等待卡片 */}
-              {hitlState?.status === 'awaiting' && (
+              {/* HITL 状态卡片：awaiting / completed (human/timeout) */}
+              {hitlState && hitlState.status && (
                 <ClarificationWaitingCard
                   agentName={hitlState.agentName || 'Agent'}
                   question={hitlState.question || '请提供更多信息'}
+                  status={hitlState.status}
+                  resolvedBy={hitlState.resolvedBy}
                   onExpand={() => setClarificationModalOpen(true)}
                 />
               )}

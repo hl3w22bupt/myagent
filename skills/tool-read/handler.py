@@ -66,6 +66,15 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     file_path = params.get("file_path")
     encoding = params.get("encoding", "utf-8")
 
+    # ⭐ 兼容 dict 格式的 file_path（PTC 生成代码可能传入完整的 file 对象）
+    if isinstance(file_path, dict):
+        file_path = file_path.get("path") or file_path.get("name", "")
+    elif not isinstance(file_path, str):
+        file_path = str(file_path)
+
+    # ⭐ Get task workspace from environment variable
+    workspace = os.getenv("MOTIA_TASK_WORKSPACE")
+
     if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
@@ -75,8 +84,19 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"success": False, "error": "file_path is required"}
 
+    # ⭐ Build full path (handle both absolute and relative paths)
+    if os.path.isabs(file_path):
+        # 绝对路径，直接使用
+        full_path = file_path
+    elif workspace:
+        # 相对路径 + workspace
+        full_path = os.path.join(workspace, file_path)
+    else:
+        # 回退到当前目录
+        full_path = file_path
+
     try:
-        content = Path(file_path).read_text(encoding=encoding)
+        content = Path(full_path).read_text(encoding=encoding)
 
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_text(content).build()
@@ -89,11 +109,20 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     except FileNotFoundError:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
-                error=FileNotFoundError(f"File not found: {file_path}"),
-                suggestions=[f"Check if the file exists: {file_path}"]
+                error=FileNotFoundError(f"File not found: {full_path}"),
+                suggestions=[
+                    f"Check if the file exists: {full_path}",
+                    f"Workspace: {workspace or 'not set'}",
+                    f"Original path: {file_path}"
+                ]
             ).build()
         else:
-            return {"success": False, "error": f"File not found: {file_path}"}
+            return {
+                "success": False,
+                "error": f"File not found: {full_path}",
+                "workspace": workspace,
+                "original_path": file_path
+            }
     except Exception as e:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(e).build()

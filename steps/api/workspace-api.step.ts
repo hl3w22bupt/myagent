@@ -2,6 +2,7 @@ import { ApiRouteConfig } from 'motia';
 import { z } from 'zod';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { join, normalize } from 'path';
+import { homedir } from 'os';
 import { getDataStore } from '../../src/core/database/data-store';
 
 export const config: ApiRouteConfig = {
@@ -82,27 +83,21 @@ function getFilesRecursively(dirPath: string, baseDir: string, maxDepth = 10, cu
  * 防止路径遍历攻击
  */
 function validatePath(workspace: string): boolean {
-  // 只允许 /tmp/myagent-workspaces 或用户指定的目录
+  // Expand tilde to home directory
+  const expanded = workspace.startsWith('~/')
+    ? join(homedir(), workspace.slice(2))
+    : workspace === '~' ? homedir() : workspace;
+
+  // 只允许已知的安全目录前缀
   const allowedPrefixes = [
-    '/tmp/myagent-workspaces',
-    '/tmp/test-',
-    '/tmp/final-test',  // ExternalAgent 测试
-    '/tmp/calculator-final',  // ExternalAgent 测试
-    '/tmp/todo-manager-test',  // ExternalAgent 测试
-    '/tmp/calculator-test',
-    '/tmp/hello-test',
-    '/tmp/quick-test',
-    '/tmp/todo-manager',
-    '/tmp/log-analyzer',
-    '/tmp/toolcall',
-    '/tmp/fileops',
-    '/tmp/complex',
-    '/tmp/workspace',
+    '/tmp/myagent-workspace',   // 统一默认 workspace
+    '/tmp/',                     // 其他 /tmp 下的路径（含用户指定 workspace）
     '/Users/leo/workspace',
+    join(homedir(), '.myrd'),    // myrd workspace
   ];
 
   // 规范化路径
-  const normalized = normalize(workspace);
+  const normalized = normalize(expanded);
 
   // 检查是否以允许的前缀开头
   return allowedPrefixes.some(prefix => normalized.startsWith(prefix));
@@ -140,12 +135,23 @@ export const handler = async (
       };
     }
 
-    // 从 task metadata 获取 workspace
-    // 优先从顶层 metadata.workspace 获取（ExternalAgent 的任务）
-    // 如果没有，再从 metadata.environment.workspace 获取（其他 Agent 的任务）
-    const workspace = task.metadata?.workspace || task.metadata?.environment?.workspace;
+    // 从 task metadata 获取 workspace（支持多种来源）
+    // 优先级：workflow 更新后的 workspace > 原始传入的 workspace
+    // 1. variables.workflowWorkspace（Workflow git-clone 更新后的实际工作目录）
+    // 2. 顶层 metadata.workspace（直接 Agent 任务）
+    // 3. metadata.environment.workspace（通过 environment 传入的原始值）
+    const workspace =
+      task.metadata?.variables?.workflowWorkspace ||
+      (task.metadata?.variables?.variables as any)?.workflowWorkspace ||
+      task.metadata?.workspace ||
+      task.metadata?.environment?.workspace;
 
-    if (!workspace) {
+    // Expand tilde in workspace path
+    const expandedWorkspace = workspace.startsWith('~/')
+      ? join(homedir(), workspace.slice(2))
+      : workspace === '~' ? homedir() : workspace;
+
+    if (!expandedWorkspace) {
       return {
         status: 400,
         body: {
@@ -156,8 +162,8 @@ export const handler = async (
     }
 
     // 验证路径安全性
-    if (!validatePath(workspace)) {
-      logger.warn('Invalid workspace path', { workspace, taskId });
+    if (!validatePath(expandedWorkspace)) {
+      logger.warn('Invalid workspace path', { workspace: expandedWorkspace, taskId });
       return {
         status: 403,
         body: {
@@ -168,14 +174,14 @@ export const handler = async (
     }
 
     // 检查 workspace 是否存在
-    if (!existsSync(workspace)) {
+    if (!existsSync(expandedWorkspace)) {
       return {
         status: 404,
         body: {
           success: false,
           error: 'Workspace directory not found',
           data: {
-            workspace,
+            workspace: expandedWorkspace,
             exists: false,
           },
         },
@@ -183,7 +189,7 @@ export const handler = async (
     }
 
     // 获取文件列表
-    const files = getFilesRecursively(workspace, workspace, 5, 0);
+    const files = getFilesRecursively(expandedWorkspace, expandedWorkspace, 5, 0);
 
     // 统计信息
     const fileCount = files.filter(f => f.type === 'file').length;
@@ -192,7 +198,7 @@ export const handler = async (
 
     logger.info('Workspace files retrieved', {
       taskId,
-      workspace,
+      workspace: expandedWorkspace,
       fileCount,
       dirCount,
       totalSize,
@@ -204,7 +210,7 @@ export const handler = async (
         success: true,
         data: {
           taskId,
-          workspace,
+          workspace: expandedWorkspace,
           files,
           summary: {
             fileCount,

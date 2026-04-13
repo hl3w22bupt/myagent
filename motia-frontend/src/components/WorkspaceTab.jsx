@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   ChevronRightIcon,
   ChevronDownIcon,
@@ -17,8 +17,9 @@ import CodePlayer from './CodePlayer'
 import './WorkspaceTab.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const POLL_INTERVAL = 5000 // 5s polling during execution
 
-const WorkspaceTab = ({ taskId }) => {
+const WorkspaceTab = ({ taskId, taskStatus }) => {
   const [workspace, setWorkspace] = useState(null)
   const [files, setFiles] = useState([])
   const [summary, setSummary] = useState(null)
@@ -29,13 +30,12 @@ const WorkspaceTab = ({ taskId }) => {
   const [fileContent, setFileContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(null)
+  const pollTimerRef = useRef(null)
 
-  useEffect(() => {
-    fetchWorkspaceFiles()
-  }, [taskId])
-
-  const fetchWorkspaceFiles = async () => {
-    setLoading(true)
+  const fetchWorkspaceFiles = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
+    }
     setError(null)
 
     try {
@@ -76,7 +76,26 @@ const WorkspaceTab = ({ taskId }) => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [taskId])
+
+  // Initial fetch + polling during execution
+  useEffect(() => {
+    fetchWorkspaceFiles()
+
+    // Only poll when task is not in a terminal state
+    const isRunning = !taskStatus || taskStatus === 'pending' || taskStatus === 'running'
+    if (isRunning) {
+      pollTimerRef.current = setInterval(() => {
+        fetchWorkspaceFiles(false) // silent refresh (no loading spinner)
+      }, POLL_INTERVAL)
+    }
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+      }
+    }
+  }, [taskId, taskStatus, fetchWorkspaceFiles])
 
   const getFileIcon = (fileName) => {
     const ext = fileName.split('.').pop()?.toLowerCase()

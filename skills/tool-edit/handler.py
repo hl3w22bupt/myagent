@@ -70,22 +70,48 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     # Get workspace directory
     workspace_dir = params.get("_workspace_dir") or os.getenv("MOTIA_WORKSPACE_DIR")
 
-    if not all([file_path, old_string]):
+    if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
             return OutputBuilder().set_error(
-                error=ValueError("file_path and old_string are required"),
-                suggestions=["Provide 'file_path' and 'old_string' parameters"]
+                error=ValueError("file_path is required"),
+                suggestions=["Provide 'file_path' parameter"]
             ).build()
         else:
-            return {"success": False, "error": "file_path and old_string are required"}
+            return {"success": False, "error": "file_path is required"}
+
+    if new_string is None:
+        if OUTPUT_BUILDER_AVAILABLE:
+            return OutputBuilder().set_error(
+                error=ValueError("new_string is required"),
+                suggestions=["Provide 'new_string' parameter"]
+            ).build()
+        else:
+            return {"success": False, "error": "new_string is required"}
 
     # Use workspace for relative paths
     if workspace_dir and not os.path.isabs(file_path):
         file_path = os.path.join(workspace_dir, file_path)
 
     try:
-        # Read file content
         path = Path(file_path)
+
+        # Create new file mode: empty old_string + file doesn't exist
+        if not old_string and not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(new_string, encoding="utf-8")
+            if OUTPUT_BUILDER_AVAILABLE:
+                output = OutputBuilder().set_text(f"Created new file: {file_path}")
+                output.set_metadata("output_files", [file_path])
+                return output.build()
+            else:
+                return {
+                    "success": True,
+                    "result_type": "text",
+                    "content": f"Created new file: {file_path}",
+                    "output_files": [file_path]
+                }
+
+        # Edit existing file mode
         if not path.exists():
             # If file not found in current skill workspace, search in task-level workspace
             # This supports multi-skill workflows where upstream skills create files
@@ -111,6 +137,22 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
                 raise FileNotFoundError(f"File not found: {file_path}")
 
         content = path.read_text(encoding="utf-8")
+
+        # Empty old_string on existing file: append new_string
+        if not old_string:
+            new_content = content + new_string
+            path.write_text(new_content, encoding="utf-8")
+            if OUTPUT_BUILDER_AVAILABLE:
+                output = OutputBuilder().set_text(f"Appended to {file_path}")
+                output.set_metadata("output_files", [file_path])
+                return output.build()
+            else:
+                return {
+                    "success": True,
+                    "result_type": "text",
+                    "content": f"Appended to {file_path}",
+                    "output_files": [file_path]
+                }
 
         # Check if old_string exists
         if old_string not in content:

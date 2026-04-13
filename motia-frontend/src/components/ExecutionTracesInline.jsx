@@ -148,6 +148,15 @@ function ExecutionTracesInline({ taskId }) {
         groupId = skillName
         displayName = skillName
         displayLevel = 'skill'  // 统一显示为 skill
+      } else if (trace.level === 'workflow-step') {
+        // Workflow step trace (git-clone, HITL, etc.)
+        const stepId = trace.metadata?.stepId || trace.agentId || 'unknown'
+        const stepName = trace.metadata?.stepName || stepId
+        const stepType = trace.metadata?.stepType || 'step'
+        groupKey = `wf-step-${stepId}`
+        groupId = stepId
+        displayName = `${stepType}: ${stepName}`
+        displayLevel = 'workflow-step'
       } else if (trace.level === 'agent' || trace.level === 'agent-internal') {
         const agentId = trace.agentId || 'unknown'
         groupKey = `agent-${agentId}`
@@ -295,6 +304,7 @@ function ExecutionTracesInline({ taskId }) {
     task: groupedTraces.filter(g => g.level === 'task').length,
     agent: groupedTraces.filter(g => g.level === 'agent').length,
     skill: groupedTraces.filter(g => g.level === 'skill').length,
+    workflowStep: groupedTraces.filter(g => g.level === 'workflow-step').length,
     completed: groupedTraces.filter(g => g.finalStatus === 'completed').length,
     failed: groupedTraces.filter(g => g.finalStatus === 'failed').length,
     running: groupedTraces.filter(g => g.finalStatus === 'running' || g.finalStatus === 'started').length,
@@ -318,6 +328,12 @@ function ExecutionTracesInline({ taskId }) {
         return (
           <svg className="level-icon" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
             <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )
+      case 'workflow-step':
+        return (
+          <svg className="level-icon" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )
       case 'tool-call':
@@ -430,6 +446,12 @@ function ExecutionTracesInline({ taskId }) {
             <span className="stat-label">Skill</span>
             <span className="stat-value">{stats.skill}</span>
           </div>
+          {stats.workflowStep > 0 && (
+            <div className="stat-item">
+              <span className="stat-label">Step</span>
+              <span className="stat-value">{stats.workflowStep}</span>
+            </div>
+          )}
           <span className="stat-divider-vertical"></span>
           <div className={`stat-item ${stats.completed > 0 ? 'stat-success' : ''}`}>
             <span className="stat-label">完成</span>

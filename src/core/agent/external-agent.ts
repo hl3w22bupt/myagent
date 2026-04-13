@@ -7,7 +7,10 @@
 import { Agent } from './agent';
 import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
 import { mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { ContextManager } from '../context/manager';
+import { ArtifactCollector } from './artifact-collector';
 
 /**
  * ExternalAgent class.
@@ -29,11 +32,9 @@ export class ExternalAgent extends Agent {
         type: 'local',
         local: {},
       },
-      llm: {
-        provider: 'anthropic',
-        model: 'unused',
-        apiKey: 'unused',
-      },
+      // LLM config omitted: Agent base class falls back to env vars
+      // (ANTHROPIC_API_KEY, DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, LLM_BASE_URL)
+      // Used by detectQuestionViaLLM() for HITL detection
     };
 
     super(baseConfig, sessionId);
@@ -71,7 +72,13 @@ export class ExternalAgent extends Agent {
       const { createAcpRuntime, createAgentRegistry, createFileSessionStore } = await import('acpx/runtime');
 
       console.log(`[ExternalAgent ${this.sessionId}] Creating AcpRuntime...`);
-
+      const { existsSync: esExists } = await import('fs');
+      console.log(`[ExternalAgent ${this.sessionId}] Debug env:`, {
+        PATH: process.env.PATH?.substring(0, 200),
+        npxExists: esExists('/opt/homebrew/bin/npx'),
+        nodeExists: esExists('/opt/homebrew/bin/node'),
+        cwd: process.cwd(),
+      });
       // Create file session store
       const sessionStore = createFileSessionStore({
         stateDir: '/tmp/acpx-sessions',
@@ -181,18 +188,25 @@ export class ExternalAgent extends Agent {
       configWorkingDir: this.externalConfig.workingDirectory,
     });
 
+    // Helper: expand ~ to home directory
+    const expandTilde = (p: string): string => {
+      if (p.startsWith('~/')) return join(homedir(), p.slice(2));
+      if (p === '~') return homedir();
+      return p;
+    };
+
     // 1. Check dynamic workspace from task context
     if (context?.environment?.workspace) {
-      return context.environment.workspace;
+      return expandTilde(context.environment.workspace);
     }
 
     if (context?.environment?.workingDirectory) {
-      return context.environment.workingDirectory;
+      return expandTilde(context.environment.workingDirectory);
     }
 
     // 2. Use static workspace from config
     if (this.externalConfig.workingDirectory) {
-      return this.externalConfig.workingDirectory;
+      return expandTilde(this.externalConfig.workingDirectory);
     }
 
     // 3. Use default shared workspace
@@ -357,7 +371,12 @@ export class ExternalAgent extends Agent {
       if (stopReason === 'end_turn') {
         // ⭐ 检测输出中是否包含提问（即使 stopReason 是 end_turn）
         // Claude Code 有时会在正常结束时提问，而不是返回 awaiting_input
-        const hasQuestion = this.detectQuestionInOutput(output);
+        let hasQuestion = this.detectQuestionInOutput(output);
+
+        // Fallback: if pattern matching didn't find a question, use LLM to judge
+        if (!hasQuestion) {
+          hasQuestion = await this.detectQuestionViaLLM(output);
+        }
 
         if (hasQuestion) {
           console.log(`[ExternalAgent ${this.sessionId}] Question detected in output, triggering HITL clarification`);
@@ -393,12 +412,14 @@ export class ExternalAgent extends Agent {
             // 3. 轮询等待用户响应
             console.log(`[ExternalAgent ${this.sessionId}] Starting to poll for HITL response`, { currentTaskId });
             const clarificationResponse = await this.pollHITLResultInternal(currentTaskId);
+            const resolvedBy = clarificationResponse.resolvedBy; // 'human' | 'timeout'
 
-            // 4. 清除 HITL 状态
-            await this.clearHITLStateInternal(currentTaskId);
+            // 4. 更新 HITL 状态为 completed（带 resolvedBy 标记）
+            await this.resolveHITLStateInternal(currentTaskId, resolvedBy, clarificationResponse.content);
 
-            console.log(`[ExternalAgent ${this.sessionId}] HITL clarification received, resuming execution`, {
+            console.log(`[ExternalAgent ${this.sessionId}] HITL resolved`, {
               currentTaskId,
+              resolvedBy,
               clarification: clarificationResponse.content,
             });
 
@@ -408,13 +429,16 @@ export class ExternalAgent extends Agent {
 
             // 1. 发送到 taskExecution stream
             if (streams?.taskExecution) {
-              const clarificationMessage = clarificationResponse.feedback
-                ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
-                : clarificationResponse.content;
+              const isTimeout = resolvedBy === 'timeout';
+              const clarificationMessage = isTimeout
+                ? '(超时自动继续)'
+                : (clarificationResponse.feedback
+                  ? `${clarificationResponse.content}（备注：${clarificationResponse.feedback}）`
+                  : clarificationResponse.content);
 
               const clarificationEvent = {
-                type: 'user_clarification',
-                status: 'clarification_provided',
+                type: isTimeout ? 'hitl_auto_resolved' : 'user_clarification',
+                status: isTimeout ? 'auto_resolved' : 'clarification_provided',
                 taskId: currentTaskId,
                 sessionId: this.sessionId,
                 timestamp: new Date().toISOString(),
@@ -423,18 +447,19 @@ export class ExternalAgent extends Agent {
                   originalQuestion: question,
                   stage: 'in_execution',
                   agentType: `External Agent (${this.externalConfig!.type})`,
+                  resolvedBy,
                 }
               };
 
-              const clarificationEntryId = `user-clarification-${currentTaskId}-${Date.now()}`;
+              const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${currentTaskId}-${Date.now()}`;
               await streams.taskExecution.set(currentTaskId, clarificationEntryId, {
                 ...clarificationEvent,
                 category: 'agent_hook',
               });
 
-              console.log('[ExternalAgent] User clarification notification sent to taskExecution', {
+              console.log('[ExternalAgent] HITL notification sent to taskExecution', {
                 currentTaskId,
-                clarification: clarificationMessage,
+                resolvedBy,
               });
             }
 
@@ -447,10 +472,11 @@ export class ExternalAgent extends Agent {
                 taskId: currentTaskId,
                 agentId: this.sessionId,
                 stage: 'hitl-clarification',
-                status: 'resolved',
+                status: resolvedBy === 'timeout' ? 'auto_resolved' : 'resolved',
                 inputData: JSON.stringify({
                   question: question.substring(0, 500) + (question.length > 500 ? '...' : ''),
                   clarification: clarificationResponse.content.substring(0, 500) + (clarificationResponse.content.length > 500 ? '...' : ''),
+                  resolvedBy,
                   timestamp: new Date().toISOString(),
                 }),
               });
@@ -458,10 +484,11 @@ export class ExternalAgent extends Agent {
               console.log('[ExternalAgent] HITL clarification trace sent', {
                 currentTaskId,
                 traceId: clarificationTraceId,
+                resolvedBy,
               });
             }
 
-            // 5. 使用用户的澄清继续执行
+            // 5. 使用澄清内容继续执行
             console.log(`[ExternalAgent ${this.sessionId}] Sending clarification to external agent`);
             const continuedResult = await this.handleHITLInput(clarificationResponse.content);
 
@@ -471,7 +498,9 @@ export class ExternalAgent extends Agent {
               output: continuedResult.output || clarificationResponse.content,
               steps: [...steps, ...continuedResult.steps, {
                 type: 'clarification',
-                content: 'User clarification received and execution resumed',
+                content: resolvedBy === 'timeout'
+                  ? 'HITL timeout - auto-resolved, execution resumed'
+                  : 'User clarification received and execution resumed',
                 timestamp: Date.now(),
               }],
               executionTime: Date.now() - startTime + continuedResult.executionTime,
@@ -480,6 +509,7 @@ export class ExternalAgent extends Agent {
                 externalAgent: this.externalConfig!.type,
                 workspace: this.currentWorkspace,
                 clarification: clarificationResponse.content,
+                hitlResolvedBy: resolvedBy,
               },
             };
 
@@ -499,6 +529,12 @@ export class ExternalAgent extends Agent {
           }
         }
 
+        // ⭐ 使用 ArtifactCollector 转换为统一的产物格式
+        const artifacts = ArtifactCollector.fromFileOperations(
+          fileOperations,
+          this.currentWorkspace
+        );
+
         return {
           success: true,
           output: output,
@@ -517,9 +553,10 @@ export class ExternalAgent extends Agent {
           metadata: {
             externalAgent: this.externalConfig!.type,
             workspace: this.currentWorkspace,
-            fileOperations: fileOperations,
+            fileOperations: fileOperations,  // 保留原始数据
             toolCallsCount: toolCalls.length,
           },
+          artifacts,  // ⭐ 新增：统一的产物信息
         };
       } else if (stopReason === 'awaiting_input') {
         return {
@@ -654,8 +691,13 @@ export class ExternalAgent extends Agent {
   /**
    * Detect if the output contains questions requiring clarification.
    *
-   * This handles the case where Claude Code asks questions in its output
-   * instead of returning stopReason='awaiting_input'.
+   * Only triggers when the output appears to be asking the USER a question,
+   * not when the agent is thinking out loud or explaining.
+   *
+   * Heuristics to avoid false positives:
+   * - Long outputs (>500 chars) are unlikely to be pure questions
+   * - Questions must appear near the END of the output (last 200 chars)
+   * - Output must be relatively short or end with a clear question block
    *
    * @param output - The output text from the external agent
    * @returns true if questions are detected, false otherwise
@@ -665,48 +707,99 @@ export class ExternalAgent extends Agent {
       return false;
     }
 
-    // Patterns that indicate questions/clarification needed
-    const questionPatterns = [
-      // Chinese question markers
-      /请问.*/,
-      /您想要.*/,
-      /需要.*吗[？?]?/,
-      /是否.*/,
-      /哪个.*/,
+    // For very long outputs, only check the last 200 chars for some patterns
+    const checkText = output.length > 500 ? output.slice(-200) : output;
+    const trimmedEnd = output.trimEnd();
+    const lines = trimmedEnd.split('\n').filter(l => l.trim());
+    const lastLines = lines.slice(-5); // Check last 5 non-empty lines
 
-      // Direct questions ending with ?
-      /\?[^？]*/,  // English question mark
-      /？/,       // Chinese question mark
-
-      // Explicit clarification requests
-      /请告诉我/,
-      /请描述/,
-      /请说明/,
-      /我想了解/,
-
-      // Multiple questions (3+ question marks)
-      /\?.*\?.*\?/,
-
-      // Short questions (less than 100 chars with question mark)
-      /^.{1,100}[?？]$/,
-
-      // Common question phrases
-      /什么类型/,
-      /哪个选项/,
-      /如何.*\?/,
-      /怎么.*\?/,
-      /为什么.*\?/,
-    ];
-
-    // Check if any pattern matches
-    for (const pattern of questionPatterns) {
-      if (pattern.test(output)) {
-        console.log(`[ExternalAgent ${this.sessionId}] Question detected with pattern:`, pattern);
+    // Pattern 1: Any of the last 5 lines is a standalone question (strong signal)
+    for (const line of lastLines) {
+      const trimmed = line.trim();
+      // Bold question: **...？** or **...?**
+      if (/^\*\*[^*]+[？?]\*\*$/.test(trimmed)) {
+        console.log(`[ExternalAgent ${this.sessionId}] Bold question detected:`, trimmed);
+        return true;
+      }
+      // Standalone question line ending with ？
+      if (/^(请问|您想要|需要.*吗|是否需要|请告诉我|请描述|请说明|什么类型|哪个选项).+[？?]$/.test(trimmed)) {
+        console.log(`[ExternalAgent ${this.sessionId}] Question line detected:`, trimmed);
         return true;
       }
     }
 
+    // Pattern 2: Short output (<300 chars) ending with question mark
+    if (output.length < 300 && /[？?]\s*$/.test(trimmedEnd)) {
+      console.log(`[ExternalAgent ${this.sessionId}] Short output ending with question mark`);
+      return true;
+    }
+
+    // Pattern 3: Explicit choice/request patterns in the tail
+    const explicitPatterns = [
+      /请选择/,
+      /请确认/,
+      /是否继续/,
+      /请提供/,
+      /请描述/,
+    ];
+    for (const pattern of explicitPatterns) {
+      if (pattern.test(checkText)) {
+        console.log(`[ExternalAgent ${this.sessionId}] Explicit request pattern detected:`, pattern);
+        return true;
+      }
+    }
+
+    // Pattern 4: Option list at end (A/B/C/D) with question mark nearby
+    // e.g. "什么类型的应用？\n- A) ...\n- D) 其他"
+    const optionPattern = /^[A-Da-d][）、.)]\s|^[①②③④⑤⑥]\s/;
+    const hasOptions = lastLines.some(l => optionPattern.test(l.trim()));
+    if (hasOptions && /[？?]/.test(checkText)) {
+      console.log(`[ExternalAgent ${this.sessionId}] Question with option list detected`);
+      return true;
+    }
+
     return false;
+  }
+
+  /**
+   * Use LLM to determine if the output is asking for user input.
+   * This is a fallback when pattern matching doesn't find a clear signal.
+   */
+  private async detectQuestionViaLLM(output: string): Promise<boolean> {
+    try {
+      const response = await this.llm.messagesCreate(
+        [
+          {
+            role: 'user',
+            content: `You are analyzing the output of an AI coding agent to determine if it is asking the user a question and waiting for a response.
+
+Analyze the following output. Is the agent asking for user input/clarification before proceeding?
+
+IMPORTANT distinctions:
+- If the agent is asking a question and waiting for the user to answer (e.g. choosing an option, providing info, confirming something) → answer YES
+- If the agent has completed the task and is just summarizing what it did → answer NO
+- If the agent is explaining something but not expecting a response → answer NO
+
+Output:
+"""
+${output}
+"""
+
+Answer only YES or NO.`,
+          },
+        ],
+        { max_tokens: 10, temperature: 0 },
+        'hitl-detection'
+      );
+
+      const answer = response.content.trim().toUpperCase();
+      const isQuestion = answer.includes('YES');
+      console.log(`[ExternalAgent ${this.sessionId}] LLM HITL detection:`, { answer, isQuestion });
+      return isQuestion;
+    } catch (error) {
+      console.warn(`[ExternalAgent ${this.sessionId}] LLM HITL detection failed, treating as no question:`, error);
+      return false; // On error, don't trigger HITL — safer default
+    }
   }
 
   /**
@@ -733,7 +826,7 @@ export class ExternalAgent extends Agent {
   /**
    * Poll internally waiting for HITL clarification result (Internal implementation).
    */
-  private async pollHITLResultInternal(taskId: string): Promise<{ content: string; feedback?: string }> {
+  private async pollHITLResultInternal(taskId: string): Promise<{ content: string; feedback?: string; resolvedBy: 'human' | 'timeout' }> {
     const POLL_INTERVAL = 2000; // 2 seconds
     const TIMEOUT = 600 * 1000; // 10 minutes
     const startTime = Date.now();
@@ -747,7 +840,7 @@ export class ExternalAgent extends Agent {
 
         if (!taskContext?.hitlState) {
           console.warn('[ExternalAgent] HITL state not found during polling', { taskId });
-          return { content: '' };
+          return { content: '', resolvedBy: 'timeout' };
         }
 
         if (taskContext.hitlState.status === 'completed' && taskContext.hitlState.response) {
@@ -758,6 +851,7 @@ export class ExternalAgent extends Agent {
           return {
             content: taskContext.hitlState.response.content,
             feedback: taskContext.hitlState.response.feedback,
+            resolvedBy: 'human',
           };
         }
 
@@ -769,26 +863,32 @@ export class ExternalAgent extends Agent {
       }
     }
 
-    // Timeout - return empty result
-    console.warn('[ExternalAgent] HITL polling timeout', { taskId });
-    return { content: '' };
+    // Timeout - return empty result with timeout marker
+    console.warn('[ExternalAgent] HITL polling timeout, auto-resolving', { taskId });
+    return { content: '', resolvedBy: 'timeout' };
   }
 
   /**
-   * Clear HITL state (Internal implementation).
+   * Resolve HITL state with resolvedBy marker (Internal implementation).
    */
-  private async clearHITLStateInternal(taskId: string): Promise<void> {
+  private async resolveHITLStateInternal(taskId: string, resolvedBy: 'human' | 'timeout', response?: string): Promise<void> {
     try {
       const contextManager = new ContextManager();
       const taskContext = await contextManager.getContext(taskId);
 
       if (taskContext && taskContext.hitlState) {
-        taskContext.hitlState = undefined;
+        taskContext.hitlState = {
+          ...taskContext.hitlState,
+          status: 'completed',
+          resolvedBy,
+          resolvedAt: new Date(),
+          ...(resolvedBy === 'timeout' ? { response: { content: response || '(超时自动继续)', timestamp: new Date() } } : {}),
+        };
         await contextManager.saveContext(taskContext);
-        console.log('[ExternalAgent] HITL state cleared');
+        console.log('[ExternalAgent] HITL state resolved', { taskId, resolvedBy });
       }
     } catch (error) {
-      console.error('[ExternalAgent] Failed to clear HITL state:', error);
+      console.error('[ExternalAgent] Failed to resolve HITL state:', error);
     }
   }
 

@@ -232,6 +232,8 @@ export interface AgentResult {
     externalAgent?: string;
     /** ACP stop reason (for ExternalAgent) */
     stopReason?: string;
+    /** File operations from ExternalAgent (保留用于向后兼容和原始数据访问) */
+    fileOperations?: any[];
     [key: string]: any; // Allow additional metadata fields
   };
 
@@ -240,6 +242,9 @@ export interface AgentResult {
 
   /** All structured outputs from multiple skill executions */
   structuredOutputs?: any[];
+
+  /** ⭐ 统一的产物信息（可选，由 WorkflowEngine 或 Agent 填充） */
+  artifacts?: import('./artifacts').AgentArtifacts;
 
   /** Session ID (optional for backward compatibility) */
   sessionId?: string;

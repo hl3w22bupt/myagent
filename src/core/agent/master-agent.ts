@@ -1012,6 +1012,11 @@ ${task}
       );
     }
 
+    // Propagate hookManager to subagent so hooks work in HITL and other flows
+    if (this.hookManager && subagent.setHookManager) {
+      subagent.setHookManager(this.hookManager);
+    }
+
     this.subagents.set(subagentKey, subagent);
 
     console.log(`[MasterAgent] Created subagent: ${name}`, {

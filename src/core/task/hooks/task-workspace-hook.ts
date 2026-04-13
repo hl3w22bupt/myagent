@@ -12,8 +12,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BaseTaskHook } from './base';
 import { TaskContext } from './types';
+import { DEFAULT_WORKSPACE_ROOT } from '../../workspace/constants';
 
-const WORKSPACE_ROOT = 'tmp-workspace';
+const WORKSPACE_ROOT = DEFAULT_WORKSPACE_ROOT;
 
 /**
  * Task-level workspace management hook.
@@ -56,12 +57,21 @@ export class TaskWorkspaceHook extends BaseTaskHook {
    * @param context - Task execution context
    * @param result - Task execution result
    */
-  async postExec(context: TaskContext, _result: any): Promise<void> {
+  async postExec(context: TaskContext, result: any): Promise<void> {
     const { taskId, services } = context;
 
     try {
-      // Clean up entire task directory (including all skill subdirectories)
-      const taskDir = path.join(WORKSPACE_ROOT, taskId);
+      // 从 result.metadata.workspace 获取实际使用的 workspace
+      const actualWorkspace = result?.metadata?.workspace;
+      const taskDir = actualWorkspace || path.join(WORKSPACE_ROOT, taskId);
+
+      // 只有默认 workspace（/tmp/myagent-workspace/...）才自动清理
+      // 用户指定的 workspace 不清理
+      const isDefault = taskDir.startsWith(DEFAULT_WORKSPACE_ROOT);
+      if (!isDefault) {
+        services.logger.info('[TaskWorkspaceHook] Preserving user-specified workspace', { taskId, taskDir });
+        return;
+      }
 
       if (fs.existsSync(taskDir)) {
         fs.rmSync(taskDir, { recursive: true, force: true });

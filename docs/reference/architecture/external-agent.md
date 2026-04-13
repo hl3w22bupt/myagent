@@ -102,10 +102,56 @@ agent:
 
 ExternalAgent 支持 HITL 澄清机制:
 
-1. **外部 agent 请求澄清**: 当 Claude Code 需要更多信息时,它会返回 `stopReason: 'awaiting_input'`
-2. **MyAgent 转发请求**: MyAgent 将澄清请求显示在 UI 上
-3. **用户提供反馈**: 用户通过 UI 提供澄清信息
-4. **恢复执行**: MyAgent 将用户的反馈发送给 Claude Code,继续执行
+1. **检测提问**: ExternalAgent 检测外部 Agent 输出中是否包含需要用户澄清的提问
+2. **保存状态**: `saveHITLStateInternal()` 保存 HITL 状态到 TaskContext（status: `awaiting`）
+3. **通知**: 触发 `onAwaitingHITL` Hook（webhook 通知）
+4. **轮询等待**: `pollHITLResultInternal()` 轮询等待用户回复（最多 10 分钟）
+5. **解决**: `resolveHITLStateInternal()` 记录解决方式（`resolvedBy: 'human' | 'timeout'`）
+6. **继续执行**: 使用用户澄清内容继续对话
+
+### 提问检测 (`detectQuestionInOutput`)
+
+ACP 协议提供 `stopReason: 'awaiting_input'`，但 Claude Code 经常以 `end_turn` 结束并在输出中提问。因此 ExternalAgent 使用 `detectQuestionInOutput()` 进行二次检测。
+
+**检测规则**（两层检测：关键字快速匹配 + LLM 兜底）：
+
+**第一层：关键字/模式匹配**（快速路径，零延迟）
+
+| 规则 | 条件 | 说明 |
+|------|------|------|
+| 加粗/独立提问 | 最后 5 行中包含 `**...？**` 或匹配中文提问模式且以 `？` 结尾的行 | 强信号，覆盖选项列表前的提问 |
+| 短输出问号结尾 | 输出 < 300 字符且以 `？`/`?` 结尾 | 短输出大概率是提问 |
+| 显式请求模式 | 尾部 200 字符包含 `请选择`/`请确认`/`是否继续`/`请提供`/`请描述` | 无歧义 |
+| 选项列表 + 问号 | 尾部有 A/B/C/D 或 ①②③ 选项列表，且附近有 `？` | 选项列表暗示前方有提问 |
+
+**第二层：LLM 判定**（兜底路径，仅在模式匹配未命中时触发）
+
+当模式匹配全部未命中且输出 >50 字符时，将输出发送给 LLM 判定：
+- Prompt 要求 LLM 区分"等待用户回复"和"已完成/纯解释"
+- 仅返回 YES/NO，token 开销极小（max_tokens=10）
+- LLM 调用失败时默认不触发 HITL（安全降级）
+
+**为什么需要两层？**
+- ACP 协议的 `StopReason` 只有 `end_turn`（不区分"提问等待"和"任务完成"）
+- 关键字匹配无法穷举所有提问模式
+- LLM 能理解语义，但每次调用有延迟和成本
+- 两层结合：常见模式快速匹配，罕见模式 LLM 兜底
+
+### HITL 状态解决方式
+
+| resolvedBy | 触发条件 | Stream 事件类型 |
+|-----------|---------|----------------|
+| `human` | 用户在 10 分钟内通过 UI 提交了回复 | `user_clarification` |
+| `timeout` | 轮询 10 分钟超时，自动继续 | `hitl_auto_resolved` |
+
+### Workspace 解析
+
+ExternalAgent 的 workspace 优先级：
+
+1. `context.environment.workspace` — 动态，每次任务可不同
+2. `context.environment.workingDirectory` — 向后兼容
+3. `externalAgent.workingDirectory` — 静态配置
+4. `/tmp/myagent-workspace` — 默认共享目录
 
 ### 澄清响应格式
 

@@ -190,12 +190,12 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
     working_dir = input_data.get('working_dir')
     timeout = input_data.get('timeout', 30)
 
-    # Use workspace as default working directory if not explicitly provided
-    workspace_dir = input_data.get('_workspace_dir') or os.getenv('MOTIA_WORKSPACE_DIR')
-    if workspace_dir and not working_dir:
+    # ⭐ Use task workspace as default working directory if not explicitly provided
+    workspace = os.getenv("MOTIA_TASK_WORKSPACE")
+    if workspace and not working_dir:
         # Ensure workspace directory exists before using it
-        os.makedirs(workspace_dir, exist_ok=True)
-        working_dir = workspace_dir
+        os.makedirs(workspace, exist_ok=True)
+        working_dir = workspace
 
     # Check if direct command/args are provided (backward compatibility)
     direct_command = input_data.get('command')

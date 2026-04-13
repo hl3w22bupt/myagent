@@ -86,6 +86,12 @@ export interface HITLState {
     feedback?: string;  // 可选的补充反馈
     timestamp: Date;
   };
+
+  /** 解决方式：human（人工确认）或 timeout（超时自动继续） */
+  resolvedBy?: 'human' | 'timeout';
+
+  /** 解决时间 */
+  resolvedAt?: Date;
 }
 
 /**
