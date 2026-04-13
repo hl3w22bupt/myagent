@@ -7,6 +7,8 @@
 import { Agent } from './agent';
 import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
 import { mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { ContextManager } from '../context/manager';
 import { ArtifactCollector } from './artifact-collector';
 
@@ -70,7 +72,13 @@ export class ExternalAgent extends Agent {
       const { createAcpRuntime, createAgentRegistry, createFileSessionStore } = await import('acpx/runtime');
 
       console.log(`[ExternalAgent ${this.sessionId}] Creating AcpRuntime...`);
-
+      const { existsSync: esExists } = await import('fs');
+      console.log(`[ExternalAgent ${this.sessionId}] Debug env:`, {
+        PATH: process.env.PATH?.substring(0, 200),
+        npxExists: esExists('/opt/homebrew/bin/npx'),
+        nodeExists: esExists('/opt/homebrew/bin/node'),
+        cwd: process.cwd(),
+      });
       // Create file session store
       const sessionStore = createFileSessionStore({
         stateDir: '/tmp/acpx-sessions',
@@ -180,18 +188,25 @@ export class ExternalAgent extends Agent {
       configWorkingDir: this.externalConfig.workingDirectory,
     });
 
+    // Helper: expand ~ to home directory
+    const expandTilde = (p: string): string => {
+      if (p.startsWith('~/')) return join(homedir(), p.slice(2));
+      if (p === '~') return homedir();
+      return p;
+    };
+
     // 1. Check dynamic workspace from task context
     if (context?.environment?.workspace) {
-      return context.environment.workspace;
+      return expandTilde(context.environment.workspace);
     }
 
     if (context?.environment?.workingDirectory) {
-      return context.environment.workingDirectory;
+      return expandTilde(context.environment.workingDirectory);
     }
 
     // 2. Use static workspace from config
     if (this.externalConfig.workingDirectory) {
-      return this.externalConfig.workingDirectory;
+      return expandTilde(this.externalConfig.workingDirectory);
     }
 
     // 3. Use default shared workspace

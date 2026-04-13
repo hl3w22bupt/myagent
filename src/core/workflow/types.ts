@@ -236,6 +236,14 @@ export interface GitCloneConfig {
 
   /** Target directory name within workspace (optional, defaults to repo name) */
   targetDir?: string;
+
+  /**
+   * Use git worktree when target directory already exists (default: true).
+   * When true and the repo already exists, creates a new worktree with a
+   * branch name derived from the task content.
+   * Set to false to work directly in the existing repo.
+   */
+  useWorktree?: boolean;
 }
 
 // Workflow step
