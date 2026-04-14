@@ -75,23 +75,36 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"success": False, "error": "pattern is required"}
 
+    # ⭐ Get task workspace from environment variable
+    workspace = os.getenv("MOTIA_TASK_WORKSPACE")
+    if workspace:
+        workspace = os.path.expanduser(workspace)
+
     try:
         base_path = Path(search_path)
         if not base_path.is_absolute():
-            base_path = Path.cwd() / base_path
+            # Prefer workspace over cwd
+            if workspace:
+                base_path = Path(workspace) / base_path
+            else:
+                base_path = Path.cwd() / base_path
+        else:
+            base_path = Path(os.path.expanduser(str(base_path)))
 
         # Use glob to find files
         matched_files = list(base_path.glob(pattern))
 
         # Convert to relative paths for cleaner output
+        # Use workspace as reference if available, otherwise cwd
+        ref_path = Path(workspace) if workspace else Path.cwd()
         relative_files = []
         for f in matched_files:
             if f.is_file():
                 try:
-                    rel_path = f.relative_to(Path.cwd())
+                    rel_path = f.relative_to(ref_path)
                     relative_files.append(str(rel_path))
                 except ValueError:
-                    # File is outside cwd, use absolute path
+                    # File is outside ref_path, use absolute path
                     relative_files.append(str(f))
 
         # Sort results

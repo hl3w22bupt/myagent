@@ -193,6 +193,8 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
     # ⭐ Use task workspace as default working directory if not explicitly provided
     workspace = os.getenv("MOTIA_TASK_WORKSPACE")
     if workspace and not working_dir:
+        # Expand tilde in workspace path
+        workspace = os.path.expanduser(workspace)
         # Ensure workspace directory exists before using it
         os.makedirs(workspace, exist_ok=True)
         working_dir = workspace

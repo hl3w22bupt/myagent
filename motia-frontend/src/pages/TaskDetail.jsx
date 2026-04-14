@@ -3901,6 +3901,23 @@ function CodeViewer({ codePath, getBlobUrl, language }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
+  // Infer language from file extension if not provided
+  const detectedLanguage = language || (() => {
+    const ext = codePath.split('.').pop()?.toLowerCase()
+    const map = {
+      'html': 'html', 'htm': 'html',
+      'md': 'markdown', 'markdown': 'markdown',
+      'js': 'javascript', 'jsx': 'jsx',
+      'ts': 'typescript', 'tsx': 'tsx',
+      'py': 'python', 'json': 'json',
+      'css': 'css', 'xml': 'xml',
+      'yaml': 'yaml', 'yml': 'yaml',
+      'sh': 'bash', 'sql': 'sql',
+      'svg': 'svg',
+    }
+    return map[ext] || 'text'
+  })()
+
   useEffect(() => {
     const loadCode = async () => {
       setLoading(true)
@@ -3936,7 +3953,7 @@ function CodeViewer({ codePath, getBlobUrl, language }) {
     return <div className="media-error">代码加载失败</div>
   }
 
-  return <CodePlayer code={code} language={language || 'text'} filename={codePath.split('/').pop()} />
+  return <CodePlayer code={code} language={detectedLanguage} filename={codePath.split('/').pop()} />
 }
 
 // Text Viewer Component - 用于显示 TEXT 类型的 artifact

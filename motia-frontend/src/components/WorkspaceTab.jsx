@@ -25,24 +25,54 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [cleanedUp, setCleanedUp] = useState(false) // 临时工作区已被清理
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [selectedFile, setSelectedFile] = useState(null)
   const [fileContent, setFileContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const pollTimerRef = useRef(null)
 
   const fetchWorkspaceFiles = useCallback(async (showLoading = true) => {
     if (showLoading) {
       setLoading(true)
+    } else {
+      setIsRefreshing(true)
     }
     setError(null)
 
     try {
       const response = await fetch(`/api/workspace/${taskId}`)
+
+      if (!response.ok) {
+        // Non-JSON or empty response (e.g. service down)
+        let errorMsg = `请求失败 (${response.status})`
+        try {
+          const errData = await response.json()
+          errorMsg = errData.error || errorMsg
+        } catch {
+          // Response body is not valid JSON (empty or HTML)
+          if (response.status === 0) {
+            errorMsg = '无法连接到服务器，请检查服务是否启动'
+          }
+        }
+        setError(errorMsg)
+        return
+      }
+
       const data = await response.json()
 
       if (data.success) {
+        // 临时工作区已被清理（/tmp 下的目录，重启后消失）
+        if (data.data.exists === false) {
+          setWorkspace(data.data.workspace)
+          setFiles([])
+          setSummary(null)
+          setCleanedUp(true)
+          return
+        }
+        setCleanedUp(false)
         setWorkspace(data.data.workspace)
         setFiles(data.data.files || [])
         setSummary(data.data.summary)
@@ -72,9 +102,14 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
         }
       }
     } catch (err) {
-      setError(err.message || '网络请求失败')
+      if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        setError('无法连接到服务器，请检查服务是否启动')
+      } else {
+        setError(err.message || '网络请求失败')
+      }
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }, [taskId])
 
@@ -156,6 +191,25 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
     }
 
     return langMap[ext] || 'text'
+  }
+
+  const getLanguageBadgeColor = (fileName) => {
+    const ext = fileName.split('.').pop()?.toLowerCase()
+    const colorMap = {
+      'js': '#F7DF1E', 'jsx': '#F7DF1E',
+      'ts': '#3178C6', 'tsx': '#3178C6',
+      'py': '#3776AB',
+      'html': '#E34F26',
+      'css': '#1572B6',
+      'json': '#292929',
+      'md': '#083FA1',
+      'yaml': '#CB171E', 'yml': '#CB171E',
+    }
+    return colorMap[ext] || null
+  }
+
+  const countFilesInFolder = (fileList, folderPath) => {
+    return fileList.filter(f => f && f.relativePath && f.relativePath.startsWith(folderPath + '/')).length
   }
 
   const formatFileSize = (bytes) => {
@@ -240,6 +294,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
     const fileName = parts[parts.length - 1] || file.relativePath
     const indent = level * 16
     const isSelected = selectedFile?.relativePath === file.relativePath
+    const badgeColor = getLanguageBadgeColor(fileName)
 
     return (
       <div key={file.relativePath} className="file-item">
@@ -252,6 +307,9 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
             {getFileIcon(fileName)}
           </div>
           <span className="file-name">{fileName}</span>
+          {badgeColor && (
+            <span className="file-badge" style={{ backgroundColor: badgeColor }} />
+          )}
           <span className="file-info">{formatFileSize(file.size || 0)}</span>
         </div>
       </div>
@@ -303,6 +361,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
       if (item.type === 'folder') {
         const folderPath = currentPath ? `${currentPath}/${name}` : name
         const isExpanded = expandedFolders.has(folderPath)
+        const fileCount = countFilesInFolder(files, folderPath)
 
         return (
           <div key={folderPath} className="folder-item">
@@ -325,6 +384,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
                 )}
               </div>
               <span className="folder-name">{name}</span>
+              <span className="folder-count">{fileCount}</span>
             </div>
             {isExpanded && (
               <div className="folder-children">
@@ -341,7 +401,22 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
   }
 
   if (loading) {
-    return <div className="workspace-tab">加载中...</div>
+    return (
+      <div className="workspace-tab">
+        <div className="workspace-header">
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-path" />
+        </div>
+        <div className="skeleton skeleton-summary" />
+        <div className="workspace-content">
+          <div className="file-list">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="skeleton skeleton-file-row" style={{ width: `${60 + Math.random() * 30}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (error) {
@@ -355,11 +430,30 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
     )
   }
 
+  if (cleanedUp && workspace) {
+    return (
+      <div className="workspace-tab">
+        <div className="empty-state">
+          <div className="empty-icon-wrapper">
+            <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+            </svg>
+          </div>
+          <h3>临时工作区已清理</h3>
+          <p>此任务使用的是临时工作目录，文件已被系统清理</p>
+          <code className="workspace-path" style={{ marginTop: 8, fontSize: 12 }}>{workspace}</code>
+        </div>
+      </div>
+    )
+  }
+
   if (!workspace) {
     return (
       <div className="workspace-tab">
         <div className="empty-state">
-          <div className="empty-icon">📁</div>
+          <div className="empty-icon-wrapper">
+            <FolderIcon className="empty-state-icon" />
+          </div>
           <h3>暂无 Workspace</h3>
           <p>此任务未指定 workspace 目录</p>
           <p className="empty-hint">系统将使用默认工作目录：/tmp/myagent-workspace</p>
@@ -372,19 +466,37 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
   return (
     <div className="workspace-tab">
       <div className="workspace-header">
-        <h3>Workspace</h3>
+        <div className="workspace-header-row">
+          <h3>Workspace</h3>
+          <button onClick={fetchWorkspaceFiles} className={`refresh-btn ${isRefreshing ? 'refreshing' : ''}`} disabled={isRefreshing}>
+            <ArrowPathIcon className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`} />
+            刷新
+          </button>
+        </div>
         <code className="workspace-path">{workspace}</code>
-        <button onClick={fetchWorkspaceFiles} className="refresh-btn">
-          <ArrowPathIcon className="refresh-icon" />
-          刷新
-        </button>
       </div>
 
       {summary && (
         <div className="workspace-summary">
-          <span>📄 {summary.fileCount} 文件</span>
-          <span>📁 {summary.dirCount} 目录</span>
-          <span>💾 {formatFileSize(summary.totalSize)}</span>
+          <div className="summary-item">
+            <DocumentIcon className="summary-icon" />
+            <span className="summary-value">{summary.fileCount}</span>
+            <span className="summary-label">文件</span>
+          </div>
+          <div className="summary-divider" />
+          <div className="summary-item">
+            <FolderIcon className="summary-icon" />
+            <span className="summary-value">{summary.dirCount}</span>
+            <span className="summary-label">目录</span>
+          </div>
+          <div className="summary-divider" />
+          <div className="summary-item">
+            <svg className="summary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+            </svg>
+            <span className="summary-value">{formatFileSize(summary.totalSize)}</span>
+            <span className="summary-label">总大小</span>
+          </div>
         </div>
       )}
 

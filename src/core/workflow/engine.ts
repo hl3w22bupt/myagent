@@ -1491,8 +1491,8 @@ export class WorkflowEngine {
           // Fetch latest
           execSync(`git fetch origin`, { cwd: cloneDir, stdio: 'pipe', timeout: 60000 });
 
-          // Create a new branch from the target branch and worktree
-          const baseBranch = branch || 'main';
+          // Resolve the actual default branch from remote
+          const baseBranch = branch || await this.detectDefaultBranch(cloneDir);
           execSync(`git worktree add ${worktreePath} -b ${worktreeBranch} origin/${baseBranch}`, {
             cwd: cloneDir, stdio: 'pipe', timeout: 60000,
           });
@@ -1517,20 +1517,36 @@ export class WorkflowEngine {
           });
         } catch (wtError: any) {
           const errMsg = wtError.stderr?.toString() || wtError.message;
-          // Worktree creation failed - fall back to using existing repo directly
-          this.logger.warn(`[WorkflowEngine] git-clone: worktree creation failed, using existing repo`, {
+          // Worktree creation failed - create a new branch in existing repo instead
+          this.logger.warn(`[WorkflowEngine] git-clone: worktree creation failed, creating new branch in existing repo`, {
             error: errMsg,
           });
 
-          // Try to reuse existing repo: fetch latest and checkout branch
+          // Fallback: create a new branch from remote default so we don't work on main directly
+          const baseBranch = branch || await this.detectDefaultBranch(cloneDir);
           try {
             execSync(`git fetch origin`, { cwd: cloneDir, stdio: 'pipe', timeout: 60000 });
-            execSync(`git checkout ${branch || 'main'}`, { cwd: cloneDir, stdio: 'pipe', timeout: 30000 });
+            execSync(`git checkout -b ${worktreeBranch} origin/${baseBranch}`, { cwd: cloneDir, stdio: 'pipe', timeout: 30000 });
+            // Successfully created branch in existing repo
+            effectiveBranch = worktreeBranch;
+            this.logger.info(`[WorkflowEngine] git-clone: created branch ${worktreeBranch} in existing repo`, {
+              cwd: cloneDir,
+              baseBranch,
+            });
           } catch (checkoutError: any) {
-            // Checkout failed too, just use as-is
-            this.logger.warn(`[WorkflowEngine] git-clone: checkout also failed, using repo as-is`, {
+            // Branch might already exist, try checking it out
+            this.logger.warn(`[WorkflowEngine] git-clone: branch creation failed, trying checkout`, {
               error: checkoutError.stderr?.toString() || checkoutError.message,
             });
+            try {
+              execSync(`git checkout ${worktreeBranch}`, { cwd: cloneDir, stdio: 'pipe', timeout: 30000 });
+              effectiveBranch = worktreeBranch;
+            } catch (fallbackError: any) {
+              // All fallbacks failed - still on main, but at least we tried
+              this.logger.error(`[WorkflowEngine] git-clone: all branch attempts failed, staying on current branch`, {
+                error: fallbackError.stderr?.toString() || fallbackError.message,
+              });
+            }
           }
         }
       } else {
@@ -1541,7 +1557,8 @@ export class WorkflowEngine {
 
         try {
           execSync(`git fetch origin`, { cwd: cloneDir, stdio: 'pipe', timeout: 60000 });
-          execSync(`git checkout ${branch || 'main'}`, { cwd: cloneDir, stdio: 'pipe', timeout: 30000 });
+          const defaultBranch = branch || await this.detectDefaultBranch(cloneDir);
+          execSync(`git checkout ${defaultBranch}`, { cwd: cloneDir, stdio: 'pipe', timeout: 30000 });
         } catch (fetchError: any) {
           this.logger.warn(`[WorkflowEngine] git-clone: fetch/checkout failed, using repo as-is`, {
             error: fetchError.stderr?.toString() || fetchError.message,
@@ -1610,7 +1627,7 @@ export class WorkflowEngine {
 
       context.set('variables.gitCloned', true);
       context.set('variables.gitRepoDir', cloneDir);
-      context.set('variables.gitBranch', branch || 'main');
+      context.set('variables.gitBranch', branch || effectiveBranch || 'main');
       context.set('variables.workflowWorkspace', cloneDir);
 
       context.setStepStatus(step.id, 'completed');
@@ -1708,6 +1725,29 @@ export class WorkflowEngine {
    * Extract repository name from URL
    * e.g. https://github.com/org/repo.git -> repo
    */
+  /**
+   * Detect the default branch of a git repo from its remote.
+   * Falls back to 'main' if detection fails.
+   */
+  private async detectDefaultBranch(repoDir: string): Promise<string> {
+    try {
+      const { execSync: execSyncFn } = await import('child_process');
+      const result = execSyncFn(
+        `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || git rev-parse --abbrev-ref origin/HEAD 2>/dev/null`,
+        { cwd: repoDir, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 }
+      ).toString().trim();
+      const branch = result.replace(/^refs\/remotes\/origin\//, '').replace(/^origin\//, '');
+      if (branch) {
+        this.logger.info(`[WorkflowEngine] Detected default branch: ${branch}`);
+        return branch;
+      }
+    } catch {
+      // Detection failed
+    }
+    this.logger.warn('[WorkflowEngine] Could not detect default branch, falling back to main');
+    return 'main';
+  }
+
   private extractRepoName(url: string): string {
     const match = url.match(/\/([^/]+?)(\.git)?$/);
     return match ? match[1] : 'repo';

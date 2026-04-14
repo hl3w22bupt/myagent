@@ -218,6 +218,9 @@ export const handler = async (
     const hookManager = agentManager.getHookManager();
 
     try {
+      // 初始化 data store（用于从数据库恢复 environment 等配置）
+      const store = getDataStore();
+
       // 获取Agent实例
       const agent = await agentManager.acquire(sessionId, {
         agentType: 'master',
@@ -277,10 +280,29 @@ export const handler = async (
       (context as any).agentType = agentTypeName;
       (context as any).agent = agent;
 
+      // ⭐ 从数据库恢复 environment 和 subagent 到 context
+      // 确保多轮对话继承初始任务提交时的配置
+      const existingTask = await store.getTask(taskId).catch(() => null);
+      if (existingTask?.metadata?.environment) {
+        (context as any).environment = existingTask.metadata.environment;
+        logger.info('[master-agent.chat] Restored environment from task metadata', {
+          taskId,
+          envKeys: Object.keys(existingTask.metadata.environment),
+        });
+      }
+      if (existingTask?.metadata?.subagent) {
+        (context as any).subagent = existingTask.metadata.subagent;
+        logger.info('[master-agent.chat] Restored subagent from task metadata', {
+          taskId,
+          subagent: existingTask.metadata.subagent,
+        });
+      }
+
       logger.info('Context loaded for chat', {
         taskId,
         conversationHistoryLength: conversationHistory.length,
         agentType: agentTypeName,
+        hasEnvironment: !!(context as any).environment,
       });
 
       // 构造聊天提示词（使用 conversationHistory）
@@ -892,7 +914,11 @@ export const handler = async (
       if (workflowDef && workflowDef.steps) {
         const timestamp = Date.now();
         const uniqueId = `${taskId}-workflow-${timestamp}`;
-        const stepsList = workflowDef.steps.map((s: any) => `- ${s.name || s.id} (${s.agent})`).join('\n');
+        const stepsList = workflowDef.steps.map((s: any) => {
+          const label = s.name || s.id;
+          const agent = s.agent ? ` (${s.agent})` : '';
+          return `- ${label}${agent}`;
+        }).join('\n');
 
         await _streams.taskExecution.set(taskId, uniqueId, {
           progressType: 'workflow',

@@ -1,6 +1,6 @@
 /* ========================================
-   Workspace Tab - Modern Professional Design
-   Swiss Modernism + Minimalism
+   Workspace Tab - Swiss Modernism 2.0
+   Developer Tool / File Manager Design
    ======================================== */
 
 .workspace-tab {
@@ -12,15 +12,61 @@
 }
 
 /* ========================================
+   Skeleton Loading
+   ======================================== */
+
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-title {
+  height: 24px;
+  width: 140px;
+  margin-bottom: 12px;
+}
+
+.skeleton-path {
+  height: 36px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.skeleton-summary {
+  height: 52px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.skeleton-file-row {
+  height: 40px;
+  margin: 4px 12px;
+}
+
+/* ========================================
    Header Section
    ======================================== */
 
 .workspace-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+
+.workspace-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .workspace-header h3 {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 18px;
   font-weight: 600;
   color: #0F172A;
@@ -36,7 +82,6 @@
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
   font-size: 13px;
   color: #475569;
-  margin-bottom: 12px;
   word-break: break-all;
   line-height: 1.5;
 }
@@ -44,27 +89,42 @@
 .refresh-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 6px 14px;
   background: #FFFFFF;
-  border: 1px solid #CBD5E1;
+  border: 1px solid #E2E8F0;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: #64748B;
   cursor: pointer;
-  transition: all 200ms ease;
+  transition: all 150ms ease;
+  flex-shrink: 0;
 }
 
 .refresh-btn:hover {
   background: #F8FAFC;
-  border-color: #94A3B8;
+  border-color: #CBD5E1;
   color: #0F172A;
 }
 
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .refresh-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
+}
+
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ========================================
@@ -73,20 +133,43 @@
 
 .workspace-summary {
   display: flex;
+  align-items: center;
   gap: 16px;
-  margin-bottom: 24px;
-  padding: 16px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
   border-radius: 8px;
-  font-size: 14px;
-  color: #475569;
 }
 
-.workspace-summary span {
+.summary-item {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.summary-icon {
+  width: 16px;
+  height: 16px;
+  color: #94A3B8;
+  flex-shrink: 0;
+}
+
+.summary-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #94A3B8;
+}
+
+.summary-divider {
+  width: 1px;
+  height: 16px;
+  background: #E2E8F0;
 }
 
 /* ========================================
@@ -129,10 +212,10 @@
 .folder-row {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 12px;
   cursor: pointer;
-  transition: background-color 200ms ease;
-  gap: 8px;
+  transition: background-color 150ms ease;
+  gap: 6px;
 }
 
 .folder-row:hover {
@@ -151,8 +234,8 @@
 .chevron-icon {
   width: 14px;
   height: 14px;
-  color: #64748B;
-  transition: transform 200ms ease;
+  color: #94A3B8;
+  transition: transform 150ms ease;
 }
 
 .folder-icon-wrapper {
@@ -168,7 +251,7 @@
   width: 18px;
   height: 18px;
   color: #64748B;
-  transition: color 200ms ease;
+  transition: color 150ms ease;
 }
 
 .folder-row:hover .folder-icon-svg {
@@ -177,7 +260,7 @@
 
 .folder-name {
   flex: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #0F172A;
   white-space: nowrap;
@@ -185,8 +268,18 @@
   text-overflow: ellipsis;
 }
 
+.folder-count {
+  font-size: 11px;
+  color: #94A3B8;
+  background: #F1F5F9;
+  padding: 1px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
 .folder-children {
-  background: #FAFAFA;
+  background: #FAFBFC;
 }
 
 /* ========================================
@@ -196,9 +289,9 @@
 .file-row {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
-  transition: background-color 200ms ease;
-  gap: 8px;
+  padding: 7px 12px;
+  transition: background-color 150ms ease;
+  gap: 6px;
   cursor: pointer;
 }
 
@@ -208,23 +301,24 @@
 
 .file-row.selected {
   background: #EFF6FF;
-  border-left: 3px solid #3B82F6;
+  border-left: 2px solid #3B82F6;
+  padding-left: 10px;
 }
 
 .file-icon-wrapper {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .file-icon-svg {
-  width: 18px;
-  height: 18px;
-  color: #64748B;
-  transition: color 200ms ease;
+  width: 16px;
+  height: 16px;
+  color: #94A3B8;
+  transition: color 150ms ease;
 }
 
 .file-row:hover .file-icon-svg {
@@ -233,7 +327,7 @@
 
 .file-name {
   flex: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   color: #334155;
   white-space: nowrap;
@@ -241,12 +335,21 @@
   text-overflow: ellipsis;
 }
 
+.file-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .file-info {
-  margin-left: 8px;
-  font-size: 12px;
+  margin-left: 4px;
+  font-size: 11px;
   color: #94A3B8;
   font-weight: 400;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ========================================
@@ -261,14 +364,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #E2E8F0;
   background: #F8FAFC;
 }
@@ -276,44 +379,45 @@
 .preview-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 
 .preview-icon-wrapper {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .preview-icon-wrapper .file-icon-svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: #64748B;
 }
 
 .preview-filename {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
   color: #0F172A;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: -0.01em;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
 }
 
 .close-preview-btn {
-  padding: 6px;
+  padding: 4px;
   background: transparent;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  color: #64748B;
-  transition: all 200ms ease;
+  color: #94A3B8;
+  transition: all 150ms ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -325,14 +429,14 @@
 }
 
 .close-icon-svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .preview-content {
   flex: 1;
   overflow: auto;
-  padding: 20px;
+  padding: 16px;
   background: #FFFFFF;
 }
 
@@ -343,7 +447,7 @@
   justify-content: center;
   height: 100%;
   color: #64748B;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .preview-error {
@@ -390,16 +494,16 @@
 
 .download-btn,
 .download-link {
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: #3B82F6;
   color: #FFFFFF;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  transition: background-color 200ms ease;
+  transition: background-color 150ms ease;
   display: inline-block;
 }
 
@@ -423,15 +527,15 @@
 
 .error-message button {
   margin-top: 16px;
-  padding: 10px 20px;
+  padding: 8px 18px;
   background: #DC2626;
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  transition: background-color 200ms ease;
+  transition: background-color 150ms ease;
 }
 
 .error-message button:hover {
@@ -445,30 +549,46 @@
   color: #64748B;
 }
 
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
+.empty-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+}
+
+.empty-state-icon {
+  width: 28px;
+  height: 28px;
+  color: #94A3B8;
 }
 
 .empty-state h3 {
   margin: 0 0 8px 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #0F172A;
 }
 
 .empty-state p {
   margin: 4px 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
   color: #64748B;
 }
 
 .empty-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: #94A3B8;
   margin-top: 12px;
+}
+
+.empty-files {
+  color: #94A3B8;
+  font-size: 13px;
 }
 
 /* ========================================
@@ -494,7 +614,6 @@
    Accessibility
    ======================================== */
 
-/* Focus states for keyboard navigation */
 .file-row:focus-visible,
 .folder-row:focus-visible,
 .refresh-btn:focus-visible,
@@ -503,12 +622,20 @@
   outline-offset: 2px;
 }
 
-/* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .file-row,
   .folder-row,
   .refresh-btn,
   .close-preview-btn {
     transition: none;
+  }
+
+  .refresh-icon.spinning {
+    animation: none;
+  }
+
+  .skeleton {
+    animation: none;
+    background: #E2E8F0;
   }
 }

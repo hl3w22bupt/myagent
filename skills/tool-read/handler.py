@@ -74,6 +74,8 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # ⭐ Get task workspace from environment variable
     workspace = os.getenv("MOTIA_TASK_WORKSPACE")
+    if workspace:
+        workspace = os.path.expanduser(workspace)
 
     if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
@@ -94,6 +96,10 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         # 回退到当前目录
         full_path = file_path
+
+    # ⭐ Expand tilde (~) to home directory
+    # Python's Path/os.path.join do NOT expand ~
+    full_path = os.path.expanduser(full_path)
 
     try:
         content = Path(full_path).read_text(encoding=encoding)

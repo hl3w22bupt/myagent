@@ -193,6 +193,8 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # ⭐ Get task workspace from environment variable
     workspace = os.getenv("MOTIA_TASK_WORKSPACE")
+    if workspace:
+        workspace = os.path.expanduser(workspace)
 
     if not file_path:
         if OUTPUT_BUILDER_AVAILABLE:
@@ -214,6 +216,9 @@ def _execute_direct(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         # 回退到 current directory
         full_path = file_path
+
+    # ⭐ Expand tilde (~) to home directory
+    full_path = os.path.expanduser(full_path)
 
     try:
         # Create parent directories if they don't exist

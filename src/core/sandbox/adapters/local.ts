@@ -8,8 +8,18 @@
 import { spawn, ChildProcess } from 'child_process';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
+import { homedir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync } from 'fs';
+
+/**
+ * Expand tilde (~) to home directory in file paths.
+ */
+function expandTilde(filepath: string): string {
+  if (filepath.startsWith('~/')) return join(homedir(), filepath.slice(2));
+  if (filepath === '~') return homedir();
+  return filepath;
+}
 import {
   SandboxAdapter,
   SandboxOptions,
@@ -102,7 +112,7 @@ export class LocalSandboxAdapter implements SandboxAdapter {
           ...process.env,
           MOTIA_TRACE_ID: options.metadata?.traceId || sessionId,
           MOTIA_TASK_ID: options.metadata?.taskId || '',
-          MOTIA_TASK_WORKSPACE: options.metadata?.workspace || '',  // ⭐ Add workspace environment variable
+          MOTIA_TASK_WORKSPACE: expandTilde(options.metadata?.workspace || ''),  // ⭐ Expand tilde in workspace path
           MOTIA_SKILL_PATH: skillPath,
           MOTIA_NOTIFY_API_URL: 'http://localhost:3000/api/notify',
           MOTIA_TRACE_API_URL: 'http://localhost:3000/api/traces/submit',
@@ -396,6 +406,11 @@ export class LocalSandboxAdapter implements SandboxAdapter {
     // Extract maxIterations from metadata for agent loop support
     const maxIterations = options.metadata?.maxIterations || 5;
 
+    // Inject task as TASK_JSON to avoid triple-quote escaping issues
+    // Use repr() style: escape and wrap in raw string notation
+    const taskContent = String(options.metadata?.task || '');
+    const taskJson = JSON.stringify(taskContent);  // Produces valid JS/JSON string literal
+
     // Normalize code indentation while preserving relative indentation:
     // 1. Split into lines
     // 2. Find minimum indentation (excluding empty lines)
@@ -507,6 +522,9 @@ import json
 
 # Agent loop support: MAX_ITERATIONS for fallback mode
 MAX_ITERATIONS = ${maxIterations}
+
+# Task as JSON string (use json.loads(TASK_JSON) to get the task)
+TASK_JSON = ${taskJson}
 
 # 创建结构化输出目录
 STRUCTURED_OUTPUT_DIR = '/tmp/motia-sandbox/structured_outputs'

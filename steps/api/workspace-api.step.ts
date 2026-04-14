@@ -146,20 +146,25 @@ export const handler = async (
       task.metadata?.workspace ||
       task.metadata?.environment?.workspace;
 
+    if (!workspace) {
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: {
+            taskId,
+            workspace: null,
+            files: [],
+            summary: null,
+          },
+        },
+      };
+    }
+
     // Expand tilde in workspace path
     const expandedWorkspace = workspace.startsWith('~/')
       ? join(homedir(), workspace.slice(2))
       : workspace === '~' ? homedir() : workspace;
-
-    if (!expandedWorkspace) {
-      return {
-        status: 400,
-        body: {
-          success: false,
-          error: 'Task does not have a workspace',
-        },
-      };
-    }
 
     // 验证路径安全性
     if (!validatePath(expandedWorkspace)) {
@@ -175,14 +180,19 @@ export const handler = async (
 
     // 检查 workspace 是否存在
     if (!existsSync(expandedWorkspace)) {
+      // /tmp 下的 workspace 是临时的，重启后会被清理，不应视为错误
+      const isTemporary = expandedWorkspace.startsWith('/tmp/');
       return {
-        status: 404,
+        status: 200,
         body: {
-          success: false,
-          error: 'Workspace directory not found',
+          success: true,
           data: {
+            taskId,
             workspace: expandedWorkspace,
+            files: [],
+            summary: null,
             exists: false,
+            temporary: isTemporary,
           },
         },
       };

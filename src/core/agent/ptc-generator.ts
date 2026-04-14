@@ -496,7 +496,7 @@ Always prioritize available skills over direct computation or common knowledge.`
             lines.push(`        # ... other params from schema`);
           }
         } else {
-          lines.push(`        '${taskParam}': '''COPY THE ACTUAL TASK FROM <task> SECTION''',`);
+          lines.push(`        '${taskParam}': TASK_JSON,  # Task from <task> section`);
         }
         lines.push(`    }`);
         lines.push(`)`);
@@ -541,7 +541,7 @@ Always prioritize available skills over direct computation or common knowledge.`
             lines.push(`            '${p}': extracted_value_for_${p},  # Extract from prev_output`);
           }
         } else {
-          lines.push(`            '${taskParam}': '''TASK DESCRIPTION FOR ${skillName}''',`);
+          lines.push(`            '${taskParam}': TASK_JSON,  # Task description for ${skillName}`);
         }
         lines.push(`        }`);
         lines.push(`    )`);
@@ -830,12 +830,13 @@ MAX_ITERATIONS is available (default: 5).
 
 ⚠️ CRITICAL: NEVER use undefined variables!
 ⚠️ The 'task' variable is NOT automatically available.
-⚠️ You MUST define it yourself using: task = '''...'''
+⚠️ You MUST define it yourself using: task = TASK_JSON
+⚠️ TASK_JSON is a global variable containing the task string.
 
 REQUIRED LOOP PATTERN:
 
 # ⚠️ CRITICAL: task variable must be defined before use
-task = """Paste the actual task from <task> section here"""
+task = TASK_JSON
 
 # Context accumulates information across iterations
 context = {

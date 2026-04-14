@@ -36,7 +36,7 @@ class SecurityValidator:
         'cp', 'mv', 'mkdir', 'touch', 'chmod', 'chown',
 
         # System information
-        'df', 'du', 'free', 'top', 'ps', 'uname', 'date', 'whoami',
+        'df', 'du', 'free', 'top', 'ps', 'uname', 'date', 'whoami', 'pwd',
 
         # Compression
         'tar', 'gzip', 'gunzip', 'zip', 'unzip',
