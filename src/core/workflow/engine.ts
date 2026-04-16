@@ -203,11 +203,41 @@ export class WorkflowEngine {
         }
       }
 
-      // Use the last completed step's agent output as the workflow output
-      // Priority: structuredOutput > output (fallback to text output)
-      // This aligns with single agent behavior and provides structured data to frontend
-      const lastAgentResult = lastCompletedStepResult?.output;
-      const finalOutput = lastAgentResult?.structuredOutput || lastAgentResult?.output || null;
+      // Assemble final output from workflow.output config or fallback to last step
+      let finalOutput: any;
+
+      if (workflow.output && Object.keys(workflow.output).length > 0) {
+        // Use workflow.output mapping to assemble final output from intermediate variables
+        finalOutput = {};
+        let hasAnyValue = false;
+        for (const [name, mapping] of Object.entries(workflow.output)) {
+          const fromPath = typeof mapping === 'string' ? mapping : mapping.from;
+          const defaultValue = typeof mapping === 'object' ? mapping.default : undefined;
+          const value = context.get(fromPath);
+          finalOutput[name] = value !== undefined ? value : defaultValue;
+          if (finalOutput[name] !== undefined) hasAnyValue = true;
+        }
+
+        // Log assembled output for debugging
+        this.logger.debug('[WorkflowEngine] Assembled output from workflow.output config', {
+          mappingKeys: Object.keys(workflow.output),
+          assembledKeys: Object.keys(finalOutput),
+          hasAnyValue,
+          variables: context.getVariables(),
+        });
+
+        // If all values are undefined (e.g. steps didn't produce expected outputs),
+        // fall back to last step's output
+        if (!hasAnyValue && lastCompletedStepResult?.output) {
+          const lastAgentResult = lastCompletedStepResult.output;
+          finalOutput = lastAgentResult.structuredOutput || lastAgentResult.output || null;
+          this.logger.info('[WorkflowEngine] Workflow.output mapping yielded no values, falling back to last step output');
+        }
+      } else {
+        // Fallback: use the last completed step's agent output
+        const lastAgentResult = lastCompletedStepResult?.output;
+        finalOutput = lastAgentResult?.structuredOutput || lastAgentResult?.output || null;
+      }
 
       // Check if any step failed
       const hasFailedStep = this.internalExecutionSteps.some(step => step.status === 'failed');
@@ -218,9 +248,9 @@ export class WorkflowEngine {
         success: workflowSuccess,
         hasFailedStep,
         failedStepCount: this.internalExecutionSteps.filter(s => s.status === 'failed').length,
-        finalOutputType: lastAgentResult?.structuredOutput ? 'structured' : (lastAgentResult?.output ? 'text' : 'none'),
+        finalOutputType: finalOutput ? (typeof finalOutput === 'object' ? 'structured' : 'text') : 'none',
         hasOutput: !!finalOutput,
-        hasStructuredOutput: !!lastAgentResult?.structuredOutput,
+        hasStructuredOutput: !!finalOutput,
         lastCompletedStep: lastCompletedStepResult?.stepId,
         variables: context.getVariables(),
       });
@@ -637,8 +667,23 @@ export class WorkflowEngine {
     }
 
     // Direct value from structuredOutput (entire object)
+    // For external agents that don't produce structuredOutput, fall back to parsing output text
     if (path === 'structuredOutput') {
-      return result.structuredOutput !== undefined ? result.structuredOutput : defaultValue;
+      if (result.structuredOutput !== undefined) {
+        return result.structuredOutput;
+      }
+      // External agent fallback: try parsing output as JSON
+      if (result.output && typeof result.output === 'string') {
+        try {
+          return JSON.parse(result.output);
+        } catch {
+          return result.output;  // Return raw text if not valid JSON
+        }
+      }
+      if (result.output !== undefined) {
+        return result.output;
+      }
+      return defaultValue;
     }
 
     // Extract from structuredOutput nested properties

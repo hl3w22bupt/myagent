@@ -945,11 +945,18 @@ export const handler = async (
       );
 
       // Convert workflow result to AgentResult format
-      // workflowResult.output is the structuredOutput from the last agent step
       const workflowStructuredOutput = workflowResult.output;
 
-      // Extract artifactType from structuredOutput (same logic as agent)
-      const artifactType = workflowStructuredOutput?.result_type
+      // Collect structuredOutputs from all completed steps for frontend multi-round display
+      const structuredOutputs = workflowResult.steps
+        .filter((s: any) => s.status === 'completed' && s.output?.structuredOutput)
+        .map((s: any) => s.output.structuredOutput);
+
+      // Extract artifactType from the last completed step's structuredOutput (same logic as single agent)
+      const lastStepStructuredOutput = workflowResult.steps
+        .filter((s: any) => s.status === 'completed' && s.output?.structuredOutput)
+        .pop()?.output?.structuredOutput;
+      const artifactType = lastStepStructuredOutput?.result_type
         ? ({
             code: 'code',
             infographic: 'image',
@@ -957,18 +964,19 @@ export const handler = async (
             image: 'image',
             audio: 'audio',
             table: 'table',
-          } as Record<string, string>)[workflowStructuredOutput.result_type] || workflowStructuredOutput.result_type
+          } as Record<string, string>)[lastStepStructuredOutput.result_type] || lastStepStructuredOutput.result_type
         : null;
 
       result = {
         success: workflowResult.success,
         output: JSON.stringify(workflowStructuredOutput),  // Store as JSON string for compatibility
-        structuredOutput: workflowStructuredOutput,        // Set structuredOutput for proper artifact detection
+        structuredOutput: workflowStructuredOutput,        // Full workflow output (assembled from all steps)
+        structuredOutputs,                                 // All step structuredOutputs for frontend
         error: workflowResult.error,
         executionTime: workflowResult.executionTime,
         metadata: {
           workflow: (input as any).workflowName,
-          artifactType: artifactType,  // Add artifactType to metadata
+          artifactType: artifactType,
           ...workflowResult.context,
         },
       } as any;
