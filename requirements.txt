@@ -5,6 +5,7 @@ pyyaml==6.0.1
 
 # LLM clients
 anthropic==0.40.0
+openai>=1.0.0
 
 # Async runtime (asyncio is built-in since Python 3.4)
 # asyncio==3.4.3  # Removed: conflicts with standard library

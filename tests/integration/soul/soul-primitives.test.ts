@@ -29,6 +29,7 @@ describe('Soul Agent Primitives Integration', () => {
       currentTask: null,
       lastActivity: Date.now(),
       scheduledWakeup: null,
+      activeSince: null,
       statistics: {
         totalTasks: 0,
         uptime: 0

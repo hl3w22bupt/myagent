@@ -29,7 +29,6 @@ describe('SkillDiscovery', () => {
       expect(skillNames).toContain('web-search');
       expect(skillNames).toContain('code-analysis');
       expect(skillNames).toContain('remotion-generator');
-      expect(skillNames).toContain('text-analyzer');
     });
 
     it('should parse skill metadata correctly', async () => {

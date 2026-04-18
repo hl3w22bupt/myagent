@@ -6,7 +6,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { soulStateDataService } from '@/core/database/soul-data-service';
-import { soulContextDataService } from '@/core/database/soul-data-service';
+import { soulContextManager } from '@/core/context/soul-context-manager';
+const soulContextDataService = soulContextManager as any;
 import { SoulState } from '@/core/agent/soul-types';
 import { getDataStore } from '@/core/database/data-store';
 
@@ -37,6 +38,7 @@ describe('Soul Data Services', () => {
         currentTask: 'test-task',
         lastActivity: Date.now(),
         scheduledWakeup: null,
+        activeSince: null,
         statistics: {
           totalTasks: 5,
           uptime: 3600000
@@ -70,6 +72,7 @@ describe('Soul Data Services', () => {
         currentTask: null,
         lastActivity: Date.now(),
         scheduledWakeup: null,
+        activeSince: null,
         statistics: {
           totalTasks: 10,
           uptime: 7200000
@@ -92,6 +95,7 @@ describe('Soul Data Services', () => {
         currentTask: 'active-task',
         lastActivity: Date.now(),
         scheduledWakeup: null,
+        activeSince: null,
         statistics: {
           totalTasks: 1,
           uptime: 1000
@@ -113,6 +117,7 @@ describe('Soul Data Services', () => {
         currentTask: null,
         lastActivity: Date.now(),
         scheduledWakeup: null,
+        activeSince: null,
         statistics: {
           totalTasks: 0,
           uptime: 0
@@ -235,6 +240,7 @@ describe('Soul Data Services', () => {
         currentTask: 'integration-task',
         lastActivity: Date.now(),
         scheduledWakeup: null,
+        activeSince: null,
         statistics: {
           totalTasks: 1,
           uptime: 5000

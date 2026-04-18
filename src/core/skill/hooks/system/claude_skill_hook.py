@@ -188,7 +188,8 @@ Return ONLY a JSON object (no markdown):
                 model=model,
                 max_tokens=1024,
                 temperature=0.3,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                extra_body={"thinking": {"type": "disabled"}}
             )
             response_text = (resp.choices[0].message.content or "").strip()
         else:

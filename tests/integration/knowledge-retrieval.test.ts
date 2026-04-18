@@ -17,7 +17,6 @@ describe('Knowledge Retrieval Integration', () => {
   beforeAll(async () => {
     // Create test table with embeddings
     const dataStore = getDataStore();
-    const dataStore = getDataStore();
     const pool = (dataStore as any).pool;
 
     await pool.query(`
@@ -84,7 +83,6 @@ describe('Knowledge Retrieval Integration', () => {
   afterAll(async () => {
     // Clean up test table
     const dataStore = getDataStore();
-    const dataStore = getDataStore();
     const pool = (dataStore as any).pool;
 
     await pool.query(`DROP TABLE IF EXISTS ${testTableName}`);
@@ -95,7 +93,6 @@ describe('Knowledge Retrieval Integration', () => {
     it('should retrieve knowledge from vector database', async () => {
       // Use a simple query that doesn't require embedding generation
       // Instead, directly query the database
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -119,7 +116,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should return results with correct structure', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -145,7 +141,6 @@ describe('Knowledge Retrieval Integration', () => {
 
     it('should filter results by limit', async () => {
       const dataStore = getDataStore();
-      const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
       const results = await pool.query(`
@@ -160,7 +155,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should return empty array for non-existent table', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -179,7 +173,6 @@ describe('Knowledge Retrieval Integration', () => {
   describe('Database Connection', () => {
     it('should handle database queries without errors', async () => {
       const dataStore = getDataStore();
-      const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
       // Simple query to test connection
@@ -191,7 +184,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should handle concurrent database queries', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -214,7 +206,6 @@ describe('Knowledge Retrieval Integration', () => {
   describe('Metadata Handling', () => {
     it('should retrieve metadata with results', async () => {
       const dataStore = getDataStore();
-      const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
       const results = await pool.query(`
@@ -233,7 +224,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should filter by metadata category', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -256,7 +246,6 @@ describe('Knowledge Retrieval Integration', () => {
   describe('Performance', () => {
     it('should complete queries within acceptable time', async () => {
       const dataStore = getDataStore();
-      const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
       const startTime = Date.now();
@@ -274,7 +263,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should handle multiple sequential queries efficiently', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
@@ -296,7 +284,6 @@ describe('Knowledge Retrieval Integration', () => {
   describe('Edge Cases', () => {
     it('should handle empty result set', async () => {
       const dataStore = getDataStore();
-      const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 
       const results = await pool.query(`
@@ -310,7 +297,6 @@ describe('Knowledge Retrieval Integration', () => {
     });
 
     it('should handle special characters in content', async () => {
-      const dataStore = getDataStore();
       const dataStore = getDataStore();
       const pool = (dataStore as any).pool;
 

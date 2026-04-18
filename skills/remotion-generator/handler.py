@@ -1818,7 +1818,8 @@ registerRoot(Root);''' % (svg_size, line_width, line_width, line_width, label_fo
             "--fps", str(fps),
             f"--frames=0-{duration * fps - 1}",  # Use frame range instead of duration
             "--jpeg-quality", quality_preset,
-            "--concurrency=1"  # Use concurrency=1 to avoid bundler issues
+            "--concurrency=1",  # Use concurrency=1 to avoid bundler issues
+            "--browser-executable", str(chrome_binary)  # Use cached Chrome to avoid re-download
         ]
 
         # DEBUG: Log the render command

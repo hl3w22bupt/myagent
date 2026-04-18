@@ -48,11 +48,11 @@ describe('RetrievalCoordinator', () => {
 
     // Setup mock stores
     const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-    mockPostgresStore = new PostgresVectorStore();
+    mockPostgresStore = new PostgresVectorStore(undefined as any);
 
     // Mock LanceDB adapter
-    const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
-    getLanceDBAdapter.mockResolvedValue(
+    const mockedGetLanceDBAdapter = getLanceDBAdapter as any;
+    mockedGetLanceDBAdapter.mockResolvedValue(
       class MockLanceDBVectorStore {
         retrieve = jest.fn();
         close = jest.fn();
@@ -95,8 +95,8 @@ describe('RetrievalCoordinator', () => {
 
     it('should retrieve from single source successfully', async () => {
       const mockResults: KnowledgeEntry[] = [
-        { content: 'Result 1', similarity: 0.9, metadata: {} },
-        { content: 'Result 2', similarity: 0.8, metadata: {} },
+        { id: '1', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '2', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.8, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -119,25 +119,24 @@ describe('RetrievalCoordinator', () => {
 
     it('should retrieve from multiple sources in parallel', async () => {
       const postgresResults: KnowledgeEntry[] = [
-        { content: 'PG Result 1', similarity: 0.9, metadata: {} },
-        { content: 'PG Result 2', similarity: 0.7, metadata: {} },
+        { id: '1', tenantId: 'default', collectionName: 'test', content: 'PG Result 1', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '2', tenantId: 'default', collectionName: 'test', content: 'PG Result 2', similarity: 0.7, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       const lancedbResults: KnowledgeEntry[] = [
-        { content: 'Lance Result 1', similarity: 0.85, metadata: {} },
-        { content: 'Lance Result 2', similarity: 0.75, metadata: {} },
+        { id: '3', tenantId: 'default', collectionName: 'test', content: 'Lance Result 1', similarity: 0.85, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '4', tenantId: 'default', collectionName: 'test', content: 'Lance Result 2', similarity: 0.75, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       // First call gets PostgresVectorStore
       const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const mockStore1 = new PostgresVectorStore();
-      mockStore1.retrieve.mockResolvedValue(postgresResults);
+      const mockStore1 = new PostgresVectorStore(undefined as any);
+      (mockStore1.retrieve as jest.Mock).mockResolvedValue(postgresResults);
 
       // Second call gets LanceDBVectorStore
-      const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
       const MockLanceDBAdapter = await getLanceDBAdapter();
       const mockStore2 = new MockLanceDBAdapter();
-      mockStore2.retrieve.mockResolvedValue(lancedbResults);
+      (mockStore2.retrieve as jest.Mock).mockResolvedValue(lancedbResults);
 
       const results = await coordinator.retrieve(
         [postgresConfig, lancedbConfig],
@@ -157,9 +156,9 @@ describe('RetrievalCoordinator', () => {
 
     it('should normalize similarity scores using min-max strategy', async () => {
       const mockResults: KnowledgeEntry[] = [
-        { content: 'Result 1', similarity: 0.5, metadata: {} },
-        { content: 'Result 2', similarity: 0.9, metadata: {} },
-        { content: 'Result 3', similarity: 0.7, metadata: {} },
+        { id: '1', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '2', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '3', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.7, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -183,9 +182,11 @@ describe('RetrievalCoordinator', () => {
 
     it('should limit results to globalLimit', async () => {
       const mockResults: KnowledgeEntry[] = Array.from({ length: 20 }, (_, i) => ({
+        id: String(i), tenantId: 'default', collectionName: 'test',
         content: `Result ${i}`,
         similarity: 0.9 - i * 0.01,
         metadata: {},
+        createdAt: new Date(), updatedAt: new Date(),
       }));
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -203,12 +204,12 @@ describe('RetrievalCoordinator', () => {
 
     it('should handle partial failures gracefully', async () => {
       const postgresResults: KnowledgeEntry[] = [
-        { content: 'PG Result', similarity: 0.9, metadata: {} },
+        { id: '4', tenantId: 'default', collectionName: 'test', content: 'PG Result', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const mockStore1 = new PostgresVectorStore();
-      mockStore1.retrieve.mockResolvedValue(postgresResults);
+      const mockStore1 = new PostgresVectorStore(undefined as any);
+      (mockStore1.retrieve as jest.Mock).mockResolvedValue(postgresResults);
 
       const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
       const MockLanceDBAdapter = await getLanceDBAdapter();
@@ -266,8 +267,8 @@ describe('RetrievalCoordinator', () => {
       });
 
       const mockResults: KnowledgeEntry[] = [
-        { content: 'Result 1', similarity: 0.5, metadata: {} },
-        { content: 'Result 2', similarity: 0.9, metadata: {} },
+        { id: '5', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '6', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -304,9 +305,11 @@ describe('RetrievalCoordinator', () => {
       });
 
       const mockResults: KnowledgeEntry[] = Array.from({ length: 10 }, (_, i) => ({
+        id: String(i), tenantId: 'default', collectionName: 'test',
         content: `Result ${i}`,
         similarity: 0.9 - i * 0.01,
         metadata: {},
+        createdAt: new Date(), updatedAt: new Date(),
       }));
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -395,7 +398,7 @@ describe('RetrievalCoordinator', () => {
 
       // Retrieve again should create new store
       const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const newInstance = new PostgresVectorStore();
+      const newInstance = new PostgresVectorStore(undefined as any);
 
       mockPostgresStore.retrieve.mockResolvedValue([]);
       await coordinator.retrieve(
@@ -416,9 +419,9 @@ describe('RetrievalCoordinator', () => {
       });
 
       const mockResults: KnowledgeEntry[] = [
-        { content: 'Result 1', similarity: 0.5, metadata: {} },
-        { content: 'Result 2', similarity: 0.5, metadata: {} },
-        { content: 'Result 3', similarity: 0.5, metadata: {} },
+        { id: '7', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '8', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '9', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);
@@ -452,9 +455,9 @@ describe('RetrievalCoordinator', () => {
 
     it('should handle results with undefined similarity', async () => {
       const mockResults: KnowledgeEntry[] = [
-        { content: 'Result 1', similarity: 0.9, metadata: {} },
-        { content: 'Result 2', similarity: undefined, metadata: {} },
-        { content: 'Result 3', similarity: 0.7, metadata: {} },
+        { id: '10', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '11', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: undefined, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '12', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.7, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
       mockPostgresStore.retrieve.mockResolvedValue(mockResults);

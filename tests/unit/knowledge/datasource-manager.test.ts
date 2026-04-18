@@ -9,7 +9,9 @@
  */
 
 import { Pool } from 'pg';
-import * as lancedb from '@lancedb/lancedb';
+const MockPool = Pool as any;
+import * as _lancedb from '@lancedb/lancedb';
+const lancedb = _lancedb as any;
 import {
   testConnection,
   discoverCollections,
@@ -59,7 +61,7 @@ describe('DataSourceManager', () => {
       };
 
       it('should successfully connect to PostgreSQL', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockClient = {
           query: jest.fn(),
           release: jest.fn(),
@@ -68,7 +70,7 @@ describe('DataSourceManager', () => {
           connect: jest.fn().mockResolvedValue(mockClient),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         const result = await testConnection(postgresConfig);
 
@@ -79,12 +81,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should handle connection errors gracefully', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           connect: jest.fn().mockRejectedValue(new Error('Connection refused')),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         const result = await testConnection(postgresConfig);
 
@@ -93,7 +95,7 @@ describe('DataSourceManager', () => {
       });
 
       it('should use default user when not provided', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockClient = {
           query: jest.fn(),
           release: jest.fn(),
@@ -102,7 +104,7 @@ describe('DataSourceManager', () => {
           connect: jest.fn().mockResolvedValue(mockClient),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         const configWithoutUser: DataSourceConfig = {
           type: 'postgres-pgvector',
@@ -116,7 +118,7 @@ describe('DataSourceManager', () => {
 
         await testConnection(configWithoutUser);
 
-        expect(Pool).toHaveBeenCalledWith(
+        expect(MockPool).toHaveBeenCalledWith(
           expect.objectContaining({
             user: 'leo', // default user
           })
@@ -124,7 +126,7 @@ describe('DataSourceManager', () => {
       });
 
       it('should use max: 1 for test connections', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockClient = {
           query: jest.fn(),
           release: jest.fn(),
@@ -133,11 +135,11 @@ describe('DataSourceManager', () => {
           connect: jest.fn().mockResolvedValue(mockClient),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         await testConnection(postgresConfig);
 
-        expect(Pool).toHaveBeenCalledWith(
+        expect(MockPool).toHaveBeenCalledWith(
           expect.objectContaining({
             max: 1,
           })
@@ -159,12 +161,12 @@ describe('DataSourceManager', () => {
         const mockDb = {
           close: jest.fn(),
         };
-        lance.connect.mockResolvedValue(mockDb);
+        lancedb.connect.mockResolvedValue(mockDb);
 
         const result = await testConnection(lancedbConfig);
 
         expect(result.success).toBe(true);
-        expect(lance.connect).toHaveBeenCalledWith('./test-lancedb');
+        expect(lancedb.connect).toHaveBeenCalledWith('./test-lancedb');
         expect(mockDb.close).toHaveBeenCalled();
       });
 
@@ -183,7 +185,7 @@ describe('DataSourceManager', () => {
 
       it('should handle LanceDB connection errors', async () => {
         const mockedLance = lancedb as jest.Mocked<typeof lancedb>;
-        lance.connect.mockRejectedValue(new Error('LanceDB connection failed'));
+        lancedb.connect.mockRejectedValue(new Error('LanceDB connection failed'));
 
         const result = await testConnection(lancedbConfig);
 
@@ -226,12 +228,12 @@ describe('DataSourceManager', () => {
       };
 
       it('should discover all non-system tables', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         // Mock tables query
         mockPool.query
@@ -259,12 +261,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should exclude system tables', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         mockPool.query.mockResolvedValue({
           rows: [{ name: 'custom_table', size: '10 MB' }],
@@ -279,12 +281,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should detect tables with embedding columns', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         mockPool.query
           .mockResolvedValueOnce({ rows: [{ name: 'docs', size: '10 MB' }] })
@@ -299,12 +301,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should handle tables without embedding columns', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         mockPool.query
           .mockResolvedValueOnce({ rows: [{ name: 'plain_table', size: '10 MB' }] })
@@ -317,12 +319,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should return empty array for database with no tables', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         mockPool.query.mockResolvedValue({ rows: [] });
 
@@ -332,12 +334,12 @@ describe('DataSourceManager', () => {
       });
 
       it('should handle query errors gracefully', async () => {
-        const MockedPool = Pool as jest.MockedClass<typeof Pool>;
+        const MockedPool = Pool as any;
         const mockPool = {
           query: jest.fn(),
           end: jest.fn(),
         };
-        Pool.mockImplementation(() => mockPool);
+        MockPool.mockImplementation(() => mockPool);
 
         mockPool.query.mockRejectedValue(new Error('Database query failed'));
 
@@ -363,7 +365,7 @@ describe('DataSourceManager', () => {
           openTable: jest.fn(),
           close: jest.fn(),
         };
-        lance.connect.mockResolvedValue(mockDb);
+        lancedb.connect.mockResolvedValue(mockDb);
 
         const result = await discoverCollections(lancedbConfig);
 
@@ -379,7 +381,7 @@ describe('DataSourceManager', () => {
           tableNames: jest.fn().mockResolvedValue([]),
           close: jest.fn(),
         };
-        lance.connect.mockResolvedValue(mockDb);
+        lancedb.connect.mockResolvedValue(mockDb);
 
         const result = await discoverCollections(lancedbConfig);
 
@@ -400,7 +402,7 @@ describe('DataSourceManager', () => {
 
       it('should handle LanceDB connection errors', async () => {
         const mockedLance = lancedb as jest.Mocked<typeof lancedb>;
-        lance.connect.mockRejectedValue(new Error('LanceDB not available'));
+        lancedb.connect.mockRejectedValue(new Error('LanceDB not available'));
 
         const result = await discoverCollections(lancedbConfig);
 
@@ -422,13 +424,13 @@ describe('DataSourceManager', () => {
       };
 
       const mockPool = {};
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       const pool1 = getPool(config);
       const pool2 = getPool(config);
 
       expect(pool1).toBe(pool2); // Same instance
-      expect(Pool).toHaveBeenCalledTimes(1);
+      expect(MockPool).toHaveBeenCalledTimes(1);
     });
 
     it('should close connection pool', async () => {
@@ -445,7 +447,7 @@ describe('DataSourceManager', () => {
       const mockPool = {
         end: jest.fn(),
       };
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       getPool(config);
       await closePool();
@@ -467,7 +469,7 @@ describe('DataSourceManager', () => {
       const mockPool = {
         end: jest.fn(),
       };
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       const pool1 = getPool(config);
       await closePool();
@@ -487,7 +489,7 @@ describe('DataSourceManager', () => {
         connect: jest.fn().mockResolvedValue(mockClient),
         end: jest.fn(),
       };
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       const maliciousConfig: DataSourceConfig = {
         type: 'postgres-pgvector',
@@ -514,7 +516,7 @@ describe('DataSourceManager', () => {
         query: jest.fn(),
         end: jest.fn(),
       };
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       const longTableName = 'a'.repeat(1000);
       mockPool.query
@@ -544,7 +546,7 @@ describe('DataSourceManager', () => {
         )),
         end: jest.fn(),
       };
-      Pool.mockImplementation(() => mockPool);
+      MockPool.mockImplementation(() => mockPool);
 
       const config: DataSourceConfig = {
         type: 'postgres-pgvector',
