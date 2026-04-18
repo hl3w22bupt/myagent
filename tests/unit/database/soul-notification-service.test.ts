@@ -26,6 +26,7 @@ describe('Soul Notification Service', () => {
       currentTask: null,
       lastActivity: Date.now(),
       scheduledWakeup: null,
+      activeSince: null,
       statistics: {
         totalTasks: 0,
         uptime: 0

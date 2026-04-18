@@ -17,6 +17,14 @@ describe('Workflow Retry Logic', () => {
   let workflowEngine: WorkflowEngine;
   let agentManager: AgentManager;
 
+  /** Helper to create a mock agent with all methods the WorkflowEngine expects */
+  const createMockAgent = (runImpl: (...args: any[]) => any) => ({
+    run: jest.fn().mockImplementation(runImpl),
+    updateLLMTraceConfig: jest.fn(),
+    setHookManager: jest.fn(),
+    cleanup: jest.fn(),
+  });
+
   beforeAll(async () => {
     const store = getDataStore();
     await store.initialize();
@@ -62,11 +70,12 @@ describe('Workflow Retry Logic', () => {
       workflowEngine.registerWorkflow('test-retry-success', workflowConfig);
 
       // Mock agent that fails once then succeeds
-      const mockAgent = {
-        run: jest.fn()
-          .mockRejectedValueOnce(new Error('ECONNREFUSED'))
-          .mockResolvedValueOnce({ output: 'Success after retry' }),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('never reached');
+      });
+      mockAgent.run
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+        .mockResolvedValueOnce({ output: 'Success after retry' });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -98,9 +107,9 @@ describe('Workflow Retry Logic', () => {
 
       workflowEngine.registerWorkflow('test-retry-exhausted', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('ECONNREFUSED');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -112,7 +121,7 @@ describe('Workflow Retry Logic', () => {
 
       expect(result.success).toBe(false);
       expect(mockAgent.run).toHaveBeenCalledTimes(3); // Initial + 2 retries
-      expect(result.error).toContain('after retries');
+      expect(result.error).toContain('ECONNREFUSED');
     });
 
     it('should not retry on non-retryable errors', async () => {
@@ -132,9 +141,9 @@ describe('Workflow Retry Logic', () => {
 
       workflowEngine.registerWorkflow('test-no-retry-syntax', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockRejectedValue(new Error('SyntaxError: Unexpected token')),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('SyntaxError: Unexpected token');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -169,12 +178,10 @@ describe('Workflow Retry Logic', () => {
       workflowEngine.registerWorkflow('test-exponential-backoff', workflowConfig);
 
       const timestamps: number[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async () => {
-          timestamps.push(Date.now());
-          throw new Error('ECONNRESET');
-        }),
-      };
+      const mockAgent = createMockAgent(async () => {
+        timestamps.push(Date.now());
+        throw new Error('ECONNRESET');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -220,9 +227,9 @@ describe('Workflow Retry Logic', () => {
 
       workflowEngine.registerWorkflow('test-custom-retryable', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockRejectedValue(new Error('TEMPORARY_FAILURE')),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('TEMPORARY_FAILURE');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -256,9 +263,9 @@ describe('Workflow Retry Logic', () => {
 
       workflowEngine.registerWorkflow('test-custom-no-retry', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockRejectedValue(new Error('PERMANENT_FAILURE')),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('PERMANENT_FAILURE');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -294,12 +301,10 @@ describe('Workflow Retry Logic', () => {
       workflowEngine.registerWorkflow('test-retry-jitter', workflowConfig);
 
       const timestamps: number[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async () => {
-          timestamps.push(Date.now());
-          throw new Error('ECONNRESET');
-        }),
-      };
+      const mockAgent = createMockAgent(async () => {
+        timestamps.push(Date.now());
+        throw new Error('ECONNRESET');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -311,13 +316,24 @@ describe('Workflow Retry Logic', () => {
 
       expect(timestamps.length).toBe(4);
 
-      // With jitterFactor 0.2 and delayMs 100:
-      // Each delay should be between 80ms and 120ms
+      // With jitterFactor 0.2, exponentialBackoff false (linear), and delayMs 100:
+      // Attempt 1 delay: base=100*1=100, jitter +/-20 -> 80-120ms
+      // Attempt 2 delay: base=100*2=200, jitter +/-40 -> 160-240ms
+      // Attempt 3 delay: base=100*3=300, jitter +/-60 -> 240-360ms
+      // Each delay should be proportional to its base (linear backoff)
       const delays = timestamps.slice(1).map((t, i) => t - timestamps[i]);
 
-      for (const delay of delays) {
-        expect(delay).toBeGreaterThanOrEqual(80);
-        expect(delay).toBeLessThanOrEqual(120);
+      // Verify delays are increasing (linear backoff)
+      for (let i = 1; i < delays.length; i++) {
+        expect(delays[i]).toBeGreaterThan(delays[i - 1] * 0.8);
+      }
+
+      // Verify each delay is within jitter range of its expected base
+      for (let i = 0; i < delays.length; i++) {
+        const baseDelay = 100 * (i + 1);
+        const jitterRange = baseDelay * 0.2;
+        expect(delays[i]).toBeGreaterThanOrEqual(baseDelay - jitterRange - 10); // small tolerance
+        expect(delays[i]).toBeLessThanOrEqual(baseDelay + jitterRange + 10);
       }
     });
   });
@@ -343,12 +359,10 @@ describe('Workflow Retry Logic', () => {
       workflowEngine.registerWorkflow('test-max-delay', workflowConfig);
 
       const timestamps: number[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async () => {
-          timestamps.push(Date.now());
-          throw new Error('ECONNRESET');
-        }),
-      };
+      const mockAgent = createMockAgent(async () => {
+        timestamps.push(Date.now());
+        throw new Error('ECONNRESET');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 

@@ -424,7 +424,7 @@ export class LLMClient {
     temperature: number,
     model: string
   ): Promise<LLMResponse> {
-    const response = await this.openai!.chat.completions.create({
+    const createParams: any = {
       model,
       messages: messages.map((m) => ({
         role: m.role,
@@ -432,7 +432,15 @@ export class LLMClient {
       })),
       max_tokens,
       temperature,
-    });
+    };
+
+    // Disable GLM thinking mode to avoid reasoning_content consuming token budget
+    const thinkingConfig = process.env.LLM_THINKING || 'disabled';
+    if (thinkingConfig === 'disabled') {
+      createParams.thinking = { type: 'disabled' };
+    }
+
+    const response = await this.openai!.chat.completions.create(createParams);
 
     const choice = response.choices[0];
     if (!choice.message?.content) {

@@ -397,6 +397,17 @@ def execute_volcano_tts(input_data: Dict[str, Any]) -> Dict[str, Any]:
     output_format = input_data.get('output_format', 'wav')  # API 返回 PCM，我们转换为 WAV
     sample_rate = int(input_data.get('sample_rate', 24000))  # 火山引擎 API 返回 24kHz PCM
 
+    # 校验 voice_type，只接受已知的 API voice_type（PTC 可能 hallucinate 无效值）
+    VALID_VOICE_TYPES = {'BV001_streaming', 'BV002_streaming', 'BV003_streaming', 'BV004_streaming'}
+    if voice_type not in VALID_VOICE_TYPES:
+        print(f"[volcano-tts] ⚠️ Invalid voice_type '{voice_type}', falling back to {DEFAULT_TTS_VOICE_TYPE}")
+        voice_type = DEFAULT_TTS_VOICE_TYPE
+
+    # 校验 output_format（API 返回 PCM，只支持 wav 输出）
+    if output_format != 'wav':
+        print(f"[volcano-tts] ⚠️ Unsupported output_format '{output_format}', falling back to wav")
+        output_format = 'wav'
+
     # 验证参数
     if not text:
         return build_validation_error("文本内容不能为空")

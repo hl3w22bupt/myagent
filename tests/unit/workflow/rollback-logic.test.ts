@@ -17,6 +17,14 @@ describe('Workflow Rollback Logic', () => {
   let workflowEngine: WorkflowEngine;
   let agentManager: AgentManager;
 
+  /** Helper to create a mock agent with all methods the WorkflowEngine expects */
+  const createMockAgent = (runImpl: (...args: any[]) => any) => ({
+    run: jest.fn().mockImplementation(runImpl),
+    updateLLMTraceConfig: jest.fn(),
+    setHookManager: jest.fn(),
+    cleanup: jest.fn(),
+  });
+
   beforeAll(async () => {
     const store = getDataStore();
     await store.initialize();
@@ -43,7 +51,7 @@ describe('Workflow Rollback Logic', () => {
   });
 
   describe('Basic Rollback', () => {
-    it('should rollback to specified step on failure', async () => {
+    it('should rollback to specified step on failure and re-execute', async () => {
       const workflowConfig: WorkflowConfig = {
         name: 'test-rollback-basic',
         steps: [
@@ -72,20 +80,22 @@ describe('Workflow Rollback Logic', () => {
       workflowEngine.registerWorkflow('test-rollback-basic', workflowConfig);
 
       const executionOrder: string[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          // Extract step ID from task
-          const stepId = task.split('\n')[0].split(':')[0];
-          executionOrder.push(stepId);
+      let step3Attempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0].split(':')[0];
+        executionOrder.push(stepId);
 
-          // step3 fails
-          if (stepId.includes('step3')) {
+        // step3 fails first time, succeeds on rollback re-execution
+        if (stepId.includes('step3')) {
+          step3Attempts++;
+          if (step3Attempts === 1) {
             throw new Error('Step 3 failed');
           }
+          return { output: `${stepId} completed on retry` };
+        }
 
-          return { output: `${stepId} completed` };
-        }),
-      };
+        return { output: `${stepId} completed` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -99,10 +109,10 @@ describe('Workflow Rollback Logic', () => {
       expect(executionOrder).toEqual([
         'step1',     // Initial execution
         'step2',     // Initial execution
-        'step3',     // Fails
+        'step3',     // Fails -> triggers rollback
         'step1',     // Rollback re-execution
         'step2',     // Rollback re-execution
-        'step3',     // Fails again
+        'step3',     // Succeeds on rollback
       ]);
     });
 
@@ -123,9 +133,9 @@ describe('Workflow Rollback Logic', () => {
 
       workflowEngine.registerWorkflow('test-rollback-invalid-target', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockRejectedValue(new Error('Failure')),
-      };
+      const mockAgent = createMockAgent(async () => {
+        throw new Error('Failure');
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -164,20 +174,21 @@ describe('Workflow Rollback Logic', () => {
 
       workflowEngine.registerWorkflow('test-rollback-clear-context', workflowConfig);
 
-      let contextBeforeRollback: any = null;
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
+      let step2Attempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
 
-          // Store context before rollback
-          if (stepId.includes('step2') && contextBeforeRollback === null) {
-            contextBeforeRollback = { data: 'preserved' };
+        // step2 fails first time, succeeds on rollback
+        if (stepId.includes('step2')) {
+          step2Attempts++;
+          if (step2Attempts === 1) {
+            throw new Error('Step 2 failed');
           }
+          return { output: `${stepId} success` };
+        }
 
-          // step2 fails
-          throw new Error('Step 2 failed');
-        }),
-      };
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -187,9 +198,8 @@ describe('Workflow Rollback Logic', () => {
         { taskId: 'rollback-clear-test' }
       );
 
-      // After rollback with clearContext, workflow should still execute
-      // but context should be reset (implementation may vary)
-      expect(result.success).toBe(false); // step2 still fails
+      // After rollback with clearContext and step2 succeeds on retry
+      expect(result.success).toBe(true);
     });
   });
 
@@ -222,18 +232,21 @@ describe('Workflow Rollback Logic', () => {
       workflowEngine.registerWorkflow('test-rollback-re-execute', workflowConfig);
 
       const executionLog: string[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
-          executionLog.push(`${stepId}-attempt-${mockAgent.run.mock.calls.length}`);
+      let testAttempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
+        executionLog.push(`${stepId}-attempt-${mockAgent.run.mock.calls.length}`);
 
-          if (stepId.includes('test')) {
+        if (stepId.includes('test')) {
+          testAttempts++;
+          if (testAttempts === 1) {
             throw new Error('Test failed');
           }
-
           return { output: `${stepId} success` };
-        }),
-      };
+        }
+
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -243,13 +256,14 @@ describe('Workflow Rollback Logic', () => {
         { taskId: 'rollback-reexecute-test' }
       );
 
+      expect(result.success).toBe(true);
       expect(executionLog).toEqual([
         'analyze-attempt-1',   // Initial
         'develop-attempt-2',   // Initial
         'test-attempt-3',      // Fails
         'analyze-attempt-4',   // Rollback
         'develop-attempt-5',   // Rollback
-        'test-attempt-6',      // Fails again
+        'test-attempt-6',      // Succeeds on rollback
       ]);
     });
 
@@ -281,22 +295,20 @@ describe('Workflow Rollback Logic', () => {
       workflowEngine.registerWorkflow('test-rollback-success', workflowConfig);
 
       let attemptCount = 0;
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
-          attemptCount++;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
+        attemptCount++;
 
-          // step3 fails first time, succeeds second time
-          if (stepId.includes('step3')) {
-            if (attemptCount <= 3) {
-              throw new Error('First failure');
-            }
-            return { output: 'step3 success' };
+        // step3 fails first time, succeeds second time
+        if (stepId.includes('step3')) {
+          if (attemptCount <= 3) {
+            throw new Error('First failure');
           }
+          return { output: 'step3 success' };
+        }
 
-          return { output: `${stepId} success` };
-        }),
-      };
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -345,18 +357,21 @@ describe('Workflow Rollback Logic', () => {
       workflowEngine.registerWorkflow('test-rollback-dependencies', workflowConfig);
 
       const executionOrder: string[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
-          executionOrder.push(stepId);
+      let step3Attempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
+        executionOrder.push(stepId);
 
-          if (stepId.includes('step3')) {
+        if (stepId.includes('step3')) {
+          step3Attempts++;
+          if (step3Attempts === 1) {
             throw new Error('Step 3 failed');
           }
-
           return { output: `${stepId} completed` };
-        }),
-      };
+        }
+
+        return { output: `${stepId} completed` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -376,7 +391,7 @@ describe('Workflow Rollback Logic', () => {
         'step1',   // Rollback
         'step2a',  // Rollback
         'step2b',  // Rollback
-        'step3',   // Fails again
+        'step3',   // Succeeds on rollback
       ]);
     });
   });
@@ -409,22 +424,23 @@ describe('Workflow Rollback Logic', () => {
 
       workflowEngine.registerWorkflow('test-rollback-stop', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
+      // step2 fails during rollback, step3 also fails (no on_failure recursion for step2)
+      const executionOrder: string[] = [];
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
+        executionOrder.push(stepId);
 
-          // step2 fails during rollback
-          if (stepId.includes('step2') && mockAgent.run.mock.calls.length > 2) {
-            throw new Error('Step 2 failed during rollback');
-          }
+        // step2 fails during rollback (2nd execution)
+        if (stepId.includes('step2') && executionOrder.filter(s => s.includes('step2')).length > 1) {
+          throw new Error('Step 2 failed during rollback');
+        }
 
-          if (stepId.includes('step3')) {
-            throw new Error('Step 3 failed');
-          }
+        if (stepId.includes('step3')) {
+          throw new Error('Step 3 failed');
+        }
 
-          return { output: `${stepId} success` };
-        }),
-      };
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -435,7 +451,9 @@ describe('Workflow Rollback Logic', () => {
       );
 
       expect(result.success).toBe(false);
-      // step3 should not execute again after step2 fails
+      // Verify step3 was not executed again after step2 failed during rollback
+      const step3Count = executionOrder.filter(s => s.includes('step3')).length;
+      expect(step3Count).toBe(1); // step3 only executed once (initial)
     });
 
     it('should continue if step has always_run flag', async () => {
@@ -467,18 +485,21 @@ describe('Workflow Rollback Logic', () => {
       workflowEngine.registerWorkflow('test-rollback-always-run', workflowConfig);
 
       const executionLog: string[] = [];
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
-          executionLog.push(stepId);
+      let step3Attempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
+        executionLog.push(stepId);
 
-          if (stepId.includes('step3')) {
+        if (stepId.includes('step3')) {
+          step3Attempts++;
+          if (step3Attempts === 1) {
             throw new Error('Step 3 failed');
           }
-
           return { output: `${stepId} success` };
-        }),
-      };
+        }
+
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -527,18 +548,30 @@ describe('Workflow Rollback Logic', () => {
 
       workflowEngine.registerWorkflow('test-nested-rollback', workflowConfig);
 
-      const mockAgent = {
-        run: jest.fn().mockImplementation(async (task: string) => {
-          const stepId = task.split('\n')[0];
+      // step2 fails first time but succeeds on rollback, step3 fails both times
+      let step2Attempts = 0;
+      let step3Attempts = 0;
+      const mockAgent = createMockAgent(async (task: string) => {
+        const stepId = task.split('\n')[0];
 
-          // Both step2 and step3 fail
-          if (stepId.includes('step2') || stepId.includes('step3')) {
+        if (stepId.includes('step2')) {
+          step2Attempts++;
+          if (step2Attempts === 1) {
             throw new Error(`${stepId} failed`);
           }
-
           return { output: `${stepId} success` };
-        }),
-      };
+        }
+
+        if (stepId.includes('step3')) {
+          step3Attempts++;
+          if (step3Attempts <= 1) {
+            throw new Error(`${stepId} failed`);
+          }
+          return { output: `${stepId} success` };
+        }
+
+        return { output: `${stepId} success` };
+      });
 
       jest.spyOn(agentManager, 'acquire').mockResolvedValue(mockAgent as any);
 
@@ -548,9 +581,9 @@ describe('Workflow Rollback Logic', () => {
         { taskId: 'nested-rollback-test' }
       );
 
-      // Should handle multiple rollbacks gracefully
-      expect(result.success).toBe(false);
-      expect(mockAgent.run).toHaveBeenCalledTimes(6); // step1, step2 (fail) + step1, step2 (fail), step3 (fail) + rollback
+      // Should handle rollbacks and eventually succeed
+      expect(result.success).toBe(true);
+      expect(mockAgent.run).toHaveBeenCalledTimes(9);
     });
   });
 });

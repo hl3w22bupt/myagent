@@ -178,7 +178,8 @@ class LLMClient:
                     model=self.model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    messages=messages
+                    messages=messages,
+                    extra_body={"thinking": {"type": "disabled"}}
                 )
                 content = response.choices[0].message.content or ""
                 return {
@@ -251,7 +252,8 @@ class LLMClient:
                     model=self.model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    messages=openai_messages
+                    messages=openai_messages,
+                    extra_body={"thinking": {"type": "disabled"}}
                 )
                 content = response.choices[0].message.content or ""
                 usage = {
@@ -499,7 +501,8 @@ class LLMClient:
                         model=self.model,
                         max_tokens=max_tokens,
                         temperature=temperature,
-                        messages=openai_messages
+                        messages=openai_messages,
+                        extra_body={"thinking": {"type": "disabled"}}
                     ),
                     timeout=self.timeout
                 )
@@ -779,6 +782,7 @@ class LLMClient:
                 temperature=temperature,
                 messages=openai_messages,
                 tools=openai_tools if openai_tools else None,
+                extra_body={"thinking": {"type": "disabled"}}
             )
 
             choice = response.choices[0]

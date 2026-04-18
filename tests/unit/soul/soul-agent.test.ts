@@ -248,7 +248,7 @@ describe('SoulAgent', () => {
       const state = soulAgent.getSoulState();
 
       expect(state).toHaveProperty('currentTask');
-      expect(typeof state.currentTask).toBe('object' || 'string' || 'null');
+      expect(typeof state.currentTask === 'object' || state.currentTask === null).toBe(true);
     });
 
     it('should reset currentTask to null when IDLE', () => {
