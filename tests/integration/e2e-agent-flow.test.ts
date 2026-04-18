@@ -12,7 +12,7 @@ import { existsSync } from 'fs';
 
 // Helper to skip tests if no valid API key
 // Only accept Anthropic format (sk-ant-xxx) as valid for these tests
-const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const hasValidApiKey = (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY)?.startsWith('sk-ant-') || false;
 const withApiKey = hasValidApiKey ? describe : describe.skip;
 
 withApiKey('End-to-End Agent Flow', () => {
@@ -45,7 +45,7 @@ withApiKey('End-to-End Agent Flow', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY,
+          apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
         },
         sandbox: {
           type: 'local',

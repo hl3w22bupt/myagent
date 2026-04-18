@@ -26,7 +26,7 @@
 
 ```bash
 # API Key
-ANTHROPIC_API_KEY=sk-ant-xxx
+LLM_API_KEY=sk-ant-xxx
 
 # LLM 提供商
 DEFAULT_LLM_PROVIDER=anthropic  # anthropic | openai-compatible

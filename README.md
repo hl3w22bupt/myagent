@@ -100,7 +100,7 @@ POSTGRES_PASSWORD=your_password
 # LLM Provider
 DEFAULT_LLM_PROVIDER=anthropic  # or 'openai-compatible'
 DEFAULT_LLM_MODEL=claude-sonnet-4-5
-ANTHROPIC_API_KEY=sk-xxx
+LLM_API_KEY=sk-xxx
 
 # Knowledge Base (RAG)
 OPENAI_API_KEY=sk-xxx

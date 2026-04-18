@@ -20,7 +20,7 @@ async function demonstrateContextSupport() {
   const llm = new LLMClient({
     provider: 'anthropic',
     model: 'claude-sonnet-4-5',
-    apiKey: process.env.ANTHROPIC_API_KEY || 'demo-key',
+    apiKey: process.env.LLM_API_KEY || 'demo-key',
   });
 
   // Define available skills

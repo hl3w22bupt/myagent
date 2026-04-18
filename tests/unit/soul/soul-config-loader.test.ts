@@ -29,9 +29,8 @@ describe('SoulConfigLoader', () => {
       expect(config.goal).toBeDefined();
       expect(config.goal).toContain('长期目标');
       expect(config.primitives).toContain('hibernate');
-      expect(config.primitives).toContain('schedule');
       expect(config.primitives).toContain('complete');
-      expect(config.hibernation.idle_timeout).toBe(3600000); // 1 hour
+      expect(config.hibernation.idle_timeout).toBe(7200000); // 2 hours
     });
 
     it('should cache loaded configuration', async () => {

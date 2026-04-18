@@ -28,8 +28,8 @@
  * - MAX_ITERATIONS: Maximum agent iterations per task (default: 5)
  * - LLM_PROVIDER: LLM provider - 'anthropic' or 'openai-compatible' (default: anthropic)
  * - LLM_MODEL: Model name (default: claude-sonnet-4-5)
- * - ANTHROPIC_API_KEY: API key for Anthropic
- * - OPENAI_API_KEY: API key for OpenAI-compatible providers
+ * - LLM_API_KEY: API key for LLM provider (falls back to ANTHROPIC_API_KEY)
+ * - OPENAI_API_KEY: API key for OpenAI-compatible providers (or embedding)
  * - PYTHON_PATH: Path to Python executable (default: python3)
  *
  * ## Graceful Shutdown
@@ -107,7 +107,7 @@ export function getAgentManager(): AgentManager {
           ? 'openai-compatible'
           : 'anthropic',
       model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+      apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
     },
     // Knowledge Base configuration for RAG (enabled by default if DB is configured)
     knowledgeBase: process.env.KNOWLEDGE_BASE_ENABLED !== 'false' ? {
@@ -167,7 +167,7 @@ export function getAgentManager(): AgentManager {
             ? 'openai-compatible'
             : 'anthropic',
         model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
-        apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+        apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
       },
       // Knowledge Base configuration for RAG (enabled by default if DB is configured)
       knowledgeBase: process.env.KNOWLEDGE_BASE_ENABLED !== 'false' ? {

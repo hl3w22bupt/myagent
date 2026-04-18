@@ -223,7 +223,7 @@ npm run py:format        # black 格式化
 DEFAULT_LLM_PROVIDER=anthropic  # 或 openai-compatible
 
 # Anthropic Claude
-ANTHROPIC_API_KEY=sk-ant-...
+LLM_API_KEY=sk-ant-...
 DEFAULT_LLM_MODEL=claude-sonnet-4-5
 LLM_BASE_URL=https://api.anthropic.com
 
@@ -310,7 +310,7 @@ export function getAgentManager(): AgentManager {
         ? 'openai-compatible'
         : 'anthropic',
       model: process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+      apiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
     },
     availableSkills: ['web-search', 'summarize', 'code-analysis'],
     sandbox: {

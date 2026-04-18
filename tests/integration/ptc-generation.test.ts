@@ -11,7 +11,7 @@ import { LLMClient } from '@/core/agent/llm-client';
 
 // Helper to skip tests if no valid API key
 // Only accept Anthropic format (sk-ant-xxx) as valid for these tests
-const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const hasValidApiKey = (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY)?.startsWith('sk-ant-') || false;
 const withApiKey = hasValidApiKey ? describe : describe.skip;
 
 withApiKey('PTC Generation and Execution', () => {
@@ -23,7 +23,7 @@ withApiKey('PTC Generation and Execution', () => {
     llm = new LLMClient({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
-      apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
+      apiKey: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) || 'test-key',
     });
 
     // Define available skills

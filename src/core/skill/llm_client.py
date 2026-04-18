@@ -27,6 +27,11 @@ except ImportError:
     anthropic = None
 
 try:
+    from openai import OpenAI as OpenAISDK
+except ImportError:
+    OpenAISDK = None
+
+try:
     from dotenv import load_dotenv
 except ImportError:
     load_dotenv = None
@@ -75,9 +80,10 @@ class LLMToolUseResponse:
 
 class LLMClient:
     """
-    LLM Client for Anthropic Claude API (Sync version).
+    LLM Client supporting both Anthropic and OpenAI-compatible APIs.
 
-    Handles communication with Anthropic's Claude API for various tasks.
+    Handles communication with LLM APIs for various tasks.
+    Provider is determined by DEFAULT_LLM_PROVIDER env var.
     """
 
     def __init__(
@@ -94,22 +100,18 @@ class LLMClient:
         Initialize LLM client.
 
         Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            api_key: API key (defaults to LLM_API_KEY env var, falls back to ANTHROPIC_API_KEY)
             model: Model identifier (defaults to DEFAULT_LLM_MODEL env var or claude-sonnet-4-5)
             timeout: Request timeout in seconds
             trace_api_url: Trace API URL (defaults to MOTIA_TRACE_API_URL env var)
             task_id: Task ID for tracing (defaults to MOTIA_TASK_ID env var)
             skill_name: Skill name for tracing
         """
-        if anthropic is None:
-            raise ImportError(
-                "anthropic package is required. Install with: pip install anthropic"
-            )
-
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        self.provider = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")
+        self.api_key = api_key or os.getenv("LLM_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "ANTHROPIC_API_KEY not found. Please set it in environment "
+                "LLM_API_KEY not found. Please set it in environment "
                 "or pass api_key parameter."
             )
 
@@ -128,14 +130,26 @@ class LLMClient:
         # Get base URL from environment if available
         base_url = os.getenv("LLM_BASE_URL")
 
-        # Create sync client
-        if base_url:
-            self.client = anthropic.Anthropic(
-                api_key=self.api_key,
-                base_url=base_url
-            )
+        # Create client based on provider
+        if self.provider == "openai-compatible":
+            if OpenAISDK is None:
+                raise ImportError(
+                    "openai package is required for openai-compatible provider. "
+                    "Install with: pip install openai"
+                )
+            client_kwargs = {"api_key": self.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            self.client = OpenAISDK(**client_kwargs)
         else:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            if anthropic is None:
+                raise ImportError(
+                    "anthropic package is required. Install with: pip install anthropic"
+                )
+            client_kwargs = {"api_key": self.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            self.client = anthropic.Anthropic(**client_kwargs)
 
     def messages_create(
         self,
@@ -159,26 +173,42 @@ class LLMClient:
         temperature = options.get('temperature', 0.7)
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=messages
-            )
-
-            content = response.content[0].text if response.content else ""
-
-            return {
-                'content': content,
-                'model': response.model,
-                'usage': {
-                    'prompt_tokens': response.usage.input_tokens,
-                    'completion_tokens': response.usage.output_tokens,
-                    'total_tokens': response.usage.input_tokens + response.usage.output_tokens,
+            if self.provider == "openai-compatible":
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=messages
+                )
+                content = response.choices[0].message.content or ""
+                return {
+                    'content': content,
+                    'model': response.model,
+                    'usage': {
+                        'prompt_tokens': response.usage.prompt_tokens,
+                        'completion_tokens': response.usage.completion_tokens,
+                        'total_tokens': response.usage.prompt_tokens + response.usage.completion_tokens,
+                    }
                 }
-            }
+            else:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=messages
+                )
+                content = response.content[0].text if response.content else ""
+                return {
+                    'content': content,
+                    'model': response.model,
+                    'usage': {
+                        'prompt_tokens': response.usage.input_tokens,
+                        'completion_tokens': response.usage.output_tokens,
+                        'total_tokens': response.usage.input_tokens + response.usage.output_tokens,
+                    }
+                }
         except Exception as e:
-            raise Exception(f"Anthropic API error: {str(e)}")
+            raise Exception(f"LLM API error: {str(e)}")
 
     def generate(
         self,
@@ -209,37 +239,55 @@ class LLMClient:
         """
         start_time = time.time()
 
-        # Prepare messages
-        messages = [{"role": "user", "content": prompt}]
-
-        # Prepare API parameters
-        api_params = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": messages,
-        }
-
-        # Add system prompt if provided
-        if system_prompt:
-            api_params["system"] = system_prompt
-
         try:
-            # Make API call
-            response = self.client.messages.create(**api_params)
+            if self.provider == "openai-compatible":
+                # Build messages for OpenAI format (system in messages)
+                openai_messages = []
+                if system_prompt:
+                    openai_messages.append({"role": "system", "content": system_prompt})
+                openai_messages.append({"role": "user", "content": prompt})
 
-            # Extract response data
-            content = response.content[0].text if response.content else ""
-            usage = {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            }
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=openai_messages
+                )
+                content = response.choices[0].message.content or ""
+                usage = {
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                }
+                stop_reason = response.choices[0].finish_reason or "end_turn"
+                if stop_reason == "tool_calls":
+                    stop_reason = "tool_use"
+                model_name = response.model
+            else:
+                # Anthropic format
+                messages = [{"role": "user", "content": prompt}]
+                api_params = {
+                    "model": self.model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": messages,
+                }
+                if system_prompt:
+                    api_params["system"] = system_prompt
+
+                response = self.client.messages.create(**api_params)
+                content = response.content[0].text if response.content else ""
+                usage = {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                }
+                stop_reason = response.stop_reason
+                model_name = response.model
 
             llm_response = LLMResponse(
                 content=content,
-                model=response.model,
+                model=model_name,
                 usage=usage,
-                stop_reason=response.stop_reason
+                stop_reason=stop_reason
             )
 
             # Send trace
@@ -247,7 +295,7 @@ class LLMClient:
             self._send_llm_trace(
                 prompt, llm_response, execution_time,
                 max_tokens, temperature, purpose,
-                is_retry, retry_attempt, system_prompt  # Issue #17: include system_prompt in trace
+                is_retry, retry_attempt, system_prompt
             )
 
             return llm_response
@@ -334,7 +382,7 @@ class LLMClient:
             "metadata": {
                 "sessionId": session_id,
                 "purpose": purpose or self.skill_name,
-                "llmProvider": "anthropic",
+                "llmProvider": self.provider,
                 "llmModel": response.model,
                 "llmRequest": {
                     "messages": messages,
@@ -432,58 +480,72 @@ class LLMClient:
 
         start_time = time.time()
 
-        # Prepare messages
-        messages = [{"role": "user", "content": prompt}]
-
-        # Prepare API parameters
-        api_params = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": messages,
-        }
-
-        # Add system prompt if provided
-        if system_prompt:
-            api_params["system"] = system_prompt
-
-        # Create client with optional base_url
-        base_url = os.getenv("LLM_BASE_URL")
-
-        # Import anthropic here for async client
         try:
-            import anthropic
-        except ImportError:
-            raise ImportError("anthropic package is required. Install with: pip install anthropic")
+            if self.provider == "openai-compatible":
+                from openai import AsyncOpenAI
+                base_url = os.getenv("LLM_BASE_URL")
+                client_kwargs = {"api_key": self.api_key}
+                if base_url:
+                    client_kwargs["base_url"] = base_url
+                async_client = AsyncOpenAI(**client_kwargs)
 
-        # Create async client
-        if base_url:
-            async_client = anthropic.AsyncAnthropic(
-                api_key=self.api_key,
-                base_url=base_url
-            )
-        else:
-            async_client = anthropic.AsyncAnthropic(api_key=self.api_key)
+                openai_messages = []
+                if system_prompt:
+                    openai_messages.append({"role": "system", "content": system_prompt})
+                openai_messages.append({"role": "user", "content": prompt})
 
-        try:
-            # Make API call with timeout
-            response = await asyncio.wait_for(
-                async_client.messages.create(**api_params),
-                timeout=self.timeout
-            )
+                response = await asyncio.wait_for(
+                    async_client.chat.completions.create(
+                        model=self.model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        messages=openai_messages
+                    ),
+                    timeout=self.timeout
+                )
+                content = response.choices[0].message.content or ""
+                usage = {
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                }
+                stop_reason = response.choices[0].finish_reason or "end_turn"
+                if stop_reason == "tool_calls":
+                    stop_reason = "tool_use"
+                model_name = response.model
+            else:
+                base_url = os.getenv("LLM_BASE_URL")
+                client_kwargs = {"api_key": self.api_key}
+                if base_url:
+                    client_kwargs["base_url"] = base_url
+                async_client = anthropic.AsyncAnthropic(**client_kwargs)
 
-            # Extract response data
-            content = response.content[0].text if response.content else ""
-            usage = {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            }
+                messages = [{"role": "user", "content": prompt}]
+                api_params = {
+                    "model": self.model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": messages,
+                }
+                if system_prompt:
+                    api_params["system"] = system_prompt
+
+                response = await asyncio.wait_for(
+                    async_client.messages.create(**api_params),
+                    timeout=self.timeout
+                )
+                content = response.content[0].text if response.content else ""
+                usage = {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                }
+                stop_reason = response.stop_reason
+                model_name = response.model
 
             llm_response = LLMResponse(
                 content=content,
-                model=response.model,
+                model=model_name,
                 usage=usage,
-                stop_reason=response.stop_reason
+                stop_reason=stop_reason
             )
 
             # Send trace
@@ -502,8 +564,8 @@ class LLMClient:
                 "retryAttempt": retry_attempt,
                 "metadata": {
                     "sessionId": os.getenv('MOTIA_SESSION_ID', 'unknown'),
-                    "llmProvider": "anthropic",
-                    "llmModel": response.model,
+                    "llmProvider": self.provider,
+                    "llmModel": model_name,
                     "llmRequest": {
                         "prompt": prompt[:1000],
                         "promptLength": len(prompt),
@@ -527,16 +589,6 @@ class LLMClient:
             raise asyncio.TimeoutError(
                 f"LLM request timed out after {self.timeout} seconds"
             )
-        except anthropic.APIError as e:
-            # Detailed error information
-            error_details = {
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "model": self.model,
-                "prompt_length": len(prompt),
-                "max_tokens": max_tokens,
-            }
-            raise Exception(f"Anthropic API error: {str(e)}\nDetails: {json.dumps(error_details, ensure_ascii=False)}")
         except Exception as e:
             error_details = {
                 "error_type": type(e).__name__,
@@ -615,6 +667,7 @@ class LLMClient:
         model_info = {
             "model": self.model,
             "timeout": self.timeout,
+            "provider": self.provider,
             "capabilities": {
                 "max_tokens": 8192 if "sonnet" in self.model else 200000,
                 "supports_json": True,
@@ -622,6 +675,168 @@ class LLMClient:
             }
         }
         return model_info
+
+    @staticmethod
+    def _convert_tools_to_openai(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Convert Anthropic-format tools to OpenAI format."""
+        openai_tools = []
+        for tool in tools:
+            openai_tools.append({
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("input_schema", {}),
+                }
+            })
+        return openai_tools
+
+    @staticmethod
+    def _convert_messages_for_openai(messages: List[Dict], system_prompt: Optional[str] = None) -> List[Dict]:
+        """Convert Anthropic-format messages to OpenAI format, including system prompt and tool_result blocks."""
+        openai_messages = []
+        if system_prompt:
+            openai_messages.append({"role": "system", "content": system_prompt})
+
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "user":
+                if isinstance(content, list):
+                    # Anthropic content blocks - extract text
+                    text_parts = []
+                    for block in content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "text":
+                                text_parts.append(block["text"])
+                            elif block.get("type") == "tool_result":
+                                # Convert tool_result to OpenAI tool message
+                                tool_result_content = block.get("content", "")
+                                if isinstance(tool_result_content, list):
+                                    text_parts.extend(
+                                        b["text"] for b in tool_result_content
+                                        if isinstance(b, dict) and b.get("type") == "text"
+                                    )
+                                else:
+                                    text_parts.append(str(tool_result_content))
+                        else:
+                            text_parts.append(str(block))
+                    openai_messages.append({"role": "user", "content": "\n".join(text_parts)})
+                else:
+                    openai_messages.append({"role": "user", "content": content})
+            elif role == "assistant":
+                if isinstance(content, list):
+                    # May contain text and tool_use blocks
+                    text_parts = []
+                    tool_calls = []
+                    for block in content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "text":
+                                text_parts.append(block["text"])
+                            elif block.get("type") == "tool_use":
+                                tool_calls.append({
+                                    "id": block["id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": block["name"],
+                                        "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                                    }
+                                })
+                    msg_dict: Dict[str, Any] = {"role": "assistant"}
+                    if text_parts:
+                        msg_dict["content"] = "\n".join(text_parts)
+                    else:
+                        msg_dict["content"] = None
+                    if tool_calls:
+                        msg_dict["tool_calls"] = tool_calls
+                    openai_messages.append(msg_dict)
+                else:
+                    openai_messages.append({"role": "assistant", "content": content})
+            else:
+                openai_messages.append(msg)
+
+        return openai_messages
+
+    def _call_with_tools(
+        self,
+        messages: List[Dict],
+        tools: List[Dict[str, Any]],
+        max_tokens: int = 16384,
+        temperature: float = 0.3,
+        system_prompt: Optional[str] = None
+    ) -> LLMToolUseResponse:
+        """
+        Internal method: make a tool-use API call, handling both providers.
+        """
+        if self.provider == "openai-compatible":
+            openai_messages = self._convert_messages_for_openai(messages, system_prompt)
+            openai_tools = self._convert_tools_to_openai(tools)
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=openai_messages,
+                tools=openai_tools if openai_tools else None,
+            )
+
+            choice = response.choices[0]
+            text_content = [choice.message.content] if choice.message.content else []
+            tool_calls = []
+            if choice.message.tool_calls:
+                for tc in choice.message.tool_calls:
+                    tool_calls.append({
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "input": json.loads(tc.function.arguments) if tc.function.arguments else {}
+                    })
+
+            return LLMToolUseResponse(
+                text="\n".join(text_content),
+                tool_calls=tool_calls,
+                stop_reason="tool_use" if choice.finish_reason == "tool_calls" else (choice.finish_reason or "end_turn"),
+                model=response.model,
+                usage={
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                }
+            )
+        else:
+            api_params: Dict[str, Any] = {
+                "model": self.model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": messages,
+                "tools": tools,
+            }
+            if system_prompt:
+                api_params["system"] = system_prompt
+
+            response = self.client.messages.create(**api_params)
+
+            tool_calls = []
+            text_content = []
+            for block in response.content:
+                if block.type == "text":
+                    text_content.append(block.text)
+                elif block.type == "tool_use":
+                    tool_calls.append({
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input
+                    })
+
+            return LLMToolUseResponse(
+                text="\n".join(text_content),
+                tool_calls=tool_calls,
+                stop_reason=response.stop_reason,
+                model=response.model,
+                usage={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                }
+            )
 
     def generate_with_tools(
         self,
@@ -647,45 +862,10 @@ class LLMClient:
             LLMToolUseResponse with tool_calls if LLM wants to use tools
         """
         start_time = time.time()
-
         messages = [{"role": "user", "content": prompt}]
 
-        api_params = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": messages,
-            "tools": tools,
-        }
-
-        if system_prompt:
-            api_params["system"] = system_prompt
-
-        response = self.client.messages.create(**api_params)
-
-        # Parse response
-        tool_calls = []
-        text_content = []
-
-        for block in response.content:
-            if block.type == "text":
-                text_content.append(block.text)
-            elif block.type == "tool_use":
-                tool_calls.append({
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input
-                })
-
-        result = LLMToolUseResponse(
-            text="\n".join(text_content),
-            tool_calls=tool_calls,
-            stop_reason=response.stop_reason,
-            model=response.model,
-            usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            }
+        result = self._call_with_tools(
+            messages, tools, max_tokens, temperature, system_prompt
         )
 
         # Send trace (Issue #17)
@@ -722,45 +902,8 @@ class LLMClient:
         """
         start_time = time.time()
 
-        # print(f"[DEBUG continue_tool_use] Received {len(messages)} messages")
-        # for i, msg in enumerate(messages):
-        #     print(f"[DEBUG continue_tool_use]   msg[{i}]: role={msg.get('role')}, content_type={type(msg.get('content')).__name__}")
-
-        api_params = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "messages": messages,
-            "tools": tools
-        }
-
-        if system_prompt:
-            api_params["system"] = system_prompt
-
-        response = self.client.messages.create(**api_params)
-
-        # Parse response
-        tool_calls = []
-        text_content = []
-
-        for block in response.content:
-            if block.type == "text":
-                text_content.append(block.text)
-            elif block.type == "tool_use":
-                tool_calls.append({
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input
-                })
-
-        result = LLMToolUseResponse(
-            text="\n".join(text_content),
-            tool_calls=tool_calls,
-            stop_reason=response.stop_reason,
-            model=response.model,
-            usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            }
+        result = self._call_with_tools(
+            messages, tools, max_tokens, 0.3, system_prompt
         )
 
         # Send trace for continuation (Issue #17)
@@ -772,7 +915,7 @@ class LLMClient:
             execution_time=execution_time,
             system_prompt=system_prompt,
             purpose="tool_use_continuation",
-            messages=messages  # Pass complete messages for debugging
+            messages=messages
         )
 
         return result
@@ -834,7 +977,7 @@ class LLMClient:
             "metadata": {
                 "sessionId": session_id,
                 "purpose": purpose or f"{self.skill_name}_with_tools",
-                "llmProvider": "anthropic",
+                "llmProvider": self.provider,
                 "llmModel": response.model,
                 "llmRequest": {
                     "messages": trace_messages,

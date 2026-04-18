@@ -71,7 +71,7 @@ describe('Agent + Skill Standalone Integration', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY,
+          apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
         },
         sandbox: {
           type: 'local',
@@ -94,12 +94,12 @@ describe('Agent + Skill Standalone Integration', () => {
   });
 
   describe('Environment Setup', () => {
-    it('should have ANTHROPIC_API_KEY set', () => {
-      if (process.env.ANTHROPIC_API_KEY) {
-        expect(process.env.ANTHROPIC_API_KEY).toBeDefined();
+    it('should have LLM_API_KEY set', () => {
+      if (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) {
+        expect(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY).toBeDefined();
       } else {
         // Warn if API key is not set, but don't fail the test
-        console.warn('⚠️  ANTHROPIC_API_KEY not set - some tests may be limited');
+        console.warn('⚠️  LLM_API_KEY not set - some tests may be limited');
       }
     });
 
@@ -307,7 +307,7 @@ print(f"SUCCESS: Analysis complete - Score: {result.output.get('score', 'N/A')}"
           llm: {
             provider: 'anthropic',
             model: 'claude-sonnet-4-5',
-            apiKey: process.env.ANTHROPIC_API_KEY,
+            apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
           },
           sandbox: {
             type: 'local',

@@ -13,7 +13,7 @@ void LocalSandboxAdapter; // Mark as used
 
 // Helper to skip tests if no valid API key
 // Only accept Anthropic format (sk-ant-xxx) as valid for these tests
-const hasValidApiKey = process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-') || false;
+const hasValidApiKey = (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY)?.startsWith('sk-ant-') || false;
 const withApiKey = hasValidApiKey ? describe : describe.skip;
 
 withApiKey('Agent Context Integration', () => {
@@ -30,7 +30,7 @@ withApiKey('Agent Context Integration', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
+          apiKey: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) || 'test-key',
         },
         sandbox: {
           type: 'local',
@@ -163,8 +163,8 @@ withApiKey('Agent Context Integration', () => {
 
   describe('Context Quality', () => {
     it('should limit conversation history to prevent overwhelming LLM', async () => {
-      if (!process.env.ANTHROPOC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
+      if (!process.env.LLM_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+        console.warn('Skipping test - LLM_API_KEY not set');
         return;
       }
 
@@ -183,8 +183,8 @@ withApiKey('Agent Context Integration', () => {
     }, 300000);
 
     it('should handle empty context gracefully', async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPOC_API_KEY not set');
+      if (!process.env.LLM_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+        console.warn('Skipping test - LLM_API_KEY not set');
         return;
       }
 
@@ -196,7 +196,7 @@ withApiKey('Agent Context Integration', () => {
           llm: {
             provider: 'anthropic',
             model: 'claude-sonnet-4-5',
-            apiKey: process.env.ANTHROPIC_API_KEY || 'test-key',
+            apiKey: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) || 'test-key',
           },
           sandbox: {
             type: 'local',

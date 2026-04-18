@@ -108,13 +108,20 @@ async def _infer_artifacts_with_llm(
         }
     """
     try:
-        from anthropic import Anthropic
-
-        api_key = os.getenv('ANTHROPIC_API_KEY') or os.getenv('ANTHROPIC_AUTH_TOKEN')
+        # 直接创建底层 SDK client，不走 LLMClient trace 系统
+        provider = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")
+        api_key = os.getenv("LLM_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             return {'artifact_type': None, 'artifacts': [], 'confidence': 0.0, 'reasoning': 'No API key'}
 
-        client = Anthropic(api_key=api_key)
+        base_url = os.getenv("LLM_BASE_URL")
+
+        if provider == "openai-compatible":
+            from openai import OpenAI as OpenAISDK
+            raw_client = OpenAISDK(api_key=api_key, base_url=base_url)
+        else:
+            import anthropic
+            raw_client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
 
         # 构建输出描述
         result_type = result.get("result_type", "unknown")
@@ -174,15 +181,23 @@ Return ONLY a JSON object (no markdown):
 }}
 """
 
-        model = os.getenv('DEFAULT_LLM_MODEL', 'claude-3-5-haiku-20241022')
+        model = os.getenv('DEFAULT_LLM_MODEL', 'glm-4.7')
 
-        response = client.messages.create(
-            model=model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        response_text = response.content[0].text.strip()
+        if provider == "openai-compatible":
+            resp = raw_client.chat.completions.create(
+                model=model,
+                max_tokens=1024,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            response_text = (resp.choices[0].message.content or "").strip()
+        else:
+            resp = raw_client.messages.create(
+                model=model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            response_text = resp.content[0].text.strip()
 
         # 移除可能的 markdown 代码块标记
         if response_text.startswith('```'):

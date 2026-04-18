@@ -82,7 +82,7 @@ describe('LLMClientFactory', () => {
   describe('LLMClient 创建', () => {
     beforeEach(() => {
       // 设置环境变量
-      process.env.ANTHROPIC_API_KEY = 'test-key';
+      process.env.LLM_API_KEY = 'test-key';
       process.env.DEFAULT_LLM_PROVIDER = 'anthropic';
       process.env.DEFAULT_LLM_MODEL = 'claude-sonnet-4-5';
     });
@@ -251,7 +251,7 @@ describe('LLMClientFactory', () => {
     });
 
     it('应该回退到环境变量', () => {
-      process.env.ANTHROPIC_API_KEY = 'env-key';
+      process.env.LLM_API_KEY = 'env-key';
       process.env.DEFAULT_LLM_PROVIDER = 'anthropic';
       process.env.DEFAULT_LLM_MODEL = 'claude-sonnet-4-5';
 

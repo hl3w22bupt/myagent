@@ -266,7 +266,7 @@ withApiServer('Agent API Integration Tests', () => {
 });
 
 // Helper to skip tests if no API key
-const withApiKey = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const withApiKey = (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) ? describe : describe.skip;
 
 /**
  * Agent Direct Execution Tests (without API)
@@ -300,7 +300,7 @@ withApiKey('Agent Direct Execution Tests', () => {
         llm: {
           provider: 'anthropic',
           model: 'claude-sonnet-4-5',
-          apiKey: process.env.ANTHROPIC_API_KEY,
+          apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
         },
         sandbox: {
           type: 'local',
@@ -329,8 +329,8 @@ withApiKey('Agent Direct Execution Tests', () => {
   test(
     'should handle errors gracefully',
     async () => {
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('Skipping test - ANTHROPIC_API_KEY not set');
+      if (!process.env.LLM_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+        console.warn('Skipping test - LLM_API_KEY not set');
         return;
       }
 
