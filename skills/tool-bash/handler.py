@@ -269,7 +269,7 @@ def execute_shell_command(input_data: Dict[str, Any]) -> Dict[str, Any]:
                             message=llm_result["error"],
                             retryable=True,
                             suggestions=[
-                                "Check if ANTHROPIC_API_KEY is set",
+                                "Check if LLM_API_KEY is set",
                                 "Try using direct 'command' parameter instead",
                                 "Check your internet connection"
                             ]
@@ -431,7 +431,7 @@ if __name__ == "__main__":
     print(json.dumps(result, indent=2))
     print()
 
-    # Test 2: LLM-based command generation (requires ANTHROPIC_API_KEY)
+    # Test 2: LLM-based command generation (requires LLM_API_KEY)
     result = execute_shell_command({
         "task": "列出当前目录的文件"
     })

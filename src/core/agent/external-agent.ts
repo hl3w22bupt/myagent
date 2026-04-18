@@ -33,7 +33,7 @@ export class ExternalAgent extends Agent {
         local: {},
       },
       // LLM config omitted: Agent base class falls back to env vars
-      // (ANTHROPIC_API_KEY, DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, LLM_BASE_URL)
+      // (LLM_API_KEY, DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, LLM_BASE_URL)
       // Used by detectQuestionViaLLM() for HITL detection
     };
 

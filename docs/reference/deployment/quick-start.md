@@ -32,7 +32,7 @@ cp .env.example .env
 
 ```bash
 # 必需配置
-ANTHROPIC_API_KEY=sk-ant-xxx
+LLM_API_KEY=sk-ant-xxx
 
 # 数据库配置
 POSTGRES_HOST=localhost

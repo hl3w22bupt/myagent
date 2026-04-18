@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Set environment variables for testing
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+os.environ.setdefault("LLM_API_KEY", "test-key")
 
 from generators import (
     ContentAnalyzer,
@@ -175,13 +175,13 @@ async def main():
     print("="*60)
 
     # Check if API key is set
-    if not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY") == "test-key":
-        print("\n⚠️  WARNING: ANTHROPIC_API_KEY not set!")
+    if not os.getenv("LLM_API_KEY") or os.getenv("LLM_API_KEY") == "test-key":
+        print("\n⚠️  WARNING: LLM_API_KEY not set!")
         print("Tests will fail without a valid API key.")
         print("\nSet it with:")
-        print("  export ANTHROPIC_API_KEY='your-key-here'")
+        print("  export LLM_API_KEY='your-key-here'")
         print("\nOr create a .env file with:")
-        print("  ANTHROPIC_API_KEY=your-key-here")
+        print("  LLM_API_KEY=your-key-here")
 
         response = input("\nContinue anyway? (y/N): ")
         if response.lower() != 'y':

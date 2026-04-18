@@ -50,12 +50,12 @@ export function createLLM(config: LLMConfig): Anthropic | OpenAI {
 /**
  * Get LLM configuration from environment.
  *
- * Uses ANTHROPIC_API_KEY for API key.
+ * Uses LLM_API_KEY for API key (falls back to ANTHROPIC_API_KEY).
  * Uses DEFAULT_LLM_PROVIDER to determine provider type.
  * Uses DEFAULT_LLM_MODEL for model name.
  */
 export function getLLMConfigFromEnv(): LLMConfig {
-  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  const apiKey = process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || '';
   const provider = (process.env.DEFAULT_LLM_PROVIDER || 'anthropic') as LLMProvider;
   const model = process.env.DEFAULT_LLM_MODEL;
   const baseURL = process.env.LLM_BASE_URL;

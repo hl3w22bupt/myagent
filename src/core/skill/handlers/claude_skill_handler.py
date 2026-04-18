@@ -113,7 +113,7 @@ class ClaudeSkillHandler:
                         error=e,
                         suggestions=[
                             f"Check if {self.skill_name} skill is properly configured",
-                            "Verify LLM API keys are set (ANTHROPIC_API_KEY)",
+                            "Verify LLM API keys are set (LLM_API_KEY)",
                             "Check the prompt template format"
                         ]
                     ) \
@@ -479,10 +479,8 @@ class ClaudeSkillHandler:
             # 检查是否有 messagesCreate 方法（Anthropic 客户端）
             if hasattr(self._llm_client, 'messagesCreate'):
                 # Anthropic 客户端 - 同步调用
-                # Build system prompt for skill execution
                 system_prompt = f"You are {self.skill_name}, a specialized skill handler. Your role is to execute tasks according to this skill's capabilities."
 
-                # 传递 purpose 参数（如果支持）
                 import inspect
                 sig = inspect.signature(self._llm_client.messagesCreate)
                 if 'purpose' in sig.parameters:
@@ -491,54 +489,39 @@ class ClaudeSkillHandler:
                         {"role": "user", "content": prompt}
                     ], purpose=purpose or self.skill_name)
                 else:
-                    # 不支持 purpose 参数，使用旧调用方式
                     message = self._llm_client.messagesCreate([
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ])
-                # 返回文本内容（兼容现有代码）
                 return message.content[0].text
             elif hasattr(self._llm_client, 'generate'):
-                # LLMClient 有 generate 方法，但可能是协程
-                # 降级到直接使用 Anthropic API
-                return self._call_anthropic_api(prompt)
+                # 使用统一的 LLMClient（支持多 provider）
+                return self._call_llm_api(prompt)
             else:
                 raise AttributeError("LLMClient has no compatible method")
         except Exception as e:
             raise Exception(f"LLMClient failed: {e}")
 
-    def _call_anthropic_api(self, prompt: str) -> str:
-        """使用 Anthropic API 直接调用"""
-        import anthropic
+    def _call_llm_api(self, prompt: str) -> str:
+        """使用统一的 LLMClient 调用（支持 anthropic 和 openai-compatible provider）"""
+        from ..llm_client import get_llm_client
 
-        # 支持多种环境变量名
-        api_key = os.getenv('ANTHROPIC_API_KEY') or os.getenv('ANTHROPIC_AUTH_TOKEN')
-        if not api_key:
-            raise ValueError('ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN not found in environment')
-
-        client = anthropic.Anthropic(
-            api_key=api_key,
-            base_url=os.getenv('ANTHROPIC_BASE_URL')  # 支持代理服务器
+        client = get_llm_client(
+            task_id=self.task_id,
+            skill_name=self.skill_name
         )
 
-        # 使用正确的模型名称（支持多种命名方式）
-        model = os.getenv('DEFAULT_LLM_MODEL', 'claude-3-5-sonnet-20241022')
-
-        # Build system prompt for skill execution
         system_prompt = f"You are {self.skill_name}, a specialized AI assistant designed to execute tasks according to this skill's capabilities."
 
-        # Use messages array with system role for unified structure (Issue #17)
-        message = client.messages.create(
-            model=model,
+        response = client.generate(
+            prompt=prompt,
             max_tokens=16384,
             temperature=0.7,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
+            system_prompt=system_prompt,
+            purpose=self.skill_name
         )
 
-        return message.content[0].text
+        return response.content
 
     def _convert_to_output_builder(self, llm_response: str) -> Dict[str, Any]:
         """

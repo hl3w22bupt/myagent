@@ -66,7 +66,7 @@ async def test_refiner():
 
     if not refiner.llm_enabled:
         print("⚠️  LLM not available - using rule-based fallback")
-        print("   Set ANTHROPIC_API_KEY environment variable to enable LLM features")
+        print("   Set LLM_API_KEY environment variable to enable LLM features")
         print()
 
     results = []
@@ -181,8 +181,8 @@ if __name__ == "__main__":
     import os
 
     # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("⚠️  Warning: ANTHROPIC_API_KEY not set")
+    if not os.getenv("LLM_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"):
+        print("⚠️  Warning: LLM_API_KEY not set")
         print("   LLM features will use rule-based fallback\n")
 
     # Run tests

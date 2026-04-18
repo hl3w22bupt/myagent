@@ -69,7 +69,7 @@ export const handler = async ({ logger, emit }: any) => {
   await store.initialize();
 
   const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
   });
 
   const now = Date.now();

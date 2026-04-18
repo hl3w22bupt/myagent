@@ -79,7 +79,7 @@ export class Agent {
     const provider = (config.llm?.provider || process.env.DEFAULT_LLM_PROVIDER || 'anthropic') as
       | 'anthropic'
       | 'openai-compatible';
-    const apiKey = config.llm?.apiKey || process.env.ANTHROPIC_API_KEY || '';
+    const apiKey = config.llm?.apiKey || process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || '';
     const baseURL = config.llm?.baseURL || process.env.LLM_BASE_URL;
     const model = config.llm?.model || process.env.DEFAULT_LLM_MODEL;
 

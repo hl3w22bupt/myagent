@@ -3,7 +3,7 @@
  * Quick test script for GLM-4 configuration.
  *
  * Usage:
- *   export ANTHROPIC_API_KEY=your_glm_api_key
+ *   export LLM_API_KEY=your_glm_api_key
  *   npm run test-glm4
  */
 
@@ -13,7 +13,7 @@ async function testGLM4() {
   console.log('=== GLM-4 Configuration Test ===\n');
 
   // Read configuration from environment
-  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  const apiKey = process.env.LLM_API_KEY || '';
   const provider = process.env.DEFAULT_LLM_PROVIDER || 'openai-compatible';
   const model = process.env.DEFAULT_LLM_MODEL || 'glm-4';
   const baseURL = process.env.LLM_BASE_URL;
@@ -26,9 +26,9 @@ async function testGLM4() {
   console.log('');
 
   if (!apiKey) {
-    console.error('❌ ANTHROPIC_API_KEY not set!');
+    console.error('❌ LLM_API_KEY not set!');
     console.log('\nPlease set your GLM-4 API key:');
-    console.log('  export ANTHROPIC_API_KEY=your_glm_api_key');
+    console.log('  export LLM_API_KEY=your_glm_api_key');
     process.exit(1);
   }
 

@@ -113,6 +113,7 @@ export class LLMClientFactory {
       'anthropic';
 
     const apiKey = config?.apiKey ||
+      process.env.LLM_API_KEY ||
       process.env.ANTHROPIC_API_KEY ||
       process.env.OPENAI_API_KEY ||
       '';

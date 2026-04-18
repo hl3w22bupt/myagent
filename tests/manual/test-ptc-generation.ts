@@ -8,12 +8,12 @@ import { Agent } from '../../src/core/agent/agent.js';
 
 async function testPTCGeneration() {
   // Check environment
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY;
   const provider = process.env.DEFAULT_LLM_PROVIDER;
   const model = process.env.DEFAULT_LLM_MODEL;
 
   if (!apiKey) {
-    console.error('❌ ANTHROPIC_API_KEY not set!');
+    console.error('❌ LLM_API_KEY not set!');
     process.exit(1);
   }
 

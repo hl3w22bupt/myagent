@@ -282,7 +282,7 @@ print(f"OK")
           llm: {
             provider: 'anthropic',
             model: 'claude-sonnet-4-5',
-            apiKey: process.env.ANTHROPIC_API_KEY,
+            apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY,
           },
           sandbox: {
             type: 'local',

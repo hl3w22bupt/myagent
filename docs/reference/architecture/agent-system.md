@@ -232,7 +232,7 @@ agent:
 
 ```typescript
 // .env
-ANTHROPIC_API_KEY=sk-ant-xxx
+LLM_API_KEY=sk-ant-xxx
 DEFAULT_LLM_PROVIDER=anthropic
 DEFAULT_LLM_MODEL=claude-sonnet-4-6
 ```
