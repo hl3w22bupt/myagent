@@ -173,7 +173,7 @@ export const config = {
  */
 export const handler = async (context: any) => {
   // Validate request body
-  const validationResult = bodySchema.safeParse(context.body);
+  const validationResult = bodySchema.safeParse(context.request.body);
   if (!validationResult.success) {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }

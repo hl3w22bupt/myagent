@@ -35,8 +35,8 @@ export const config = {
  */
 export const handler = async (context: any) => {
   // Get soulId from path parameters (support both pathParams and params)
-  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId || context.params?.soulId;
-  const requestBody = context.body || context.request?.body || {};
+  const soulId = context.request.pathParams?.soulId || context.request?.params?.soulId;
+  const requestBody = context.request.body;
   const { userId, trigger_time, context: triggerContext, taskId: providedTaskId } = requestBody;
 
   if (!userId || !triggerContext) {

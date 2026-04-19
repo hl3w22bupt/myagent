@@ -105,7 +105,7 @@ function getMimeType(filePath: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handler = async (context: any) => {
   // Motia uses queryParams not query
-  const queryParams: Record<string, any> = context.queryParams || {};
+  const queryParams: Record<string, any> = context.request.queryParams || {};
   const path = queryParams.path as string;
 
   if (!path) {

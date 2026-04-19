@@ -27,7 +27,7 @@ export const config = {
  */
 export const handler: any = async (context: any) => {
   // Get soulId from path parameters
-  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
+  const soulId = context.request.pathParams?.soulId;
   const {
     userId,
     characterId,

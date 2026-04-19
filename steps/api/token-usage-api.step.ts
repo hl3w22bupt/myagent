@@ -85,8 +85,8 @@ export const handler = async (
   const { action, taskId, timeRange = '30d' } = {
     ...context.request?.pathParams,
     ...context.request?.queryParams,
-    ...context.params,
-    ...context.query,
+    ...context.request?.params,
+    ...context.request?.query,
   };
 
   logger.info('Token Usage API: Received request', { action, taskId, timeRange });

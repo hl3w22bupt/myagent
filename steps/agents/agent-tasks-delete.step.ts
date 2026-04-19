@@ -88,7 +88,7 @@ export const config = {
  */
 export const handler = async (context: any) => {
   // Parse query parameters
-  const queryParams: Record<string, any> = context.queryParams || {};
+  const queryParams: Record<string, any> = context.request.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
 
   if (!validationResult.success) {

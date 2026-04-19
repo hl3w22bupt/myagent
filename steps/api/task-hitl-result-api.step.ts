@@ -47,7 +47,7 @@ export const handler = async (context: any) => {
 
   try {
     // Get task ID from path parameters
-    const taskId = context.request.pathParams?.id || context.request.params?.id || context.params?.id;
+    const taskId = context.request.pathParams?.id || context.request?.params?.id || context.request?.params?.id;
 
     if (!taskId) {
       logger.error('Task HITL Result API: Task ID is missing');
@@ -61,7 +61,7 @@ export const handler = async (context: any) => {
     }
 
     // Parse request body
-    const body = context.body || context.request?.body || {};
+    const body = context.request.body;
     logger.info('Task HITL Result API: Request body', { body });
 
     // Validate input

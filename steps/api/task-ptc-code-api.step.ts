@@ -39,7 +39,7 @@ export const config = {
  * Returns all PTC code generations including the final code for each round.
  */
 export const handler = async (context: any) => {
-  const taskId = context.request.pathParams?.taskId || context.request.params?.taskId || context.query?.taskId;
+  const taskId = context.request.pathParams?.taskId || context.request?.params?.taskId || context.request?.query?.taskId;
 
   if (!taskId) {
     logger.warn('PTC Code API: Missing taskId parameter');

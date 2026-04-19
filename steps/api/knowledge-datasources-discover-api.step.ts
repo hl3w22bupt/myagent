@@ -16,7 +16,7 @@ export const config = {
 
 export const handler = async (context: any) => {
   try {
-    const { id } = context.params;
+    const { id } = context.request?.params;
 
     const dataSource = await getDataSource(id);
     if (!dataSource) {

@@ -35,8 +35,8 @@ export type RequestSchema = z.infer<typeof requestSchema>;
  * Soul Execution History handler.
  */
 export const handler = async (context: any) => {
-  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
-  const queryParams: Record<string, any> = context.request.queryParams || context.query || {};
+  const soulId = context.request.pathParams?.soulId || context.request?.params?.soulId;
+  const queryParams: Record<string, any> = context.request.queryParams || context.request?.query || {};
 
   logger.info('Fetching soul execution history', { soulId, queryParams });
 

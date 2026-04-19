@@ -39,7 +39,7 @@ export const config = {
 
 export const handler = async (context: any) => {
   try {
-    const body = context.body;
+    const body = context.request.body;
 
     // Validate request
     const validationResult = addDataSourceSchema.safeParse(body);

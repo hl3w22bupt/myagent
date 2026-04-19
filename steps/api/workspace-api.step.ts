@@ -106,7 +106,7 @@ export const handler = async (
 ) => {
   try {
     // 验证 taskId
-    const validationResult = taskIdSchema.safeParse(context.request?.pathParams?.taskId || context.params?.taskId);
+    const validationResult = taskIdSchema.safeParse(context.request?.pathParams?.taskId || context.request?.params?.taskId);
     if (!validationResult.success) {
       return {
         status: 400,

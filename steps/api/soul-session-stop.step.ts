@@ -24,8 +24,8 @@ export const config = {
  * Soul Session Stop handler.
  */
 export const handler = async (context: any) => {
-  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
-  const sessionId = context.request.pathParams?.sessionId || context.request.params?.sessionId;
+  const soulId = context.request.pathParams?.soulId;
+  const sessionId = context.request.pathParams?.sessionId;
 
   logger.info('Stopping soul session', { soulId, sessionId });
 

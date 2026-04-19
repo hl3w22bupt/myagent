@@ -388,6 +388,38 @@ export const handler = async (input: z.infer<typeof inputSchema>) => {
     try {
       const store = getDataStore();
 
+      // === Output History Tracking (merged from output-history-tracker) ===
+      // Save output to outputs table BEFORE updating task status
+      // This was previously a separate step but iii engine uses competing consumers
+      // for queue topics, so only one subscriber per topic receives the message.
+      if (normalizedResult.output && sessionId) {
+        try {
+          const existingOutputs = await store.getOutputs(taskId);
+          const round = existingOutputs.length + 1;
+
+          await store.addOutput({
+            taskId,
+            sessionId,
+            round,
+            messageId,
+            output: normalizedResult.output,
+            executionTime: normalizedResult.executionTime,
+            timestamp: new Date(),
+          });
+
+          logger.info('[Output History] Output saved', {
+            taskId,
+            round,
+            outputLength: normalizedResult.output?.length || 0,
+          });
+        } catch (outputError: any) {
+          logger.warn('[Output History] Failed to save output', {
+            taskId,
+            error: outputError.message,
+          });
+        }
+      }
+
       // Check if task is awaiting clarification (HITL checkpoint)
       const isAwaitingClarification = normalizedResult.error === 'AWAITING_CLARIFICATION' ||
                                      (normalizedResult.metadata as any)?.hitl === true;

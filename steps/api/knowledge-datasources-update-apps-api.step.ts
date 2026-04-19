@@ -20,8 +20,8 @@ export const config = {
 
 export const handler = async (context: any) => {
   try {
-    const { id } = context.params;
-    const body = context.body;
+    const { id } = context.request?.params;
+    const body = context.request.body;
 
     // Validate request
     const validationResult = updateAppsSchema.safeParse(body);

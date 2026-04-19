@@ -33,7 +33,7 @@ export const handler = async (context: any) => {
   logger.info('Pin Task API: Received request');
 
   try {
-    const body = context.body || context.request?.body || {};
+    const body = context.request.body;
     const parsed = pinTaskSchema.parse(body);
 
     const dataStore = getDataStore();

@@ -319,6 +319,15 @@ export interface WorkflowOptions {
   dryRun?: boolean;
   parentContext?: any;
   parentSessionId?: string;
+
+  /** Step ID to resume execution from (skips all prior steps) */
+  resumeFrom?: string;
+
+  /** Previous task ID to load context/state from */
+  previousTaskId?: string;
+
+  /** Feedback or instructions for the resumed workflow */
+  feedback?: string;
 }
 
 // Workflow execution result

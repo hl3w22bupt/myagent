@@ -24,7 +24,7 @@ export const config = {
  * Soul Configuration handler.
  */
 export const handler = async (context: any) => {
-  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
+  const soulId = context.request.pathParams?.soulId;
 
   logger.info('Fetching soul configuration', { soulId });
 

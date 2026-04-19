@@ -25,7 +25,7 @@ export const config = {
  * Workflow detail handler.
  */
 export const handler = async (context: any) => {
-  const { name } = context.request?.pathParams || context.request?.params || context.params;
+  const { name } = context.request?.pathParams || context.request?.params || context.request?.params;
   logger.info('Workflow Detail API: Received request', { workflowName: name });
 
   try {
