@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { getWorkflows, getWorkflowDetail } from '../services/workflowService'
 import WorkflowDAG from '../components/workflows/WorkflowDAG'
 import WorkflowDetailModal from '../components/workflows/WorkflowDetailModal'
@@ -390,9 +392,24 @@ function Workflows() {
                   <p>加载 YAML 配置...</p>
                 </div>
               ) : selectedWorkflowDetail?.yaml ? (
-                <pre className="wf-yaml-block">
-                  <code>{selectedWorkflowDetail.yaml}</code>
-                </pre>
+                <div className="wf-yaml-block">
+                  <SyntaxHighlighter
+                    language="yaml"
+                    style={oneDark}
+                    customStyle={{
+                      margin: 0,
+                      borderRadius: '0.75rem',
+                      fontSize: '0.8125rem',
+                      lineHeight: 1.7,
+                      padding: '1.25rem',
+                      background: '#1E293B',
+                    }}
+                    showLineNumbers
+                    lineNumberStyle={{ color: '#475569', minWidth: '2.5em' }}
+                  >
+                    {selectedWorkflowDetail.yaml}
+                  </SyntaxHighlighter>
+                </div>
               ) : (
                 <div className="wf-modal-error">
                   <svg width="40" height="40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

@@ -665,20 +665,9 @@
 
 /* ========== YAML Code Block ========== */
 .wf-yaml-block {
-  margin: 0;
-  padding: 1.25rem;
-  background: #1E293B;
   border-radius: 0.75rem;
-  overflow: auto;
-  font-size: 0.8125rem;
-  line-height: 1.7;
+  overflow: hidden;
   border: 1px solid #334155;
-}
-
-.wf-yaml-block code {
-  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  color: #E2E8F0;
-  white-space: pre;
 }
 
 /* ========== Responsive ========== */
