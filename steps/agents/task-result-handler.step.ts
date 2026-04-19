@@ -10,7 +10,8 @@
  */
 
 import { z } from 'zod';
-import { EventConfig } from 'motia';
+import { type StepConfig, logger, stateManager, queue } from 'motia';
+import { taskResultStream } from '../streams/task-result.stream';
 import { stateLockManager } from '../../src/utils/state-lock';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 import { writeFile, mkdir } from 'fs/promises';
@@ -166,26 +167,15 @@ export const inputSchema = z
 /**
  * Task Result Handler Step configuration.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'task-result-handler',
-  description: 'Handles agent task results: parses output, saves artifacts, updates task status',
-
-  /**
-   * Subscribe to both successful and failed agent task events.
-   */
-  subscribes: ['agent.task.completed', 'agent.task.failed'],
-
-  /**
-   * No events emitted (direct database access).
-   */
-  emits: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  description: 'Handles agent task completion/failure events and processes results',
+  triggers: [
+    queue('agent.task.completed'),
+    queue('agent.task.failed'),
+  ],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Parse unified format result from output string.
@@ -285,7 +275,7 @@ function parseUnifiedResult(output: string | undefined): Record<string, unknown>
  * Also pushes processed results to taskResult stream for real-time frontend updates.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const handler = async (input: z.infer<typeof inputSchema>, { logger, state, streams }: any) => {
+export const handler = async (input: z.infer<typeof inputSchema>) => {
   const timestamp = new Date().toISOString();
 
   // Determine if this is a completed or failed event
@@ -1253,7 +1243,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
     // ✅ 使用 atomicUpdate 保证原子性，防止竞态条件
     const updatedHistory: any[] = await stateLockManager.atomicUpdate(
-      state,
+      stateManager,
       groupId,
       key,
       (history: any) => {
@@ -1308,6 +1298,9 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
   // ========== Push to taskResult Stream for real-time updates ==========
   try {
+    if (!taskId) {
+      logger.warn('No taskId provided, skipping stream push');
+    } else {
     // Get store instance
     const unifiedStore = getDataStore();
 
@@ -1355,7 +1348,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
 
       // Push to taskResult stream with the same format as /agent/result API
       // Use taskId as groupId - frontend subscribes with: stream.subscribeGroup('taskResult', taskId)
-      await streams.taskResult.set(taskId, taskId, {
+      await taskResultStream.set(taskId, taskId, {
         taskId: finalTask.id,
         task: finalTask.task,
         sessionId: finalTask.sessionId,
@@ -1384,6 +1377,7 @@ export const handler = async (input: z.infer<typeof inputSchema>, { logger, stat
     } else {
       logger.warn('Task not found in database when trying to push to stream', { taskId });
     }
+    } // end taskId guard
   } catch (error: any) {
     // Don't fail the handler if stream push fails
     logger.error('Failed to push task result to stream', {
