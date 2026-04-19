@@ -1,66 +1,38 @@
-import type { ApiRouteConfig } from 'motia';
-import { z as _z } from 'zod';
+/**
+ * Get Stream History API Step configuration.
+ */
+
+import { type Handlers, type StepConfig, logger } from 'motia';
+import { z } from 'zod';
+import { taskExecutionStream } from '../streams/task-execution.stream';
 
 /**
  * Get Stream History API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'stream-history-api',
   description: 'API endpoint for fetching stream history for a task',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/tasks/:id/stream-history',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/tasks/:id/stream-history' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Input schema for stream history requests.
  */
-export const inputSchema = _z.object({
-  /**
-   * The task ID to fetch stream history for.
-   */
-  id: _z.string(),
-});
+const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
 /**
  * Stream History handler.
  */
-export const handler = async (
-  input: any,
-  { logger, streams }: any
-) => {
-  const { id: taskId } = input.pathParams;
+export const handler: Handlers<typeof config> = async (context) => {
+  const taskId = context.request.pathParams.id;
 
   logger.info('Stream History API: Received request', { taskId });
 
   try {
-    if (!streams || !streams.taskExecution) {
-      logger.error('Stream History API: Streams not available');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Streams not available',
-        },
-      };
-    }
-
-    // 获取stream的所有数据 - 使用 getGroup 方法
-    const streamData = await streams.taskExecution.getGroup(taskId);
+    // Get all stream data for this task
+    const streamData = await taskExecutionStream.list(taskId);
 
     logger.info('Stream History API: Retrieved data', {
       taskId,

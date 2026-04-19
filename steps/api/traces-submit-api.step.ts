@@ -6,33 +6,20 @@
  * directly access Motia streams.
  */
 
-import type { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger, enqueue } from 'motia';
 import { z } from 'zod';
+import { executionTracesStream } from '../streams/execution-traces.stream';
 
 /**
  * Submit Execution Trace API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'traces-submit-api',
   description: 'API endpoint for submitting execution traces from Python skills',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/traces/submit',
-  method: 'POST',
-
-  /**
-   * Events emitted.
-   */
-  emits: ['execution.trace.created'],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/traces/submit' }],
+  enqueues: ['execution.trace.created'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Schema for execution trace submission.
@@ -75,15 +62,12 @@ const traceSubmitSchema = z.object({
 /**
  * Submit Execution Trace handler.
  */
-export const handler = async (
-  input: any,
-  { logger, streams, emit }: any
-) => {
+export const handler: Handlers<typeof config> = async (context) => {
   logger.info('Submit Trace API: Received request');
 
   try {
     // Parse and validate request body
-    const traceData = traceSubmitSchema.parse(input.body);
+    const traceData = traceSubmitSchema.parse(context.request.body);
 
     logger.info('Submit Trace API: Validated trace data', {
       id: traceData.id,
@@ -92,20 +76,8 @@ export const handler = async (
       status: traceData.status,
     });
 
-    if (!streams || !streams.executionTraces) {
-      logger.error('Submit Trace API: Streams not available');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Streams not available',
-        },
-      };
-    }
-
     // Store trace data in executionTraces stream
-    // Parameter order: (groupId, id, data)
-    await streams.executionTraces.set(traceData.taskId, traceData.id, traceData);
+    await executionTracesStream.set(traceData.taskId, traceData.id, traceData);
 
     logger.info('Submit Trace API: Trace stored successfully', {
       id: traceData.id,
@@ -114,8 +86,8 @@ export const handler = async (
 
     // Emit execution.trace.created event for token usage extraction
     // Use startsWith to match llm_call, llm_call_execute, llm_call_skill_prompt, etc.
-    if (traceData.stage?.startsWith('llm_call') && emit) {
-      await emit({
+    if (traceData.stage?.startsWith('llm_call')) {
+      await enqueue({
         topic: 'execution.trace.created',
         data: traceData,
       });
