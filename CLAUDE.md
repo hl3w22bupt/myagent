@@ -49,7 +49,7 @@ pkill -f "vite"             # Stop frontend
 ```
 
 **Architecture**: Motia 1.0.x runs on iii engine (Rust). Three processes:
-1. `iii` — Engine process (HTTP API on :3000, Stream on :4112, Engine WS on :49135)
+1. `iii` — Engine process (HTTP API on :3000, Stream on :3012, Engine WS on :49135)
 2. `node dist/index-dev.js` — Worker process (registers step handlers with engine)
 3. `node outputs-server.cjs` — Media server (serves large media files on :3010, bypasses iii WebSocket size limits)
 

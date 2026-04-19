@@ -9,7 +9,7 @@
 **端口说明**：
 - 后端服务：3000 端口（iii Engine REST API + Motia Worker）
 - Media 服务：3010 端口（独立媒体文件服务，绕过 iii 引擎 WebSocket 大小限制）
-- Stream 服务：4112 端口（iii Engine Stream Module）
+- Stream 服务：3012 端口（iii Engine Stream Module）
 - iii Engine：49135 端口（Engine WebSocket）
 
 #### 启动服务（推荐）

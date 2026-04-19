@@ -259,7 +259,7 @@ port: ${III_PORT:49234}
 modules:
   - class: modules::stream::StreamModule
     config:
-      port: ${STREAMS_PORT:4112}
+      port: ${STREAMS_PORT:3012}
       host: 127.0.0.1
       adapter:
         class: modules::stream::adapters::KvStore

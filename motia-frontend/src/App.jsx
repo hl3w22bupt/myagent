@@ -19,7 +19,7 @@ import { MotiaStreamProvider } from '@motiadev/stream-client-react'
 
 function App() {
   const streamUrl = import.meta.env.VITE_STREAM_URL
-    || 'ws://localhost:4112'
+    || 'ws://localhost:3012'
 
   return (
     <ErrorBoundary>
