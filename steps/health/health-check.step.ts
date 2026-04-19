@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger, stateManager } from 'motia';
 
 /**
  * Response schema for health check.
@@ -35,34 +35,19 @@ void healthResponseSchema; // Mark as used
 /**
  * Health Check API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'health-check',
   description: 'Health check and system status endpoint',
-
-  /**
-   * API route configuration.
-   */
-  path: '/health',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * No flow assignment.
-   */
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/health' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Health Check handler.
  *
  * Returns system health status and metrics.
  */
-export const handler = async (request: any, { logger, state }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   const _startTime = Date.now();
   void _startTime; // Mark as used
 
@@ -84,7 +69,7 @@ export const handler = async (request: any, { logger, state }: any) => {
     let metrics;
     try {
       // Use Motia state API directly
-      const history = await state.get('agent:execution', 'history') || [];
+      const history: any[] = await stateManager.list('agent:execution') || [];
 
       const successfulTasks = history.filter((entry: any) => entry.success).length;
       const failedTasks = history.filter((entry: any) => !entry.success).length;
