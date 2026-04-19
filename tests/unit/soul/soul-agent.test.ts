@@ -55,7 +55,8 @@ describe('SoulAgent', () => {
     it('should have soul state initialized', () => {
       const state = soulAgent.getSoulState();
       expect(state.status).toBe('IDLE');
-      expect(state.currentTask).toBeNull();
+      // currentTask defaults to taskId in Contractor pattern
+      expect(state.currentTask).toBe('task-test-session-soul');
       expect(state.statistics.totalTasks).toBe(0);
     });
 
@@ -163,7 +164,8 @@ describe('SoulAgent', () => {
   describe('hibernation configuration', () => {
     it('should have correct idle timeout', () => {
       const config = soulAgent.getSoulConfig();
-      expect(config.hibernation.idle_timeout).toBe(3600000); // 1 hour
+      // idle_timeout changed from 3600000 (1h) to 7200000 (2h)
+      expect(config.hibernation.idle_timeout).toBe(7200000); // 2 hours
     });
 
     it('should have idle timeout as number', () => {
@@ -248,14 +250,15 @@ describe('SoulAgent', () => {
       const state = soulAgent.getSoulState();
 
       expect(state).toHaveProperty('currentTask');
-      expect(typeof state.currentTask === 'object' || state.currentTask === null).toBe(true);
+      // currentTask is now set to taskId by default in Contractor pattern
+      expect(typeof state.currentTask === 'string').toBe(true);
     });
 
-    it('should reset currentTask to null when IDLE', () => {
-      // Force agent to IDLE state
+    it('should have currentTask set to taskId when IDLE', () => {
+      // In Contractor pattern, currentTask defaults to taskId
       const state = soulAgent.getSoulState();
       expect(state.status).toBe('IDLE');
-      expect(state.currentTask).toBeNull();
+      expect(state.currentTask).toBe('task-test-session-soul');
     });
   });
 
@@ -265,9 +268,9 @@ describe('SoulAgent', () => {
       // User messages cancel current tasks and take priority
       const state = soulAgent.getSoulState();
 
-      // When IDLE, both types of triggers can be handled
+      // When IDLE, currentTask is set to taskId
       expect(state.status).toBe('IDLE');
-      expect(state.currentTask).toBeNull();
+      expect(state.currentTask).toBe('task-test-session-soul');
     });
   });
 });

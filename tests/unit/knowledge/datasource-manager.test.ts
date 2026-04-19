@@ -243,11 +243,13 @@ describe('DataSourceManager', () => {
               { name: 'js_docs', size: '50 MB' },
             ],
           })
-          // Mock count queries
+          // Mock count query for python_docs
           .mockResolvedValueOnce({ rows: [{ count: '1000' }] })
-          .mockResolvedValueOnce({ rows: [{ count: '500' }] })
-          // Mock column queries
+          // Mock column query for python_docs
           .mockResolvedValueOnce({ rows: [{ column_name: 'embedding', data_type: 'USER-DEFINED' }] })
+          // Mock count query for js_docs
+          .mockResolvedValueOnce({ rows: [{ count: '500' }] })
+          // Mock column query for js_docs
           .mockResolvedValueOnce({ rows: [{ column_name: 'embedding', data_type: 'USER-DEFINED' }] });
 
         const result = await discoverCollections(postgresConfig);
@@ -275,8 +277,7 @@ describe('DataSourceManager', () => {
         await discoverCollections(postgresConfig);
 
         expect(mockPool.query).toHaveBeenCalledWith(
-          expect.stringContaining("AND table_name NOT IN"),
-          expect.anything()
+          expect.stringContaining("AND table_name NOT IN")
         );
       });
 
@@ -412,7 +413,7 @@ describe('DataSourceManager', () => {
   });
 
   describe('getPool() and closePool()', () => {
-    it('should create and cache connection pool', () => {
+    it('should create and cache connection pool', async () => {
       const config: DataSourceConfig = {
         type: 'postgres-pgvector',
         name: 'test',
@@ -423,7 +424,7 @@ describe('DataSourceManager', () => {
         },
       };
 
-      const mockPool = {};
+      const mockPool = { end: jest.fn() };
       MockPool.mockImplementation(() => mockPool);
 
       const pool1 = getPool(config);

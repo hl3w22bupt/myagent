@@ -2,14 +2,17 @@
  * Unit tests for Soul Data Services
  *
  * Tests soul_states and soul_contexts database operations
+ *
+ * NOTE: SoulContextDataService tests are skipped because the service is
+ * deprecated. Soul Agent now uses standard task_contexts instead of soul_contexts.
+ * The old methods (saveSoulContext, getSoulContext, addConversationMessage, etc.)
+ * are now no-ops that return stub values.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { soulStateDataService } from '@/core/database/soul-data-service';
-import { soulContextManager } from '@/core/context/soul-context-manager';
-const soulContextDataService = soulContextManager as any;
-import { SoulState } from '@/core/agent/soul-types';
 import { getDataStore } from '@/core/database/data-store';
+import { SoulState } from '@/core/agent/soul-types';
 
 describe('Soul Data Services', () => {
   const testSessionId = 'test-soul-session';
@@ -135,7 +138,19 @@ describe('Soul Data Services', () => {
     });
   });
 
-  describe('SoulContextDataService', () => {
+  // SoulContextDataService tests are skipped because the service is deprecated.
+  // Soul Agent now uses standard task_contexts instead of soul_contexts.
+  // All methods (saveSoulContext, getSoulContext, addConversationMessage, etc.)
+  // are now no-ops that return stub values.
+  describe.skip('SoulContextDataService (deprecated)', () => {
+    const soulContextDataService = {
+      saveSoulContext: async () => {},
+      getSoulContext: async () => null,
+      addConversationMessage: async () => {},
+      updateUserProfile: async () => {},
+      updateRelationshipState: async () => {},
+      getRecentConversations: async () => [],
+    } as any;
     it('should save soul context', async () => {
       const userProfile = {
         name: '测试用户',
@@ -230,7 +245,15 @@ describe('Soul Data Services', () => {
     });
   });
 
-  describe('Integration: SoulState and SoulContext', () => {
+  // Skipped: Integration test between SoulState and SoulContext
+  // SoulContext is deprecated - use task_contexts instead
+  describe.skip('Integration: SoulState and SoulContext (deprecated)', () => {
+    // Stub for deprecated soulContextDataService
+    const soulContextDataService = {
+      saveSoulContext: async () => {},
+      getSoulContext: async () => ({ userProfile: { name: '' }, relationshipState: {} }),
+    } as any;
+
     it('should maintain consistency between state and context', async () => {
       const integrationSessionId = 'test-integration-session';
 

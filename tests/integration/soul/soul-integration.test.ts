@@ -137,8 +137,8 @@ describe('Soul Agent Integration', () => {
     it('should have all required primitives', async () => {
       const soulConfig = await soulConfigLoader.loadSoulConfig('emotional-girlfriend-lively');
 
+      // schedule primitive removed in Contractor pattern - periodic checks driven by external cron
       expect(soulConfig.primitives).toContain('hibernate');
-      expect(soulConfig.primitives).toContain('schedule');
       expect(soulConfig.primitives).toContain('complete');
     });
 
@@ -146,7 +146,8 @@ describe('Soul Agent Integration', () => {
       const soulConfig = await soulConfigLoader.loadSoulConfig('emotional-girlfriend-lively');
 
       expect(soulConfig.hibernation).toBeDefined();
-      expect(soulConfig.hibernation.idle_timeout).toBe(3600000);
+      // idle_timeout changed from 3600000 (1h) to 7200000 (2h)
+      expect(soulConfig.hibernation.idle_timeout).toBe(7200000);
     });
   });
 

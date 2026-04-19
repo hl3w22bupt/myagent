@@ -85,7 +85,7 @@ describe('DataStore', () => {
     expect(retrieved?.workingMemory).toEqual({ key: 'value' });
   });
 
-  it('should add message to existing context', async () => {
+  it('should add conversation round to existing context', async () => {
     const taskId = uuidv4();
     const sessionId = uuidv4();
 
@@ -99,19 +99,20 @@ describe('DataStore', () => {
 
     await dataStore.createTaskContext(taskId, sessionId, '测试');
 
-    const message = {
-      id: 'msg-' + uuidv4(),
+    // addConversationRound replaces the old addMessage API
+    const round = {
       role: 'assistant' as const,
       content: '你好！有什么我可以帮助的吗？',
-      metadata: { timestamp: new Date(), tokens: 20 },
-      compressed: false,
+      timestamp: Date.now(),
+      metadata: { tokens: 20 },
     };
 
-    const updated = await dataStore.addMessage(taskId, message);
+    const updated = await dataStore.addConversationRound(taskId, round);
 
-    // addMessage returns the updated context with conversationRounds
+    // addConversationRound returns the updated context with conversationRounds
     expect(updated.conversationRounds).toBeDefined();
-    expect(updated.conversationRounds.length).toBeGreaterThanOrEqual(0);
+    expect(updated.conversationRounds.length).toBeGreaterThanOrEqual(1);
+    expect(updated.conversationRounds[0].content).toBe('你好！有什么我可以帮助的吗？');
   });
 
   it('should track artifact changes', async () => {

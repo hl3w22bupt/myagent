@@ -35,7 +35,11 @@ describe('Soul Trigger System', () => {
   });
 
   afterAll(async () => {
-    await soulScheduler.shutdown();
+    try {
+      await soulScheduler.shutdown();
+    } catch {
+      // Ignore shutdown errors in test cleanup
+    }
   });
 
   describe('SoulContextManager', () => {

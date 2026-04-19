@@ -1,7 +1,11 @@
 /**
  * Integration tests for Soul Agent primitives
  *
- * Tests send_notification and schedule primitives
+ * Tests send_notification primitive.
+ *
+ * NOTE: The schedule primitive was removed in the Contractor pattern refactoring.
+ * Periodic checks are now driven by external cron (soul-periodic-check) rather
+ * than an in-agent scheduleNext method. Schedule-related tests are skipped.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
@@ -41,7 +45,13 @@ describe('Soul Agent Primitives Integration', () => {
 
   afterAll(async () => {
     // Cleanup
-    await soulStateDataService.deleteSoulState(testSessionId);
+    try {
+      await soulStateDataService.deleteSoulState(testSessionId);
+    } catch {
+      // Ignore cleanup errors
+    }
+    // Shutdown scheduler to clear cleanup interval and hibernate souls
+    await soulScheduler.shutdown();
   });
 
   describe('send_notification primitive', () => {
@@ -104,7 +114,10 @@ describe('Soul Agent Primitives Integration', () => {
     });
   });
 
-  describe('schedule primitive', () => {
+  // Schedule primitive removed in Contractor pattern refactoring.
+  // Periodic checks are now driven by external cron (soul-periodic-check),
+  // not by an in-agent scheduleNext() method.
+  describe.skip('schedule primitive (removed in Contractor pattern)', () => {
     it('should schedule wakeup with delay', async () => {
       const soulAgent = await soulScheduler.activateSoul(testSoulId, testSessionId);
 
@@ -207,7 +220,9 @@ describe('Soul Agent Primitives Integration', () => {
     });
   });
 
-  describe('Integration: Multiple primitives', () => {
+  // Skipped: scheduleNext was removed in Contractor pattern.
+  // Only send_notification is tested now.
+  describe.skip('Integration: Multiple primitives (schedule removed)', () => {
     it('should send notification and schedule wakeup in sequence', async () => {
       const soulAgent = await soulScheduler.activateSoul(testSoulId, testSessionId);
 

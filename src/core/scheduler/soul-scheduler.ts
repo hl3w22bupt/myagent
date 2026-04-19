@@ -385,6 +385,9 @@ export class SoulScheduler {
   async shutdown(): Promise<void> {
     console.log('[SoulScheduler] Shutting down...');
 
+    // Stop cleanup interval FIRST to prevent new operations
+    this.stopCleanupInterval();
+
     const hibernatePromises: Promise<void>[] = [];
 
     // Hibernate all active souls
@@ -393,10 +396,7 @@ export class SoulScheduler {
       hibernatePromises.push(this.hibernateSoul(instance.soulAgent));
     });
 
-    await Promise.all(hibernatePromises);
-
-    // Stop cleanup interval
-    this.stopCleanupInterval();
+    await Promise.allSettled(hibernatePromises);
 
     console.log('[SoulScheduler] Shutdown completed');
   }

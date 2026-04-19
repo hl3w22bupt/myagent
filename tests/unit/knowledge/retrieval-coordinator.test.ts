@@ -14,28 +14,38 @@ import type { KnowledgeEntry } from '../../../src/core/knowledge/interfaces/vect
 import { PostgresVectorStore } from '../../../src/core/knowledge/adapters/postgres-adapter';
 import { getLanceDBAdapter } from '../../../src/core/knowledge/loaders/lancedb-loader';
 
-// Mock PostgresVectorStore
+// Shared mock functions that all PostgresVectorStore instances will use
+const mockPostgresRetrieve = jest.fn();
+const mockPostgresClose = jest.fn();
+
+// Mock PostgresVectorStore - all instances share the same retrieve/close mocks
 jest.mock('../../../src/core/knowledge/adapters/postgres-adapter', () => ({
   PostgresVectorStore: jest.fn().mockImplementation(() => ({
-    retrieve: jest.fn(),
-    close: jest.fn(),
+    retrieve: mockPostgresRetrieve,
+    close: mockPostgresClose,
   })),
 }));
 
 // Mock LanceDB loader
+const mockLanceDBRetrieve = jest.fn();
+const mockLanceDBClose = jest.fn();
+
 jest.mock('../../../src/core/knowledge/loaders/lancedb-loader', () => ({
   getLanceDBAdapter: jest.fn().mockResolvedValue(
     class MockLanceDBVectorStore {
-      retrieve = jest.fn();
-      close = jest.fn();
+      retrieve = mockLanceDBRetrieve;
+      close = mockLanceDBClose;
     }
   ),
 }));
 
+// Mock validateConfig to avoid validation errors in tests
+jest.mock('../../../src/core/knowledge/interfaces/adapter-config.interface', () => ({
+  validateConfig: jest.fn(),
+}));
+
 describe('RetrievalCoordinator', () => {
   let coordinator: RetrievalCoordinator;
-  let mockPostgresStore: any;
-  let mockLanceDBStore: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -45,19 +55,6 @@ describe('RetrievalCoordinator', () => {
       globalLimit: 5,
       normalizationStrategy: 'min-max',
     });
-
-    // Setup mock stores
-    const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-    mockPostgresStore = new PostgresVectorStore(undefined as any);
-
-    // Mock LanceDB adapter
-    const mockedGetLanceDBAdapter = getLanceDBAdapter as any;
-    mockedGetLanceDBAdapter.mockResolvedValue(
-      class MockLanceDBVectorStore {
-        retrieve = jest.fn();
-        close = jest.fn();
-      }
-    );
   });
 
   afterEach(async () => {
@@ -99,7 +96,7 @@ describe('RetrievalCoordinator', () => {
         { id: '2', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.8, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinator.retrieve(
         [postgresConfig],
@@ -110,7 +107,7 @@ describe('RetrievalCoordinator', () => {
 
       expect(results).toHaveLength(2);
       expect(results[0].content).toBe('Result 1');
-      expect(mockPostgresStore.retrieve).toHaveBeenCalledWith(
+      expect(mockPostgresRetrieve).toHaveBeenCalledWith(
         'test-collection',
         'test query',
         expect.objectContaining({ limit: 10 })
@@ -128,15 +125,10 @@ describe('RetrievalCoordinator', () => {
         { id: '4', tenantId: 'default', collectionName: 'test', content: 'Lance Result 2', similarity: 0.75, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      // First call gets PostgresVectorStore
-      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const mockStore1 = new PostgresVectorStore(undefined as any);
-      (mockStore1.retrieve as jest.Mock).mockResolvedValue(postgresResults);
-
-      // Second call gets LanceDBVectorStore
-      const MockLanceDBAdapter = await getLanceDBAdapter();
-      const mockStore2 = new MockLanceDBAdapter();
-      (mockStore2.retrieve as jest.Mock).mockResolvedValue(lancedbResults);
+      // First call (postgres config) uses mockPostgresRetrieve
+      mockPostgresRetrieve.mockResolvedValue(postgresResults);
+      // Second call (lancedb config) uses mockLanceDBRetrieve
+      mockLanceDBRetrieve.mockResolvedValue(lancedbResults);
 
       const results = await coordinator.retrieve(
         [postgresConfig, lancedbConfig],
@@ -161,7 +153,7 @@ describe('RetrievalCoordinator', () => {
         { id: '3', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.7, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinator.retrieve(
         [postgresConfig],
@@ -189,7 +181,7 @@ describe('RetrievalCoordinator', () => {
         createdAt: new Date(), updatedAt: new Date(),
       }));
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinator.retrieve(
         [postgresConfig],
@@ -207,14 +199,9 @@ describe('RetrievalCoordinator', () => {
         { id: '4', tenantId: 'default', collectionName: 'test', content: 'PG Result', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const mockStore1 = new PostgresVectorStore(undefined as any);
-      (mockStore1.retrieve as jest.Mock).mockResolvedValue(postgresResults);
-
-      const mockedGetLanceDBAdapter = getLanceDBAdapter as jest.MockedFunction<typeof getLanceDBAdapter>;
-      const MockLanceDBAdapter = await getLanceDBAdapter();
-      const mockStore2 = new MockLanceDBAdapter();
-      mockStore2.retrieve.mockRejectedValue(new Error('LanceDB failed'));
+      // Postgres succeeds, LanceDB fails
+      mockPostgresRetrieve.mockResolvedValue(postgresResults);
+      mockLanceDBRetrieve.mockRejectedValue(new Error('LanceDB failed'));
 
       const results = await coordinator.retrieve(
         [postgresConfig, lancedbConfig],
@@ -229,7 +216,7 @@ describe('RetrievalCoordinator', () => {
     });
 
     it('should return empty array when all sources fail', async () => {
-      mockPostgresStore.retrieve.mockRejectedValue(new Error('PostgreSQL failed'));
+      mockPostgresRetrieve.mockRejectedValue(new Error('PostgreSQL failed'));
 
       const results = await coordinator.retrieve(
         [postgresConfig],
@@ -243,7 +230,7 @@ describe('RetrievalCoordinator', () => {
 
     it('should handle query timeout', async () => {
       // Mock a slow query that times out
-      mockPostgresStore.retrieve.mockImplementation(
+      mockPostgresRetrieve.mockImplementation(
         () => new Promise(resolve => setTimeout(() => resolve([]), 15000))
       );
 
@@ -271,7 +258,7 @@ describe('RetrievalCoordinator', () => {
         { id: '6', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinatorNoNorm.retrieve(
         [postgresConfig],
@@ -280,14 +267,15 @@ describe('RetrievalCoordinator', () => {
         'test query'
       );
 
-      expect(results[0].similarity).toBe(0.5);
-      expect(results[1].similarity).toBe(0.9);
+      // Results are sorted by similarity descending
+      expect(results[0].similarity).toBe(0.9);
+      expect(results[1].similarity).toBe(0.5);
 
       await coordinatorNoNorm.close();
     });
 
     it('should handle empty result set', async () => {
-      mockPostgresStore.retrieve.mockResolvedValue([]);
+      mockPostgresRetrieve.mockResolvedValue([]);
 
       const results = await coordinator.retrieve(
         [postgresConfig],
@@ -312,7 +300,7 @@ describe('RetrievalCoordinator', () => {
         createdAt: new Date(), updatedAt: new Date(),
       }));
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       await coordinatorWithLimit.retrieve(
         [postgresConfig],
@@ -321,7 +309,7 @@ describe('RetrievalCoordinator', () => {
         'test query'
       );
 
-      expect(mockPostgresStore.retrieve).toHaveBeenCalledWith(
+      expect(mockPostgresRetrieve).toHaveBeenCalledWith(
         'test-collection',
         'test query',
         expect.objectContaining({ limit: 3 })
@@ -333,7 +321,7 @@ describe('RetrievalCoordinator', () => {
 
   describe('close()', () => {
     it('should close all store connections', async () => {
-      const postgresConfig: VectorStoreConfig = {
+      const pgConfig: VectorStoreConfig = {
         type: 'postgres-pgvector',
         connection: {
           host: 'localhost',
@@ -350,9 +338,9 @@ describe('RetrievalCoordinator', () => {
       };
 
       // Create a store by retrieving
-      mockPostgresStore.retrieve.mockResolvedValue([]);
+      mockPostgresRetrieve.mockResolvedValue([]);
       await coordinator.retrieve(
-        [postgresConfig],
+        [pgConfig],
         'default',
         'test-collection',
         'test query'
@@ -362,7 +350,7 @@ describe('RetrievalCoordinator', () => {
       await coordinator.close();
 
       // Verify close was called
-      expect(mockPostgresStore.close).toHaveBeenCalled();
+      expect(mockPostgresClose).toHaveBeenCalled();
     });
 
     it('should handle closing when no stores are open', async () => {
@@ -370,7 +358,7 @@ describe('RetrievalCoordinator', () => {
     });
 
     it('should clear stores cache after closing', async () => {
-      const postgresConfig: VectorStoreConfig = {
+      const pgConfig: VectorStoreConfig = {
         type: 'postgres-pgvector',
         connection: {
           host: 'localhost',
@@ -386,9 +374,9 @@ describe('RetrievalCoordinator', () => {
         },
       };
 
-      mockPostgresStore.retrieve.mockResolvedValue([]);
+      mockPostgresRetrieve.mockResolvedValue([]);
       await coordinator.retrieve(
-        [postgresConfig],
+        [pgConfig],
         'default',
         'test-collection',
         'test query'
@@ -396,13 +384,10 @@ describe('RetrievalCoordinator', () => {
 
       await coordinator.close();
 
-      // Retrieve again should create new store
-      const MockedPostgresVectorStore = PostgresVectorStore as jest.MockedClass<typeof PostgresVectorStore>;
-      const newInstance = new PostgresVectorStore(undefined as any);
-
-      mockPostgresStore.retrieve.mockResolvedValue([]);
+      // Retrieve again should create new store (PostgresVectorStore called again)
+      mockPostgresRetrieve.mockResolvedValue([]);
       await coordinator.retrieve(
-        [postgresConfig],
+        [pgConfig],
         'default',
         'test-collection',
         'test query'
@@ -424,7 +409,7 @@ describe('RetrievalCoordinator', () => {
         { id: '9', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.5, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinatorWithNorm.retrieve(
         [{
@@ -456,11 +441,11 @@ describe('RetrievalCoordinator', () => {
     it('should handle results with undefined similarity', async () => {
       const mockResults: KnowledgeEntry[] = [
         { id: '10', tenantId: 'default', collectionName: 'test', content: 'Result 1', similarity: 0.9, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
-        { id: '11', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: undefined, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        { id: '11', tenantId: 'default', collectionName: 'test', content: 'Result 2', similarity: undefined as any, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
         { id: '12', tenantId: 'default', collectionName: 'test', content: 'Result 3', similarity: 0.7, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
       ];
 
-      mockPostgresStore.retrieve.mockResolvedValue(mockResults);
+      mockPostgresRetrieve.mockResolvedValue(mockResults);
 
       const results = await coordinator.retrieve(
         [{

@@ -205,14 +205,14 @@ describe('Workflow HITL Logic', () => {
 
       // Simulate user responding
       await new Promise(resolve => setTimeout(resolve, 200));
-      taskContext = await contextManager.getContext(taskId);
-      if (taskContext?.hitlState) {
-        taskContext.hitlState.status = 'completed';
-        taskContext.hitlState.response = {
+      const latestContext = await contextManager.getContext(taskId);
+      if (latestContext?.hitlState) {
+        latestContext.hitlState.status = 'completed';
+        latestContext.hitlState.response = {
           content: JSON.stringify({ action: 'skip', params: {} }),
           timestamp: new Date(),
         };
-        await contextManager.saveContext(taskContext);
+        await contextManager.saveContext(latestContext);
       }
 
       const result = await workflowPromise;
