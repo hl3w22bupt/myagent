@@ -4,7 +4,7 @@
  * Real-time stream for tracking agent task execution progress.
  */
 
-import { StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from 'motia';
 import { z } from 'zod';
 
 /**
@@ -109,3 +109,5 @@ export const config: StreamConfig = {
   schema: taskExecutionSchema as any,
   baseConfig: { storageType: 'default' },
 };
+
+export const taskExecutionStream = new Stream(config);

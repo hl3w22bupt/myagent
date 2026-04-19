@@ -11,7 +11,7 @@
  * - Data structure matches /agent/result API response
  */
 
-import { StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from 'motia';
 import { z } from 'zod';
 
 /**
@@ -126,3 +126,5 @@ export const config: StreamConfig = {
   schema: taskResultSchema as any,
   baseConfig: { storageType: 'default' },
 };
+
+export const taskResultStream = new Stream(config);
