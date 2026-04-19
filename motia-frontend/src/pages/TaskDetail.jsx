@@ -19,6 +19,7 @@ import { useTaskPolling } from '../hooks/useTaskPolling'
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const MEDIA_BASE_URL = import.meta.env.VITE_MEDIA_URL || 'http://localhost:3010'
 
 import './TaskDetail.css'
 
@@ -1335,7 +1336,7 @@ function TaskDetail() {
 
     try {
       // 使用查询参数格式：/media?path=xxx 而不是 /media/xxx
-      const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`
+      const url = `${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`
       console.log('[getMediaBlobUrl] Fetching:', url)
 
       const response = await fetch(url)

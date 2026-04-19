@@ -1,7 +1,7 @@
-# Motia Project Guide for Claude Code & Claude AI
+# MyAgent Project Guide for Claude Code & Claude AI
 
 > **Project**: Distributed AI Agent System (4-Layer Architecture)
-> **Tech Stack**: TypeScript + PostgreSQL + Motia
+> **Tech Stack**: TypeScript + PostgreSQL + iii engine + Motia 1.0.x
 
 ---
 
@@ -26,28 +26,42 @@
 
 ```bash
 npm install               # Dependencies
-npm run generate-types    # Generate Motia types
-npm run start            # Start server (port 3000) - Recommended
+npm run build             # Build TypeScript + Motia bundle
+npm run start            # Start all services (iii engine + worker + media server)
 ```
 
 **Service Management**:
 ```bash
-# 后端服务（端口 3000）- 推荐使用生产模式
-npm run start            # Start production mode (recommended)
-npm run dev              # Start dev mode (hot reload, slower)
+# 全部启动（iii engine + worker + media server）- 推荐
+npm run start            # Start iii engine (:3000) + worker + media server (:3010)
+
+# 单独启动 media server
+npm run media            # Start media server on port 3010
 
 # 前端服务（端口 5173）
 cd motia-frontend && npm run dev
 
 # 停止服务
-pkill -f "motia start"   # Stop backend
-pkill -f "vite"          # Stop frontend
+pkill -f "iii"              # Stop iii engine
+pkill -f "index-dev.js"     # Stop node worker
+pkill -f "outputs-server"   # Stop media server
+pkill -f "vite"             # Stop frontend
 ```
+
+**Architecture**: Motia 1.0.x runs on iii engine (Rust). Three processes:
+1. `iii` — Engine process (HTTP API on :3000, Stream on :4112, Engine WS on :49135)
+2. `node dist/index-dev.js` — Worker process (registers step handlers with engine)
+3. `node outputs-server.cjs` — Media server (serves large media files on :3010, bypasses iii WebSocket size limits)
 
 **After code changes**:
 ```bash
-npm run build            # TypeScript changes
-npm run generate-types   # Motia config changes
+npm run build             # TypeScript changes → rebuild + motia bundle
+```
+
+**Required env vars** (in `.env`):
+```
+III_URL=ws://localhost:49135
+III_PORT=49135
 ```
 
 ## 🤖 Test API (Most Used)
@@ -66,6 +80,9 @@ curl http://localhost:3000/api/contexts/outputs/{taskId}
 
 # 4. Health check
 curl http://localhost:3000/health
+
+# 5. Media server health check
+curl http://localhost:3010/health
 ```
 
 **Full testing flow**: See `TESTING_WORKFLOW.md`
@@ -97,10 +114,13 @@ Layer 4: Skill Abstraction (reusable capabilities)
 | Column "user_id" missing | `npm run db:reset` |
 | Creating new session every time | Ensure `sessionId` is passed |
 | LLM timeout | Increase timeout in `src/index.ts` |
+| Media file 500 error (>4.5MB) | Use media server (`npm run media`, port 3010) — iii engine WebSocket has size limits |
+| Media file 404 | Ensure media server is running, check `VITE_MEDIA_URL` env var |
 
 ## 📦 Key Files
 
 ```
+outputs-server.cjs           # Media server (port 3010, zero dependencies)
 steps/agents/              # Agent endpoints
 ├── agent-api.step.ts      # /agent/execute
 └── master-agent.step.ts   # MasterAgent event handling

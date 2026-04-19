@@ -1796,6 +1796,7 @@ export class WorkflowEngine {
       const id = `wf-step-${stepId}-${stage}-${Date.now()}`;
 
       await this.streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'workflow-step',
         taskId,

@@ -28,6 +28,7 @@ import {
 
 // 使用与 API 配置相同的基础 URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+const MEDIA_BASE_URL = import.meta.env.VITE_MEDIA_URL || 'http://localhost:3010';
 
 /**
  * 渲染代码内容的组件（支持 HTML 预览）
@@ -42,7 +43,7 @@ const CodeContentRenderer = ({ path }) => {
       setLoading(true);
       setError(null);
       try {
-        const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`;
+        const url = `${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`;
         console.log('[CodeContentRenderer] Fetching:', url);
         const response = await fetch(url);
         if (!response.ok) {
@@ -255,7 +256,7 @@ const ArtifactsTab = ({ taskId, task }) => {
     console.log('[ArtifactsTab] Fetching media for:', path);
 
     try {
-      const url = `${API_BASE_URL}/media?path=${encodeURIComponent(path)}`;
+      const url = `${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`;
       console.log('[ArtifactsTab] Fetching:', url);
 
       const response = await fetch(url);
@@ -500,7 +501,7 @@ const ArtifactsTab = ({ taskId, task }) => {
         // For images, use the media API, get blob URL for better control
         return (
           <div className="image-wrapper">
-            <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
+            <img src={`${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`}
                  alt={artifact.description}
                  className="artifact-image"
                  onLoad={(e) => {
@@ -524,7 +525,7 @@ const ArtifactsTab = ({ taskId, task }) => {
         if (imageExts.includes(ext)) {
           return (
             <div className="image-wrapper">
-              <img src={`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`}
+              <img src={`${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`}
                    alt={artifact.description}
                    className="artifact-image"
                    style={{ width: '100%', maxWidth: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain' }}

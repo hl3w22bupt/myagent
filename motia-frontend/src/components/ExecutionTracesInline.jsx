@@ -59,13 +59,9 @@ function ExecutionTracesInline({ taskId }) {
 
     try {
       subscription = stream.subscribeGroup('executionTraces', taskId)
-      console.log('[ExecutionTracesInline] 订阅成功:', subscription)
 
       subscription.addChangeListener((data) => {
-        console.log('[ExecutionTracesInline] 收到数据更新:', data)
-
         const entries = Array.isArray(data) ? data : data ? [data] : []
-        console.log('[ExecutionTracesInline] 更新 traces:', entries.length, '条')
 
         setTraces((prev) => {
           const newTraces = [...prev]
@@ -74,10 +70,7 @@ function ExecutionTracesInline({ taskId }) {
             if (!message) return
 
             const traceId = message.traceId || message.id
-            if (!traceId) {
-              console.warn('[ExecutionTracesInline] Message 缺少 ID:', message)
-              return
-            }
+            if (!traceId) return
 
             const existingIndex = newTraces.findIndex((t) => t.traceId === traceId || t.id === traceId)
 
@@ -98,7 +91,6 @@ function ExecutionTracesInline({ taskId }) {
     return () => {
       if (subscription) {
         subscription.close()
-        console.log('[ExecutionTracesInline] 取消订阅')
       }
     }
   }, [stream, taskId])

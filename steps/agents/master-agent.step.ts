@@ -13,6 +13,7 @@
 
 import { type StepConfig, logger, enqueue, queue } from 'motia';
 import { taskExecutionStream } from '../streams/task-execution.stream';
+import { executionTracesStream } from '../streams/execution-traces.stream';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
@@ -230,7 +231,7 @@ export const handler = async (input: any) => {
 
     // === Agent Hook Setup ===
     // Set streams for progress notifications
-    setAgentStreams({ taskExecution: taskExecutionStream as any });
+    setAgentStreams({ taskExecution: taskExecutionStream as any, executionTraces: executionTracesStream as any });
 
     // Get hook manager
     const hookManager = agentManager.getHookManager();
@@ -499,7 +500,7 @@ export const handler = async (input: any) => {
 
   // === Agent Hook Setup ===
   // Set streams for progress notifications
-  setAgentStreams({ taskExecution: taskExecutionStream as any });
+  setAgentStreams({ taskExecution: taskExecutionStream as any, executionTraces: executionTracesStream as any });
 
   // Register Agent hooks
   const hookManager = agentManager.getHookManager();
@@ -568,7 +569,7 @@ export const handler = async (input: any) => {
       rewriteRequest: input.rewriteRequest !== undefined ? input.rewriteRequest : true, // Request rewriting control (default: true)
     },
     services: {
-      streams: { taskExecution: taskExecutionStream },
+      streams: { taskExecution: taskExecutionStream, executionTraces: executionTracesStream },
       logger,
       emit: enqueue,
     },

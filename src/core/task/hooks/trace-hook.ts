@@ -24,6 +24,7 @@ export class TaskTraceHook extends BaseTaskHook {
     try {
       // Create initial trace entry
       await services.streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'task',
         taskId,
@@ -64,6 +65,7 @@ export class TaskTraceHook extends BaseTaskHook {
 
       // Create completion trace entry
       await services.streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'task',
         taskId,
