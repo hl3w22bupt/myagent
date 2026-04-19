@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import { getGlobalPostgresStore } from '../../src/core/database/global-store';
 import type { Task } from '../../src/core/database/data-store';
@@ -64,41 +64,22 @@ export const querySchema = z.object({
 /**
  * Agent Results API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'agent-results-api',
   description: 'REST API endpoint for querying agent task results',
 
-  /**
-   * API route configuration.
-   */
-  path: '/agent/results',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/agent/results' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Agent Results API handler.
  *
  * Retrieves paginated task results from state based on query parameters.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   // Parse query parameters - use queryParams not query
-  const queryParams: Record<string, any> = request.queryParams || {};
+  const queryParams: Record<string, any> = context.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
 
   if (!validationResult.success) {

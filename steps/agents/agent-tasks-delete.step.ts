@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -69,33 +69,13 @@ export const querySchema = z
 /**
  * Agent Tasks Delete API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'agent-tasks-delete-api',
   description: 'REST API endpoint for deleting agent task results (single or batch)',
 
-  /**
-   * API route configuration.
-   * Uses DELETE method on /agent/results to follow RESTful conventions.
-   */
-  path: '/agent/results',
-  method: 'DELETE',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'DELETE' as const, path: '/agent/results' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Agent Tasks Delete API handler.
@@ -106,9 +86,9 @@ export const config: ApiRouteConfig = {
  *
  * Returns detailed results including successful and failed deletions.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   // Parse query parameters
-  const queryParams: Record<string, any> = request.queryParams || {};
+  const queryParams: Record<string, any> = context.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
 
   if (!validationResult.success) {
