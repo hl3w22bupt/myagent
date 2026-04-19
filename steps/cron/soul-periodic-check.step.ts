@@ -10,7 +10,7 @@
  * 这是数据库驱动的心跳调度，替代了之前的内存单例 MinHeap 方案。
  */
 
-import type { CronConfig } from 'motia';
+import { type StepConfig, logger, cron, enqueue } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -45,19 +45,19 @@ function getQueryWindowHours(): number {
 /**
  * Cron 配置
  */
-export const config: CronConfig = {
-  type: 'cron',
+export const config = {
   name: 'SoulPeriodicCheck',
   description: 'Periodic check for Soul Agents - triggers every 5 minutes',
-  cron: '*/5 * * * *', // 每 5 分钟
-  emits: ['soul.agent.execute'],
-  flows: ['soul-agent-flow'],
-};
+  triggers: [
+    cron('0 0 */5 * * * *'), // 每 5 分钟 (7-field format)
+  ],
+  enqueues: ['soul.agent.execute'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Cron Handler
  */
-export const handler = async ({ logger, emit }: any) => {
+export const handler = async (_: any) => {
   logger.info('[SoulPeriodicCheck] Starting periodic check for Soul Agents');
 
   const store = getDataStore();
@@ -123,7 +123,7 @@ export const handler = async ({ logger, emit }: any) => {
         };
 
         // 发送 soul.agent.execute 事件
-        await emit({
+        await enqueue({
           topic: 'soul.agent.execute',
           data: {
             sessionId: soulState.session_id,

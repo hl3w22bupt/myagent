@@ -10,7 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { CronConfig } from 'motia';
+import { type StepConfig, logger, cron, enqueue } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -50,19 +50,19 @@ interface AIAnalysisResult {
 /**
  * Cron 配置
  */
-export const config: CronConfig = {
-  type: 'cron',
+export const config = {
   name: 'UserProfileAnalysis',
   description: 'AI-powered user profile analysis running daily at 9 PM',
-  cron: '0 21 * * *', // 每天 9 PM
-  emits: ['user.profile.analyzed'],
-  flows: ['user-analysis-flow'],
-};
+  triggers: [
+    cron('0 0 21 * * * *'), // 每天 9 PM (7-field format)
+  ],
+  enqueues: ['user.profile.analyzed'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Cron Handler
  */
-export const handler = async ({ logger, emit }: any) => {
+export const handler = async (_: any) => {
   logger.info('[UserProfileAnalysis] Starting daily user profile analysis');
 
   const store = getDataStore();
@@ -137,7 +137,7 @@ export const handler = async ({ logger, emit }: any) => {
     // 处理每个用户
     for (const userId of activeUserIds) {
       try {
-        await analyzeUser(userId, store, anthropic, logger, emit);
+        await analyzeUser(userId, store, anthropic);
         totalUsersProcessed++;
       } catch (error: any) {
         totalUsersFailed++;
@@ -168,8 +168,6 @@ async function analyzeUser(
   userId: string,
   store: any,
   anthropic: Anthropic,
-  logger: any,
-  emit: any
 ): Promise<void> {
   logger.info('[UserProfileAnalysis] Analyzing user', { userId });
 
@@ -289,7 +287,7 @@ async function analyzeUser(
   });
 
   // 发出分析完成事件
-  await emit({
+  await enqueue({
     topic: 'user.profile.analyzed',
     data: {
       userId,

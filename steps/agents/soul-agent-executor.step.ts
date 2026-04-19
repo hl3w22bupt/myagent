@@ -15,33 +15,32 @@
 import { SoulAgent } from '../../src/core/agent/soul-agent';
 import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
 import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader';
-import { EventConfig } from 'motia';
+import { type StepConfig, logger, queue, enqueue } from 'motia';
 import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 
 /**
  * Soul Agent Executor configuration.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'soul-agent-executor',
   description: 'Executes Soul Agent tasks triggered by soul.agent.execute events',
 
   // ✅ 订阅 Soul 专用事件
-  subscribes: ['soul.agent.execute'],
+  triggers: [
+    queue('soul.agent.execute'),
+  ],
 
   // ✅ 发送 completion 事件和 execution traces
-  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
-
-  flows: ['agent-workflow'],
-};
+  enqueues: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Agent Executor handler.
  */
 export const handler = async (
   input: any,
-  { emit, logger, streams }: any
+  { streams }: any
 ) => {
   const { taskId, sessionId, soulId, userId, trigger_time, context } = input;
 
@@ -96,7 +95,7 @@ export const handler = async (
       trigger_time: trigger_time || new Date().toISOString(),
       context: {
         ...context,
-        emit: emit,  // ⭐ Pass emit function to SoulAgent for token usage events
+        emit: enqueue,  // ⭐ Pass enqueue function to SoulAgent for token usage events
       },
       streams: streams,
     };
@@ -153,7 +152,7 @@ export const handler = async (
 
     // ✅ 发送 agent.task.completed 事件，触发所有 subscribers
     // 与 master-agent 的模式完全一致
-    await emit({
+    await enqueue({
       topic: 'agent.task.completed',
       data: {
         taskId,
@@ -183,7 +182,7 @@ export const handler = async (
     });
 
     // ✅ 失败时也发送事件
-    await emit({
+    await enqueue({
       topic: 'agent.task.failed',
       data: {
         taskId,

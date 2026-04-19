@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 
 /**
@@ -22,39 +22,21 @@ export const querySchema = z.object({
 /**
  * Agent Retry API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'agent-retry-api',
   description: 'REST API endpoint for manually retrying a failed agent task',
 
-  /**
-   * API route configuration.
-   */
-  path: '/agent/result/retry',
-  method: 'POST',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/agent/result/retry' }],
 
-  /**
-   * Emits task execution event.
-   */
-  emits: ['agent.task.execute'],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  enqueues: ['agent.task.execute'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Agent Retry API handler.
  *
  * Retrieves a failed task and re-executes it.
  */
-export const handler = async (request: any, { logger, emit }: any) => {
+export const handler = async (request: any) => {
   // Parse query parameters
   const queryParams: Record<string, any> = request.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
@@ -114,7 +96,7 @@ export const handler = async (request: any, { logger, emit }: any) => {
     logger.info('[Agent Retry] Task status updated to RUNNING', { taskId: id });
 
     // 重新执行任务（使用相同的 taskId）
-    await emit({
+    await enqueue({
       topic: 'agent.task.execute',
       data: {
         task: foundTask.task,
