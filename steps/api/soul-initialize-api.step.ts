@@ -5,32 +5,29 @@
  * Called by MyEcho after creating an echo thread.
  */
 
+import { type StepConfig, logger } from 'motia';
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { ApiRouteConfig } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
+import { taskExecutionStream } from '../streams/task-execution.stream';
 
 /**
  * Soul Initialize API configuration
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'soul-initialize',
   description: 'Initialize Soul Agent with idle task',
 
-  path: '/api/soul/:soulId/initialize',
-  method: 'POST',
-
-  emits: [],
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/soul/:soulId/initialize' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Initialize handler
  */
-export const handler = async (request: any, { logger, streams }: any) => {
+export const handler: any = async (context: any) => {
   // Get soulId from path parameters
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
+  const soulId = context.request.pathParams?.soulId;
   const {
     userId,
     characterId,
@@ -39,7 +36,7 @@ export const handler = async (request: any, { logger, streams }: any) => {
     app,
     threadId,
     metadata = {}
-  } = request.body;
+  } = context.request.body;
 
   logger.info('Soul Initialize API: Received request', {
     soulId,
@@ -90,8 +87,8 @@ export const handler = async (request: any, { logger, streams }: any) => {
         id: taskId,
         sessionId: sessionId,
         task: taskName || `对话${threadId ? ` ${threadId}` : ''}`,
-        userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
-        status: 'idle' as const,  // ← Idle state, waiting for trigger
+        userId: userId,  // userId 作为顶层属性，用于数据隔离 (Issue #65)
+        status: 'idle' as const,  // Idle state, waiting for trigger
         app: app || 'default',
         metadata: {
           ...metadata,
@@ -129,8 +126,8 @@ export const handler = async (request: any, { logger, streams }: any) => {
     const soulState = soulAgent.getSoulState();
     await soulStateDataService.saveSoulState(sessionId, soulId, {
       ...soulState,
-      currentTask: taskId  // ← 关联 taskId
-    }, app);  // ← 保存 app 标识
+      currentTask: taskId  // 关联 taskId
+    }, app);  // 保存 app 标识
 
     logger.info('Soul Initialize API: Soul Agent ready', {
       sessionId,
@@ -139,26 +136,24 @@ export const handler = async (request: any, { logger, streams }: any) => {
     });
 
     // 4. Send initialization event to stream
-    if (streams?.taskExecution) {
-      const uniqueId = `${taskId}-init-${Date.now()}`;
-      await streams.taskExecution.set(taskId, uniqueId, {
-        taskId: taskId,
-        task: '',
-        status: 'idle',
-        sessionId: sessionId,
-        timestamp: new Date().toISOString(),
-        type: 'soul',
-        stage: 'initialized',
-        progressType: 'soul_init',
-        metadata: {
-          data: {
-            soulId: soulId,
-            userId: userId,
-            message: 'Soul Agent initialized with idle task'
-          }
+    const uniqueId = `${taskId}-init-${Date.now()}`;
+    await taskExecutionStream.set(taskId, uniqueId, {
+      taskId: taskId,
+      task: '',
+      status: 'idle',
+      sessionId: sessionId,
+      timestamp: new Date().toISOString(),
+      type: 'soul',
+      stage: 'initialized',
+      progressType: 'soul_init',
+      metadata: {
+        data: {
+          soulId: soulId,
+          userId: userId,
+          message: 'Soul Agent initialized with idle task'
         }
-      });
-    }
+      }
+    });
 
     return {
       status: 200,

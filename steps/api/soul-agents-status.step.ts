@@ -8,28 +8,23 @@ import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
 import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 
 /**
  * Soul Agents Status API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'soul-agents-status',
   description: '获取自主智能体状态列表',
 
-  path: '/api/soul-agents/status',
-  method: 'GET',
-
-  emits: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/soul-agents/status' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Agents Status handler.
  */
-export const handler = async (request: any, { logger }: any) => {
-  logger.info('Fetching soul agents status');
+export const handler = async (_context: any) => {
 
   try {
     // 1. 获取所有可用的 Soul 配置

@@ -3,23 +3,20 @@
  * Discover collections from data source
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { discoverCollections } from '../../src/core/knowledge/datasource-manager.js';
 import { getDataSource } from '../../src/core/knowledge/datasource-store.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-collections-api',
   description: 'Discover collections from data source',
-  path: '/api/knowledge/datasources/:id/collections',
-  method: 'GET',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/knowledge/datasources/:id/collections' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
-    const { id } = request.pathParams;
+    const { id } = context.request?.params ?? {};
 
     const dataSource = await getDataSource(id);
     if (!dataSource) {

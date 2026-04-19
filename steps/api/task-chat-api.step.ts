@@ -4,11 +4,12 @@
  * Provides endpoint to send chat messages to a specific task.
  */
 
-import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
+import { z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 import { ContextManager } from '../../src/core/context/manager';
 import { MessageIdGenerator } from '../../src/utils/message-id-generator';
+import { taskExecutionStream } from '../streams/task-execution.stream';
 
 // 防重复请求存储，存储最近处理过的请求ID
 const processedRequests = new Map<string, number>();
@@ -17,64 +18,63 @@ const DUPLICATE_REQUEST_WINDOW = 5000; // 5秒内防止重复请求
 /**
  * Task Chat API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'task-chat-api',
   description: 'API endpoint for sending chat messages to a specific task',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/tasks/:id/chat',
-  method: 'POST',
-
-  /**
-   * Emit agent.task.execute event to trigger new execution round.
-   */
-  emits: ['agent.task.execute'],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/tasks/:id/chat' }],
+  enqueues: ['agent.task.execute'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Input schema for task chat messages.
  */
-export const inputSchema = _z.object({
+const chatInputSchema = z.object({
   /**
    * The message content to send.
    */
-  message: _z.string().min(1),
+  message: z.string().min(1),
 
   /**
    * Optional: Session ID for conversation context.
    */
-  sessionId: _z.string().optional(),
+  sessionId: z.string().optional(),
 
   /**
    * Optional: Whether to rewrite the request using conversation history (default: true).
    * When false, the original request will be used as-is without context enhancement.
    */
-  rewriteRequest: _z.boolean().optional(),
+  rewriteRequest: z.boolean().optional(),
 
   /**
    * Optional: User ID for MyEcho integration.
    */
-  userId: _z.string().optional(),
+  userId: z.string().optional(),
 
   /**
    * Optional: Message ID for tracking conversation messages.
    * Used to link agent execution results with specific messages in external systems (e.g., MyEcho).
    * If not provided, a new messageId will be generated automatically.
    */
-  messageId: _z.string().optional(),
+  messageId: z.string().optional(),
+
+  /**
+   * Optional: Step name to resume workflow execution from.
+   * Used when resuming a previously failed or completed workflow from a specific step.
+   */
+  resumeFrom: z.string().optional(),
+
+  /**
+   * Optional: Task ID of the previous (failed/completed) task to resume from.
+   * Used to load the context and state from the previous task.
+   */
+  previousTaskId: z.string().optional(),
+
+  /**
+   * Optional: Feedback or instructions for the resumed workflow.
+   * Provides additional context when resuming from a specific step.
+   */
+  feedback: z.string().optional(),
 });
 
 /**
@@ -82,7 +82,8 @@ export const inputSchema = _z.object({
  *
  * Handles sending chat messages to a specific task.
  */
-export const handler = async (request: any, { logger, streams, emit }: any) => {
+export const handler: any = async (context: any) => {
+  const request = context.request;
   logger.info('Task Chat API: Received request', { request });
 
   // 生成请求唯一标识符（基于taskId、message内容和sessionId）
@@ -152,13 +153,19 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
     let rewriteRequest = true; // Default to true
     let requestUserId: string | undefined;
     let providedMessageId: string | undefined;
+    let resumeFrom: string | undefined;
+    let previousTaskId: string | undefined;
+    let feedback: string | undefined;
     try {
-      const parsedBody = inputSchema.parse(body);
+      const parsedBody = chatInputSchema.parse(body);
       message = parsedBody.message;
       rewriteRequest = parsedBody.rewriteRequest !== undefined ? parsedBody.rewriteRequest : true;
       requestUserId = parsedBody.userId;
       providedMessageId = parsedBody.messageId;
-      logger.info('Task Chat API: Message validated successfully', { taskId, message, rewriteRequest, providedMessageId });
+      resumeFrom = parsedBody.resumeFrom;
+      previousTaskId = parsedBody.previousTaskId;
+      feedback = parsedBody.feedback;
+      logger.info('Task Chat API: Message validated successfully', { taskId, message, rewriteRequest, providedMessageId, resumeFrom, previousTaskId });
     } catch (validationError: any) {
       logger.error('Task Chat API: Input validation failed', {
         error: validationError.message,
@@ -171,29 +178,6 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
           message: 'Invalid request body',
           error: validationError.message,
           details: validationError.issues,
-        },
-      };
-    }
-
-    // Check if streams and taskExecution are available
-    if (!streams) {
-      logger.error('Task Chat API: Streams not available');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Streams not available',
-        },
-      };
-    }
-
-    if (!streams.taskExecution) {
-      logger.error('Task Chat API: Task execution stream not available');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Task execution stream not available',
         },
       };
     }
@@ -293,7 +277,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         const timestamp = Date.now();
         const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
 
-        await streams.taskExecution.set(taskId, uniqueId, {
+        await taskExecutionStream.set(taskId, uniqueId, {
           taskId: taskId,
           task: message,
           status: 'running',
@@ -314,7 +298,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         logger.info('Task Chat API: Clarification message sent to stream', { taskId, message });
 
         // Re-trigger task execution with clarified content
-        await emit({
+        await enqueue({
           topic: 'agent.task.execute',
           data: {
             task: message, // Use clarified message as new task
@@ -325,6 +309,9 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
             subagent, // 传递 subagent 用于委派
             rewriteRequest, // Pass through rewriteRequest flag
             app, // 传递 app 用于知识库自动发现
+            resumeFrom, // Step name to resume workflow from
+            previousTaskId, // Previous task ID for context loading
+            feedback, // Feedback for resumed workflow
           },
         });
 
@@ -373,7 +360,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
     });
 
     try {
-      const streamResult = await streams.taskExecution.set(taskId, uniqueId, {
+      const streamResult = await taskExecutionStream.set(taskId, uniqueId, {
         taskId: taskId,
         task: message,
         status: 'running',
@@ -415,7 +402,7 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
 
     // CRITICAL: Trigger new task execution round
     // This ensures the conversation continues and output is updated
-    await emit({
+    await enqueue({
       topic: 'agent.task.execute',
       data: {
         task: message,
@@ -428,10 +415,13 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
         app, // 传递 app 用于知识库自动发现，保持多轮对话使用相同的知识库配置
         userId: requestUserId, // Pass userId for MyEcho
         rewriteRequest, // Pass through rewriteRequest flag
+        resumeFrom, // Step name to resume workflow from
+        previousTaskId, // Previous task ID for context loading
+        feedback, // Feedback for resumed workflow
       },
     });
 
-    logger.info('Task Chat API: Task execution event emitted', { taskId, message });
+    logger.info('Task Chat API: Task execution event enqueued', { taskId, message });
 
     return {
       status: 200,
@@ -462,4 +452,3 @@ export const handler = async (request: any, { logger, streams, emit }: any) => {
     };
   }
 };
-void _z; // Mark as unused

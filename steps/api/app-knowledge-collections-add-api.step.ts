@@ -5,19 +5,16 @@
  * Add a knowledge collection to an app
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { addAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'app-knowledge-collections-add-api',
   description: 'Add knowledge collection to app',
-  path: '/api/apps/:appId/knowledge-collections/add',
-  method: 'POST',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/apps/:appId/knowledge-collections/add' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 // Request body schema
 const addCollectionSchema = z.object({
@@ -29,13 +26,10 @@ const addCollectionSchema = z.object({
   priority: z.number().optional().default(0),
 });
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: any = async (context: any) => {
   try {
-    const { appId } = request.pathParams;
-    const body = request.body;
+    const { appId } = context.request.pathParams;
+    const body = context.request.body;
 
     // Validate request body
     const validationResult = addCollectionSchema.safeParse(body);

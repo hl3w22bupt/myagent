@@ -9,25 +9,20 @@
  */
 
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
 
 /**
  * Soul Execute API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'soul-execute',
   description: 'Execute Soul Agent with trigger context',
 
-  path: '/api/soul/:soulId/execute',
-  method: 'POST',
-
-  // ✅ 发送 completion 事件和 execution traces
-  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/soul/:soulId/execute' }],
+  enqueues: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Execute handler.
@@ -38,10 +33,11 @@ export const config: ApiRouteConfig = {
  * 3. 设置 streams 并执行 Soul Agent
  * 4. 发送 agent.task.completed 事件
  */
-export const handler = async (request: any, { emit, logger, streams }: any) => {
+export const handler = async (context: any) => {
   // Get soulId from path parameters (support both pathParams and params)
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const { userId, trigger_time, context: triggerContext, taskId: providedTaskId } = request.body;
+  const soulId = context.request.pathParams?.soulId || context.request?.params?.soulId;
+  const requestBody = context.request.body;
+  const { userId, trigger_time, context: triggerContext, taskId: providedTaskId } = requestBody;
 
   if (!userId || !triggerContext) {
     return {
@@ -135,7 +131,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
         await dataStore.createTask({
           id: taskId,
           task: taskDescription,  // ✅ 使用真实的任务描述
-          app: request.body.app || request.body.appId || 'myagent',  // ✅ 从请求中获取 app 参数
+          app: requestBody.app || requestBody.appId || 'myagent',  // ✅ 从请求中获取 app 参数
           sessionId: sessionId,
           userId: userId,  // ✅ userId 作为顶层属性，用于数据隔离 (Issue #65)
           status: TaskStatus.PENDING,
@@ -148,11 +144,12 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
           }
         });
 
-        logger.info('Soul Execute API: Task created', { taskId, sessionId, status: 'PENDING', task: taskDescription, app: request.body.app || 'myagent' });
+        logger.info('Soul Execute API: Task created', { taskId, sessionId, status: 'PENDING', task: taskDescription, app: requestBody.app || 'myagent' });
       }
     }
 
     // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作
+    const streams = context.streams;
     setAgentStreams(streams);
 
     // ✅ 激活并执行 Soul Agent
@@ -162,7 +159,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
       trigger_time: trigger_time || new Date().toISOString(),
       context: {
         ...triggerContext,
-        emit: emit,  // ⭐ Pass emit function to SoulAgent for token usage events
+        emit: enqueue,  // ⭐ Pass enqueue function to SoulAgent for token usage events
       },
       streams: streams,
     });
@@ -191,7 +188,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
 
     // ✅ 发送 agent.task.completed 事件，触发所有 subscribers
     // 重要：将 output 从 JSON 字符串改为纯文本，这样 MyEcho 可以直接使用
-    await emit({
+    await enqueue({
       topic: 'agent.task.completed',
       data: {
         taskId,
@@ -235,7 +232,7 @@ export const handler = async (request: any, { emit, logger, streams }: any) => {
     });
 
     // ✅ 失败时也发送事件
-    await emit({
+    await enqueue({
       topic: 'agent.task.failed',
       data: {
         taskId,

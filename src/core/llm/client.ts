@@ -302,6 +302,7 @@ export class LLMClient {
       }
 
       await this.streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level,
         taskId,

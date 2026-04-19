@@ -11,7 +11,9 @@
  * - Configuration unified with application-wide settings
  */
 
-import type { EventConfig } from 'motia';
+import { type StepConfig, logger, enqueue, queue } from 'motia';
+import { taskExecutionStream } from '../streams/task-execution.stream';
+import { executionTracesStream } from '../streams/execution-traces.stream';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { agentManager } from '../../src/index';
@@ -140,19 +142,39 @@ export const inputSchema = _z.object({
    * Links task execution results to specific messages in external systems (e.g., MyEcho).
    */
   messageId: _z.string().optional(),
+
+  /**
+   * Optional: Step name to resume workflow execution from.
+   * When specified, the workflow will skip all steps before this one and start from here.
+   * Used for resuming failed or completed workflows from a specific step.
+   */
+  resumeFrom: _z.string().optional(),
+
+  /**
+   * Optional: Task ID of the previous (failed/completed) task to resume from.
+   * Used to load the context and state from the previous task.
+   */
+  previousTaskId: _z.string().optional(),
+
+  /**
+   * Optional: Feedback or instructions for the resumed workflow.
+   * Provides additional context when resuming from a specific step.
+   */
+  feedback: _z.string().optional(),
 });
 
 /**
  * Master Agent Step configuration.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'master-agent',
   description: 'Master agent that orchestrates task execution using PTC',
-  subscribes: ['agent.task.execute', 'agent.task.chat'],
-  emits: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'],
-  flows: ['agent-workflow'],
-};
+  triggers: [
+    queue('agent.task.execute'),
+    queue('agent.task.chat'),
+  ],
+  enqueues: ['agent.task.completed', 'agent.task.failed', 'execution.trace.created'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Master Agent handler.
@@ -163,10 +185,7 @@ export const config: EventConfig = {
  * - Returns sessionId for continued conversations
  * - Maintains session state (no release in finally)
  */
-export const handler = async (
-  input: any,
-  { emit, logger, state: _state, streams: _streams }: any
-) => {
+export const handler = async (input: any) => {
   const handlerStartTime = Date.now();
   const { taskId: _htid, sessionId: _hsid } = input;
   logger.info('[IPC-DEBUG] master-agent handler ENTERED', { taskId: _htid, sessionId: _hsid, handlerStartTime });
@@ -187,7 +206,7 @@ export const handler = async (
   // === 处理聊天消息 ===
   // 检查是否有 message 字段来判断是否是聊天事件
   // 注意：由于事件已经根据 subscribes 配置路由到这里，不需要检查 input.topic
-  // 对于聊天事件，Motia 会将 emit({ topic: 'agent.task.chat', data }) 中的 data 传递给 handler
+  // 对于聊天事件，Motia 会将 enqueue({ topic: 'agent.task.chat', data }) 中的 data 传递给 handler
   const message = input.message || input.data?.message;
 
   if (message) {
@@ -212,7 +231,7 @@ export const handler = async (
 
     // === Agent Hook Setup ===
     // Set streams for progress notifications
-    setAgentStreams(_streams);
+    setAgentStreams({ taskExecution: taskExecutionStream as any, executionTraces: executionTracesStream as any });
 
     // Get hook manager
     const hookManager = agentManager.getHookManager();
@@ -391,7 +410,7 @@ export const handler = async (
         contentPreview: responseContent.substring(0, 100)
       });
 
-      await _streams.taskExecution.set(taskId, uniqueId, {
+      await taskExecutionStream.set(taskId, uniqueId, {
         progressType: 'chat',
         type: 'chat',
         role: 'assistant',
@@ -429,7 +448,7 @@ export const handler = async (
       // 发送错误消息到Stream
       const timestamp = Date.now();
       const uniqueId = `${taskId}-chat-error-${timestamp}`;
-      await _streams.taskExecution.set(taskId, uniqueId, {
+      await taskExecutionStream.set(taskId, uniqueId, {
         progressType: 'chat',
         type: 'error',
         role: 'assistant',
@@ -481,7 +500,7 @@ export const handler = async (
 
   // === Agent Hook Setup ===
   // Set streams for progress notifications
-  setAgentStreams(_streams);
+  setAgentStreams({ taskExecution: taskExecutionStream as any, executionTraces: executionTracesStream as any });
 
   // Register Agent hooks
   const hookManager = agentManager.getHookManager();
@@ -550,9 +569,9 @@ export const handler = async (
       rewriteRequest: input.rewriteRequest !== undefined ? input.rewriteRequest : true, // Request rewriting control (default: true)
     },
     services: {
-      streams: _streams,
+      streams: { taskExecution: taskExecutionStream, executionTraces: executionTracesStream },
       logger,
-      emit,
+      emit: enqueue,
     },
   } as any; // 使用 any 因为我们要添加额外的 agentType 字段
 
@@ -641,7 +660,7 @@ export const handler = async (
 
     if (preResult.stop) {
       logger.warn('Task stopped by pre-hook', { taskId, reason: preResult.reason });
-      await emit({
+      await enqueue({
         topic: 'agent.task.failed',
         data: { taskId, sessionId, messageId: input.messageId, error: preResult.reason },
       } as any);
@@ -741,8 +760,8 @@ export const handler = async (
     (taskContext.context as any).agentType = agentTypeName;
     (taskContext.context as any).agent = agent;
     (taskContext.context as any).rewriteRequest = input.rewriteRequest !== undefined ? input.rewriteRequest : true; // Pass rewriteRequest to agent
-    // Pass emit function to Agent for event emission
-    (taskContext.context as any).emit = emit;
+    // Pass enqueue function to Agent for event emission
+    (taskContext.context as any).emit = enqueue;
 
     // ⭐ 关键修复：将 userContext 从 metadata 复制到 workingMemory
     // 这样 Agent.buildEnhancedSystemPrompt() 和 Orchestrator 都能找到它
@@ -920,7 +939,7 @@ export const handler = async (
           return `- ${label}${agent}`;
         }).join('\n');
 
-        await _streams.taskExecution.set(taskId, uniqueId, {
+        await taskExecutionStream.set(taskId, uniqueId, {
           progressType: 'workflow',
           type: 'info',
           role: 'system',
@@ -941,7 +960,14 @@ export const handler = async (
       const workflowResult = await workflowEngine.execute(
         (input as any).workflowName,
         workflowInput,
-        { taskId, parentSessionId: sessionId, environment: (input as any).environment }
+        {
+          taskId,
+          parentSessionId: sessionId,
+          environment: (input as any).environment,
+          resumeFrom: input.resumeFrom,
+          previousTaskId: input.previousTaskId,
+          feedback: input.feedback,
+        }
       );
 
       // Convert workflow result to AgentResult format
@@ -1115,7 +1141,7 @@ export const handler = async (
       emitStart,
     });
 
-    await emit({
+    await enqueue({
       topic: 'agent.task.completed',
       data: {
         taskId,
@@ -1185,7 +1211,7 @@ export const handler = async (
     });
 
     // Emit failure event
-    await emit({
+    await enqueue({
       topic: 'agent.task.failed',
       data: {
         taskId,

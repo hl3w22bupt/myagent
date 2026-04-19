@@ -7,46 +7,44 @@
 ### 服务管理
 
 **端口说明**：
-- 后端服务：3000 端口（Motia Workbench + API）
-- 前端服务：5173 端口（Vite 开发服务器）
+- 后端服务：3000 端口（iii Engine REST API + Motia Worker）
+- Media 服务：3010 端口（独立媒体文件服务，绕过 iii 引擎 WebSocket 大小限制）
+- Stream 服务：3012 端口（iii Engine Stream Module）
+- iii Engine：49135 端口（Engine WebSocket）
 
 #### 启动服务（推荐）
 
 ```bash
-# 启动后端（根目录）
+# 启动后端（根目录）— 同时启动 iii engine + node worker + media server
 cd /Users/leo/workspace/myagent
 npm run start
-# 后台运行：npm run start &
+
+# 单独启动 media server
+npm run media
+
+# 或手动分别启动：
+npm run build                # 先构建
+iii &                        # 启动 iii engine
+III_URL=ws://localhost:49135 node dist/index-dev.js &  # 启动 worker
+node outputs-server.cjs &    # 启动 media server (port 3010)
 
 # 启动前端（新终端）
 cd motia-frontend
 npm run dev
-# 后台运行：npm run dev &
 ```
 
 #### 停止服务
 
 ```bash
 # 停止后端
-pkill -f "motia start"      # 停止生产模式
-pkill -f "node.*motia"      # 备用方案
+pkill -f "iii"               # 停止 iii engine
+pkill -f "index-dev.js"      # 停止 node worker
+pkill -f "outputs-server"    # 停止 media server
 
 # 停止前端
-pkill -f "vite"             # 停止前端
-pkill -f "npm run dev"      # 备用方案
+pkill -f "vite"              # 停止前端
 
-# 或者在启动终端按 Ctrl+C
-```
-
-#### 开发模式（不推荐 - 性能较差）
-
-```bash
-# 仅用于需要热重载的开发调试
-cd /Users/leo/workspace/myagent
-npm run dev
-
-# 停止开发模式
-pkill -f "motia dev"
+# 或者使用 npm start 的终端按 Ctrl+C
 ```
 
 ### 验证服务
@@ -54,6 +52,9 @@ pkill -f "motia dev"
 ```bash
 # 检查后端健康状态
 curl http://localhost:3000/health
+
+# 检查 media server
+curl http://localhost:3010/health
 
 # 检查前端（应返回 HTML）
 curl http://localhost:5173

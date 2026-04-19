@@ -1,12 +1,21 @@
+/**
+ * Notify API Step.
+ *
+ * API endpoint for receiving progress notifications from Python skills.
+ * Stores notifications in the task execution stream.
+ */
+
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
+import { taskExecutionStream } from './task-execution.stream';
 
 export const config = {
-  type: 'api',
   name: 'notify-api',
-  path: '/api/notify',
-  method: 'POST',
-  emits: [],
-};
+  description: 'API endpoint for receiving progress notifications from Python skills',
+
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/notify' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 const notifySchema = z.object({
   taskId: z.string(),
@@ -18,9 +27,9 @@ const notifySchema = z.object({
   stage: z.string().optional(),
 });
 
-export const handler = async (request: any, { logger, streams }: any) => {
+export const handler: any = async (context: any) => {
   try {
-    const body = request.body;
+    const body = context.request.body;
     const data = notifySchema.parse(body);
 
     // Get stage (default to 'processing' if not provided)
@@ -29,10 +38,6 @@ export const handler = async (request: any, { logger, streams }: any) => {
     // Generate unique ID for each progress notification with stage
     // Format: {taskId}-{stage}-{timestamp}-{random}
     const uniqueId = `${data.taskId}-${stage}-${data.timestamp}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // Send to Motia Stream
-    // CRITICAL: Data must match taskExecutionSchema
-    // IMPORTANT: Parameter order is (groupId, id, data) NOT (id, groupId, data)
 
     // 过滤消息内容，只保留用户友好的信息
     let displayMessage = data.message || `Skill execution (${data.type})`;
@@ -52,14 +57,14 @@ export const handler = async (request: any, { logger, streams }: any) => {
       }
     }
 
-    await streams.taskExecution.set(data.taskId, uniqueId, {
+    await taskExecutionStream.set(data.taskId, uniqueId, {
       taskId: data.taskId,
       task: displayMessage,
       // FIX: Send 'completed' status when post hook finishes successfully
       // This allows frontend to detect task completion and refresh automatically
       status: (stage === 'post' && data.data?.success === true) ? 'completed' :
               (stage === 'post' && data.data?.success === false) ? 'failed' : 'running',
-      sessionId: request.body?.sessionId || '',
+      sessionId: context.request.body?.sessionId || '',
       timestamp: new Date(data.timestamp * 1000).toISOString(),
       type: 'skill',
       skill: data.skill,

@@ -6,7 +6,7 @@
  * to extract token usage information from LLM responses.
  */
 
-import type { EventConfig } from 'motia';
+import { type StepConfig, logger, queue, enqueue } from 'motia';
 import { executionTraceSchema, ExecutionTrace } from '../streams/execution-traces.stream';
 import { TokenUsageRecordedEvent } from './types';
 
@@ -27,19 +27,16 @@ export const inputSchema = executionTraceSchema;
  *
  * Emits token_usage_recorded events for downstream processing.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'token-usage-extractor',
   description: 'Extracts token usage data from execution traces',
 
-  subscribes: ['execution.trace.created'],
+  triggers: [
+    queue('execution.trace.created'),
+  ],
 
-  emits: ['token_usage_recorded'],
-
-  input: inputSchema,
-
-  flows: ['token-usage-tracking', 'agent-workflow'],
-};
+  enqueues: ['token_usage_recorded'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Token Usage Extractor handler.
@@ -47,7 +44,7 @@ export const config: EventConfig = {
  * Processes execution traces and extracts token usage from LLM calls.
  * Filters for llm_call stage and validates token data before emitting.
  */
-export const handler = async (trace: ExecutionTrace, { logger, emit }: any) => {
+export const handler = async (trace: ExecutionTrace) => {
   const { traceId, taskId, agentId, stage, metadata } = trace;
 
   logger.info('[Token Usage Extractor] Received trace', {
@@ -151,19 +148,15 @@ export const handler = async (trace: ExecutionTrace, { logger, emit }: any) => {
     totalTokens,
   });
 
-  // Manually emit token_usage_recorded event
-  if (emit) {
-    await emit({
-      topic: 'token_usage_recorded',
-      data: tokenUsageEvent,
-    });
-    logger.info('[Token Usage Extractor] Emitted token_usage_recorded event', {
-      traceId,
-      taskId,
-    });
-  } else {
-    logger.warn('[Token Usage Extractor] No emit function available');
-  }
+  // Emit token_usage_recorded event
+  await enqueue({
+    topic: 'token_usage_recorded',
+    data: tokenUsageEvent,
+  });
+  logger.info('[Token Usage Extractor] Emitted token_usage_recorded event', {
+    traceId,
+    taskId,
+  });
 
   return tokenUsageEvent;
 };

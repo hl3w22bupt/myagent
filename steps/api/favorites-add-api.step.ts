@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -19,41 +19,29 @@ const addToFavoriteSchema = _z.object({
 /**
  * Add to Favorites API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'favorites-add-api',
   description: 'API endpoint to add an artifact to favorites',
 
   /**
    * API route configuration.
    */
-  path: '/api/favorites/add',
-  method: 'POST',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/favorites/add' }],
 
   /**
    * Emit events (none, this is a CRUD API)
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['api-workflow'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Add to Favorites Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: any = async (context: any) => {
   logger.info('Add to Favorites API: Received request');
 
   try {
-    const body = request.body || {};
+    const body = context.request.body || {};
     const parsed = addToFavoriteSchema.parse(body);
 
     const dataStore = getDataStore();

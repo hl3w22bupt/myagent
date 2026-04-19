@@ -4,27 +4,24 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataSource, updateDataSourceApps } from '../../src/core/knowledge/datasource-store.js';
 
 const updateAppsSchema = z.object({
   appIds: z.array(z.string()).min(1).max(10),
 });
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-update-apps-api',
   description: 'Update associated apps for data source',
-  path: '/api/knowledge/datasources/:id/apps',
-  method: 'PUT',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'PUT' as const, path: '/api/knowledge/datasources/:id/apps' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
-    const { id } = request.pathParams;
-    const body = request.body;
+    const { id } = context.request?.params ?? {};
+    const body = context.request.body;
 
     // Validate request
     const validationResult = updateAppsSchema.safeParse(body);

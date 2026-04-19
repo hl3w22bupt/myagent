@@ -1663,6 +1663,7 @@ ${userRequest}
       if (streams.executionTraces) {
         const id = `intent-analysis-${groupId}-${timestamp}`;
         await streams.executionTraces.set(groupId, id, {
+          id,
           traceId: id,
           level: 'agent-internal',
           taskId: groupId,
@@ -1741,6 +1742,7 @@ ${userRequest}
       if (streams.executionTraces) {
         const id = `ptc-planning-${groupId}-${timestamp}`;
         await streams.executionTraces.set(groupId, id, {
+          id,
           traceId: id,
           level: 'agent-internal',
           taskId: groupId,
@@ -2646,6 +2648,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
       const hasError = !!data.error;
 
       await streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'agent-internal',
         taskId,

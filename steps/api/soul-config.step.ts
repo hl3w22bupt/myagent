@@ -7,28 +7,24 @@
 import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 
 /**
  * Soul Configuration API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'soul-config',
   description: '获取 Soul 和 Subagent 完整配置',
 
-  path: '/api/soul/:soulId/config',
-  method: 'GET',
-
-  emits: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/soul/:soulId/config' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Configuration handler.
  */
-export const handler = async (request: any, { logger }: any) => {
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
+export const handler = async (context: any) => {
+  const soulId = context.request.pathParams?.soulId;
 
   logger.info('Fetching soul configuration', { soulId });
 

@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -36,41 +36,29 @@ const getFavoritesSchema = _z.object({
 /**
  * Favorites API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'favorites-api',
   description: 'API endpoints for managing favorite artifacts',
 
   /**
    * API route configuration.
    */
-  path: '/api/favorites',
-  method: 'GET',
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/favorites' }],
 
   /**
    * Emit events (none, this is a CRUD API)
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['api-workflow'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * 添加到精选 Handler
  */
-export const addToFavoriteHandler = async (request: any, { logger }: any) => {
-  logger.info('Favorites API: Add to favorite', { request });
+export const addToFavoriteHandler: any = async (context: any) => {
+  logger.info('Favorites API: Add to favorite', { request: context.request });
 
   try {
-    const body = request.body || {};
+    const body = context.request.body || {};
     const parsed = addToFavoriteSchema.parse(body);
 
     const dataStore = getDataStore();
@@ -123,11 +111,11 @@ export const addToFavoriteHandler = async (request: any, { logger }: any) => {
 /**
  * 从精选移除 Handler
  */
-export const removeFromFavoriteHandler = async (request: any, { logger }: any) => {
-  logger.info('Favorites API: Remove from favorite', { request });
+export const removeFromFavoriteHandler: any = async (context: any) => {
+  logger.info('Favorites API: Remove from favorite', { request: context.request });
 
   try {
-    const body = request.body || {};
+    const body = context.request.body || {};
     const parsed = removeFromFavoriteSchema.parse(body);
 
     const dataStore = getDataStore();
@@ -163,12 +151,12 @@ export const removeFromFavoriteHandler = async (request: any, { logger }: any) =
  *
  * Handles GET requests to list favorites with pagination and filtering.
  */
-export const handler = async (request: any, { logger }: any) => {
-  logger.info('Favorites API: Get favorites', { request });
+export const handler: any = async (context: any) => {
+  logger.info('Favorites API: Get favorites', { request: context.request });
 
   try {
-    // 使用 queryParams 获取查询参数
-    const queryParams: Record<string, any> = request.queryParams || {};
+    // 使用 query 获取查询参数
+    const queryParams: Record<string, any> = context.request.queryParams || {};
     const parsed = getFavoritesSchema.parse(queryParams);
 
     const dataStore = getDataStore();

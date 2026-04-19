@@ -17,6 +17,7 @@ import CodePlayer from './CodePlayer'
 import './WorkspaceTab.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const MEDIA_BASE_URL = import.meta.env.VITE_MEDIA_URL || 'http://localhost:3010'
 const POLL_INTERVAL = 5000 // 5s polling during execution
 
 const WorkspaceTab = ({ taskId, taskStatus }) => {
@@ -246,7 +247,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
     setFileContent(null)
 
     try {
-      const url = `${API_BASE_URL}/media?path=${encodeURIComponent(file.path)}`
+      const url = `${MEDIA_BASE_URL}/media?path=${encodeURIComponent(file.path)}`
       const response = await fetch(url)
 
       if (!response.ok) {
@@ -571,7 +572,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
                   {fileContent.type === 'binary' && (
                     <div className="preview-binary">
                       <p>这是一个二进制文件，无法预览</p>
-                      <button onClick={() => window.open(`${API_BASE_URL}/media?path=${encodeURIComponent(selectedFile.path)}`)} className="download-btn">
+                      <button onClick={() => window.open(`${MEDIA_BASE_URL}/media?path=${encodeURIComponent(selectedFile.path)}`)} className="download-btn">
                         下载文件
                       </button>
                     </div>

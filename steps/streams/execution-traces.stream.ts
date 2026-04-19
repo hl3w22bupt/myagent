@@ -6,7 +6,7 @@
  * input/output recording, error tracking, retry counts, and timing data.
  */
 
-import { StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from 'motia';
 import { z } from 'zod';
 
 /**
@@ -189,3 +189,5 @@ export const config: StreamConfig = {
   schema: executionTraceSchema as any,
   baseConfig: { storageType: 'default' },
 };
+
+export const executionTracesStream = new Stream(config);

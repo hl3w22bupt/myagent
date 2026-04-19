@@ -101,6 +101,7 @@ export class AgentTraceHook extends BaseAgentHook {
 
       // Create initial agent trace entry
       await streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'agent',
         taskId,
@@ -194,6 +195,7 @@ export class AgentTraceHook extends BaseAgentHook {
 
       // Create a separate post trace entry (don't overwrite pre!)
       await streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'agent',
         taskId,

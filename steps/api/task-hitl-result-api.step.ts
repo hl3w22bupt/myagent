@@ -7,39 +7,19 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { ContextManager } from '../../src/core/context/manager';
 
 /**
  * Task HITL Result API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'task-hitl-result-api',
   description: 'API endpoint for setting HITL clarification result',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/tasks/:id/hitl',
-  method: 'PUT',
-
-  /**
-   * No events emitted - this API only saves state.
-   * The Agent polls internally and will resume when it sees status === 'completed'.
-   */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'PUT' as const, path: '/api/tasks/:id/hitl' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Input schema for HITL result.
@@ -62,12 +42,12 @@ export const inputSchema = z.object({
  * Handles setting HITL clarification result.
  * Does NOT trigger new execution - Agent polls internally.
  */
-export const handler = async (request: any, { logger }: any) => {
-  logger.info('Task HITL Result API: Received request', { request });
+export const handler = async (context: any) => {
+  logger.info('Task HITL Result API: Received request', { context });
 
   try {
     // Get task ID from path parameters
-    const taskId = request.pathParams?.id || request.params?.id;
+    const taskId = context.request.pathParams?.id || context.request?.params?.id || context.request?.params?.id;
 
     if (!taskId) {
       logger.error('Task HITL Result API: Task ID is missing');
@@ -81,7 +61,7 @@ export const handler = async (request: any, { logger }: any) => {
     }
 
     // Parse request body
-    const body = request.body || {};
+    const body = context.request.body;
     logger.info('Task HITL Result API: Request body', { body });
 
     // Validate input

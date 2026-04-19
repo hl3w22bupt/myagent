@@ -5,7 +5,7 @@
  * This step eliminates the "no subscriber defined" warning for agent.task.failed.
  */
 
-import type { EventConfig } from 'motia';
+import { type StepConfig, logger, queue } from 'motia';
 import { z } from 'zod';
 
 /**
@@ -36,14 +36,14 @@ export const inputSchema = z.object({
 /**
  * Failure Handler Step configuration.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'failure-handler',
   description: 'Handles agent task failures and logs them for monitoring',
-  subscribes: ['agent.task.failed'],
-  emits: [],
-  flows: ['agent-workflow'],
-};
+  triggers: [
+    queue('agent.task.failed'),
+  ],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Failure Handler.
@@ -51,7 +51,7 @@ export const config: EventConfig = {
  * Logs task failures and can be extended to implement retry logic,
  * alerting, or other failure handling strategies.
  */
-export const handler = async (input: z.infer<typeof inputSchema>, { logger }: any) => {
+export const handler = async (input: z.infer<typeof inputSchema>) => {
   const timestamp = new Date().toISOString();
 
   logger.warn('❌ Agent Task Failed', {

@@ -4,7 +4,7 @@ console.log('import.meta.env:', import.meta.env)
 console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL)
 
 // 使用相对路径以便通过 Vite 代理，或者使用环境变量中的完整 URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -17,6 +17,24 @@ const apiClient = axios.create({
   // 开发环境下避免 CORS 问题
   withCredentials: false
 })
+
+// 媒体服务器地址（独立于后端 API）
+const MEDIA_BASE_URL = import.meta.env.VITE_MEDIA_URL || 'http://localhost:3010'
+
+/**
+ * 构建媒体文件 URL
+ * @param {string} path - 相对路径
+ * @returns {string|null} 完整的媒体 URL
+ */
+export const getMediaUrl = (path) => {
+  if (!path) return null
+  return `${MEDIA_BASE_URL}/media?path=${encodeURIComponent(path)}`
+}
+
+/**
+ * 获取媒体服务器基础 URL
+ */
+export const getMediaBaseUrl = () => MEDIA_BASE_URL
 
 // 请求拦截器
 apiClient.interceptors.request.use(

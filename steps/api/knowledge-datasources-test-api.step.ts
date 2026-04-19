@@ -3,23 +3,20 @@
  * Test data source connection
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { testConnection } from '../../src/core/knowledge/datasource-manager.js';
 import { getDataSource, updateDataSourceStatus } from '../../src/core/knowledge/datasource-store.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-test-api',
   description: 'Test data source connection',
-  path: '/api/knowledge/datasources/:id/test',
-  method: 'POST',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/knowledge/datasources/:id/test' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
-    const { id } = request.pathParams;
+    const { id } = context.request?.params ?? {};
 
     const dataSource = await getDataSource(id);
     if (!dataSource) {

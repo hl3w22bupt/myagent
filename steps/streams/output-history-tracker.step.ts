@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { EventConfig } from 'motia';
+import { logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -32,22 +32,20 @@ export const inputSchema = z.object({
 /**
  * Output History Tracker configuration.
  *
- * NOTE: This step subscribes to agent.task.completed BEFORE result-logger.
- * The Motia framework executes steps in registration order, so this step
- * should be registered before result-logger to ensure output history is
- * saved before result-logger updates the task metadata.
+ * NOTE: This step has been merged into task-result-handler.
+ * iii engine uses competing consumers for queue topics (only one subscriber
+ * receives the message), so we merged this into task-result-handler to ensure
+ * both output tracking and task status update happen in a single handler.
+ *
+ * This file is kept for reference but no longer subscribes to any triggers.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'output-history-tracker',
-  description: 'Tracks output history for multi-turn conversations',
+  description: 'DEPRECATED: Merged into task-result-handler',
 
-  subscribes: ['agent.task.completed'],
-
-  emits: [],
-
-  flows: ['agent-workflow'],
-};
+  triggers: [] as any[],
+  enqueues: [] as const,
+} as const;
 
 /**
  * Output History Tracker handler.
@@ -55,7 +53,7 @@ export const config: EventConfig = {
  * Saves each execution round's output to task metadata for multi-turn conversations.
  * This allows users to view all generated outputs across conversation rounds.
  */
-export const handler = async (input: z.infer<typeof inputSchema>, { logger }: any) => {
+export const handler = async (input: z.infer<typeof inputSchema>) => {
   const { taskId, sessionId, result, messageId } = input;
 
   logger.info('[Output History Tracker] Received event', {

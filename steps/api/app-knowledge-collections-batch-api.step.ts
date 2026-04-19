@@ -5,19 +5,16 @@
  * Batch configure knowledge collections for an app
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { batchConfigureAppKnowledgeCollections } from '../../src/core/knowledge/app-knowledge-manager.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'app-knowledge-collections-batch-api',
   description: 'Batch configure knowledge collections',
-  path: '/api/apps/:appId/knowledge-collections/batch',
-  method: 'POST',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/apps/:appId/knowledge-collections/batch' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 // Request body schema
 const batchConfigSchema = z.object({
@@ -28,13 +25,10 @@ const batchConfigSchema = z.object({
   })).min(1),
 });
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: any = async (context: any) => {
   try {
-    const { appId } = request.pathParams;
-    const body = request.body;
+    const { appId } = context.request.pathParams;
+    const body = context.request.body;
 
     // Validate request body
     const validationResult = batchConfigSchema.safeParse(body);

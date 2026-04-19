@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
-import { systemAPI, tasksAPI, skillsAPI, agentsAPI, favoritesAPI } from '../services/api'
+import { systemAPI, tasksAPI, skillsAPI, agentsAPI, favoritesAPI, getMediaUrl } from '../services/api'
 import AudioPlayer from '../components/AudioPlayer'
 import './Home.css'
 
@@ -281,8 +281,8 @@ function Home() {
 
     try {
       // 使用查询参数格式：/media?path=xxx
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-      const response = await fetch(`${API_BASE_URL}/media?path=${encodeURIComponent(path)}`)
+      const mediaUrl = getMediaUrl(path)
+      const response = await fetch(mediaUrl)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

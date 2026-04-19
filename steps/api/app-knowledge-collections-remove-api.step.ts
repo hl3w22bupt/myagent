@@ -5,25 +5,19 @@
  * Remove a knowledge collection from an app
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { removeAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'app-knowledge-collections-remove-api',
   description: 'Remove knowledge collection from app',
-  path: '/api/apps/:appId/knowledge-collections/:collectionName',
-  method: 'DELETE',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'DELETE' as const, path: '/api/apps/:appId/knowledge-collections/:collectionName' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: any = async (context: any) => {
   try {
-    const { appId, collectionName } = request.pathParams;
+    const { appId, collectionName } = context.request.pathParams;
 
     logger.info('Removing knowledge collection from app', {
       appId,

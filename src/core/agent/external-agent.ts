@@ -467,6 +467,7 @@ export class ExternalAgent extends Agent {
             if (streams?.executionTraces) {
               const clarificationTraceId = `hitl-clarification-${currentTaskId}-${Date.now()}`;
               await streams.executionTraces.set(currentTaskId, clarificationTraceId, {
+                id: clarificationTraceId,
                 traceId: clarificationTraceId,
                 level: 'agent',
                 taskId: currentTaskId,

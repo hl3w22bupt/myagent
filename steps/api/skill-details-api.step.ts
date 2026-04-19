@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { loadAllSkills } from '../../src/core/skill/skill-loader';
 
 /**
@@ -22,32 +22,20 @@ export const pathParamsSchema = z.object({
 /**
  * Skill Details API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'skill-details-api',
   description: 'API endpoint for getting skill details',
 
   /**
    * API route configuration.
    */
-  path: '/api/skills/:skillName',
-  method: 'GET',
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/skills/:skillName' }],
 
   /**
    * No events emitted.
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['metadata-api'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Skill Details API handler.
@@ -55,9 +43,9 @@ export const config: ApiRouteConfig = {
  * Returns detailed information about a specific skill.
  * Supports native skills, Claude Skills, and OpenClaw Skills.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: any = async (context: any) => {
   // Extract skill name from path parameters
-  const skillName = request.pathParams?.skillName;
+  const skillName = context.request.pathParams?.skillName;
 
   if (!skillName) {
     return {

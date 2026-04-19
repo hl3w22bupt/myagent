@@ -1,45 +1,16 @@
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { ContextManager } from '../../src/core/context/manager';
 import { getDataStore } from '../../src/core/database/data-store';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'context-failure-experience-api',
   description: 'REST API endpoint for recording failure experiences',
 
-  path: '/api/context/failure-experience',
-  method: 'POST',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/context/failure-experience' }],
 
-  emits: [],
-  virtualSubscribes: [],
-  flows: [],
-
-  bodySchema: z.object({
-    taskId: z.string(),
-    skillName: z.string(),
-    error: z.string(),
-    scenario: z.string(),
-    solution: z.string(),
-    timestamp: z.string(),
-  }),
-
-  responseSchema: {
-    200: z.object({
-      success: z.boolean(),
-    }),
-    400: z.object({
-      error: z.string(),
-      details: z.array(z.any()).optional(),
-    }),
-    404: z.object({
-      error: z.string(),
-    }),
-    500: z.object({
-      error: z.string(),
-    }),
-  },
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 const schema = z.object({
   taskId: z.string(),
@@ -50,9 +21,9 @@ const schema = z.object({
   timestamp: z.string(),
 });
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler: any = async (context: any) => {
   try {
-    const body = schema.parse(request.body || {});
+    const body = schema.parse(context.request.body || {});
 
     const dataStore = getDataStore();
     await dataStore.initialize();
@@ -95,7 +66,7 @@ export const handler = async (request: any, { logger }: any) => {
     if (error instanceof z.ZodError) {
       logger.warn('Invalid failure experience payload', {
         errors: error.issues,
-        body: request.body || {},
+        body: context.request.body || {},
       });
       return { status: 400, body: { error: 'Invalid request payload', details: error.issues } };
     }

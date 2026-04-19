@@ -167,13 +167,14 @@ describe('SoulScheduler', () => {
       expect(scheduler.isSoulActive('test-session-10')).toBe(false);
     });
 
-    it('should update soul state to HIBERNATED', async () => {
+    it('should update soul state to IDLE after hibernation', async () => {
       const soulAgent = await scheduler.activateSoul('emotional-girlfriend-lively', 'test-session-11');
 
       await scheduler.hibernateSoul(soulAgent);
 
+      // hibernate() now sets status to IDLE (not HIBERNATED) - IDLE means waiting for next trigger
       const state = soulAgent.getSoulState();
-      expect(state.status).toBe('HIBERNATED');
+      expect(state.status).toBe('IDLE');
     });
   });
 

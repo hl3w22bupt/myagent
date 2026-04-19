@@ -5,69 +5,37 @@
  * Returns flat trace array with filtering handled on the frontend.
  */
 
-import type { ApiRouteConfig } from 'motia';
-import { z as _z } from 'zod';
+import { type StepConfig, logger } from 'motia';
+import { z } from 'zod';
+import { executionTracesStream } from '../streams/execution-traces.stream';
 
 /**
  * Get Execution Traces API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'execution-traces-api',
   description: 'API endpoint for fetching execution traces for a task',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/tasks/:id/traces',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/tasks/:id/traces' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Input schema for execution traces requests.
  */
-export const inputSchema = _z.object({
-  /**
-   * The task ID to fetch execution traces for.
-   */
-  id: _z.string(),
-});
+const _taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
 /**
  * Execution Traces handler.
  */
-export const handler = async (
-  input: any,
-  { logger, streams }: any
-) => {
-  const { id: taskId } = input.pathParams;
+export const handler: any = async (context: any) => {
+  const taskId = context.request.pathParams.id;
 
   logger.info('Execution Traces API: Received request', { taskId });
 
   try {
-    if (!streams || !streams.executionTraces) {
-      logger.error('Execution Traces API: Streams not available');
-      return {
-        status: 500,
-        body: {
-          success: false,
-          message: 'Streams not available',
-        },
-      };
-    }
-
     // Get all trace entries for this task
-    const traceData = await streams.executionTraces.getGroup(taskId);
+    const traceData = await executionTracesStream.list(taskId);
 
     // Ensure traces is an array
     const traces = Array.isArray(traceData) ? traceData : [traceData];

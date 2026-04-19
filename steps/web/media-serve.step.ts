@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
@@ -33,14 +33,13 @@ export const inputSchema = z
 /**
  * Media Serve API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'media-serve-api',
-  path: '/media',
-  method: 'GET',
-  flows: ['agent-workflow'],
-  emits: [],
-};
+  description: 'Serves media files from multiple output directories',
+
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/media' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Get MIME type based on file extension.
@@ -104,9 +103,9 @@ function getMimeType(filePath: string): string {
  * Serve media file from disk.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   // Motia uses queryParams not query
-  const queryParams: Record<string, any> = request.queryParams || {};
+  const queryParams: Record<string, any> = context.request.queryParams || {};
   const path = queryParams.path as string;
 
   if (!path) {

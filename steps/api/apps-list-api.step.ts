@@ -3,20 +3,17 @@
  * Get all available apps
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'apps-list-api',
   description: 'Get all available apps',
-  path: '/api/apps',
-  method: 'GET',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/apps' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler: any = async (_context: any) => {
   try {
     const dataStore = getDataStore();
 

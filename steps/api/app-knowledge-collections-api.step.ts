@@ -5,25 +5,19 @@
  * Get all knowledge collections for an app
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getAppKnowledgeCollections } from '../../src/core/knowledge/app-knowledge-manager.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'app-knowledge-collections-api',
   description: 'Get app knowledge collections',
-  path: '/api/apps/:appId/knowledge-collections',
-  method: 'GET',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/apps/:appId/knowledge-collections' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: any = async (context: any) => {
   try {
-    const { appId } = request.pathParams;
+    const { appId } = context.request.pathParams;
 
     logger.info('Getting knowledge collections for app', { appId });
 

@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import type { EventConfig } from 'motia';
+import { type StepConfig, logger, queue } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import { PostgresTokenUsageStorage } from './storage/postgres-token-storage';
 import type { TokenUsageRecordedEvent } from './types';
@@ -35,19 +35,16 @@ export const inputSchema = z.object({
  * Subscribes to token_usage_recorded events and persists data to PostgreSQL.
  * Uses idempotency checks to prevent duplicate processing.
  */
-export const config: EventConfig = {
-  type: 'event',
+export const config = {
   name: 'token-usage-writer',
   description: 'Writes token usage data to PostgreSQL database with idempotency',
 
-  subscribes: ['token_usage_recorded'],
+  triggers: [
+    queue('token_usage_recorded'),
+  ],
 
-  emits: [],
-
-  input: inputSchema,
-
-  flows: ['token-usage-tracking', 'agent-workflow'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Token Usage Writer handler.
@@ -64,7 +61,7 @@ export const config: EventConfig = {
  * 6. Mark trace as processed
  * 7. Handle errors gracefully
  */
-export const handler = async (event: TokenUsageRecordedEvent, { logger }: any) => {
+export const handler = async (event: TokenUsageRecordedEvent) => {
   const {
     traceId,
     taskId,

@@ -5,19 +5,20 @@
  * Runs every 10 minutes to keep the database clean.
  */
 
+import { type StepConfig, cron } from 'motia';
 import { soulCleanupService } from '../../src/core/cleanup/soul-cleanup-service';
 
 /**
  * Step configuration
  */
 export const config = {
-  type: 'cron',
-  cron: '*/10 * * * *', // Every 10 minutes
   name: 'soul-cleanup-cron',
   description: 'Cleanup stopped Soul Agent instances older than 1 hour',
-  emits: [], // No events emitted
-  flows: ['soul-agent-flow'],
-};
+  triggers: [
+    cron('0 0 */10 * * * *'), // Every 10 minutes (7-field format)
+  ],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Cron handler

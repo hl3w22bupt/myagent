@@ -21,8 +21,17 @@ beforeAll(async () => {
   }
 });
 
-// 全局测试结束时清理 AgentManager 单例
+// 全局测试结束时清理资源
 afterAll(async () => {
+  // Shutdown SoulScheduler singleton to clear setInterval timers
+  try {
+    const { soulScheduler } = await import('./src/core/scheduler/soul-scheduler');
+    await soulScheduler.shutdown();
+  } catch {
+    // Ignore if not loaded
+  }
+
+  // Shutdown AgentManager singleton
   const agentManager = getAgentManager();
   if (agentManager && typeof agentManager.shutdown === 'function') {
     await agentManager.shutdown();

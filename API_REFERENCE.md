@@ -439,7 +439,13 @@ curl -s http://localhost:3000/api/skills | jq '.count'
 
 ## 注意事项
 
-1. **默认端口**: 开发服务器默认运行在 `3000` 端口
+1. **默认端口**: 开发服务器默认运行在 `3000` 端口，Media 服务运行在 `3010` 端口
+2. **Media 服务**: 独立的媒体文件服务（`node outputs-server.cjs`），支持大文件传输，绕过 iii 引擎 WebSocket 大小限制
+   - `GET /media?path=<relative-path>` — 获取媒体文件（视频、音频、图片、代码文件等）
+   - `GET /outputs/<path>` — 直接访问 outputs 目录文件
+   - `GET /health` — 健康检查
+   - 支持 Range 请求（视频 seek）
+   - 配置：`VITE_MEDIA_URL` 环境变量（默认 `http://localhost:3010`）
 2. **认证**: 当前API未实现认证，生产环境需要添加API密钥
 3. **异步执行**: `/agent/execute` 返回的是任务ID，实际执行是异步的
 4. **流分配**:

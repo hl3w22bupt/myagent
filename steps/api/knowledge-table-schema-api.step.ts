@@ -4,7 +4,7 @@
  * Returns the schema structure of a knowledge table for UI field mapping configuration
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { Pool } from 'pg';
 
 let pool: Pool | null = null;
@@ -27,17 +27,15 @@ function getPool(): Pool {
   return pool;
 }
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-table-schema-api',
-  path: '/api/knowledge/table-schema',
-  method: 'POST',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  description: 'API endpoint for fetching knowledge table schema',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/knowledge/table-schema' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any) => {
-  const { tableName } = request.body;
+export const handler: any = async (context: any) => {
+  const { tableName } = context.request.body;
 
   // Validate table name to prevent SQL injection
   const tableRegex = /^[a-zA-Z0-9_-]+$/;
@@ -92,7 +90,9 @@ export const handler = async (request: any) => {
       },
     };
   } catch (error) {
-    console.error('[KnowledgeTableSchemaAPI] Failed to get table schema:', error);
+    logger.error('Failed to get table schema', {
+      error: (error as Error).message,
+    });
     return {
       status: 500,
       body: {

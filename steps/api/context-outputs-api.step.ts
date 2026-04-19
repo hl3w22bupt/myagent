@@ -1,27 +1,22 @@
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'context-outputs-api',
   description: 'API endpoint for fetching multi-round outputs for a task',
-  path: '/api/contexts/:id/outputs',
-  method: 'GET',
-  emits: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/contexts/:id/outputs' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
 const unifiedStore = getDataStore();
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: any = async (context: any) => {
   try {
     // Validate taskId
-    const validationResult = taskIdSchema.safeParse(request.pathParams.id);
+    const validationResult = taskIdSchema.safeParse(context.request.pathParams.id);
     if (!validationResult.success) {
       return {
         status: 400,

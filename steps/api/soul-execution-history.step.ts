@@ -7,18 +7,17 @@
 import { z } from 'zod';
 import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
 
+import { type StepConfig, logger } from 'motia';
+
 /**
  * Soul Execution History API configuration.
  */
-export const config: any = {
-  type: 'api',
+export const config = {
   name: 'soul-execution-history',
   description: '获取 Soul Agent 执行历史记录',
-  path: '/api/soul/:soulId/execution-history',
-  method: 'GET',
-  emits: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/soul/:soulId/execution-history' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Request schema
@@ -35,9 +34,9 @@ export type RequestSchema = z.infer<typeof requestSchema>;
 /**
  * Soul Execution History handler.
  */
-export const handler = async (request: any, { logger }: any) => {
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const queryParams: Record<string, any> = request.queryParams || {};
+export const handler = async (context: any) => {
+  const soulId = context.request.pathParams?.soulId || context.request?.params?.soulId;
+  const queryParams: Record<string, any> = context.request.queryParams || context.request?.query || {};
 
   logger.info('Fetching soul execution history', { soulId, queryParams });
 

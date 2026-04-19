@@ -179,13 +179,67 @@ export class WorkflowEngine {
       context.set('environment', (options as any).environment);
     }
 
+    // ⭐ Resume support: load context from previous task if specified
+    if (options.previousTaskId) {
+      try {
+        const contextManager = new ContextManager();
+        const previousContext = await contextManager.getContext(options.previousTaskId);
+        if (previousContext) {
+          // Restore variables from previous context into workflow context
+          if (previousContext.workingMemory) {
+            for (const [key, value] of Object.entries(previousContext.workingMemory)) {
+              context.set(key, value);
+            }
+          }
+          // Restore artifact index for downstream steps
+          if (previousContext.artifactIndex) {
+            context.set('previousArtifacts', previousContext.artifactIndex);
+          }
+          this.logger.info('[WorkflowEngine] Restored context from previous task', {
+            previousTaskId: options.previousTaskId,
+            restoredKeys: previousContext.workingMemory ? Object.keys(previousContext.workingMemory) : [],
+          });
+        }
+      } catch (err: any) {
+        this.logger.warn('[WorkflowEngine] Failed to load previous task context, starting fresh', {
+          previousTaskId: options.previousTaskId,
+          error: err.message,
+        });
+      }
+    }
+
+    // ⭐ Resume support: inject feedback into context
+    if (options.feedback) {
+      context.set('feedback', options.feedback);
+      this.logger.info('[WorkflowEngine] Injected feedback into workflow context', {
+        feedback: options.feedback.substring(0, 100),
+      });
+    }
+
     // ⭐ Clear internal execution steps tracking
     this.internalExecutionSteps = [];
     let lastCompletedStepResult: any = null;  // Track the last completed step result
 
     try {
       // Execute steps in dependency order
-      const sortedSteps = this.topologicalSort(workflow.steps);
+      let sortedSteps = this.topologicalSort(workflow.steps);
+
+      // ⭐ Resume support: if resumeFrom is specified, only execute from that step onwards
+      if (options.resumeFrom) {
+        sortedSteps = this.getStepsFrom(sortedSteps, options.resumeFrom);
+        // Mark skipped steps as completed in context so downstream dependencies resolve
+        const allSteps = this.topologicalSort(workflow.steps);
+        for (const step of allSteps) {
+          if (step.id === options.resumeFrom) break;
+          context.setStepStatus(step.id, 'completed');
+        }
+        this.logger.info('[WorkflowEngine] Resuming workflow from step', {
+          resumeFrom: options.resumeFrom,
+          totalSteps: allSteps.length,
+          resumedSteps: sortedSteps.length,
+          skippedSteps: allSteps.length - sortedSteps.length,
+        });
+      }
 
       for (const step of sortedSteps) {
         // ⭐ Use executeStepWithRetry instead of executeStep
@@ -1742,6 +1796,7 @@ export class WorkflowEngine {
       const id = `wf-step-${stepId}-${stage}-${Date.now()}`;
 
       await this.streams.executionTraces.set(taskId, id, {
+        id,
         traceId: id,
         level: 'workflow-step',
         taskId,

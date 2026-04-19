@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import type { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -19,22 +19,20 @@ export const paramsSchema = z.object({
 /**
  * API 配置
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'get-user',
   description: 'Get user profile and information',
-  path: '/api/users/:userId',
-  method: 'GET',
-  emits: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/users/:userId' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * API Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: any = async (context: any) => {
   try {
-    // 获取路径参数 (支持 pathParams 和 params 两种方式)
-    const userId = request.pathParams?.userId || request.params?.userId;
+    // 获取路径参数
+    const userId = context.request.pathParams?.userId;
 
     if (!userId) {
       return {
@@ -86,7 +84,7 @@ export const handler = async (request: any, { logger }: any) => {
   } catch (error: any) {
     logger.error('Get User API: Error', {
       error: error.message,
-      userId: request.params?.userId,
+      userId: context.request.pathParams?.userId,
     });
 
     if (error instanceof z.ZodError) {
