@@ -7,7 +7,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import type { Task } from '../../src/core/database/data-store';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -17,32 +17,20 @@ import * as yaml from 'js-yaml';
 /**
  * System API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'system-api',
   description: 'API endpoint for system overview',
 
   /**
    * API route configuration.
    */
-  path: '/api/system',
-  method: 'GET',
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/system' }],
 
   /**
    * No events emitted.
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['metadata-api'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Load skills metadata.
@@ -127,7 +115,7 @@ function loadSubagentsMetadata(): any[] {
  *
  * Returns system overview including skills, agents, and statistics.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   logger.info('System API: Received request');
 
   try {

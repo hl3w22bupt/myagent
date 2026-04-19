@@ -1,46 +1,16 @@
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { ContextManager } from '../../src/core/context/manager';
 import { getDataStore } from '../../src/core/database/data-store';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'context-skill-execution-api',
   description: 'REST API endpoint for recording skill executions',
 
-  path: '/api/context/skill-execution',
-  method: 'POST',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/context/skill-execution' }],
 
-  emits: [],
-  virtualSubscribes: [],
-  flows: [],
-
-  bodySchema: z.object({
-    taskId: z.string(),
-    skillName: z.string(),
-    success: z.boolean(),
-    startedAt: z.string(),
-    completedAt: z.string(),
-    duration: z.number(),
-    inputSummary: z.string(),
-    outputType: z.string().optional(),
-    scenario: z.string().optional(),
-    error: z.string().optional(),
-  }),
-
-  responseSchema: {
-    200: z.object({
-      success: z.boolean(),
-    }),
-    400: z.object({
-      error: z.string(),
-      details: z.array(z.any()).optional(),
-    }),
-    500: z.object({
-      error: z.string(),
-    }),
-  },
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 const schema = z.object({
   taskId: z.string(),
@@ -55,9 +25,9 @@ const schema = z.object({
   error: z.string().optional(),
 });
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   try {
-    const body = schema.parse(request.body || {});
+    const body = schema.parse(context.request.body || {});
 
     // 使用 ContextManager 添加执行记录
     const dataStore = getDataStore();

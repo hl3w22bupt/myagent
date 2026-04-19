@@ -5,19 +5,16 @@
  * Update knowledge collection configuration for an app
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { addAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'app-knowledge-collections-update-api',
   description: 'Update knowledge collection configuration',
-  path: '/api/apps/:appId/knowledge-collections/:collectionName',
-  method: 'PUT',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'PUT' as const, path: '/api/apps/:appId/knowledge-collections/:collectionName' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 // Request body schema
 const updateCollectionSchema = z.object({
@@ -28,13 +25,10 @@ const updateCollectionSchema = z.object({
   priority: z.number().optional().default(0),
 });
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: Handlers<typeof config> = async (context) => {
   try {
-    const { appId, collectionName } = request.pathParams;
-    const body = request.body;
+    const { appId, collectionName } = context.request.pathParams;
+    const body = context.request.body;
 
     // Validate request body
     const validationResult = updateCollectionSchema.safeParse(body);

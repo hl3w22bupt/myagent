@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import type { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -27,26 +27,20 @@ const queryParamsSchema = z.object({
 /**
  * API 配置
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'get-user-sessions',
   description: 'Get all sessions for a user',
-  path: '/api/users/:userId/sessions',
-  method: 'GET',
-  emits: [],
-  queryParams: [
-    { name: 'limit', description: 'Maximum number of sessions to return (default: 50)' },
-    { name: 'offset', description: 'Number of sessions to skip (default: 0)' },
-  ],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/users/:userId/sessions' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * API Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   try {
     // 获取路径参数
-    const userId = request.pathParams?.userId || request.params?.userId;
+    const userId = context.request.pathParams?.userId;
 
     if (!userId) {
       return {
@@ -59,7 +53,7 @@ export const handler = async (request: any, { logger }: any) => {
     }
 
     // 验证查询参数
-    const { limit, offset } = queryParamsSchema.safeParse(request.queryParams).data || { limit: 50, offset: 0 };
+    const { limit, offset } = queryParamsSchema.safeParse(context.request.queryParams).data || { limit: 50, offset: 0 };
 
     logger.info('Get User Sessions API: Fetching sessions', { userId, limit, offset });
 
@@ -106,7 +100,7 @@ export const handler = async (request: any, { logger }: any) => {
   } catch (error: any) {
     logger.error('Get User Sessions API: Error', {
       error: error.message,
-      userId: request.params?.userId,
+      userId: context.request.pathParams?.userId,
     });
 
     if (error instanceof z.ZodError) {

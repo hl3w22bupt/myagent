@@ -1,28 +1,22 @@
 /**
  * Knowledge Collections API
  *
- * GET /api/knowledge/collections
+ * GET /api/knowledge/list
  * List all available knowledge collections
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-collections-api',
   description: 'List all available knowledge collections',
-  path: '/api/knowledge/list',
-  method: 'GET',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/knowledge/list' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (
-  request: any,
-  { logger }: any
-) => {
+export const handler: Handlers<typeof config> = async (context) => {
   try {
-    const queryParams: Record<string, any> = request.queryParams || {};
+    const queryParams: Record<string, any> = context.request.queryParams || {};
     const tenantId = queryParams.tenantId || 'default';
 
     logger.info('Getting all knowledge collections', { tenantId });

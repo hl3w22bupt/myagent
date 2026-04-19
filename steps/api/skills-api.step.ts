@@ -6,7 +6,7 @@
  * Uses unified skill-loader from core/skill layer for consistent discovery.
  */
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import {
   loadAllSkills,
   filterByTags,
@@ -32,32 +32,20 @@ export const querySchema = z.object({
 /**
  * Skills API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'skills-api',
   description: 'API endpoint for querying available skills',
 
   /**
    * API route configuration.
    */
-  path: '/api/skills',
-  method: 'GET',
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/skills' }],
 
   /**
    * No events emitted.
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['metadata-api'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Skills API handler.
@@ -65,12 +53,12 @@ export const config: ApiRouteConfig = {
  * Returns list of available skills with optional tag filtering.
  * Uses unified skill-loader from core/skill layer.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   logger.info('Skills API: Received request');
 
   try {
     // Parse query parameters
-    const queryParams: Record<string, any> = request.queryParams || {};
+    const queryParams: Record<string, any> = context.request.queryParams || {};
     const validationResult = querySchema.safeParse(queryParams);
 
     if (!validationResult.success) {

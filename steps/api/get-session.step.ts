@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import type { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -19,22 +19,20 @@ export const paramsSchema = z.object({
 /**
  * API 配置
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'get-session',
   description: 'Get session details with tasks, messages, and artifacts',
-  path: '/api/sessions/:sessionId',
-  method: 'GET',
-  emits: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/sessions/:sessionId' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * API Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   try {
     // 获取路径参数
-    const sessionId = request.pathParams?.sessionId || request.params?.sessionId;
+    const sessionId = context.request.pathParams?.sessionId;
 
     if (!sessionId) {
       return {
@@ -98,14 +96,14 @@ export const handler = async (request: any, { logger }: any) => {
     }
 
     // 获取第一个任务的上下文（假设一个 session 对应一个主要上下文）
-    let context = null;
+    let ctx = null;
     let conversationRounds = [];
     let artifacts = [];
 
     if (tasks.length > 0) {
       const firstTaskId = tasks[0].id;
-      context = await store.getContext(firstTaskId);
-      conversationRounds = context?.conversationRounds || [];
+      ctx = await store.getContext(firstTaskId);
+      conversationRounds = ctx?.conversationRounds || [];
       artifacts = await store.getArtifacts(firstTaskId);
     }
 
@@ -135,10 +133,10 @@ export const handler = async (request: any, { logger }: any) => {
             completedAt: t.completedAt?.toISOString(),
             output: t.output,
           })),
-          context: context ? {
-            summary: context.summary,
-            workingMemory: context.workingMemory,
-            conversationRounds: context.conversationRounds,
+          context: ctx ? {
+            summary: ctx.summary,
+            workingMemory: ctx.workingMemory,
+            conversationRounds: ctx.conversationRounds,
           } : null,
           messages: conversationRounds.flatMap((r: any) => [
             {
@@ -168,7 +166,7 @@ export const handler = async (request: any, { logger }: any) => {
   } catch (error: any) {
     logger.error('Get Session API: Error', {
       error: error.message,
-      sessionId: request.params?.sessionId,
+      sessionId: context.request.pathParams?.sessionId,
     });
 
     if (error instanceof z.ZodError) {

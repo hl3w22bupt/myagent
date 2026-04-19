@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type Handlers, type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -18,41 +18,29 @@ const removeFromFavoriteSchema = _z.object({
 /**
  * Remove from Favorites API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'favorites-remove-api',
   description: 'API endpoint to remove an artifact from favorites',
 
   /**
    * API route configuration.
    */
-  path: '/api/favorites/remove',
-  method: 'POST',
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/favorites/remove' }],
 
   /**
    * Emit events (none, this is a CRUD API)
    */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['api-workflow'],
-};
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Remove from Favorites Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler: Handlers<typeof config> = async (context) => {
   logger.info('Remove from Favorites API: Received request');
 
   try {
-    const body = request.body || {};
+    const body = context.request.body || {};
     const parsed = removeFromFavoriteSchema.parse(body);
 
     const dataStore = getDataStore();
