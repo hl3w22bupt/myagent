@@ -115,8 +115,7 @@ function loadSubagentsMetadata(): any[] {
  *
  * Returns system overview including skills, agents, and statistics.
  */
-export const handler: any = async (context: any) => {
-  logger.info('System API: Received request');
+export const handler: any = async (_context: any) => {
 
   try {
     // Load skills and subagents

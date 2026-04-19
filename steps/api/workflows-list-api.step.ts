@@ -24,8 +24,7 @@ export const config = {
 /**
  * Workflows list handler.
  */
-export const handler = async (context: any) => {
-  logger.info('Workflows API: Received request');
+export const handler = async (_context: any) => {
 
   try {
     // Read workflow directories

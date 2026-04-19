@@ -23,7 +23,7 @@ export const config = {
 /**
  * Input schema for execution traces requests.
  */
-const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
+const _taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
 /**
  * Execution Traces handler.

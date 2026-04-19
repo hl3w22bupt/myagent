@@ -205,8 +205,7 @@ export function clearSubagentsCache(): void {
  * Returns list of available subagents in the system.
  * Dynamically discovers subagents from /subagents directory with 5-minute caching.
  */
-export const handler = async (context: any) => {
-  logger.info('Subagents API: Received request');
+export const handler = async (_context: any) => {
 
   try {
     // Check if we're using cached data before calling getSubagentsMetadata

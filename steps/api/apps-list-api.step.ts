@@ -13,7 +13,7 @@ export const config = {
   enqueues: [] as const,
 } as const satisfies StepConfig;
 
-export const handler: any = async (context: any) => {
+export const handler: any = async (_context: any) => {
   try {
     const dataStore = getDataStore();
 

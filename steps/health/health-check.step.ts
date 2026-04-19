@@ -47,7 +47,7 @@ export const config = {
  *
  * Returns system health status and metrics.
  */
-export const handler: any = async (context: any) => {
+export const handler: any = async (_context: any) => {
   const _startTime = Date.now();
   void _startTime; // Mark as used
 

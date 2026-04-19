@@ -22,8 +22,7 @@ export const config = {
 /**
  * Pinned Tasks List Handler
  */
-export const handler = async (context: any) => {
-  logger.info('Pinned Tasks List API: Received request');
+export const handler = async (_context: any) => {
 
   try {
     const dataStore = getDataStore();

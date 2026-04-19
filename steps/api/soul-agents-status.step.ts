@@ -24,8 +24,7 @@ export const config = {
 /**
  * Soul Agents Status handler.
  */
-export const handler = async (context: any) => {
-  logger.info('Fetching soul agents status');
+export const handler = async (_context: any) => {
 
   try {
     // 1. 获取所有可用的 Soul 配置

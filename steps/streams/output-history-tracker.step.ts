@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, queue } from 'motia';
+import { logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**

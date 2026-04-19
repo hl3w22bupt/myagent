@@ -15,7 +15,7 @@ export const config = {
 
 export const handler = async (context: any) => {
   try {
-    const { id } = context.request?.params;
+    const { id } = context.request?.params ?? {};
 
     // Don't allow deleting the default data source
     if (id === 'default') {

@@ -20,7 +20,7 @@ export const config = {
 
 export const handler = async (context: any) => {
   try {
-    const { id } = context.request?.params;
+    const { id } = context.request?.params ?? {};
     const body = context.request.body;
 
     // Validate request
