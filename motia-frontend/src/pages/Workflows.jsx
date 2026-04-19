@@ -41,7 +41,7 @@ function Workflows() {
     setLoadingDetail(true)
     setShowDAG(true)
     try {
-      const detail = await getWorkflowDetail(workflow.name)
+      const detail = await getWorkflowDetail(workflow.id || workflow.name)
       setSelectedWorkflowDetail(detail)
     } catch (err) {
       console.error('Error loading workflow detail:', err)
@@ -66,7 +66,7 @@ function Workflows() {
     setLoadingDetail(true)
     setShowYAML(true)
     try {
-      const detail = await getWorkflowDetail(workflow.name)
+      const detail = await getWorkflowDetail(workflow.id || workflow.name)
       setSelectedWorkflowDetail(detail)
     } catch (err) {
       console.error('Error loading workflow detail for YAML:', err)
