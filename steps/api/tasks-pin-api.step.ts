@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -18,27 +18,22 @@ const pinTaskSchema = _z.object({
 /**
  * Pin Task API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'tasks-pin-api',
   description: 'API endpoint to pin a task',
 
-  path: '/api/tasks/pin',
-  method: 'POST',
-
-  emits: [],
-  virtualSubscribes: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/tasks/pin' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Pin Task Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   logger.info('Pin Task API: Received request');
 
   try {
-    const body = request.body || {};
+    const body = context.body || context.request?.body || {};
     const parsed = pinTaskSchema.parse(body);
 
     const dataStore = getDataStore();

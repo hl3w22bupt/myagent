@@ -7,27 +7,25 @@
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { SoulState } from '../../src/core/agent/soul-types';
 
+import { type StepConfig, logger } from 'motia';
+
 /**
  * Soul Session Stop API configuration.
  */
-export const config: any = {
-  type: 'api',
+export const config = {
   name: 'soul-session-stop',
   description: '停止 Soul Agent 实例',
 
-  path: '/api/soul/:soulId/session/:sessionId/stop',
-  method: 'POST',
-
-  emits: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/soul/:soulId/session/:sessionId/stop' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Session Stop handler.
  */
-export const handler = async (request: any, { logger }: any) => {
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const sessionId = request.pathParams?.sessionId || request.params?.sessionId;
+export const handler = async (context: any) => {
+  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
+  const sessionId = context.request.pathParams?.sessionId || context.request.params?.sessionId;
 
   logger.info('Stopping soul session', { soulId, sessionId });
 

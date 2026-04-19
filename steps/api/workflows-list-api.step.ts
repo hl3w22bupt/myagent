@@ -7,29 +7,24 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse } from 'yaml';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 const WORKFLOWS_DIR = join(process.cwd(), 'workflows');
 
 /**
  * Workflows API configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'workflows-list-api',
   description: 'API endpoint for listing available workflows',
 
-  path: '/api/workflows',
-  method: 'GET',
-
-  emits: [],
-  virtualSubscribes: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/workflows' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Workflows list handler.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   logger.info('Workflows API: Received request');
 
   try {

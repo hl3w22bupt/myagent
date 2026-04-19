@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 // Initialize data store at module level (same pattern as context-api)
@@ -24,69 +24,13 @@ export const queryParamsSchema = z
 /**
  * PTC Code API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'task-ptc-code-api',
   description: 'REST API endpoint for retrieving PTC generated code',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/tasks/:taskId/ptc-code',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-
-  /**
-   * Query parameters.
-   */
-  queryParams: [
-    {
-      name: 'taskId',
-      description: 'Task ID to retrieve PTC codes for',
-    },
-  ],
-
-  /**
-   * Response schema.
-   */
-  responseSchema: {
-    200: z.object({
-      success: z.boolean(),
-      data: z.array(
-        z.object({
-          round: z.number(),
-          code: z.string(),
-          selectedSkills: z.array(z.string()),
-          reasoning: z.string().optional(),
-          timestamp: z.number(),
-        })
-      ),
-    }),
-    404: z.object({
-      success: z.boolean(),
-      message: z.string(),
-    }),
-    500: z.object({
-      success: z.boolean(),
-      message: z.string(),
-      error: z.string().optional(),
-    }),
-  },
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/tasks/:taskId/ptc-code' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * PTC Code API handler.
@@ -94,8 +38,8 @@ export const config: ApiRouteConfig = {
  * Retrieves PTC code records for a given task from the database.
  * Returns all PTC code generations including the final code for each round.
  */
-export const handler = async (request: any, { logger }: any) => {
-  const taskId = request.pathParams?.taskId || request.queryParams?.taskId;
+export const handler = async (context: any) => {
+  const taskId = context.request.pathParams?.taskId || context.request.params?.taskId || context.query?.taskId;
 
   if (!taskId) {
     logger.warn('PTC Code API: Missing taskId parameter');

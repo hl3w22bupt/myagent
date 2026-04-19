@@ -5,7 +5,7 @@
  * Provides task-level, global summary, and trend analytics.
  */
 
-import type { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z as _z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage';
@@ -48,27 +48,13 @@ function getGranularity(timeRange: TimeRange): 'hour' | 'day' {
 /**
  * Token Usage API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'token-usage-api',
   description: 'API endpoints for token usage statistics and analytics',
 
-  /**
-   * Multiple route configurations handled via pathParams
-   */
-  path: '/api/token-usage/:action',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/token-usage/:action' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Input schema for token usage requests.
@@ -94,12 +80,13 @@ export const inputSchema = _z.object({
  * Token Usage API handler.
  */
 export const handler = async (
-  input: any,
-  { logger }: any
+  context: any
 ) => {
   const { action, taskId, timeRange = '30d' } = {
-    ...input.pathParams,
-    ...input.queryParams,
+    ...context.request?.pathParams,
+    ...context.request?.queryParams,
+    ...context.params,
+    ...context.query,
   };
 
   logger.info('Token Usage API: Received request', { action, taskId, timeRange });

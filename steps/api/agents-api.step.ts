@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';
@@ -13,32 +13,13 @@ import * as yaml from 'js-yaml';
 /**
  * Subagents API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'subagents-api',
   description: 'API endpoint for querying available subagents',
 
-  /**
-   * API route configuration.
-   */
-  path: '/api/agents',
-  method: 'GET',
-
-  /**
-   * No events emitted.
-   */
-  emits: [],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['metadata-api'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/agents' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Cache configuration.
@@ -224,7 +205,7 @@ export function clearSubagentsCache(): void {
  * Returns list of available subagents in the system.
  * Dynamically discovers subagents from /subagents directory with 5-minute caching.
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   logger.info('Subagents API: Received request');
 
   try {

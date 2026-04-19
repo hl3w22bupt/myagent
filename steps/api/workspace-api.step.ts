@@ -1,17 +1,15 @@
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 import { getDataStore } from '../../src/core/database/data-store';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'workspace-api',
-  path: '/api/workspace/:taskId',
-  method: 'GET',
-  emits: [],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/workspace/:taskId' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
@@ -104,12 +102,11 @@ function validatePath(workspace: string): boolean {
 }
 
 export const handler = async (
-  request: any,
-  { logger }: any
+  context: any
 ) => {
   try {
     // 验证 taskId
-    const validationResult = taskIdSchema.safeParse(request.pathParams.taskId);
+    const validationResult = taskIdSchema.safeParse(context.request?.pathParams?.taskId || context.params?.taskId);
     if (!validationResult.success) {
       return {
         status: 400,

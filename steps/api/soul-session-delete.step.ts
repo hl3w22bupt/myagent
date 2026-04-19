@@ -6,27 +6,25 @@
 
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 
+import { type StepConfig, logger } from 'motia';
+
 /**
  * Soul Session Delete API configuration.
  */
-export const config: any = {
-  type: 'api',
+export const config = {
   name: 'soul-session-delete',
   description: '删除 Soul Agent 实例',
 
-  path: '/api/soul/:soulId/session/:sessionId',
-  method: 'DELETE',
-
-  emits: [],
-  flows: [],
-};
+  triggers: [{ type: 'http' as const, method: 'DELETE' as const, path: '/api/soul/:soulId/session/:sessionId' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Soul Session Delete handler.
  */
-export const handler = async (request: any, { logger }: any) => {
-  const soulId = request.pathParams?.soulId || request.params?.soulId;
-  const sessionId = request.pathParams?.sessionId || request.params?.sessionId;
+export const handler = async (context: any) => {
+  const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
+  const sessionId = context.request.pathParams?.sessionId || context.request.params?.sessionId;
 
   logger.info('Deleting soul session', { soulId, sessionId });
 

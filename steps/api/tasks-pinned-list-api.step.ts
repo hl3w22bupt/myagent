@@ -4,30 +4,25 @@
  * Returns list of pinned tasks
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import type { Task } from '../../src/core/database/data-store';
 
 /**
  * Pinned Tasks List API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'tasks-pinned-list-api',
   description: 'API endpoint to list pinned tasks',
 
-  path: '/api/tasks/pinned',
-  method: 'GET',
-
-  emits: [],
-  virtualSubscribes: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/tasks/pinned' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
 /**
  * Pinned Tasks List Handler
  */
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   logger.info('Pinned Tasks List API: Received request');
 
   try {
