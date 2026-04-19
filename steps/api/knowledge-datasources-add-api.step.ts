@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { testConnection } from '../../src/core/knowledge/datasource-manager.js';
 import { addDataSource, type DataSource } from '../../src/core/knowledge/datasource-store.js';
 
@@ -30,19 +30,16 @@ const addDataSourceSchema = z.object({
   ),
 });
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-add-api',
   description: 'Add knowledge data source',
-  path: '/api/knowledge/datasources',
-  method: 'POST',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/api/knowledge/datasources' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
-    const body = request.body;
+    const body = context.body;
 
     // Validate request
     const validationResult = addDataSourceSchema.safeParse(body);

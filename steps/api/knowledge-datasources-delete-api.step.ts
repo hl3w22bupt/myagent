@@ -3,22 +3,19 @@
  * Delete a data source
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataSource, deleteDataSource } from '../../src/core/knowledge/datasource-store.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-delete-api',
   description: 'Delete knowledge data source',
-  path: '/api/knowledge/datasources/:id',
-  method: 'DELETE',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'DELETE' as const, path: '/api/knowledge/datasources/:id' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
-    const { id } = request.pathParams;
+    const { id } = context.params;
 
     // Don't allow deleting the default data source
     if (id === 'default') {

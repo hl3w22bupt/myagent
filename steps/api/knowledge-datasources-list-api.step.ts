@@ -3,20 +3,17 @@
  * List all data sources
  */
 
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getAllDataSources } from '../../src/core/knowledge/datasource-store.js';
 
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'knowledge-datasources-list-api',
   description: 'List all knowledge data sources',
-  path: '/api/knowledge/datasources',
-  method: 'GET',
-  emits: [],
-  flows: ['api-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'GET' as const, path: '/api/knowledge/datasources' }],
+  enqueues: [] as const,
+} as const satisfies StepConfig;
 
-export const handler = async (request: any, { logger }: any) => {
+export const handler = async (context: any) => {
   try {
     const sources = await getAllDataSources();
 
