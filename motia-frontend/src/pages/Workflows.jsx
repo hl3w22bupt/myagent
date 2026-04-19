@@ -18,12 +18,10 @@ function Workflows() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const itemsPerPage = 8
 
-  // Load workflows on mount
   useEffect(() => {
     loadWorkflows()
   }, [])
 
-  // Load workflows from API
   const loadWorkflows = async () => {
     try {
       setLoading(true)
@@ -38,30 +36,24 @@ function Workflows() {
     }
   }
 
-  // Handle visualize button click
   const handleVisualize = async (workflow) => {
-    console.log('🖼️ Opening DAG for workflow:', workflow.name)
     setSelectedWorkflow(workflow)
     setLoadingDetail(true)
     setShowDAG(true)
-
     try {
       const detail = await getWorkflowDetail(workflow.name)
-      console.log('✅ Workflow detail loaded:', detail)
       setSelectedWorkflowDetail(detail)
     } catch (err) {
-      console.error('❌ Error loading workflow detail:', err)
+      console.error('Error loading workflow detail:', err)
     } finally {
       setLoadingDetail(false)
     }
   }
 
-  // Handle node click in DAG
   const handleNodeClick = (step) => {
     setSelectedStep(step)
   }
 
-  // Close DAG modal
   const handleCloseDAG = () => {
     setShowDAG(false)
     setSelectedWorkflow(null)
@@ -69,237 +61,288 @@ function Workflows() {
     setSelectedStep(null)
   }
 
-  // Handle YAML config button click
   const handleShowYAML = async (workflow) => {
-    console.log('📄 Opening YAML config for workflow:', workflow.name)
     setSelectedWorkflow(workflow)
     setLoadingDetail(true)
     setShowYAML(true)
-
     try {
       const detail = await getWorkflowDetail(workflow.name)
-      console.log('✅ Workflow detail loaded for YAML:', detail)
       setSelectedWorkflowDetail(detail)
     } catch (err) {
-      console.error('❌ Error loading workflow detail for YAML:', err)
+      console.error('Error loading workflow detail for YAML:', err)
     } finally {
       setLoadingDetail(false)
     }
   }
 
-  // Close YAML modal
   const handleCloseYAML = () => {
     setShowYAML(false)
     setSelectedWorkflow(null)
     setSelectedWorkflowDetail(null)
   }
 
-  // Filter workflows by search term
   const filteredWorkflows = workflows.filter(workflow =>
     workflow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (workflow.description && workflow.description.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredWorkflows.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedWorkflows = filteredWorkflows.slice(startIndex, endIndex)
 
-  // Reset page when search term changes
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm])
 
   return (
     <div className="workflows-page">
-      <div className="workflows-actions">
-        <button
-          className="btn-refresh"
-          onClick={loadWorkflows}
-          disabled={loading}
-        >
-          {loading ? '加载中...' : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '18px', height: '18px' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.991" />
-              </svg>
-              <span>刷新</span>
-            </>
-          )}
-        </button>
-
-        <div className="search-input-wrapper">
-          <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="搜索工作流..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
+      {/* Page Header */}
+      <div className="workflows-header">
+        <div className="workflows-header-left">
+          <h1 className="workflows-title">
+            <svg className="workflows-title-icon" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0l-5.571 3-5.571-3" />
+            </svg>
+            工作流
+          </h1>
+          <p className="workflows-subtitle">管理和可视化工作流配置</p>
         </div>
-
-        <div className="workflow-count">
-          共 {filteredWorkflows.length} 个工作流
-          {filteredWorkflows.length > itemsPerPage && (
-            <span className="pagination-info"> · 第 {currentPage} / {totalPages} 页</span>
+        <div className="workflows-header-right">
+          {!loading && (
+            <span className="workflows-stats-badge">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+              </svg>
+              {filteredWorkflows.length} 个工作流
+            </span>
           )}
         </div>
       </div>
 
-      {error && (
-        <div className="error-message">
-          ❌ {error}
-          <button onClick={loadWorkflows} className="btn-retry">重试</button>
+      {/* Toolbar */}
+      <div className="workflows-toolbar">
+        <div className="workflows-search-wrapper">
+          <svg className="workflows-search-icon" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="搜索工作流名称或描述..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="workflows-search-input"
+          />
+          {searchTerm && (
+            <button
+              className="workflows-search-clear"
+              onClick={() => setSearchTerm('')}
+              aria-label="清除搜索"
+            >
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
-      )}
 
-      {!loading && !error && filteredWorkflows.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-icon">📋</div>
-          <h3>没有找到工作流</h3>
-          <p>{searchTerm ? '尝试使用其他搜索词' : '暂无可用的 workflows'}</p>
-        </div>
-      )}
-
-      {!loading && !error && filteredWorkflows.length > 0 && (
-        <div className="workflows-table-container">
-          <table className="workflows-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>名称</th>
-                <th>描述</th>
-                <th>步骤数</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedWorkflows.map((workflow, index) => (
-                <tr key={workflow.id || workflow.name || index}>
-                  <td className="workflow-id">
-                    <code className="id-badge">{workflow.id || '-'}</code>
-                  </td>
-                  <td className="workflow-name">
-                    <strong>{workflow.name}</strong>
-                  </td>
-                  <td className="workflow-description">
-                    {workflow.description || '无描述'}
-                  </td>
-                  <td className="workflow-steps">
-                    <span className="step-badge">
-                      {workflow.step_count || '?'} 步骤
-                    </span>
-                  </td>
-                  <td className="workflow-actions">
-                    <button
-                      className="btn-visualize"
-                      onClick={() => handleVisualize(workflow)}
-                      title="查看 DAG 可视化"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: '20px', height: '20px', marginRight: '6px' }}>
-                        {/* Node 1 - Top */}
-                        <circle cx="12" cy="4" r="1.8" fill="currentColor" />
-                        {/* Node 2 - Middle Left */}
-                        <circle cx="6" cy="12" r="1.8" fill="currentColor" />
-                        {/* Node 3 - Middle Right */}
-                        <circle cx="18" cy="12" r="1.8" fill="currentColor" />
-                        {/* Node 4 - Bottom */}
-                        <circle cx="12" cy="20" r="1.8" fill="currentColor" />
-                        {/* Arrows showing flow */}
-                        <path d="M12 5.8 L8 8.8" stroke="currentColor" strokeLinecap="round" />
-                        <path d="M12 5.8 L16 8.8" stroke="currentColor" strokeLinecap="round" />
-                        <path d="M6 13.8 L10 17.2" stroke="currentColor" strokeLinecap="round" />
-                        <path d="M18 13.8 L14 17.2" stroke="currentColor" strokeLinecap="round" />
-                        {/* Arrow heads */}
-                        <path d="M8 8.8 L8.8 8.3 L8 7.8" stroke="currentColor" strokeLinecap="round" fill="currentColor" />
-                        <path d="M16 8.8 L15.2 8.3 L16 7.8" stroke="currentColor" strokeLinecap="round" fill="currentColor" />
-                        <path d="M10 17.2 L10.8 16.7 L10 16.2" stroke="currentColor" strokeLinecap="round" fill="currentColor" />
-                        <path d="M14 17.2 L13.2 16.7 L14 16.2" stroke="currentColor" strokeLinecap="round" fill="currentColor" />
-                      </svg>
-                      可视化
-                    </button>
-                    <button
-                      className="btn-yaml"
-                      onClick={() => handleShowYAML(workflow)}
-                      title="查看 YAML 配置"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '18px', height: '18px', marginRight: '6px' }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                      </svg>
-                      YAML配置
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="pagination-container">
-          <button
-            className="pagination-button"
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
+        <button
+          className="workflows-btn-refresh"
+          onClick={loadWorkflows}
+          disabled={loading}
+          title="刷新工作流列表"
+        >
+          <svg
+            className={loading ? 'spin-icon' : ''}
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+            width="18"
+            height="18"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '16px', height: '16px' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-            上一页
-          </button>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.991" />
+          </svg>
+          <span>{loading ? '加载中...' : '刷新'}</span>
+        </button>
+      </div>
 
-          <div className="pagination-pages">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                className={`pagination-page ${currentPage === page ? 'active' : ''}`}
-                onClick={() => setCurrentPage(page)}
-              >
-                {page}
-              </button>
-            ))}
+      {/* Error State */}
+      {error && (
+        <div className="workflows-error">
+          <div className="workflows-error-icon">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <span className="workflows-error-text">{error}</span>
+          <button onClick={loadWorkflows} className="workflows-error-retry">重试</button>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && !error && filteredWorkflows.length === 0 && (
+        <div className="workflows-empty">
+          <svg className="workflows-empty-icon" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+          </svg>
+          <h3 className="workflows-empty-title">
+            {searchTerm ? '没有匹配的工作流' : '暂无工作流'}
+          </h3>
+          <p className="workflows-empty-desc">
+            {searchTerm ? '尝试使用其他搜索词' : '工作流列表为空，请先配置工作流'}
+          </p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && !error && (
+        <div className="workflows-loading">
+          <div className="workflows-loading-spinner" />
+          <span>加载工作流...</span>
+        </div>
+      )}
+
+      {/* Table */}
+      {!loading && !error && filteredWorkflows.length > 0 && (
+        <>
+          <div className="workflows-table-container">
+            <table className="workflows-table">
+              <thead>
+                <tr>
+                  <th className="th-id">ID</th>
+                  <th className="th-name">名称</th>
+                  <th className="th-desc">描述</th>
+                  <th className="th-steps">步骤</th>
+                  <th className="th-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedWorkflows.map((workflow, index) => (
+                  <tr key={workflow.id || workflow.name || index} className="workflow-row">
+                    <td className="td-id">
+                      <code className="wf-id-badge">{workflow.id || '-'}</code>
+                    </td>
+                    <td className="td-name">
+                      <span className="wf-name">{workflow.name}</span>
+                    </td>
+                    <td className="td-desc">
+                      <span className="wf-desc">{workflow.description || '无描述'}</span>
+                    </td>
+                    <td className="td-steps">
+                      <span className="wf-step-badge">
+                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
+                        </svg>
+                        {workflow.step_count || '?'}
+                      </span>
+                    </td>
+                    <td className="td-actions">
+                      <button
+                        className="wf-action-btn wf-action-dag"
+                        onClick={() => handleVisualize(workflow)}
+                        title="查看 DAG 可视化"
+                      >
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <circle cx="12" cy="4" r="1.8" fill="currentColor" />
+                          <circle cx="6" cy="12" r="1.8" fill="currentColor" />
+                          <circle cx="18" cy="12" r="1.8" fill="currentColor" />
+                          <circle cx="12" cy="20" r="1.8" fill="currentColor" />
+                          <path d="M12 5.8 L8 8.8" stroke="currentColor" strokeLinecap="round" />
+                          <path d="M12 5.8 L16 8.8" stroke="currentColor" strokeLinecap="round" />
+                          <path d="M6 13.8 L10 17.2" stroke="currentColor" strokeLinecap="round" />
+                          <path d="M18 13.8 L14 17.2" stroke="currentColor" strokeLinecap="round" />
+                        </svg>
+                        <span>可视化</span>
+                      </button>
+                      <button
+                        className="wf-action-btn wf-action-yaml"
+                        onClick={() => handleShowYAML(workflow)}
+                        title="查看 YAML 配置"
+                      >
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <span>YAML</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <button
-            className="pagination-button"
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-          >
-            下一页
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: '16px', height: '16px' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-          </button>
-        </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="workflows-pagination">
+              <button
+                className="wf-page-btn"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+                上一页
+              </button>
+
+              <div className="wf-page-numbers">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    className={`wf-page-num ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                className="wf-page-btn"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                下一页
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* DAG Modal */}
       {showDAG && selectedWorkflow && (
-        <div className="dag-modal-overlay" onClick={handleCloseDAG}>
-          <div className="dag-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="dag-modal-header">
-              <h2>
-                工作流 DAG: {selectedWorkflow.name}
-                {loadingDetail && <span className="loading-badge">加载中...</span>}
-              </h2>
-              <button
-                className="btn-close"
-                onClick={handleCloseDAG}
-              >
-                ✕
+        <div className="wf-modal-overlay" onClick={handleCloseDAG}>
+          <div className="wf-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="wf-modal-header">
+              <div className="wf-modal-title-group">
+                <h2 className="wf-modal-title">
+                  <svg width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <circle cx="12" cy="4" r="1.8" fill="currentColor" />
+                    <circle cx="6" cy="12" r="1.8" fill="currentColor" />
+                    <circle cx="18" cy="12" r="1.8" fill="currentColor" />
+                    <circle cx="12" cy="20" r="1.8" fill="currentColor" />
+                    <path d="M12 5.8 L8 8.8" stroke="currentColor" strokeLinecap="round" />
+                    <path d="M12 5.8 L16 8.8" stroke="currentColor" strokeLinecap="round" />
+                  </svg>
+                  {selectedWorkflow.name}
+                </h2>
+                {loadingDetail && <span className="wf-loading-pill">加载中...</span>}
+              </div>
+              <button className="wf-modal-close" onClick={handleCloseDAG} aria-label="关闭">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
-            <div className="dag-modal-body">
+            <div className="wf-modal-body">
               {loadingDetail ? (
-                <div className="dag-loading">
-                  <div className="spinner"></div>
-                  <p>加载 workflow 详情中...</p>
+                <div className="wf-modal-loading">
+                  <div className="wf-modal-spinner" />
+                  <p>加载工作流详情...</p>
                 </div>
               ) : selectedWorkflowDetail ? (
                 <WorkflowDAG
@@ -307,9 +350,12 @@ function Workflows() {
                   onNodeClick={handleNodeClick}
                 />
               ) : (
-                <div className="dag-error">
-                  <p>无法加载 workflow 详情</p>
-                  <button onClick={handleCloseDAG} className="btn-close-dag">关闭</button>
+                <div className="wf-modal-error">
+                  <svg width="40" height="40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  <p>无法加载工作流详情</p>
+                  <button onClick={handleCloseDAG} className="wf-modal-error-btn">关闭</button>
                 </div>
               )}
             </div>
@@ -317,36 +363,43 @@ function Workflows() {
         </div>
       )}
 
-      {/* YAML Config Modal */}
+      {/* YAML Modal */}
       {showYAML && selectedWorkflow && (
-        <div className="dag-modal-overlay" onClick={handleCloseYAML}>
-          <div className="dag-modal-content yaml-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="dag-modal-header">
-              <h2>
-                YAML 配置: {selectedWorkflow.name}
-                {loadingDetail && <span className="loading-badge">加载中...</span>}
-              </h2>
-              <button
-                className="btn-close"
-                onClick={handleCloseYAML}
-              >
-                ✕
+        <div className="wf-modal-overlay" onClick={handleCloseYAML}>
+          <div className="wf-modal-content wf-modal-yaml" onClick={(e) => e.stopPropagation()}>
+            <div className="wf-modal-header">
+              <div className="wf-modal-title-group">
+                <h2 className="wf-modal-title">
+                  <svg width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  {selectedWorkflow.name}
+                </h2>
+                {loadingDetail && <span className="wf-loading-pill">加载中...</span>}
+              </div>
+              <button className="wf-modal-close" onClick={handleCloseYAML} aria-label="关闭">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
-            <div className="dag-modal-body yaml-modal-body">
+            <div className="wf-modal-body wf-modal-yaml-body">
               {loadingDetail ? (
-                <div className="dag-loading">
-                  <div className="spinner"></div>
-                  <p>加载 YAML 配置中...</p>
+                <div className="wf-modal-loading">
+                  <div className="wf-modal-spinner" />
+                  <p>加载 YAML 配置...</p>
                 </div>
               ) : selectedWorkflowDetail?.yaml ? (
-                <pre className="yaml-code-block">
+                <pre className="wf-yaml-block">
                   <code>{selectedWorkflowDetail.yaml}</code>
                 </pre>
               ) : (
-                <div className="dag-error">
+                <div className="wf-modal-error">
+                  <svg width="40" height="40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
                   <p>无法加载 YAML 配置</p>
-                  <button onClick={handleCloseYAML} className="btn-close-dag">关闭</button>
+                  <button onClick={handleCloseYAML} className="wf-modal-error-btn">关闭</button>
                 </div>
               )}
             </div>
