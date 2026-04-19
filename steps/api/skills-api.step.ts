@@ -6,7 +6,7 @@
  * Uses unified skill-loader from core/skill layer for consistent discovery.
  */
 import { z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import {
   loadAllSkills,
   filterByTags,
@@ -53,7 +53,7 @@ export const config = {
  * Returns list of available skills with optional tag filtering.
  * Uses unified skill-loader from core/skill layer.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('Skills API: Received request');
 
   try {

@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -36,7 +36,7 @@ export const config = {
 /**
  * Remove from Favorites Handler
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('Remove from Favorites API: Received request');
 
   try {

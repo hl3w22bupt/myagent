@@ -6,7 +6,7 @@
  * directly access Motia streams.
  */
 
-import { type Handlers, type StepConfig, logger, enqueue } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
 import { z } from 'zod';
 import { executionTracesStream } from '../streams/execution-traces.stream';
 
@@ -62,7 +62,7 @@ const traceSubmitSchema = z.object({
 /**
  * Submit Execution Trace handler.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('Submit Trace API: Received request');
 
   try {

@@ -5,7 +5,7 @@
  * Get all knowledge collections for an app
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getAppKnowledgeCollections } from '../../src/core/knowledge/app-knowledge-manager.js';
 
 export const config = {
@@ -15,7 +15,7 @@ export const config = {
   enqueues: [] as const,
 } as const satisfies StepConfig;
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const { appId } = context.request.pathParams;
 

@@ -5,7 +5,7 @@
  * Called by MyEcho after creating an echo thread.
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 import { getDataStore } from '../../src/core/database/data-store';
@@ -25,7 +25,7 @@ export const config = {
 /**
  * Soul Initialize handler
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   // Get soulId from path parameters
   const soulId = context.request.pathParams?.soulId || context.request.params?.soulId;
   const {

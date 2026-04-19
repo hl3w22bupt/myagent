@@ -3,7 +3,7 @@
  * Get all available apps
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store.js';
 
 export const config = {
@@ -13,7 +13,7 @@ export const config = {
   enqueues: [] as const,
 } as const satisfies StepConfig;
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const dataStore = getDataStore();
 

@@ -2,7 +2,7 @@
  * Get Stream History API Step configuration.
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { taskExecutionStream } from '../streams/task-execution.stream';
 
@@ -25,7 +25,7 @@ const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 /**
  * Stream History handler.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const taskId = context.request.pathParams.id;
 
   logger.info('Stream History API: Received request', { taskId });

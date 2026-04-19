@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { loadAllSkills } from '../../src/core/skill/skill-loader';
 
 /**
@@ -43,7 +43,7 @@ export const config = {
  * Returns detailed information about a specific skill.
  * Supports native skills, Claude Skills, and OpenClaw Skills.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   // Extract skill name from path parameters
   const skillName = context.request.pathParams?.skillName;
 

@@ -5,7 +5,7 @@
  * Batch configure knowledge collections for an app
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { batchConfigureAppKnowledgeCollections } from '../../src/core/knowledge/app-knowledge-manager.js';
 
@@ -25,7 +25,7 @@ const batchConfigSchema = z.object({
   })).min(1),
 });
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const { appId } = context.request.pathParams;
     const body = context.request.body;

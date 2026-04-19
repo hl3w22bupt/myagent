@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -37,7 +37,7 @@ export const config = {
 /**
  * API Handler
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     // 获取路径参数
     const userId = context.request.pathParams?.userId;

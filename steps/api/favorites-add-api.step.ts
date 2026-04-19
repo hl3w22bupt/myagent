@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -37,7 +37,7 @@ export const config = {
 /**
  * Add to Favorites Handler
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('Add to Favorites API: Received request');
 
   try {

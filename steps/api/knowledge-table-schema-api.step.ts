@@ -4,7 +4,7 @@
  * Returns the schema structure of a knowledge table for UI field mapping configuration
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { Pool } from 'pg';
 
 let pool: Pool | null = null;
@@ -34,7 +34,7 @@ export const config = {
   enqueues: [] as const,
 } as const satisfies StepConfig;
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const { tableName } = context.request.body;
 
   // Validate table name to prevent SQL injection

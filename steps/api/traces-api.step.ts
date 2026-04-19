@@ -5,7 +5,7 @@
  * Returns flat trace array with filtering handled on the frontend.
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { executionTracesStream } from '../streams/execution-traces.stream';
 
@@ -28,7 +28,7 @@ const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 /**
  * Execution Traces handler.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const taskId = context.request.pathParams.id;
 
   logger.info('Execution Traces API: Received request', { taskId });

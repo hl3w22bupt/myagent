@@ -1,4 +1,4 @@
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 
@@ -13,7 +13,7 @@ const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 
 const unifiedStore = getDataStore();
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     // Validate taskId
     const validationResult = taskIdSchema.safeParse(context.request.pathParams.id);

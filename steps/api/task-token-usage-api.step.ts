@@ -5,7 +5,7 @@
  * Returns summary, breakdown, and timeline data.
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage';
@@ -30,7 +30,7 @@ const taskIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9-_]+$/);
 /**
  * Task Token Usage API handler.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const taskId = context.request.pathParams.taskId;
 
   logger.info('Task Token Usage API: Received request', { taskId });

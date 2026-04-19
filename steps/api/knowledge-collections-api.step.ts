@@ -5,7 +5,7 @@
  * List all available knowledge collections
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 
 export const config = {
   name: 'knowledge-collections-api',
@@ -14,7 +14,7 @@ export const config = {
   enqueues: [] as const,
 } as const satisfies StepConfig;
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const queryParams: Record<string, any> = context.request.queryParams || {};
     const tenantId = queryParams.tenantId || 'default';

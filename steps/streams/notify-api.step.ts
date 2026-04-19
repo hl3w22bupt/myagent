@@ -5,7 +5,7 @@
  * Stores notifications in the task execution stream.
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { taskExecutionStream } from './task-execution.stream';
 
@@ -27,7 +27,7 @@ const notifySchema = z.object({
   stage: z.string().optional(),
 });
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const body = context.request.body;
     const data = notifySchema.parse(body);

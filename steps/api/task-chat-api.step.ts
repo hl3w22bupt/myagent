@@ -4,7 +4,7 @@
  * Provides endpoint to send chat messages to a specific task.
  */
 
-import { type Handlers, type StepConfig, logger, enqueue } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
 import { z } from 'zod';
 import { getDataStore } from '../../src/core/database/data-store';
 import { ContextManager } from '../../src/core/context/manager';
@@ -82,7 +82,7 @@ const chatInputSchema = z.object({
  *
  * Handles sending chat messages to a specific task.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const request = context.request;
   logger.info('Task Chat API: Received request', { request });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { ContextManager } from '../../src/core/context/manager';
 import { getDataStore } from '../../src/core/database/data-store';
 
@@ -21,7 +21,7 @@ const schema = z.object({
   error: z.string().optional(),
 });
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const body = schema.parse(context.request.body || {});
 

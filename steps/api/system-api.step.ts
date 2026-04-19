@@ -7,7 +7,7 @@
  */
 
 import { z as _z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 import type { Task } from '../../src/core/database/data-store';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -115,7 +115,7 @@ function loadSubagentsMetadata(): any[] {
  *
  * Returns system overview including skills, agents, and statistics.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('System API: Received request');
 
   try {

@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { getDataStore } from '../../src/core/database/data-store';
 
 /**
@@ -54,7 +54,7 @@ export const config = {
 /**
  * 添加到精选 Handler
  */
-export const addToFavoriteHandler: Handlers<typeof config> = async (context) => {
+export const addToFavoriteHandler: any = async (context: any) => {
   logger.info('Favorites API: Add to favorite', { request: context.request });
 
   try {
@@ -111,7 +111,7 @@ export const addToFavoriteHandler: Handlers<typeof config> = async (context) => 
 /**
  * 从精选移除 Handler
  */
-export const removeFromFavoriteHandler: Handlers<typeof config> = async (context) => {
+export const removeFromFavoriteHandler: any = async (context: any) => {
   logger.info('Favorites API: Remove from favorite', { request: context.request });
 
   try {
@@ -151,7 +151,7 @@ export const removeFromFavoriteHandler: Handlers<typeof config> = async (context
  *
  * Handles GET requests to list favorites with pagination and filtering.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   logger.info('Favorites API: Get favorites', { request: context.request });
 
   try {

@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { type Handlers, type StepConfig, logger, stateManager } from 'motia';
+import { type StepConfig, logger, stateManager } from 'motia';
 
 /**
  * Response schema for health check.
@@ -47,7 +47,7 @@ export const config = {
  *
  * Returns system health status and metrics.
  */
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   const _startTime = Date.now();
   void _startTime; // Mark as used
 

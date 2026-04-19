@@ -5,7 +5,7 @@
  * Add a knowledge collection to an app
  */
 
-import { type Handlers, type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { addAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 
@@ -26,7 +26,7 @@ const addCollectionSchema = z.object({
   priority: z.number().optional().default(0),
 });
 
-export const handler: Handlers<typeof config> = async (context) => {
+export const handler: any = async (context: any) => {
   try {
     const { appId } = context.request.pathParams;
     const body = context.request.body;
