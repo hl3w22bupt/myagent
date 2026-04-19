@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { ApiRouteConfig } from 'motia';
+import { type StepConfig, logger, enqueue } from 'motia';
 import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
 import { MessageIdGenerator } from '../../src/utils/message-id-generator';
 
@@ -128,37 +128,35 @@ export const bodySchema = z.object({
    * If not provided, a new messageId will be generated automatically.
    */
   messageId: z.string().optional().describe('Message ID for tracking (format: msg-{timestamp}-{random})'),
+
+  /**
+   * Optional: Step name to resume workflow execution from.
+   * Used when resuming a previously failed or completed workflow from a specific step.
+   */
+  resumeFrom: z.string().optional().describe('Step name to resume workflow execution from'),
+
+  /**
+   * Optional: Task ID of the previous (failed/completed) task to resume from.
+   * Used to load the context and state from the previous task.
+   */
+  previousTaskId: z.string().optional().describe('Task ID of the previous task to resume from'),
+
+  /**
+   * Optional: Feedback or instructions for the resumed workflow.
+   * Provides additional context when resuming from a specific step.
+   */
+  feedback: z.string().optional().describe('Feedback for resumed workflow execution'),
 });
 
 /**
  * Agent API Step configuration.
  */
-export const config: ApiRouteConfig = {
-  type: 'api',
+export const config = {
   name: 'agent-api',
   description: 'REST API endpoint for agent task execution',
-
-  /**
-   * API route configuration.
-   */
-  path: '/agent/execute',
-  method: 'POST',
-
-  /**
-   * Emit agent task execution event.
-   */
-  emits: [{ topic: 'agent.task.execute', label: 'Execute agent task' }],
-
-  /**
-   * Virtual connections.
-   */
-  virtualSubscribes: [],
-
-  /**
-   * Flow assignment.
-   */
-  flows: ['agent-workflow'],
-};
+  triggers: [{ type: 'http' as const, method: 'POST' as const, path: '/agent/execute' }],
+  enqueues: ['agent.task.execute'] as const,
+} as const satisfies StepConfig;
 
 /**
  * Agent API handler.
@@ -173,14 +171,14 @@ export const config: ApiRouteConfig = {
  * we create the task record in the database BEFORE emitting the event. This ensures
  * that when the frontend immediately queries /agent/result, the task will exist.
  */
-export const handler = async (request: any, { emit, logger }: any) => {
+export const handler = async (context: any) => {
   // Validate request body
-  const validationResult = bodySchema.safeParse(request.body);
+  const validationResult = bodySchema.safeParse(context.body);
   if (!validationResult.success) {
     throw new Error(`Invalid request: ${validationResult.error.message}`);
   }
 
-  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, delegateTo, environment, userId, userContext, subagent, agentType, rewriteRequest, workflow, workflow_input, messageId: providedMessageId } =
+  const { task, sessionId, systemPrompt, availableSkills, app, useDelegation, delegateTo, environment, userId, userContext, subagent, agentType, rewriteRequest, workflow, workflow_input, messageId: providedMessageId, resumeFrom, previousTaskId, feedback } =
     validationResult.data;
 
   // Generate unique taskId with counter to prevent conflicts
@@ -242,7 +240,7 @@ export const handler = async (request: any, { emit, logger }: any) => {
 
   // Emit agent task execution event
   // This will be picked up by the master-agent step
-  await emit({
+  await enqueue({
     topic: 'agent.task.execute',
     data: {
       taskId,
@@ -262,8 +260,11 @@ export const handler = async (request: any, { emit, logger }: any) => {
       rewriteRequest, // Request rewriting control (default: true)
       workflow, // Workflow name to execute (if specified)
       workflowInput: workflow_input, // Workflow input parameters (if specified)
+      resumeFrom, // Step name to resume workflow from
+      previousTaskId, // Previous task ID for context loading
+      feedback, // Feedback for resumed workflow
     },
-  } as any);
+  });
 
   // Return immediate response
   return {
