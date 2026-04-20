@@ -317,6 +317,61 @@ export const handler = async (input: any) => {
         });
       }
 
+      // ⭐ Workflow Resume: 检查是否有 resumeFrom 参数 + task 有 workflow 信息
+      const chatWorkflowName = (input as any).workflowName || (existingTask?.metadata?.workflow as string);
+      const chatResumeFrom = (input as any).resumeFrom;
+      const chatFeedback = (input as any).feedback || '';
+
+      if (chatWorkflowName && chatResumeFrom) {
+        logger.info('[master-agent.chat] Workflow resume detected', {
+          taskId,
+          workflow: chatWorkflowName,
+          resumeFrom: chatResumeFrom,
+          feedback: chatFeedback.substring(0, 100),
+        });
+
+        // Get or create workflow engine
+        if (!(globalThis as any).motiaWorkflowEngine) {
+          (globalThis as any).motiaWorkflowEngine = new WorkflowEngine(agentManager);
+          const workflowLoader = getWorkflowLoader((globalThis as any).motiaWorkflowEngine);
+          await workflowLoader.loadFromDefaults();
+          logger.info('[master-agent.chat] Workflow engine initialized');
+        }
+        const workflowEngine = (globalThis as any).motiaWorkflowEngine;
+
+        const workflowResult = await workflowEngine.executeFrom(
+          chatWorkflowName,
+          chatResumeFrom,
+          chatFeedback,
+          taskId,
+          { taskId, parentSessionId: sessionId, environment: (context as any).environment }
+        );
+
+        // 更新任务状态
+        const hasFailedStep = workflowResult.steps?.some((s: any) => s.status === 'failed');
+        await store.updateTask(taskId, {
+          status: hasFailedStep ? 'failed' : 'completed',
+          output: workflowResult.output,
+          metadata: {
+            ...existingTask?.metadata,
+            workflowContext: workflowResult.context,
+            workflowSteps: workflowResult.steps,
+          },
+        });
+
+        logger.info('[master-agent.chat] Workflow resume completed', {
+          taskId,
+          success: workflowResult.success,
+          stepCount: workflowResult.steps?.length,
+        });
+
+        return {
+          success: workflowResult.success,
+          output: workflowResult.output,
+          taskId,
+        };
+      }
+
       logger.info('Context loaded for chat', {
         taskId,
         conversationHistoryLength: conversationHistory.length,

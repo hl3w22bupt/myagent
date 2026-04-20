@@ -204,6 +204,20 @@ export const handler: any = async (context: any) => {
         environment = taskResult.metadata?.environment as Record<string, any>; // 获取 environment
         app = taskResult.app; // 获取 app 用于知识库自动发现
 
+        // 如果是 workflow resume，从 task metadata 获取 workflow 名称
+        if (resumeFrom) {
+          const workflowName = taskResult.metadata?.workflow as string;
+          if (workflowName) {
+            logger.info('Task Chat API: Workflow resume detected from task metadata', {
+              taskId,
+              workflow: workflowName,
+              resumeFrom,
+            });
+            // 将 workflow 名称注入到后续 emit 的参数中
+            (request as any).__workflowName = workflowName;
+          }
+        }
+
         // 如果前端提供了 sessionId 且与数据库不同，记录警告
         if (request.body?.sessionId && request.body.sessionId !== sessionId) {
           logger.warn('Task Chat API: Frontend provided sessionId differs from database', {
@@ -420,6 +434,7 @@ export const handler: any = async (context: any) => {
         resumeFrom, // Step name to resume workflow from
         previousTaskId, // Previous task ID for context loading
         feedback, // Feedback for resumed workflow
+        workflowName: (request as any).__workflowName, // Workflow name from task metadata
       },
     });
 
