@@ -1381,6 +1381,7 @@ export const handler = async (input: z.infer<typeof inputSchema>) => {
       // Push to taskResult stream with the same format as /agent/result API
       // Use taskId as groupId - frontend subscribes with: stream.subscribeGroup('taskResult', taskId)
       await taskResultStream.set(taskId, taskId, {
+        id: taskId,
         taskId: finalTask.id,
         task: finalTask.task,
         sessionId: finalTask.sessionId,

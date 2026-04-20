@@ -1015,7 +1015,11 @@ function Home() {
                 ) : favorites.length > 0 ? (
                   <>
                     <div className="favorites-grid">
-                      {favorites.map(favorite => renderFavoriteCard(favorite))}
+                      {favorites.map(favorite => (
+                        <React.Fragment key={favorite.artifactId || favorite.id}>
+                          {renderFavoriteCard(favorite)}
+                        </React.Fragment>
+                      ))}
                     </div>
 
                     {/* 分页控制 */}

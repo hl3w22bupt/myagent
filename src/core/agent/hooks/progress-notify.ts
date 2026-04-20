@@ -443,6 +443,7 @@ export class AgentProgressNotifyHook extends BaseAgentHook {
       // 发送到 taskExecution stream（与 task hook 和 skill hook 统一）
       await globalStreams.taskExecution.set(groupId, entryId, {
         ...event,
+        id: event.id || entryId,
         category: 'agent_hook', // 标识为 agent hook 事件
       });
 

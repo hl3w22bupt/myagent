@@ -500,6 +500,7 @@ export class Agent {
 
           await streams.taskExecution.set(groupId, entryId, {
             ...event,
+            id: entryId,
             category: 'agent_hook',
           });
 
@@ -1656,6 +1657,7 @@ ${userRequest}
 
       await streams.taskExecution.set(groupId, entryId, {
         ...event,
+        id: entryId,
         category: 'agent_hook',
       });
 
@@ -1735,6 +1737,7 @@ ${userRequest}
 
       await streams.taskExecution.set(groupId, entryId, {
         ...event,
+        id: entryId,
         category: 'agent_hook',
       });
 
@@ -2062,6 +2065,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
           const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${taskId}-${Date.now()}`;
           await streams.taskExecution.set(taskId, clarificationEntryId, {
             ...clarificationEvent,
+            id: clarificationEntryId,
             category: 'agent_hook',
           });
 
@@ -2143,6 +2147,7 @@ Important: A vague "help me" request should get LOW confidence because it's uncl
           const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${taskId}-${Date.now()}`;
           await streams.taskExecution.set(taskId, clarificationEntryId, {
             ...clarificationEvent,
+            id: clarificationEntryId,
             category: 'agent_hook',
           });
 

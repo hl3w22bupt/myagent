@@ -259,6 +259,7 @@ ${soulGoal}
       if (streams?.taskExecution) {
         const startUniqueId = `${this.taskId}-start-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, startUniqueId, {
+          id: startUniqueId,
           taskId: this.taskId,
           task: taskPrompt.substring(0, 100),
           status: 'running',
@@ -470,6 +471,7 @@ ${soulGoal}
       if (streams?.taskExecution) {
         const completeUniqueId = `${this.taskId}-complete-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, completeUniqueId, {
+          id: completeUniqueId,
           taskId: this.taskId,
           task: result.output || '执行完成',
           status: 'completed',
@@ -633,6 +635,7 @@ ${soulGoal}
       if (streams?.taskExecution) {
         const startUniqueId = `${this.taskId}-start-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, startUniqueId, {
+          id: startUniqueId,
           taskId: this.taskId,
           task: taskPrompt.substring(0, 100),
           status: 'running',
@@ -805,6 +808,7 @@ ${soulGoal}
       if (streams?.taskExecution) {
         const completeUniqueId = `${this.taskId}-complete-${Date.now()}`;
         await streams.taskExecution.set(this.taskId, completeUniqueId, {
+          id: completeUniqueId,
           taskId: this.taskId,
           task: result.output || '执行完成',
           status: 'completed',

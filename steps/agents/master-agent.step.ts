@@ -411,6 +411,7 @@ export const handler = async (input: any) => {
       });
 
       await taskExecutionStream.set(taskId, uniqueId, {
+        id: uniqueId,
         progressType: 'chat',
         type: 'chat',
         role: 'assistant',
@@ -449,6 +450,7 @@ export const handler = async (input: any) => {
       const timestamp = Date.now();
       const uniqueId = `${taskId}-chat-error-${timestamp}`;
       await taskExecutionStream.set(taskId, uniqueId, {
+        id: uniqueId,
         progressType: 'chat',
         type: 'error',
         role: 'assistant',
@@ -623,35 +625,10 @@ export const handler = async (input: any) => {
     });
   }
 
-  // Helper function to update stream
-  // DISABLED: Stream updates cause stack overflow due to wrapObject bug
-  // See: docs/websocket-stream-analysis.md
-  const updateStream = async (status: string, data?: any) => {
-    try {
-      // Only log to console, don't update stream
-      logger.debug(`[${status}] ${taskId}`, {
-        task: input.task,
-        sessionId,
-        timestamp: new Date().toISOString(),
-        ...data,
-      });
-
-      // Stream update disabled to prevent stack overflow
-      // await streams.taskExecution.set(taskId, taskId, {
-      //   taskId,
-      //   task: input.task,
-      //   status,
-      //   sessionId,
-      //   timestamp: new Date().toISOString(),
-      //   ...data,
-      // });
-    } catch (error) {
-      logger.warn('Failed to log stream update', { error });
-    }
-  };
-
-  // Set initial status to pending
-  await updateStream('pending', { currentStep: 'Initializing' });
+  // Stream updates are handled by:
+  // - DefaultTaskHook (preExec/postExec for started/completed/failed)
+  // - Agent hooks (progress notifications)
+  // - Chat response writes below
 
   try {
     // === Execute pre-hooks ===
@@ -679,9 +656,6 @@ export const handler = async (input: any) => {
     }
 
     taskContext.status = 'running';
-
-    // Update status to running
-    await updateStream('running', { currentStep: 'Acquiring agent' });
 
     // Determine agent type (default to master for backward compatibility)
     const agentType = input.agentType || 'master';
@@ -798,10 +772,6 @@ export const handler = async (input: any) => {
       'context.rewriteRequest': (taskContext.context as any).rewriteRequest,
     });
 
-    await updateStream('running', {
-      currentStep: `${agentTypeName} acquired, starting execution`,
-    });
-
     // If continuing conversation, get history
     if (input.continue) {
       const agentState = agent.getState();
@@ -809,13 +779,12 @@ export const handler = async (input: any) => {
         sessionId,
         conversationLength: agentState.conversationHistory.length,
       });
-      await updateStream('running', {
-        currentStep: `Continuing conversation (${agentState.conversationHistory.length} messages)`,
+      logger.info('Continuing conversation', {
+        sessionId,
+        conversationLength: agentState.conversationHistory.length,
       });
     }
 
-    // Execute task (Agent maintains session state)
-    await updateStream('running', { currentStep: 'Executing task' });
     logger.info('About to call agent.run()', { sessionId, task: input.task, taskId });
 
     // Update task status to RUNNING
@@ -940,6 +909,7 @@ export const handler = async (input: any) => {
         }).join('\n');
 
         await taskExecutionStream.set(taskId, uniqueId, {
+          id: uniqueId,
           progressType: 'workflow',
           type: 'info',
           role: 'system',
@@ -1054,14 +1024,6 @@ export const handler = async (input: any) => {
         logger.error('Failed to update task status', { taskId, error: dbError.message });
       }
 
-      // Update stream with awaiting_clarification status
-      // Stream provides real-time push to frontend subscribers
-      await updateStream('awaiting_clarification', {
-        clarification: result.clarification,
-        currentStep: 'Awaiting user clarification',
-        metadata: result.metadata,
-      });
-
       return {
         success: false,
         awaitingClarification: true,
@@ -1120,15 +1082,6 @@ export const handler = async (input: any) => {
       executionTime: result.executionTime,
       output: result.output,
       error: result.error,
-      metadata: result.metadata,
-    });
-
-    // Update stream with completed status
-    await updateStream('completed', {
-      output: result.output,
-      error: result.error,
-      executionTime: result.executionTime,
-      currentStep: 'Task completed',
       metadata: result.metadata,
     });
 
@@ -1202,12 +1155,6 @@ export const handler = async (input: any) => {
       success: false,
       error: error.message,
       executionTime: 0,
-    });
-
-    // Update stream with failed status
-    await updateStream('failed', {
-      error: error.message,
-      currentStep: 'Task failed',
     });
 
     // Emit failure event

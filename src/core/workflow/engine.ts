@@ -1279,6 +1279,7 @@ export class WorkflowEngine {
 
       await streams.taskExecution.set(groupId, entryId, {
         ...event,
+        id: entryId,
         category: 'workflow_hook',
       });
 
@@ -2001,6 +2002,7 @@ export class WorkflowEngine {
 
       await streams.taskExecution.set(groupId, entryId, {
         ...event,
+        id: entryId,
         category: 'workflow_hook',
       });
     }

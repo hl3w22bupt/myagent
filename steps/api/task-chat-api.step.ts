@@ -278,6 +278,7 @@ export const handler: any = async (context: any) => {
         const uniqueId = `${taskId}-chat-${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
 
         await taskExecutionStream.set(taskId, uniqueId, {
+          id: uniqueId,
           taskId: taskId,
           task: message,
           status: 'running',
@@ -361,6 +362,7 @@ export const handler: any = async (context: any) => {
 
     try {
       const streamResult = await taskExecutionStream.set(taskId, uniqueId, {
+        id: uniqueId,
         taskId: taskId,
         task: message,
         status: 'running',

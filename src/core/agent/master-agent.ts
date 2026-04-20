@@ -730,6 +730,7 @@ ${task}
       const entryId = `agent-delegation_planning-analyzing-${effectiveTaskId}-${timestamp}`;
       await streams.taskExecution.set(effectiveTaskId, entryId, {
         ...analyzingEvent,
+        id: entryId,
         category: 'agent_hook',
       });
       console.log('[MasterAgent] Delegation planning (analyzing) notification sent');
@@ -833,6 +834,7 @@ ${task}
             const entryId = `agent-delegation_plan-completed-${effectiveTaskId}-${timestamp}`;
             await streams.taskExecution?.set(effectiveTaskId, entryId, {
               ...planEvent,
+              id: entryId,
               category: 'agent_hook',
             });
             console.log('[MasterAgent] Delegation plan (resolved) notification sent');
@@ -1067,6 +1069,7 @@ ${task}
         const entryId = `agent-delegation_plan-direct-${effectiveTaskId}-${timestamp}`;
         await streams.taskExecution.set(effectiveTaskId, entryId, {
           ...event,
+          id: entryId,
           category: 'agent_hook',
         });
         console.log('[MasterAgent] Direct delegation notification sent', {
@@ -1598,6 +1601,7 @@ Important rules:
       const entryId = `agent-task_decomposition-${effectiveTaskId}-${timestamp}`;
       await streams.taskExecution.set(effectiveTaskId, entryId, {
         ...event,
+        id: entryId,
         category: 'agent_hook',
       });
 

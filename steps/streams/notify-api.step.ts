@@ -58,6 +58,7 @@ export const handler: any = async (context: any) => {
     }
 
     await taskExecutionStream.set(data.taskId, uniqueId, {
+      id: uniqueId,
       taskId: data.taskId,
       task: displayMessage,
       // FIX: Send 'completed' status when post hook finishes successfully

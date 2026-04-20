@@ -539,6 +539,30 @@ function TaskDetail() {
         console.log('[Stream History] 去重后历史数据数量:', uniqueEntries.length)
         messagesRef.current = uniqueEntries
         setMessages(prev => [...uniqueEntries])
+
+        // 根据 stream 历史数据更新 task 状态
+        const statusPriority = { 'completed': 4, 'failed': 4, 'running': 3, 'started': 2, 'pending': 1 }
+        const statusEntries = uniqueEntries.filter(e => e.status)
+        if (statusEntries.length > 0) {
+          let bestEntry = statusEntries[0]
+          for (const e of statusEntries) {
+            const ePriority = statusPriority[e.status] || 0
+            const bestPriority = statusPriority[bestEntry.status] || 0
+            if (ePriority > bestPriority || (ePriority === bestPriority)) {
+              bestEntry = e
+            }
+          }
+          const latestStatus = bestEntry.status === 'started' ? 'running' : bestEntry.status
+          if (latestStatus && latestStatus !== 'pending') {
+            setTask(prev => {
+              if (prev && prev.status !== latestStatus) {
+                console.log('[Stream History] 更新 task 状态:', prev.status, '→', latestStatus)
+                return { ...prev, status: latestStatus }
+              }
+              return prev
+            })
+          }
+        }
       }
     } catch (error) {
       console.error('[Stream History] 获取历史数据失败:', error)
@@ -794,6 +818,30 @@ function TaskDetail() {
       }
 
       setMessages(prev => [...uniqueEntries]) // 浅拷贝确保组件更新
+
+      // 根据 stream 消息中的 status 更新 task 状态（解决任务一直显示"等待中"的问题）
+      const statusPriority = { 'completed': 4, 'failed': 4, 'running': 3, 'started': 2, 'pending': 1 }
+      const statusEntries = uniqueEntries.filter(e => e.status)
+      if (statusEntries.length > 0) {
+        // 取优先级最高的状态，同优先级取最后出现的
+        let bestEntry = statusEntries[0]
+        for (const e of statusEntries) {
+          const ePriority = statusPriority[e.status] || 0
+          const bestPriority = statusPriority[bestEntry.status] || 0
+          if (ePriority > bestPriority || (ePriority === bestPriority)) {
+            bestEntry = e
+          }
+        }
+        const latestStatus = bestEntry.status === 'started' ? 'running' : bestEntry.status
+        if (latestStatus && latestStatus !== 'pending') {
+          setTask(prev => {
+            if (prev && prev.status !== latestStatus) {
+              return { ...prev, status: latestStatus }
+            }
+            return prev
+          })
+        }
+      }
     })
 
     // 清理所有订阅
@@ -869,116 +917,7 @@ function TaskDetail() {
     }
   }, [messages, id])
 
-  useEffect(() => {
-    // 清理之前的 interval
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-
-    // ✨ 优化：如果 stream 可用，就不启动轮询，完全依赖 stream
-    if (stream) {
-      console.log('[✨ Stream] 可用，跳过轮询，完全依赖 stream 推送')
-      return
-    }
-
-    // ✨ 如果已经有 task 数据了，不需要轮询（说明已经通过初始加载获取了数据）
-    if (task) {
-      console.log('[✨ 数据] 已有任务数据，跳过轮询')
-      return
-    }
-
-    // ⚠️ Stream 不可用且没有数据时，才启用轮询作为兜底机制
-    console.log('[⚠️ Stream] 不可用且无数据，启用轮询兜底机制')
-
-    const fetchTaskDetails = async () => {
-      try {
-        // 轮询时使用较短的超时时间（5秒），避免长时间等待
-        const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
-        console.log('[📡 轮询] 任务查询成功:', task?.taskId, task?.status)
-        setTask(task)
-        setError('')
-        setLoading(false)
-
-        // 检查 artifacts 的收藏状态
-        if (task.artifacts && task.artifacts.length > 0) {
-          checkFavoritesStatus(task.artifacts)
-        }
-        // 只有在首次成功获取数据时才结束 initialLoading
-        if (!hasInitialData.current) {
-          hasInitialData.current = true
-          setInitialLoading(false)
-        }
-        return { found: true, error: null }
-      } catch (error) {
-        console.error('[❌ 轮询] 查询失败:', error.message)
-        setLoading(false)
-        // 不要在失败时结束 initialLoading，让用户看到"加载中..."而不是"执行中"
-
-        // 处理 404 错误：404 = Not Found，直接停止轮询
-        if (error.response?.status === 404) {
-          console.error('[❌ 轮询] 任务不存在:', id)
-          setError('任务不存在')
-          setInitialLoading(false) // 404时结束加载，显示错误
-          return { found: false, error: true, taskNotFound: true }
-        }
-
-        // 其他错误
-        setError('获取任务详情失败')
-        return { found: false, error: true }
-      }
-    }
-
-    let pollCount = 0
-    const maxPolls = 60 // 最多轮询60次（约1分钟）
-
-    const startPolling = async () => {
-      setPolling(true)
-      pollCount = 0
-
-      const poll = async () => {
-        pollCount++
-        if (pollCount % 10 === 0) {
-          console.log(`[📡 轮询] 第 ${pollCount} 次，任务ID: ${id}`)
-        }
-        const result = await fetchTaskDetails()
-
-        // 如果找到任务、出错、任务不存在或达到最大轮询次数，停止轮询
-        if (result.found || result.error || result.taskNotFound || pollCount >= maxPolls) {
-          setPolling(false)
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
-          }
-          if (result.taskNotFound) {
-            // 任务不存在，停止轮询，不设置额外错误
-            console.log('[🛑 轮询] 任务不存在，停止')
-          } else if (result.error && !result.taskNotFound) {
-            setError('获取任务详情失败')
-          } else if (!result.found && pollCount >= maxPolls) {
-            setError('任务执行超时，请稍后刷新页面重试')
-          }
-        }
-      }
-
-      // 立即执行一次
-      await poll()
-
-      // 如果还没找到、没有错误、且任务不是不存在，开始轮询
-      if (pollCount < maxPolls && !error && !task && !polling) {
-        pollIntervalRef.current = setInterval(poll, 1000) // 每秒轮询一次
-      }
-    }
-
-    startPolling()
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
-    }
-  }, [id, stream, task]) // 依赖 stream 和 task，当任何变化时重新评估
+  // 重置版本选择当任务更新时
 
   // 重置版本选择当任务更新时
   useEffect(() => {
@@ -2760,13 +2699,13 @@ function TaskDetail() {
     return (
       <div className="message-group">
         <div className="group-timestamp">{groupTimestamp}</div>
-        {group.map(msg => (
+        {group.map((msg, index) => (
           msg.progressType === 'workflow' ? (
-            <WorkflowBubble key={msg.id || msg.timestamp} message={msg} />
+            <WorkflowBubble key={msg.id || `${msg.timestamp}-${index}`} message={msg} />
           ) : msg.progressType === 'chat' ? (
-            <ChatBubble key={msg.id || msg.timestamp} message={msg} />
+            <ChatBubble key={msg.id || `${msg.timestamp}-${index}`} message={msg} />
           ) : (
-            <MessageBubble key={msg.id || msg.timestamp} message={msg} />
+            <MessageBubble key={msg.id || `${msg.timestamp}-${index}`} message={msg} />
           )
         ))}
       </div>
@@ -2899,8 +2838,8 @@ function TaskDetail() {
       // skill 类型的消息需要特殊处理
       content = formatSkillMessage(message)
     } else {
-      // 其他类型的消息显示 task 或 message
-      content = message.task || message.message || ''
+      // 其他类型的消息显示 content、task 或 message
+      content = message.content || message.task || message.message || ''
     }
 
     return (

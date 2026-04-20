@@ -454,6 +454,7 @@ export class ExternalAgent extends Agent {
               const clarificationEntryId = `${isTimeout ? 'hitl-auto' : 'user-clarification'}-${currentTaskId}-${Date.now()}`;
               await streams.taskExecution.set(currentTaskId, clarificationEntryId, {
                 ...clarificationEvent,
+                id: clarificationEntryId,
                 category: 'agent_hook',
               });
 

@@ -25,7 +25,10 @@ export const useTaskPolling = (taskId, interval = 2000) => {
       const response = await tasksAPI.getTaskDetails(taskId);
       return response;
     } catch (err) {
-      console.error('[useTaskPolling] Failed to fetch task:', err);
+      // 404 静默处理：任务可能还在创建中
+      if (err.response?.status !== 404) {
+        console.debug('[useTaskPolling] Failed to fetch task:', err.message);
+      }
       throw err;
     }
   }, [taskId]);
@@ -37,16 +40,17 @@ export const useTaskPolling = (taskId, interval = 2000) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/api/contexts/${taskId}`);
       if (!response.ok) {
-        console.error('[useTaskPolling] API response not OK:', response.status);
+        // 404 是正常的：任务刚开始时 context 尚未创建，不需要报错
+        if (response.status !== 404) {
+          console.debug('[useTaskPolling] API response not OK:', response.status);
+        }
         return null;
       }
       const result = await response.json();
-      console.log('[useTaskPolling] HITL API response:', result);
       const hitlState = result.data?.hitlState || null;
-      console.log('[useTaskPolling] Extracted HITL state:', hitlState);
       return hitlState;
     } catch (err) {
-      console.error('[useTaskPolling] Failed to fetch HITL state:', err);
+      // 网络错误静默处理
       return null;
     }
   }, [taskId]);

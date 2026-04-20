@@ -138,6 +138,7 @@ export const handler: any = async (context: any) => {
     // 4. Send initialization event to stream
     const uniqueId = `${taskId}-init-${Date.now()}`;
     await taskExecutionStream.set(taskId, uniqueId, {
+      id: uniqueId,
       taskId: taskId,
       task: '',
       status: 'idle',

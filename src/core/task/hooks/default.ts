@@ -19,6 +19,7 @@ export class DefaultTaskHook extends BaseTaskHook {
 
     // 1. Send initial status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
+      id: entryId,
       type: 'task',
       status: 'started',
       task: task,
@@ -58,6 +59,7 @@ export class DefaultTaskHook extends BaseTaskHook {
 
     // 5. Send simplified completion status to Stream
     await services.streams.taskExecution.set(taskId, entryId, {
+      id: entryId,
       type: 'task',  // 统一为 'task'
       stage: 'post',  // 统一使用 stage 字段
       progressType: 'task-result',
