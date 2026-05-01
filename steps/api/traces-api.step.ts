@@ -8,6 +8,10 @@
 import { type StepConfig, logger } from 'motia';
 import { z } from 'zod';
 import { executionTracesStream } from '../streams/execution-traces.stream';
+import Redis from 'ioredis';
+
+const MAX_TRACES = 1000;
+const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 /**
  * Get Execution Traces API Step configuration.
@@ -34,11 +38,56 @@ export const handler: any = async (context: any) => {
   logger.info('Execution Traces API: Received request', { taskId });
 
   try {
-    // Get all trace entries for this task
-    const traceData = await executionTracesStream.list(taskId);
+    let traces: any[] = [];
 
-    // Ensure traces is an array
-    const traces = Array.isArray(traceData) ? traceData : [traceData];
+    // Try Redis directly first (handles large datasets that iii list() can't)
+    try {
+      const key = `motia:stream:executionTraces:group:${taskId}`;
+      const hashSize = await redisClient.hlen(key);
+
+      if (hashSize > 0) {
+        if (hashSize <= MAX_TRACES) {
+          const allData = await redisClient.hgetall(key);
+          traces = Object.values(allData).map((v: string) => {
+            try { return JSON.parse(v); } catch { return null; }
+          }).filter(Boolean);
+        } else {
+          // Large dataset: extract timestamp from key suffix, sort by time, take latest N
+          const allKeys = await redisClient.hkeys(key);
+          const keyWithTime = allKeys.map(k => {
+            const parts = k.split('-');
+            const ts = Number(parts[parts.length - 1]) || 0;
+            return { key: k, ts };
+          });
+          keyWithTime.sort((a, b) => b.ts - a.ts);
+          const latestKeys = keyWithTime.slice(0, MAX_TRACES).map(k => k.key);
+          const values = await redisClient.hmget(key, ...latestKeys);
+          traces = values.map((v: string | null) => {
+            if (!v) return null;
+            try { return JSON.parse(v); } catch { return null; }
+          }).filter(Boolean);
+          // Sort chronologically (oldest first) for display
+          traces.sort((a: any, b: any) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          logger.info('Execution Traces API: Large dataset, returning latest', {
+            taskId,
+            totalEntries: hashSize,
+            returnedEntries: traces.length,
+          });
+        }
+      }
+    } catch (redisError: any) {
+      logger.warn('Execution Traces API: Redis read failed, trying stream.list()', {
+        error: redisError.message,
+      });
+    }
+
+    // Fallback to stream.list() if Redis returned nothing
+    if (traces.length === 0) {
+      const traceData = await executionTracesStream.list(taskId);
+      traces = Array.isArray(traceData) ? traceData : traceData ? [traceData] : [];
+    }
 
     logger.info('Execution Traces API: Retrieved data', {
       taskId,
