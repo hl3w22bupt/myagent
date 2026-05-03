@@ -1,0 +1,10 @@
+{
+  "name": "iii-node-sdk",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-node-sdk",
+  "installedAt": "2026-05-03T10:26:32.480Z",
+  "enabled": true,
+  "checksum": "3371c78682549183"
+}

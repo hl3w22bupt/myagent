@@ -1,0 +1,10 @@
+{
+  "name": "iii-observability",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-observability",
+  "installedAt": "2026-05-03T10:26:32.481Z",
+  "enabled": true,
+  "checksum": "23b9513d2d6b0a62"
+}

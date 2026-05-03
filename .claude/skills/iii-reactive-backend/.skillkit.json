@@ -1,0 +1,10 @@
+{
+  "name": "iii-reactive-backend",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-reactive-backend",
+  "installedAt": "2026-05-03T10:26:32.484Z",
+  "enabled": true,
+  "checksum": "d9529c9d1f25662c"
+}

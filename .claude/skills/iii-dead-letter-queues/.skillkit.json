@@ -1,0 +1,10 @@
+{
+  "name": "iii-dead-letter-queues",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-dead-letter-queues",
+  "installedAt": "2026-05-03T10:26:32.464Z",
+  "enabled": true,
+  "checksum": "811779b80ad8c4de"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "iii-cron-scheduling",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-cron-scheduling",
+  "installedAt": "2026-05-03T10:26:32.460Z",
+  "enabled": true,
+  "checksum": "096b5e7052b341cd"
+}

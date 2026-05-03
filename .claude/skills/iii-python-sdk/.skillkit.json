@@ -1,0 +1,10 @@
+{
+  "name": "iii-python-sdk",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-python-sdk",
+  "installedAt": "2026-05-03T10:26:32.482Z",
+  "enabled": true,
+  "checksum": "87b4490f5b25897b"
+}

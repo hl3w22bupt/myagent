@@ -1,0 +1,10 @@
+{
+  "name": "iii-trigger-actions",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-trigger-actions",
+  "installedAt": "2026-05-03T10:26:32.489Z",
+  "enabled": true,
+  "checksum": "fe370fe9e0b2d54b"
+}

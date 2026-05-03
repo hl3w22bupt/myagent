@@ -1,0 +1,10 @@
+{
+  "name": "iii-workflow-orchestration",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-workflow-orchestration",
+  "installedAt": "2026-05-03T10:26:32.492Z",
+  "enabled": true,
+  "checksum": "e856b3a42a0ff286"
+}

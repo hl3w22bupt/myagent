@@ -1,0 +1,10 @@
+{
+  "name": "iii-trigger-conditions",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-trigger-conditions",
+  "installedAt": "2026-05-03T10:26:32.491Z",
+  "enabled": true,
+  "checksum": "cd67872d13ea60e6"
+}

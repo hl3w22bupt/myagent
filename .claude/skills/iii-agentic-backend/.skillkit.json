@@ -1,0 +1,10 @@
+{
+  "name": "iii-agentic-backend",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-agentic-backend",
+  "installedAt": "2026-05-03T10:26:32.449Z",
+  "enabled": true,
+  "checksum": "ca6e726af14d94aa"
+}

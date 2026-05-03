@@ -1,0 +1,10 @@
+{
+  "name": "iii-http-endpoints",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-http-endpoints",
+  "installedAt": "2026-05-03T10:26:32.473Z",
+  "enabled": true,
+  "checksum": "672089fd6a33d50b"
+}

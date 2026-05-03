@@ -1,0 +1,10 @@
+{
+  "name": "iii-state-reactions",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-state-reactions",
+  "installedAt": "2026-05-03T10:26:32.489Z",
+  "enabled": true,
+  "checksum": "a302438ae29ebb63"
+}

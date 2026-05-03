@@ -1,0 +1,10 @@
+{
+  "name": "iii-event-driven-cqrs",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-event-driven-cqrs",
+  "installedAt": "2026-05-03T10:26:32.469Z",
+  "enabled": true,
+  "checksum": "67284649649cbb4a"
+}

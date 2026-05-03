@@ -1,0 +1,10 @@
+{
+  "name": "iii-queue-processing",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-queue-processing",
+  "installedAt": "2026-05-03T10:26:32.483Z",
+  "enabled": true,
+  "checksum": "6fe5433ad955ca82"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "iii-custom-triggers",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-custom-triggers",
+  "installedAt": "2026-05-03T10:26:32.462Z",
+  "enabled": true,
+  "checksum": "3978927752772edc"
+}

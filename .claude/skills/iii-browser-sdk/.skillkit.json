@@ -1,0 +1,10 @@
+{
+  "name": "iii-browser-sdk",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-browser-sdk",
+  "installedAt": "2026-05-03T10:26:32.454Z",
+  "enabled": true,
+  "checksum": "63570d16af75fe1d"
+}

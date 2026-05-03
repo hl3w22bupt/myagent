@@ -1,0 +1,10 @@
+{
+  "name": "iii-low-code-automation",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-low-code-automation",
+  "installedAt": "2026-05-03T10:26:32.478Z",
+  "enabled": true,
+  "checksum": "dff981e8325de5fe"
+}

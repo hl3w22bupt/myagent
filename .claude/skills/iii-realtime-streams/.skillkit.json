@@ -1,0 +1,10 @@
+{
+  "name": "iii-realtime-streams",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-realtime-streams",
+  "installedAt": "2026-05-03T10:26:32.485Z",
+  "enabled": true,
+  "checksum": "5508c4a88d27bb3b"
+}

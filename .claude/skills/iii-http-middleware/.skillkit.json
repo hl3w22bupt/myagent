@@ -1,0 +1,10 @@
+{
+  "name": "iii-http-middleware",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-http-middleware",
+  "installedAt": "2026-05-03T10:26:32.477Z",
+  "enabled": true,
+  "checksum": "0ebcaa5f26b51ae1"
+}

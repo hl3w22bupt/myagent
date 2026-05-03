@@ -1,0 +1,10 @@
+{
+  "name": "iii-rust-sdk",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-rust-sdk",
+  "installedAt": "2026-05-03T10:26:32.486Z",
+  "enabled": true,
+  "checksum": "ac91d16413266c01"
+}

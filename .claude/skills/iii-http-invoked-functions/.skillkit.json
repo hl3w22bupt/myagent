@@ -1,0 +1,10 @@
+{
+  "name": "iii-http-invoked-functions",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-http-invoked-functions",
+  "installedAt": "2026-05-03T10:26:32.475Z",
+  "enabled": true,
+  "checksum": "4f601e906196913a"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "iii-engine-config",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-engine-config",
+  "installedAt": "2026-05-03T10:26:32.467Z",
+  "enabled": true,
+  "checksum": "aa6c1e7212cc0aa7"
+}

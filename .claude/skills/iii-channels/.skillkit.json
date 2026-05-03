@@ -1,0 +1,10 @@
+{
+  "name": "iii-channels",
+  "description": "",
+  "source": "iii-hq/iii/skills",
+  "sourceType": "github",
+  "subpath": "iii-channels",
+  "installedAt": "2026-05-03T10:26:32.458Z",
+  "enabled": true,
+  "checksum": "2028626d23740693"
+}
