@@ -11,9 +11,12 @@ import {
   PhotoIcon,
   MusicalNoteIcon,
   VideoCameraIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  CommandLineIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline'
 import CodePlayer from './CodePlayer'
+import TerminalModal from './Terminal'
 import './WorkspaceTab.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -33,6 +36,7 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showTerminal, setShowTerminal] = useState(false)
   const pollTimerRef = useRef(null)
 
   const fetchWorkspaceFiles = useCallback(async (showLoading = true) => {
@@ -469,13 +473,45 @@ const WorkspaceTab = ({ taskId, taskStatus }) => {
       <div className="workspace-header">
         <div className="workspace-header-row">
           <h3>Workspace</h3>
-          <button onClick={fetchWorkspaceFiles} className={`refresh-btn ${isRefreshing ? 'refreshing' : ''}`} disabled={isRefreshing}>
-            <ArrowPathIcon className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`} />
-            刷新
-          </button>
+          <div className="workspace-buttons">
+            <button
+              onClick={() => setShowTerminal(!showTerminal)}
+              className={`terminal-btn ${showTerminal ? 'terminal-btn-active' : ''}`}
+              title={showTerminal ? '关闭终端' : '打开终端'}
+            >
+              {showTerminal ? (
+                <XMarkIcon className="terminal-btn-icon" />
+              ) : (
+                <CommandLineIcon className="terminal-btn-icon" />
+              )}
+              {showTerminal ? '关闭' : '终端'}
+            </button>
+            {showTerminal && (
+              <button
+                onClick={() => window.open(`/terminal/${taskId}?workspace=${encodeURIComponent(workspace)}`, '_blank')}
+                className="terminal-btn"
+                title="在新标签页打开全屏终端"
+              >
+                <ArrowTopRightOnSquareIcon className="terminal-btn-icon" />
+                新标签
+              </button>
+            )}
+            <button onClick={fetchWorkspaceFiles} className={`refresh-btn ${isRefreshing ? 'refreshing' : ''}`} disabled={isRefreshing}>
+              <ArrowPathIcon className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`} />
+              刷新
+            </button>
+          </div>
         </div>
         <code className="workspace-path">{workspace}</code>
       </div>
+
+      {/* Terminal Modal */}
+      <TerminalModal
+        taskId={taskId}
+        workspace={workspace}
+        isOpen={showTerminal}
+        onClose={() => setShowTerminal(false)}
+      />
 
       {summary && (
         <div className="workspace-summary">

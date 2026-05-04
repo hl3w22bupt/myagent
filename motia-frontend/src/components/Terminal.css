@@ -1,0 +1,54 @@
+/* xterm.js container - fill absolute parent */
+.xterm {
+  height: 100%;
+  padding: 8px;
+  cursor: text;
+}
+
+.xterm:focus {
+  outline: none;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #4a4a6a;
+  border-radius: 4px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #5a5a8a;
+}
+
+/* Fill the absolute container */
+.xterm-screen {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.xterm-text-layer {
+  line-height: 1.2 !important;
+}
+
+.xterm-cursor {
+  z-index: 10;
+}
+
+.xterm-selection {
+  opacity: 0.5;
+}
+
+/* Let xterm helper textarea stay in place but invisible */
+.xterm-helper-textarea {
+  opacity: 0 !important;
+}
