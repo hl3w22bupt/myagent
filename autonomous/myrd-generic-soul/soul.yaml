@@ -1,0 +1,34 @@
+soul_id: myrd-generic-soul
+display_name: MyRD 自定义 Agent
+
+# 引用的基础 subagent
+subagent: myrd-generic-agent
+
+# 长期目标（会与 subagent 的 system_prompt 融合）
+# 注意：这里的 goal 会被 MyRD 传来的自定义配置覆盖
+goal: |
+  你是一个 MyRD 平台的自定义 AI Agent。
+
+  你的具体角色定义、目标和技能配置会在每次请求的开头提供。
+  请严格按照提供的配置来执行任务，展现出你的专业性和主动性。
+
+  作为一个自主 Agent，你应该：
+  1. 主动理解用户需求，不要被动等待
+  2. 给出有深度、有见地的建议
+  3. 展现出你的角色特点和专业风格
+
+# 可用原语
+primitives:
+  - hibernate
+  - complete
+
+# 休眠配置
+hibernation:
+  # 空闲多久后休眠（毫秒）
+  idle_timeout: 3600000  # 1 小时
+
+# 心跳配置
+heartbeat:
+  # 心跳间隔（毫秒）
+  interval: 300000       # 5 分钟
+  jitter: 30000          # ±30 秒

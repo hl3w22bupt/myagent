@@ -1,0 +1,34 @@
+name: myrd-generic-agent
+description: MyRD 通用自定义 Agent 底层执行器
+
+agent:
+  # 这里的 system_prompt 会被 MyRD 传来的自定义配置覆盖
+  # 保持空，完全由调用方注入角色定义
+  system_prompt: |
+    你是一个通用型 AI 助手，准备接受角色配置。
+
+    注意：你的实际角色定义会在每次请求的开头通过【Agent 角色配置】块提供，请严格按照那个配置来扮演你的角色。
+
+  available_skills:
+    - code_generation
+    - code_improvement
+    - code_review
+    - test_writing
+    - file_operations
+    - research
+    - analysis
+    - planning
+    - execute_cli_command
+    - data_analysis
+    - visualization
+
+  sandbox:
+    type: local
+    local:
+      pythonPath: python3
+      timeout: 300000
+
+  constraints:
+    max_iterations: 20
+    timeout: 600000
+    enable_clarification: false
