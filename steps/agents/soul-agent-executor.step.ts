@@ -16,6 +16,8 @@ import { SoulAgent } from '../../src/core/agent/soul-agent';
 import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
 import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader';
 import { type StepConfig, logger, queue, enqueue } from 'motia';
+import { taskExecutionStream } from '../streams/task-execution.stream';
+import { executionTracesStream } from '../streams/execution-traces.stream';
 import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
 import { soulStateDataService } from '../../src/core/database/soul-data-service';
 
@@ -40,7 +42,7 @@ export const config = {
  */
 export const handler = async (
   input: any,
-  { streams }: any
+  _context: any
 ) => {
   const { taskId, sessionId, soulId, userId, trigger_time, context } = input;
 
@@ -54,7 +56,8 @@ export const handler = async (
 
   try {
     // ✅ 设置全局 streams，确保执行追踪、Token使用等功能正常工作
-    setAgentStreams(streams);
+    const agentStreams = { taskExecution: taskExecutionStream, executionTraces: executionTracesStream };
+    setAgentStreams(agentStreams);
 
     // 🔄 数据库驱动：创建临时 SoulAgent 实例（不依赖内存单例）
     // 直接加载配置，不使用 soulScheduler.activateSoul()
@@ -97,7 +100,7 @@ export const handler = async (
         ...context,
         emit: enqueue,  // ⭐ Pass enqueue function to SoulAgent for token usage events
       },
-      streams: streams,
+      streams: agentStreams,
     };
 
     const result = await soulAgent.execute(soulInput);

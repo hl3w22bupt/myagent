@@ -14,6 +14,48 @@ A distributed AI agent system built on Motia with knowledge base integration, dy
 
 Built on [Motia](https://github.com/garrytan/gstack) - a unified backend framework that eliminates runtime fragmentation.
 
+## Screenshots
+
+### Agent Chat Interface
+Multi-turn conversations with AI Agent with real-time streaming output.
+
+![Agent Chat Interface](images/20260531-180449.jpg)
+
+### Execution Trace
+Full-chain tracing via multi-level hooks — see exactly what's happening behind the scenes.
+
+![Execution Trace](images/20260531-180510.jpg)
+
+### Task Context Monitoring
+Inspect multi-level task context and outputs for any agent execution.
+
+![Task Context Detail](images/20260531-180518.jpg)
+
+### Token Usage
+Clear visibility into token consumption for cost control.
+
+![Token Observability](images/20260531-180522.jpg)
+
+### Workflow Orchestration
+Pre-define workflows to orchestrate complex tasks with human-in-the-loop.
+
+![Workflow Orchestration](images/20260531-180525.jpg)
+
+### Autonomous Agent
+A persistent agent instance with goals and autonomy — not just a passive responder.
+
+![Autonomous Agent](images/20260531-180529.jpg)
+
+### Workspace
+Every task runs in its own isolated workspace environment.
+
+![Workspace](images/20260531-180655.jpg)
+
+### Web Terminal
+Interact directly with the workspace environment via Web Terminal — ideal for coding agent scenarios.
+
+![Web Terminal](images/20260531-180659.jpg)
+
 ## Key Features
 
 ### 🧠 Knowledge Base with Dynamic Model Selection
