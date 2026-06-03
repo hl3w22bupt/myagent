@@ -3,7 +3,7 @@
  * Delete a data source
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { getDataSource, deleteDataSource } from '../../src/core/knowledge/datasource-store.js';
 
 export const config = {

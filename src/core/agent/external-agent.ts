@@ -4,13 +4,13 @@
  * This agent uses acpx runtime to communicate with external agents.
  */
 
-import { Agent } from './agent';
-import { AgentConfig, AgentResult, ExternalAgentConfig } from './types';
+import { Agent } from './agent.js';
+import { AgentConfig, AgentResult, ExternalAgentConfig } from './types.js';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { ContextManager } from '../context/manager';
-import { ArtifactCollector } from './artifact-collector';
+import { ContextManager } from '../context/manager.js';
+import { ArtifactCollector } from './artifact-collector.js';
 
 /**
  * ExternalAgent class.

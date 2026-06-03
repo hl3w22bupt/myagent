@@ -5,7 +5,7 @@
  * Add a knowledge collection to an app
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 import { addAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 

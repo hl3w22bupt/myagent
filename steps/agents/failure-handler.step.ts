@@ -5,7 +5,7 @@
  * This step eliminates the "no subscriber defined" warning for agent.task.failed.
  */
 
-import { type StepConfig, logger, queue } from 'motia';
+import { type StepConfig, logger, queue } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 
 /**

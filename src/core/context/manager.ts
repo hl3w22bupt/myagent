@@ -4,11 +4,11 @@
  * 提供任务上下文的创建、更新、查询和压缩功能
  */
 
-import type { TaskContext, ConversationRound, ConversationHistoryEntry } from '../database/context-types';
-import { DataStore, getDataStore } from '../database/data-store';
-import { ContextCompressor } from './compressor';
-import { ArtifactExtractor } from './artifact-extractor';
-import { LLMSummarizer } from '../llm/summarizer';
+import type { TaskContext, ConversationRound, ConversationHistoryEntry } from '../database/context-types.js';
+import { DataStore, getDataStore } from '../database/data-store.js';
+import { ContextCompressor } from './compressor.js';
+import { ArtifactExtractor } from './artifact-extractor.js';
+import { LLMSummarizer } from '../llm/summarizer.js';
 
 export class ContextManager {
   private store: DataStore;

@@ -6,9 +6,9 @@
  * to extract token usage information from LLM responses.
  */
 
-import { type StepConfig, logger, queue, enqueue } from 'motia';
-import { executionTraceSchema, ExecutionTrace } from '../streams/execution-traces.stream';
-import { TokenUsageRecordedEvent } from './types';
+import { type StepConfig, logger, queue, enqueue } from '../../src/iii-bridge.js';
+import { executionTraceSchema, ExecutionTrace } from '../streams/execution-traces.stream.js';
+import { TokenUsageRecordedEvent } from './types.js';
 
 /**
  * Input schema for token usage extractor.

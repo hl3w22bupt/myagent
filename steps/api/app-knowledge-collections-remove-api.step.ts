@@ -5,7 +5,7 @@
  * Remove a knowledge collection from an app
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { removeAppKnowledgeCollection } from '../../src/core/knowledge/app-knowledge-manager.js';
 
 export const config = {

@@ -22,8 +22,8 @@
  * ```
  */
 
-import { BaseAgentHook, type Agent } from './base';
-import type { AgentResult, AgentConfig } from '../types';
+import { BaseAgentHook, type Agent } from './base.js';
+import type { AgentResult, AgentConfig } from '../types.js';
 
 /**
  * Configuration for AgentContextSyncHook.

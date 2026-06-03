@@ -5,7 +5,7 @@
  * Get all knowledge collections for an app
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { getAppKnowledgeCollections } from '../../src/core/knowledge/app-knowledge-manager.js';
 
 export const config = {

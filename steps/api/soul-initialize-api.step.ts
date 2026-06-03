@@ -5,11 +5,11 @@
  * Called by MyEcho after creating an echo thread.
  */
 
-import { type StepConfig, logger } from 'motia';
-import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { getDataStore } from '../../src/core/database/data-store';
-import { taskExecutionStream } from '../streams/task-execution.stream';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { soulScheduler } from '../../src/core/scheduler/soul-scheduler.js';
+import { soulStateDataService } from '../../src/core/database/soul-data-service.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
 
 /**
  * Soul Initialize API configuration

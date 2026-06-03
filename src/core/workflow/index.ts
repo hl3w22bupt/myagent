@@ -2,8 +2,8 @@
  * Workflow Module Exports
  */
 
-export * from './engine';
-export * from './context';
-export * from './types';
-export * from './validator';
-export * from './loader';
+export * from './engine.js';
+export * from './context.js';
+export * from './types.js';
+export * from './validator.js';
+export * from './loader.js';

@@ -5,8 +5,8 @@
  * Records input/output, errors, timing, and metadata for task execution.
  */
 
-import { BaseTaskHook } from './base';
-import { TaskContext } from './types';
+import { BaseTaskHook } from './base.js';
+import { TaskContext } from './types.js';
 
 /**
  * Task-level execution tracing hook.

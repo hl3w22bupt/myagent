@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { testConnection } from '../../src/core/knowledge/datasource-manager.js';
 import { addDataSource, type DataSource } from '../../src/core/knowledge/datasource-store.js';
 

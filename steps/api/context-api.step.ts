@@ -1,7 +1,7 @@
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { getDataStore } from '../../src/core/database/data-store';
-import { ContextManager } from '../../src/core/context/manager';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { ContextManager } from '../../src/core/context/manager.js';
 
 export const config = {
   name: 'context-api',

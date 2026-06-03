@@ -4,12 +4,12 @@
  * Provides endpoint to send chat messages to a specific task.
  */
 
-import { type StepConfig, logger, enqueue } from 'motia';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { getDataStore } from '../../src/core/database/data-store';
-import { ContextManager } from '../../src/core/context/manager';
-import { MessageIdGenerator } from '../../src/utils/message-id-generator';
-import { taskExecutionStream } from '../streams/task-execution.stream';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { ContextManager } from '../../src/core/context/manager.js';
+import { MessageIdGenerator } from '../../src/utils/message-id-generator.js';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
 
 // 防重复请求存储，存储最近处理过的请求ID
 const processedRequests = new Map<string, number>();

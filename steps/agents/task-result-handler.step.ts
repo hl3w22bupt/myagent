@@ -10,10 +10,10 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, stateManager, queue } from 'motia';
-import { taskResultStream } from '../streams/task-result.stream';
-import { stateLockManager } from '../../src/utils/state-lock';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { type StepConfig, logger, stateManager, queue } from '../../src/iii-bridge.js';
+import { taskResultStream } from '../streams/task-result.stream.js';
+import { stateLockManager } from '../../src/utils/state-lock.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';

@@ -3,7 +3,7 @@
  * Discover collections from data source
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { discoverCollections } from '../../src/core/knowledge/datasource-manager.js';
 import { getDataSource } from '../../src/core/knowledge/datasource-store.js';
 

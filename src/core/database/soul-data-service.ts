@@ -5,9 +5,9 @@
  * Provides methods to save/load soul_states and soul_execution_history
  */
 
-import { PostgresDataStore } from './postgres-store';
-import { SoulState } from '../agent/soul-types';
-import { SoulExecutionRecord, ExecutionHistoryQuery } from '../agent/soul-execution-types';
+import { PostgresDataStore } from './postgres-store.js';
+import { SoulState } from '../agent/soul-types.js';
+import { SoulExecutionRecord, ExecutionHistoryQuery } from '../agent/soul-execution-types.js';
 
 // Global store instance
 let postgresStore: PostgresDataStore | null = null;

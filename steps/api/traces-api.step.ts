@@ -5,9 +5,9 @@
  * Returns flat trace array with filtering handled on the frontend.
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { executionTracesStream } from '../streams/execution-traces.stream';
+import { executionTracesStream } from '../streams/execution-traces.stream.js';
 import Redis from 'ioredis';
 
 const MAX_TRACES = 1000;

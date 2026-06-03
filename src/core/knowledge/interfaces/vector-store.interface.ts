@@ -3,7 +3,7 @@
  * Abstraction for different vector database backends
  */
 
-import type { KnowledgeEntry, RetrieveOptions, EmbeddingOptions } from './knowledge-entry.interface';
+import type { KnowledgeEntry, RetrieveOptions, EmbeddingOptions } from './knowledge-entry.interface.js';
 
 // Re-export types for convenience
 export type { KnowledgeEntry, RetrieveOptions, EmbeddingOptions };

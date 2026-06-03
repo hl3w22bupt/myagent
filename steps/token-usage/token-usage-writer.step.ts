@@ -7,10 +7,10 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, queue } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import { PostgresTokenUsageStorage } from './storage/postgres-token-storage';
-import type { TokenUsageRecordedEvent } from './types';
+import { type StepConfig, logger, queue } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from './storage/postgres-token-storage.js';
+import type { TokenUsageRecordedEvent } from './types.js';
 
 /**
  * Input schema for token usage writer.

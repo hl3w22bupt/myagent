@@ -6,9 +6,9 @@
  * Maintains hierarchical relationship with parent task traces.
  */
 
-import { BaseAgentHook, type Agent } from './base';
-import type { AgentConfig, AgentResult } from '../types';
-import { getAgentStreams } from './progress-notify';
+import { BaseAgentHook, type Agent } from './base.js';
+import type { AgentConfig, AgentResult } from '../types.js';
+import { getAgentStreams } from './progress-notify.js';
 
 /**
  * Agent-level execution tracing hook.

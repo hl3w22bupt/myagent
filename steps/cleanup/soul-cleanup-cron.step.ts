@@ -5,8 +5,8 @@
  * Runs every 10 minutes to keep the database clean.
  */
 
-import { type StepConfig, cron } from 'motia';
-import { soulCleanupService } from '../../src/core/cleanup/soul-cleanup-service';
+import { type StepConfig, cron } from '../../src/iii-bridge.js';
+import { soulCleanupService } from '../../src/core/cleanup/soul-cleanup-service.js';
 
 /**
  * Step configuration

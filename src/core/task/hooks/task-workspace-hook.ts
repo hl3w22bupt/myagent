@@ -10,9 +10,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { BaseTaskHook } from './base';
-import { TaskContext } from './types';
-import { DEFAULT_WORKSPACE_ROOT } from '../../workspace/constants';
+import { BaseTaskHook } from './base.js';
+import { TaskContext } from './types.js';
+import { DEFAULT_WORKSPACE_ROOT } from '../../workspace/constants.js';
 
 const WORKSPACE_ROOT = DEFAULT_WORKSPACE_ROOT;
 

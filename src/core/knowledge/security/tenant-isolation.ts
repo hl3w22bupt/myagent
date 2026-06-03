@@ -6,7 +6,7 @@
  */
 
 import { Pool } from 'pg';
-import { validateCollectionName, validateAppId } from './collection-validator';
+import { validateCollectionName, validateAppId } from './collection-validator.js';
 
 let pool: Pool | null = null;
 

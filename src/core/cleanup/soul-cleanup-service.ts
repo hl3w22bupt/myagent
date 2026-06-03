@@ -5,7 +5,7 @@
  * Deletes soul_states and cascades to related tables (contexts, notifications, history).
  */
 
-import { PostgresDataStore } from '../database/postgres-store';
+import { PostgresDataStore } from '../database/postgres-store.js';
 
 // Unused import removed
 

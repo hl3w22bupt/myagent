@@ -5,7 +5,7 @@
  * List all available knowledge collections
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 export const config = {
   name: 'knowledge-collections-api',

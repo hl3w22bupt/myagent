@@ -12,7 +12,7 @@ import {
   RawTriggerContext,
   TimePeriod,
   MoodTrend
-} from '../agent/soul-context-types';
+} from '../agent/soul-context-types.js';
 
 /**
  * Soul Context Builder

@@ -12,14 +12,14 @@
  * 5. task-result-handler 等订阅者保存所有数据
  */
 
-import { SoulAgent } from '../../src/core/agent/soul-agent';
-import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
-import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader';
-import { type StepConfig, logger, queue, enqueue } from 'motia';
-import { taskExecutionStream } from '../streams/task-execution.stream';
-import { executionTracesStream } from '../streams/execution-traces.stream';
-import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
-import { soulStateDataService } from '../../src/core/database/soul-data-service';
+import { SoulAgent } from '../../src/core/agent/soul-agent.js';
+import { soulConfigLoader } from '../../src/core/config/soul-config-loader.js';
+import { subagentConfigLoader } from '../../src/core/config/subagent-config-loader.js';
+import { type StepConfig, logger, queue, enqueue } from '../../src/iii-bridge.js';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
+import { executionTracesStream } from '../streams/execution-traces.stream.js';
+import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify.js';
+import { soulStateDataService } from '../../src/core/database/soul-data-service.js';
 
 /**
  * Soul Agent Executor configuration.

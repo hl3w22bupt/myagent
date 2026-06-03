@@ -2,9 +2,9 @@
  * Get Stream History API Step configuration.
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { taskExecutionStream } from '../streams/task-execution.stream';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
 
 /**
  * Get Stream History API Step configuration.

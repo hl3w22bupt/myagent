@@ -6,7 +6,7 @@
  */
 
 // Export PTCGenerator class for type checking
-export { PTCGenerator } from './ptc-generator';
+export { PTCGenerator } from './ptc-generator.js';
 
 /**
  * Configuration for creating an Agent.

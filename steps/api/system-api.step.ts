@@ -7,9 +7,9 @@
  */
 
 import { z as _z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import type { Task } from '../../src/core/database/data-store';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import type { Task } from '../../src/core/database/data-store.js';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';

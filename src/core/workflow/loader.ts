@@ -15,11 +15,11 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { WorkflowEngine } from './engine';
-import { WorkflowConfig } from './types';
-import { ConfigLoader } from '../config/config-loader';
-import { WorkflowValidator, AgentValidationOptions } from './validator';
-import { discoverSubagents } from '../../index';
+import { WorkflowEngine } from './engine.js';
+import { WorkflowConfig } from './types.js';
+import { ConfigLoader } from '../config/config-loader.js';
+import { WorkflowValidator, AgentValidationOptions } from './validator.js';
+import { discoverSubagents } from '../../index.js';
 
 export class WorkflowLoader {
   private engine: WorkflowEngine;

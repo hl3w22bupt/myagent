@@ -5,7 +5,7 @@
  * This is critical for performance - creating multiple instances causes severe slowdowns.
  */
 
-import { PostgresDataStore } from './postgres-store';
+import { PostgresDataStore } from './postgres-store.js';
 
 let globalPostgresStore: PostgresDataStore | null = null;
 let isInitializing = false;

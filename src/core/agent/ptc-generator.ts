@@ -6,11 +6,11 @@
  * 2. Implementation: Generate Python code using selected skills
  */
 
-import { LLMClient } from './llm-client';
-import { LLMClientFactory } from '../llm/factory';
-import { PTCGenerationOptions, PTCResult } from './types';
-import { SkillMetadata as FullSkillMetadata } from './skill-discovery';
-import { ContextManager } from '../context/manager';
+import { LLMClient } from './llm-client.js';
+import { LLMClientFactory } from '../llm/factory.js';
+import { PTCGenerationOptions, PTCResult } from './types.js';
+import { SkillMetadata as FullSkillMetadata } from './skill-discovery.js';
+import { ContextManager } from '../context/manager.js';
 import Handlebars from 'handlebars';
 import { readFileSync } from 'fs';
 import { join } from 'path';

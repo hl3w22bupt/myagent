@@ -5,9 +5,9 @@
  * Supports multiple backends: PostgreSQL, SQLite.
  */
 
-import type { Database } from './database.interface';
-import { DataStore as SqliteDataStore } from './data-store';
-import { PostgresDataStore } from './postgres-store';
+import type { Database } from './database.interface.js';
+import { DataStore as SqliteDataStore } from './data-store.js';
+import { PostgresDataStore } from './postgres-store.js';
 
 export type DatabaseBackend = 'sqlite' | 'postgres';
 

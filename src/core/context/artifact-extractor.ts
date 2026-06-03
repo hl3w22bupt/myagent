@@ -4,7 +4,7 @@
  * 从消息中提取Artifact信息，用于跟踪文件修改、函数调用等
  */
 
-import type { ArtifactIndex } from '../database/context-types';
+import type { ArtifactIndex } from '../database/context-types.js';
 
 export class ArtifactExtractor {
   /**

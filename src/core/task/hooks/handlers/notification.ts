@@ -4,9 +4,9 @@
  * Sends notifications to various channels (lark, dingtalk, slack, etc.)
  */
 
-import { HookHandler } from '../types';
-import { TemplateEngine } from '../../../config/template-engine';
-import { LarkNotificationChannel } from './channels/lark';
+import { HookHandler } from '../types.js';
+import { TemplateEngine } from '../../../config/template-engine.js';
+import { LarkNotificationChannel } from './channels/lark.js';
 
 export interface NotificationChannel {
   send(params: { webhook: string; message: string; config?: any }): Promise<void>;

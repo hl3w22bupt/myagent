@@ -8,10 +8,10 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import { getGlobalPostgresStore } from '../../src/core/database/global-store';
-import type { Task } from '../../src/core/database/data-store';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { getGlobalPostgresStore } from '../../src/core/database/global-store.js';
+import type { Task } from '../../src/core/database/data-store.js';
 
 // Cache database instance for performance
 let cachedStore: any = null;

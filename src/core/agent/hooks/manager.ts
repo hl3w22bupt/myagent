@@ -27,7 +27,7 @@
  * ```
  */
 
-import { BaseAgentHook } from './base';
+import { BaseAgentHook } from './base.js';
 
 /**
  * Manages Agent lifecycle hooks.

@@ -10,8 +10,8 @@
  * 这是数据库驱动的心跳调度，替代了之前的内存单例 MinHeap 方案。
  */
 
-import { type StepConfig, logger, cron, enqueue } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { type StepConfig, logger, cron, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 /**
  * Soul Agent 状态接口

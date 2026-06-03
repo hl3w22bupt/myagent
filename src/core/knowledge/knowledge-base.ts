@@ -5,11 +5,11 @@
  * This file is kept for backward compatibility.
  */
 
-import { PostgresVectorStore } from './adapters/postgres-adapter';
-import type { PostgresConfig } from './interfaces/adapter-config.interface';
+import { PostgresVectorStore } from './adapters/postgres-adapter.js';
+import type { PostgresConfig } from './interfaces/adapter-config.interface.js';
 
 // Re-export for backward compatibility
-export type { KnowledgeEntry, RetrieveOptions } from './interfaces/knowledge-entry.interface';
+export type { KnowledgeEntry, RetrieveOptions } from './interfaces/knowledge-entry.interface.js';
 
 export interface KnowledgeBaseConfig {
   db: any;

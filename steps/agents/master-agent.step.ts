@@ -11,13 +11,13 @@
  * - Configuration unified with application-wide settings
  */
 
-import { type StepConfig, logger, enqueue, queue } from 'motia';
-import { taskExecutionStream } from '../streams/task-execution.stream';
-import { executionTracesStream } from '../streams/execution-traces.stream';
+import { type StepConfig, logger, enqueue, queue } from '../../src/iii-bridge.js';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
+import { executionTracesStream } from '../streams/execution-traces.stream.js';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { agentManager } from '../../src/index';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { agentManager } from '../../src/index.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
 import {
   TaskHookExecutor,
   DefaultTaskHook,
@@ -28,23 +28,23 @@ import {
   UserProfileAccumulatorHook,
   TaskWorkspaceHook,
   TaskContext,
-} from '../../src/core/task/hooks/index';
-import { ContextManager } from '../../src/core/context/manager';
+} from '../../src/core/task/hooks/index.js';
+import { ContextManager } from '../../src/core/context/manager.js';
 import {
   AgentMonitoringHook,
-} from '../../src/core/agent/hooks/monitoring';
+} from '../../src/core/agent/hooks/monitoring.js';
 import {
   AgentContextSyncHook,
-} from '../../src/core/agent/hooks/context-sync';
+} from '../../src/core/agent/hooks/context-sync.js';
 import {
   AgentProgressNotifyHook,
   setAgentStreams,
-} from '../../src/core/agent/hooks/progress-notify';
-import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook';
-import { WorkflowEngine } from '../../src/core/workflow/engine';
-import { getWorkflowLoader } from '../../src/core/workflow/loader';
-import { getHookConfigLoader } from '../../src/core/task/hooks/hook-config-loader';
-import type { AgentResult } from '../../src/core/agent/types';
+} from '../../src/core/agent/hooks/progress-notify.js';
+import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook.js';
+import { WorkflowEngine } from '../../src/core/workflow/engine.js';
+import { getWorkflowLoader } from '../../src/core/workflow/loader.js';
+import { getHookConfigLoader } from '../../src/core/task/hooks/hook-config-loader.js';
+import type { AgentResult } from '../../src/core/agent/types.js';
 
 /**
  * Input schema for Master Agent step.

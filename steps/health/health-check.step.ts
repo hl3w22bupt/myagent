@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, stateManager } from 'motia';
+import { type StepConfig, logger, stateManager } from '../../src/iii-bridge.js';
 
 /**
  * Response schema for health check.

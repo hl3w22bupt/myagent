@@ -4,7 +4,7 @@
  * Real-time stream for tracking agent task execution progress.
  */
 
-import { Stream, type StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 
 /**

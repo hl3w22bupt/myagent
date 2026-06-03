@@ -9,9 +9,9 @@
  * - 降级策略保证在 LLM 调用失败时仍能返回有效摘要
  */
 
-import { LLMClient } from './client';
-import { LLMClientFactory } from './factory';
-import type { ConversationRound, StructuredSummary } from '../database/context-types';
+import { LLMClient } from './client.js';
+import { LLMClientFactory } from './factory.js';
+import type { ConversationRound, StructuredSummary } from '../database/context-types.js';
 
 export interface LLMSummarizerConfig {
   apiKey?: string;

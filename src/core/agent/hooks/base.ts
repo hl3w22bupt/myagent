@@ -16,7 +16,7 @@
  * 3. Skill Hooks (Skill-level: single skill execution, lightweight)
  */
 
-import type { AgentConfig, AgentResult } from '../types';
+import type { AgentConfig, AgentResult } from '../types.js';
 
 // Forward declaration for Agent interface
 export interface Agent {

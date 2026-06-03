@@ -12,7 +12,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Import PostgreSQL store (will be used if DATABASE_BACKEND=postgres)
-import { PostgresDataStore } from './postgres-store';
+import { PostgresDataStore } from './postgres-store.js';
 
 /**
  * Task status enum
@@ -88,7 +88,7 @@ import type {
   OutputIndex,
   CompressionHistory,
   ConversationRound,
-} from './context-types';
+} from './context-types.js';
 
 /**
  * UserProfile - 通用用户画像

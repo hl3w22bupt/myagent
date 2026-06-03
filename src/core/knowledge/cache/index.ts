@@ -16,7 +16,7 @@ export {
   closeGlobalCache,
   type CacheKey,
   type CacheConfig,
-} from './knowledge-cache';
+} from './knowledge-cache.js';
 
 export {
   BatchRetriever,
@@ -25,4 +25,4 @@ export {
   type BatchRetrievalRequest,
   type BatchRetrievalResult,
   type BatchRetrieverConfig,
-} from './batch-retriever';
+} from './batch-retriever.js';

@@ -10,12 +10,12 @@ import type {
   IVectorStore,
   KnowledgeEntry,
   RetrieveOptions,
-} from '../interfaces/vector-store.interface';
-import type { PostgresConfig } from '../interfaces/adapter-config.interface';
+} from '../interfaces/vector-store.interface.js';
+import type { PostgresConfig } from '../interfaces/adapter-config.interface.js';
 import {
   ValidationError,
   EmbeddingGenerationError,
-} from '../errors/knowledge-errors';
+} from '../errors/knowledge-errors.js';
 
 export class PostgresVectorStore implements IVectorStore {
   private pool: Pool;

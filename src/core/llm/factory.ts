@@ -8,8 +8,8 @@
  * 4. 支持动态更新 trace 配置（streams 和 traceContext）
  */
 
-import { LLMClient, LLMClientConfig, LLMPresets } from './client';
-import { getAgentStreams } from '../agent/hooks/progress-notify';
+import { LLMClient, LLMClientConfig, LLMPresets } from './client.js';
+import { getAgentStreams } from '../agent/hooks/progress-notify.js';
 
 /**
  * 全局 trace 配置接口

@@ -4,11 +4,11 @@
  * 提供自主智能体状态查询接口
  */
 
-import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
-import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
-import { type StepConfig, logger } from 'motia';
+import { soulScheduler } from '../../src/core/scheduler/soul-scheduler.js';
+import { soulConfigLoader } from '../../src/core/config/soul-config-loader.js';
+import { soulStateDataService } from '../../src/core/database/soul-data-service.js';
+import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service.js';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 /**
  * Soul Agents Status API configuration.

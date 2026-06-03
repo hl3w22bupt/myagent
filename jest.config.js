@@ -6,6 +6,7 @@ export default {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^steps/(.*)$': '<rootDir>/steps/$1',
+    '^(\\.\\.?/.+)\\.js$': '$1',
   },
   transform: {
     '^.+\\.tsx?$': [

@@ -11,7 +11,7 @@
  * - Data structure matches /agent/result API response
  */
 
-import { Stream, type StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 
 /**

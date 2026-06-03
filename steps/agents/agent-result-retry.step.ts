@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, enqueue } from 'motia';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
 
 /**
  * Query parameters schema for retry API.

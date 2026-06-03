@@ -8,9 +8,9 @@
  * - notification: Send notifications (lark, etc.)
  */
 
-import { BaseTaskHook } from './base';
-import { ConfigurableHookConfig, HookHandler, HookTrigger, PreExecResult, TaskContext } from './types';
-import { HookHandlerFactory } from './handlers/handler-factory';
+import { BaseTaskHook } from './base.js';
+import { ConfigurableHookConfig, HookHandler, HookTrigger, PreExecResult, TaskContext } from './types.js';
+import { HookHandlerFactory } from './handlers/handler-factory.js';
 
 export class ConfigurableHook extends BaseTaskHook {
   readonly name: string;

@@ -7,7 +7,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse } from 'yaml';
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 const WORKFLOWS_DIR = join(process.cwd(), 'workflows');
 
 /**

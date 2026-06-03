@@ -15,7 +15,7 @@ import {
   validateCollectionName,
   validateAppId,
   validateFieldName,
-} from './security/index';
+} from './security/index.js';
 
 let pool: Pool | null = null;
 

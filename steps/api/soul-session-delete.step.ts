@@ -4,9 +4,9 @@
  * 删除指定的 Soul Agent 实例
  */
 
-import { soulStateDataService } from '../../src/core/database/soul-data-service';
+import { soulStateDataService } from '../../src/core/database/soul-data-service.js';
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 /**
  * Soul Session Delete API configuration.

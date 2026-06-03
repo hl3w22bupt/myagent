@@ -11,8 +11,8 @@
  * - Input validation and error logging
  */
 
-import type { TokenUsageStorage } from './token-storage.interface';
-import type { TaskTokenUsage, TotalUsage, TokenUsageRecordedEvent } from '../types';
+import type { TokenUsageStorage } from './token-storage.interface.js';
+import type { TaskTokenUsage, TotalUsage, TokenUsageRecordedEvent } from '../types.js';
 import { Pool } from 'pg';
 
 /**

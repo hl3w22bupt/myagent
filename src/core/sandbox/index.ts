@@ -19,13 +19,13 @@ export type {
   ModalSandboxConfig,
   SandboxConfig,
   SandboxAdapter,
-} from './types';
+} from './types.js';
 
 // Manager
-export { SandboxManager, SandboxManagerConfig } from './manager';
+export { SandboxManager, SandboxManagerConfig } from './manager.js';
 
 // Factory
-export { SandboxFactory } from './factory';
+export { SandboxFactory } from './factory.js';
 
 // Config
 export {
@@ -33,7 +33,7 @@ export {
   getAdapterConfig,
   getDefaultAdapterConfig,
   type SandboxSystemConfig,
-} from './config';
+} from './config.js';
 
 // Adapters
-export { LocalSandboxAdapter } from './adapters/local';
+export { LocalSandboxAdapter } from './adapters/local.js';

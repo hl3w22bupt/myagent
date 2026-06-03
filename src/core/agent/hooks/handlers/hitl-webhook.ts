@@ -18,8 +18,8 @@
  * ```
  */
 
-import { BaseAgentHook } from '../base';
-import type { AgentConfig } from '../../types';
+import { BaseAgentHook } from '../base.js';
+import type { AgentConfig } from '../../types.js';
 
 /**
  * Webhook payload format.

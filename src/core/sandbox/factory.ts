@@ -5,13 +5,13 @@
  * Supports multiple adapter types with a unified interface.
  */
 
-import { SandboxAdapter, SandboxAdapterConfig, LocalSandboxConfig } from './types';
-import { LocalSandboxAdapter } from './adapters/local';
+import { SandboxAdapter, SandboxAdapterConfig, LocalSandboxConfig } from './types.js';
+import { LocalSandboxAdapter } from './adapters/local.js';
 
 // Lazy load remote adapters (to be implemented)
-// import { DaytonaSandboxAdapter } from './adapters/daytona';
-// import { E2BSandboxAdapter } from './adapters/e2b';
-// import { ModalSandboxAdapter } from './adapters/modal';
+// import { DaytonaSandboxAdapter } from './adapters/daytona.js';
+// import { E2BSandboxAdapter } from './adapters/e2b.js';
+// import { ModalSandboxAdapter } from './adapters/modal.js';
 
 type AdapterFactory = (config?: any) => SandboxAdapter;
 

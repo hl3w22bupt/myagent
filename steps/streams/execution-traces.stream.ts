@@ -6,7 +6,7 @@
  * input/output recording, error tracking, retry counts, and timing data.
  */
 
-import { Stream, type StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 
 /**

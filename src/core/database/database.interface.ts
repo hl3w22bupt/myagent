@@ -5,8 +5,8 @@
  * Implementations can support different backends (PostgreSQL, SQLite, etc.)
  */
 
-import type { TaskStatus, Task, CreateTaskData, Session } from './data-store';
-import type { TaskContext, ArtifactIndex, CompressionHistory, OutputIndex } from './context-types';
+import type { TaskStatus, Task, CreateTaskData, Session } from './data-store.js';
+import type { TaskContext, ArtifactIndex, CompressionHistory, OutputIndex } from './context-types.js';
 
 export interface Database {
   /**

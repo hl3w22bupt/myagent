@@ -5,14 +5,14 @@
  */
 
 // Core types
-export * from './soul-types';
+export * from './soul-types.js';
 
 // SoulAgent class
-export { SoulAgent } from './soul-agent';
+export { SoulAgent } from './soul-agent.js';
 
 // Configuration loaders
-export { soulConfigLoader, SoulConfigLoader } from '../config/soul-config-loader';
-export { subagentConfigLoader, SubagentConfigLoader } from '../config/subagent-config-loader';
+export { soulConfigLoader, SoulConfigLoader } from '../config/soul-config-loader.js';
+export { subagentConfigLoader, SubagentConfigLoader } from '../config/subagent-config-loader.js';
 
 // Scheduler
-export { soulScheduler, SoulScheduler } from '../scheduler/soul-scheduler';
+export { soulScheduler, SoulScheduler } from '../scheduler/soul-scheduler.js';

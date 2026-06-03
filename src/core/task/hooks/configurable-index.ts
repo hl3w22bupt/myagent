@@ -2,11 +2,11 @@
  * Configurable Hook Module Exports
  */
 
-export * from './configurable-hook';
-export * from './hook-config-loader';
-export * from './handlers/handler-factory';
-export * from './handlers/http-webhook';
-export * from './handlers/condition-check';
-export * from './handlers/middleware';
-export * from './handlers/notification';
-export * from './handlers/channels/lark';
+export * from './configurable-hook.js';
+export * from './hook-config-loader.js';
+export * from './handlers/handler-factory.js';
+export * from './handlers/http-webhook.js';
+export * from './handlers/condition-check.js';
+export * from './handlers/middleware.js';
+export * from './handlers/notification.js';
+export * from './handlers/channels/lark.js';

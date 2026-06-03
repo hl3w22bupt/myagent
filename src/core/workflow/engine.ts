@@ -4,20 +4,20 @@
  * Orchestrates multi-step workflows by calling agents
  */
 
-import { AgentManager } from '../agent/manager';
-import { WorkflowConfig, WorkflowOptions, WorkflowResult, WorkflowStep, OutputMapping } from './types';
-import { WorkflowContext } from './context';
-import { TemplateEngine } from '../config/template-engine';
-import { setAgentStreams, getAgentStreams } from '../agent/hooks/progress-notify';
-import { retryOperation, isDefaultRetryableError } from '../agent/retry';
-import { ContextManager } from '../context/manager';
+import { AgentManager } from '../agent/manager.js';
+import { WorkflowConfig, WorkflowOptions, WorkflowResult, WorkflowStep, OutputMapping } from './types.js';
+import { WorkflowContext } from './context.js';
+import { TemplateEngine } from '../config/template-engine.js';
+import { setAgentStreams, getAgentStreams } from '../agent/hooks/progress-notify.js';
+import { retryOperation, isDefaultRetryableError } from '../agent/retry.js';
+import { ContextManager } from '../context/manager.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import * as yaml from 'js-yaml';
-import { ArtifactCollector } from '../agent/artifact-collector';
-import { AgentArtifacts } from '../agent/artifacts';
-import { getDefaultWorkspace } from '../workspace/constants';
+import { ArtifactCollector } from '../agent/artifact-collector.js';
+import { AgentArtifacts } from '../agent/artifacts.js';
+import { getDefaultWorkspace } from '../workspace/constants.js';
 
 /**
  * Expand tilde (~) to home directory in file paths.
