@@ -1,7 +1,7 @@
 # MyAgent Project Guide for Claude Code & Claude AI
 
 > **Project**: Distributed AI Agent System (4-Layer Architecture)
-> **Tech Stack**: TypeScript + PostgreSQL + iii engine + Motia 1.0.x
+> **Tech Stack**: TypeScript + PostgreSQL + iii engine
 
 ---
 
@@ -13,7 +13,7 @@
 ## 📚 Quick Links
 
 **Development Guides**:
-- `.cursor/rules/motia/` - Motia best practices (11 detailed guides)
+- `.cursor/rules/` - Development best practices (11 detailed guides)
 - `TESTING_WORKFLOW.md` - Complete testing flow
 - `API_REFERENCE.md` - All API endpoints
 - `docs/reference/architecture/README.md` - Architecture overview
@@ -26,7 +26,7 @@
 
 ```bash
 npm install               # Dependencies
-npm run build             # Build TypeScript + Motia bundle
+npm run build             # Build TypeScript
 npm run start            # Start all services (iii engine + worker + media server)
 ```
 
@@ -48,14 +48,14 @@ pkill -f "outputs-server"   # Stop media server
 pkill -f "vite"             # Stop frontend
 ```
 
-**Architecture**: Motia 1.0.x runs on iii engine (Rust). Three processes:
+**Architecture**: Pure iii engine (Rust). Three processes:
 1. `iii` — Engine process (HTTP API on :3000, Stream on :3012, Engine WS on :49135)
 2. `node dist/index-dev.js` — Worker process (registers step handlers with engine)
 3. `node outputs-server.cjs` — Media server (serves large media files on :3010, bypasses iii WebSocket size limits)
 
 **After code changes**:
 ```bash
-npm run build             # TypeScript changes → rebuild + motia bundle
+npm run build             # TypeScript changes → rebuild
 ```
 
 **Required env vars** (in `.env`):
@@ -90,7 +90,7 @@ curl http://localhost:3010/health
 ## 🏗️ Architecture (4 Layers)
 
 ```
-Layer 1: Motia Integration (event-driven)
+Layer 1: iii Engine (event-driven runtime)
    ↓
 Layer 2: Agent Orchestration (Agent/MasterAgent, PTC)
    ↓
@@ -110,7 +110,7 @@ Layer 4: Skill Abstraction (reusable capabilities)
 
 | Problem | Solution |
 |---------|----------|
-| Module not found | `npm run generate-types` |
+| Module not found | `npm run build` |
 | Column "user_id" missing | `npm run db:reset` |
 | Creating new session every time | Ensure `sessionId` is passed |
 | LLM timeout | Increase timeout in `src/index.ts` |
@@ -139,7 +139,7 @@ src/core/
 
 | Agent | Purpose | When to Use |
 |-------|---------|-------------|
-| **myagent-developer** | Code development | Write Motia Steps, Agent logic, Skills |
+| **myagent-developer** | Code development | Write iii Steps, Agent logic, Skills |
 | **myagent-test-loop** | Automated testing | Verify features, test loops, debug failures |
 
 **Details**: `.claude/agents/myagent-*-*.md`
@@ -170,12 +170,12 @@ curl -X POST http://localhost:3000/agent/execute \
 
 **Developers**:
 1. Read `docs/AGENT_PLATFORM_ARCHITECTURE.md`
-2. Read `.cursor/rules/motia/*.mdc`
+2. Read `.cursor/rules/*.mdc`
 3. Use `myagent-developer` for coding
 
 **Debugging**:
 1. Read `docs/reference/architecture/core-concepts.md`
-2. Check logs: `tail -f .motia/logs/motia.log`
+2. Check logs: `tail -f logs/iii.log`
 3. Use Context API for task analysis
 
 ## 💡 Knowledge Base (RAG)
@@ -212,19 +212,19 @@ npm run setup:knowledge-base -- --execute --dimensions 1024
 
 **Documentation**: `docs/reference/architecture/knowledge-base.md`
 
-## ⚡ Motia Development
+## ⚡ iii Development
 
-**Comprehensive guides in `.cursor/rules/motia/`**:
+**Comprehensive guides in `.cursor/rules/`**:
 - Configuration, API/Event/Cron steps
 - State management, middlewares, streaming
 - Virtual steps, UI steps
 - Architecture, error handling
 
-**Before writing Motia code**, read the relevant guide from `.cursor/rules/`.
+**Before writing iii step code**, read the relevant guide from `.cursor/rules/`.
 
 ---
 
 **Remember**:
-- The `.cursor/rules/` directory is your primary Motia reference
+- The `.cursor/rules/` directory is your primary development reference
 - AGENTS.md (this file) is now merged into CLAUDE.md for auto-injection
 - See `docs/reference/` for detailed architecture documentation
