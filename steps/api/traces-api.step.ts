@@ -8,6 +8,8 @@
 import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 import { executionTracesStream } from '../streams/execution-traces.stream.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage.js';
 import Redis from 'ioredis';
 
 const MAX_TRACES = 1000;
@@ -40,50 +42,64 @@ export const handler: any = async (context: any) => {
   try {
     let traces: any[] = [];
 
-    // Try Redis directly first (handles large datasets that iii list() can't)
+    // Try database first (persisted across restarts)
     try {
-      const key = `motia:stream:executionTraces:group:${taskId}`;
-      const hashSize = await redisClient.hlen(key);
-
-      if (hashSize > 0) {
-        if (hashSize <= MAX_TRACES) {
-          const allData = await redisClient.hgetall(key);
-          traces = Object.values(allData).map((v: string) => {
-            try { return JSON.parse(v); } catch { return null; }
-          }).filter(Boolean);
-        } else {
-          // Large dataset: extract timestamp from key suffix, sort by time, take latest N
-          const allKeys = await redisClient.hkeys(key);
-          const keyWithTime = allKeys.map(k => {
-            const parts = k.split('-');
-            const ts = Number(parts[parts.length - 1]) || 0;
-            return { key: k, ts };
-          });
-          keyWithTime.sort((a, b) => b.ts - a.ts);
-          const latestKeys = keyWithTime.slice(0, MAX_TRACES).map(k => k.key);
-          const values = await redisClient.hmget(key, ...latestKeys);
-          traces = values.map((v: string | null) => {
-            if (!v) return null;
-            try { return JSON.parse(v); } catch { return null; }
-          }).filter(Boolean);
-          // Sort chronologically (oldest first) for display
-          traces.sort((a: any, b: any) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-          );
-          logger.info('Execution Traces API: Large dataset, returning latest', {
-            taskId,
-            totalEntries: hashSize,
-            returnedEntries: traces.length,
-          });
-        }
+      const store = getDataStore();
+      const pool = 'getPool' in store && typeof store.getPool === 'function'
+        ? store.getPool()
+        : null;
+      if (pool) {
+        const storage = new PostgresTokenUsageStorage(pool);
+        await storage.initializeTables();
+        traces = await storage.getExecutionTraces(taskId);
       }
-    } catch (redisError: any) {
-      logger.warn('Execution Traces API: Redis read failed, trying stream.list()', {
-        error: redisError.message,
+    } catch (dbError: any) {
+      logger.warn('Execution Traces API: DB read failed', {
+        taskId,
+        error: dbError.message,
       });
     }
 
-    // Fallback to stream.list() if Redis returned nothing
+    // Fallback to Redis if DB returned nothing
+    if (traces.length === 0) {
+      try {
+        const key = `motia:stream:executionTraces:group:${taskId}`;
+        const hashSize = await redisClient.hlen(key);
+
+        if (hashSize > 0) {
+          if (hashSize <= MAX_TRACES) {
+            const allData = await redisClient.hgetall(key);
+            traces = Object.values(allData).map((v: string) => {
+              try { return JSON.parse(v); } catch { return null; }
+            }).filter(Boolean);
+          } else {
+            const allKeys = await redisClient.hkeys(key);
+            const keyWithTime = allKeys.map(k => {
+              const parts = k.split('-');
+              const ts = Number(parts[parts.length - 1]) || 0;
+              return { key: k, ts };
+            });
+            keyWithTime.sort((a, b) => b.ts - a.ts);
+            const latestKeys = keyWithTime.slice(0, MAX_TRACES).map(k => k.key);
+            const values = await redisClient.hmget(key, ...latestKeys);
+            traces = values.map((v: string | null) => {
+              if (!v) return null;
+              try { return JSON.parse(v); } catch { return null; }
+            }).filter(Boolean);
+            traces.sort((a: any, b: any) =>
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+          }
+        }
+      } catch (redisError: any) {
+        logger.warn('Execution Traces API: Redis read failed', {
+          taskId,
+          error: redisError.message,
+        });
+      }
+    }
+
+    // Last resort: in-memory stream
     if (traces.length === 0) {
       const traceData = await executionTracesStream.list(taskId);
       traces = Array.isArray(traceData) ? traceData : traceData ? [traceData] : [];

@@ -132,10 +132,13 @@ export const handler = async (event: TokenUsageRecordedEvent) => {
       };
     }
 
-    // Save task usage
+    // Save task usage (aggregated summary)
     await storage.saveTaskUsage(taskId, event);
 
-    logger.info('[Token Usage Writer] Task usage saved', {
+    // Save timeline entry (per-call record for detailed breakdown)
+    await storage.saveTimelineEntry(event);
+
+    logger.info('[Token Usage Writer] Task usage and timeline saved', {
       traceId,
       taskId,
       totalTokens,

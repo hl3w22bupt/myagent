@@ -62,7 +62,7 @@ export const handler: any = async (_context: any) => {
       api: true, // If we're here, API is healthy
       agent: true,
       sandbox: true,
-      llm: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) ? true : false,
+      llm: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) ? true : false,
     };
 
     // Get metrics from state if available

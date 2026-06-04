@@ -97,9 +97,9 @@ async function startWorker() {
               });
             });
             iii.registerTrigger({
-              type: 'queue',
+              type: 'subscribe',
               function_id: fnId,
-              config: { queue_name: t.topic },
+              config: { topic: t.topic },
               metadata: meta,
             });
           } else if (t.type === 'cron') {

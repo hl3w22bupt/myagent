@@ -8,6 +8,8 @@
 
 import { Stream, type StreamConfig } from '../../src/iii-bridge.js';
 import { z } from 'zod';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage.js';
 
 /**
  * Execution trace entry schema.
@@ -188,6 +190,40 @@ export const config: StreamConfig = {
   name: 'executionTraces',
   schema: executionTraceSchema as any,
   baseConfig: { storageType: 'default' },
+  onPersist: async (groupId: string, _itemId: string, data: any) => {
+    try {
+      const store = getDataStore();
+      const pool = 'getPool' in store && typeof store.getPool === 'function'
+        ? store.getPool()
+        : null;
+      if (!pool) return;
+      const storage = new PostgresTokenUsageStorage(pool);
+      await storage.initializeTables();
+      await storage.saveExecutionTrace({
+        id: data.id || data.traceId,
+        taskId: groupId,
+        level: data.level,
+        stage: data.stage,
+        agentId: data.agentId,
+        skillName: data.skillName,
+        parentId: data.parentId || data.parentTraceId,
+        status: data.status,
+        inputData: data.inputData,
+        outputData: data.outputData,
+        errorData: data.errorData || data.error,
+        isRetry: data.isRetry,
+        retryAttempt: data.retryAttempt || data.retryCount,
+        retryReason: data.retryReason,
+        startedAt: data.startedAt,
+        completedAt: data.completedAt,
+        durationMs: data.durationMs || data.executionTime,
+        timestamp: data.timestamp,
+        metadata: data.metadata,
+      });
+    } catch (_err) {
+      // Silently fail; the in-memory stream is the primary data source
+    }
+  },
 };
 
 export const executionTracesStream = new Stream(config);

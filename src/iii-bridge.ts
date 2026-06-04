@@ -68,7 +68,7 @@ export interface EnqueueData<T = unknown> {
 export async function enqueue<T = unknown>(event: EnqueueData<T>): Promise<void> {
   const iii = getIII();
   await iii.trigger({
-    function_id: 'enqueue',
+    function_id: 'publish',
     payload: {
       topic: event.topic,
       data: event.data,
@@ -155,6 +155,8 @@ export interface StreamConfig {
   baseConfig?: { storageType: 'default' };
   onJoin?: (subscription: StreamSubscription, context: any, authContext?: any) => any;
   onLeave?: (subscription: StreamSubscription, context: any, authContext?: any) => any;
+  /** Called after each set() to persist data externally (e.g. to PostgreSQL). */
+  onPersist?: (groupId: string, itemId: string, data: any) => Promise<void>;
 }
 
 export interface StreamSubscription {
@@ -190,10 +192,17 @@ export class Stream<TData = any> {
 
   async set(groupId: string, itemId: string, data: TData): Promise<any> {
     const iii = getIII();
-    return iii.trigger({
+    const result = await iii.trigger({
       function_id: 'stream::set',
       payload: { stream_name: this.config.name, group_id: groupId, item_id: itemId, data },
     });
+    // Persist to external store if configured (e.g. PostgreSQL for durability)
+    if (this.config.onPersist) {
+      this.config.onPersist(groupId, itemId, data).catch((err) => {
+        console.error(`[Stream:${this.config.name}] onPersist failed:`, err.message);
+      });
+    }
+    return result;
   }
 
   async delete(groupId: string, itemId: string): Promise<void> {
