@@ -1,5 +1,5 @@
-import { BaseTaskHook } from './base';
-import { TaskContext } from './types';
+import { BaseTaskHook } from './base.js';
+import { TaskContext } from './types.js';
 
 /**
  * Metrics Collector TaskHook

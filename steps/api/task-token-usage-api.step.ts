@@ -5,11 +5,10 @@
  * Returns summary, breakdown, and timeline data.
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { getDataStore } from '../../src/core/database/data-store';
-import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage';
-import { executionTracesStream } from '../streams/execution-traces.stream';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage.js';
 
 /**
  * Task Token Usage API configuration.
@@ -69,73 +68,15 @@ export const handler: any = async (context: any) => {
       };
     }
 
-    // Get detailed timeline from execution traces
-    let detailedTimeline: any[] = [];
-    const groupedBySkill: Record<string, any> = {};
-    const groupedByModel: Record<string, any> = {};
-
+    // Get detailed timeline and breakdown from database
     try {
-      const traceData = await executionTracesStream.list(taskId);
-      const traces = Array.isArray(traceData) ? traceData : [traceData];
+      const { timeline, bySkill, byModel } = await storage.getTaskTimeline(taskId);
 
-      traces.forEach((trace: any) => {
-        // Token data is stored in metadata.llmResponse for llm_call stages
-        const llmResponse = trace.metadata?.llmResponse;
-        if (llmResponse && (llmResponse.promptTokens || llmResponse.completionTokens || llmResponse.totalTokens)) {
-          // Group by skill - 'unknown' means agent is calling directly
-          const skill = trace.skillName || 'Agent直接调用';
-          if (!groupedBySkill[skill]) {
-            groupedBySkill[skill] = {
-              skillName: skill,
-              promptTokens: 0,
-              completionTokens: 0,
-              totalTokens: 0,
-              llmCallsCount: 0,
-            };
-          }
-          groupedBySkill[skill].promptTokens += llmResponse.promptTokens || 0;
-          groupedBySkill[skill].completionTokens += llmResponse.completionTokens || 0;
-          groupedBySkill[skill].totalTokens += llmResponse.totalTokens || 0;
-          groupedBySkill[skill].llmCallsCount += 1;
-
-          // Group by model
-          const model = trace.metadata?.llmModel || 'unknown';
-          if (!groupedByModel[model]) {
-            groupedByModel[model] = {
-              model: model,
-              promptTokens: 0,
-              completionTokens: 0,
-              totalTokens: 0,
-              llmCallsCount: 0,
-            };
-          }
-          groupedByModel[model].promptTokens += llmResponse.promptTokens || 0;
-          groupedByModel[model].completionTokens += llmResponse.completionTokens || 0;
-          groupedByModel[model].totalTokens += llmResponse.totalTokens || 0;
-          groupedByModel[model].llmCallsCount += 1;
-        }
-      });
-
-      detailedTimeline = traces
-        .filter((trace: any) => trace.metadata?.llmResponse)
-        .map((trace: any) => ({
-          timestamp: trace.timestamp,
-          skillName: trace.skillName,
-          agentId: trace.agentId,
-          llmUsage: {
-            promptTokens: trace.metadata.llmResponse.promptTokens,
-            completionTokens: trace.metadata.llmResponse.completionTokens,
-            totalTokens: trace.metadata.llmResponse.totalTokens,
-            model: trace.metadata.llmModel,
-            provider: trace.metadata.llmProvider,
-          },
-        }));
-
-      logger.info('Task Token Usage API: Retrieved detailed data', {
+      logger.info('Task Token Usage API: Retrieved detailed data from database', {
         taskId,
-        traceCount: traces.length,
-        skillsCount: Object.keys(groupedBySkill).length,
-        modelsCount: Object.keys(groupedByModel).length,
+        timelineCount: timeline.length,
+        skillsCount: bySkill.length,
+        modelsCount: byModel.length,
       });
 
       return {
@@ -144,15 +85,12 @@ export const handler: any = async (context: any) => {
           success: true,
           taskId,
           summary: taskUsage,
-          breakdown: {
-            bySkill: Object.values(groupedBySkill),
-            byModel: Object.values(groupedByModel),
-          },
-          timeline: detailedTimeline,
+          breakdown: { bySkill, byModel },
+          timeline,
         },
       };
     } catch (traceError: any) {
-      logger.warn('Task Token Usage API: Failed to fetch traces', {
+      logger.warn('Task Token Usage API: Failed to fetch timeline from database', {
         taskId,
         error: traceError.message,
       });

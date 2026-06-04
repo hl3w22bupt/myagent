@@ -3,13 +3,13 @@
  *
  * @deprecated This class is deprecated and will be removed in a future version.
  * Soul Agent now uses the standard task_contexts table instead of soul_contexts.
- * Use ContextManager from './manager' instead.
+ * Use ContextManager from './manager.js' instead.
  *
  * Extends ContextManager with Soul-specific context management
  * Handles user profiles, relationship states, and conversation history for Soul agents
  */
 
-import { ContextManager } from './manager';
+import { ContextManager } from './manager.js';
 
 export interface UserProfile {
   name?: string;
@@ -40,7 +40,7 @@ export interface SoulContext {
 /**
  * SoulContextManager - Manages context for autonomous Soul agents
  *
- * @deprecated Use ContextManager from './manager' instead.
+ * @deprecated Use ContextManager from './manager.js' instead.
  * Soul Agent now saves conversations to task_contexts table.
  */
 export class SoulContextManager extends ContextManager {

@@ -2,7 +2,7 @@
  * Lark (飞书) Notification Channel
  */
 
-import { NotificationChannel } from '../notification';
+import { NotificationChannel } from '../notification.js';
 
 export class LarkNotificationChannel implements NotificationChannel {
   async send(params: { webhook: string; message: string; config?: any }): Promise<void> {

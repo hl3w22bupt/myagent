@@ -1,4 +1,4 @@
-import { ConversationHistoryEntry } from '../../database/context-types';
+import { ConversationHistoryEntry } from '../../database/context-types.js';
 
 /**
  * Task execution context passed to all TaskHooks

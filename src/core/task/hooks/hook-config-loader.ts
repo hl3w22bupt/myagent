@@ -18,10 +18,10 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { ConfigLoader } from '../../config/config-loader';
-import { ConfigurableHook } from './configurable-hook';
-import { TaskHookExecutor } from './executor';
-import { ConfigurableHookConfig, HookType } from './types';
+import { ConfigLoader } from '../../config/config-loader.js';
+import { ConfigurableHook } from './configurable-hook.js';
+import { TaskHookExecutor } from './executor.js';
+import { ConfigurableHookConfig, HookType } from './types.js';
 
 interface HooksConfig {
   version?: string;

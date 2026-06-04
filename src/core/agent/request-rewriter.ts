@@ -9,8 +9,8 @@
  * - User message: Context + current request
  */
 
-import { LLMClient } from './llm-client';
-import { LLMClientFactory, LLMTraceConfig } from '../llm/factory';
+import { LLMClient } from './llm-client.js';
+import { LLMClientFactory, LLMTraceConfig } from '../llm/factory.js';
 
 export interface ContextSummary {
   currentTask: string;

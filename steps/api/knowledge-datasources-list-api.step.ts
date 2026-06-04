@@ -3,7 +3,7 @@
  * List all data sources
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { getAllDataSources } from '../../src/core/knowledge/datasource-store.js';
 
 export const config = {

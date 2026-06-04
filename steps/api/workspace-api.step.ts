@@ -1,9 +1,9 @@
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
-import { getDataStore } from '../../src/core/database/data-store';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 export const config = {
   name: 'workspace-api',

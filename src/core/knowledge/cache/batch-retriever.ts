@@ -5,10 +5,10 @@
  * and reducing database round trips.
  */
 
-import type { KnowledgeEntry } from '../interfaces/knowledge-entry.interface';
-import type { RetrieveOptions } from '../interfaces/knowledge-entry.interface';
-import { getGlobalCache } from './knowledge-cache';
-import type { KnowledgeCache } from './knowledge-cache';
+import type { KnowledgeEntry } from '../interfaces/knowledge-entry.interface.js';
+import type { RetrieveOptions } from '../interfaces/knowledge-entry.interface.js';
+import { getGlobalCache } from './knowledge-cache.js';
+import type { KnowledgeCache } from './knowledge-cache.js';
 
 /**
  * Batch retrieval request

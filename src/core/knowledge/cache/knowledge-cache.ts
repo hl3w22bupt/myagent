@@ -6,7 +6,7 @@
  */
 
 import { LRUCache } from 'lru-cache';
-import type { KnowledgeEntry } from '../interfaces/knowledge-entry.interface';
+import type { KnowledgeEntry } from '../interfaces/knowledge-entry.interface.js';
 
 /**
  * Cache key structure

@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { loadAllSkills } from '../../src/core/skill/skill-loader';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { loadAllSkills } from '../../src/core/skill/skill-loader.js';
 
 /**
  * Path parameters schema for skill details API.

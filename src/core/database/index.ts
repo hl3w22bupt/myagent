@@ -14,14 +14,14 @@
  */
 
 // Database interface
-export { Database } from './database.interface';
+export { Database } from './database.interface.js';
 
 // Implementations
-export { DataStore as SqliteDataStore } from './data-store';
-export { PostgresDataStore } from './postgres-store';
+export { DataStore as SqliteDataStore } from './data-store.js';
+export { PostgresDataStore } from './postgres-store.js';
 
 // Factory
-export { createDatabase, getDatabase, type DatabaseBackend, type DatabaseConfig } from './database-factory';
+export { createDatabase, getDatabase, type DatabaseBackend, type DatabaseConfig } from './database-factory.js';
 
 // Types
 export type {
@@ -29,13 +29,13 @@ export type {
   TaskStatus,
   Session,
   CreateTaskData,
-} from './data-store';
+} from './data-store.js';
 
 export type {
   TaskContext,
   ArtifactIndex,
   CompressionHistory,
-} from './context-types';
+} from './context-types.js';
 
 // Legacy exports (for backward compatibility)
-export { getDataStore, setDataStore } from './data-store';
+export { getDataStore, setDataStore } from './data-store.js';

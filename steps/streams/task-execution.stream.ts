@@ -4,8 +4,10 @@
  * Real-time stream for tracking agent task execution progress.
  */
 
-import { Stream, type StreamConfig } from 'motia';
+import { Stream, type StreamConfig } from '../../src/iii-bridge.js';
 import { z } from 'zod';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from '../token-usage/storage/postgres-token-storage.js';
 
 /**
  * Task execution status schema.
@@ -108,6 +110,42 @@ export const config: StreamConfig = {
   name: 'taskExecution',
   schema: taskExecutionSchema as any,
   baseConfig: { storageType: 'default' },
+  onPersist: async (groupId: string, itemId: string, data: any) => {
+    try {
+      const store = getDataStore();
+      const pool = 'getPool' in store && typeof store.getPool === 'function'
+        ? store.getPool()
+        : null;
+      if (!pool) return;
+      const storage = new PostgresTokenUsageStorage(pool);
+      await storage.initializeTables();
+      await storage.saveExecutionEvent({
+        taskId: groupId,
+        eventId: itemId,
+        type: data.type,
+        status: data.status,
+        output: data.output,
+        error: data.error,
+        currentStep: data.currentStep,
+        skill: data.skill,
+        stage: data.stage,
+        progressType: data.progressType,
+        executionTime: data.executionTime,
+        sessionId: data.sessionId,
+        role: data.role,
+        content: data.content,
+        taskDescription: data.task,
+        // Merge data.data (rich event payload) and data.metadata (extra metadata)
+        // so frontend can access event details after page refresh
+        metadata: {
+          ...(data.metadata || {}),
+          ...(data.data ? { data: data.data } : {}),
+        },
+      });
+    } catch (_err) {
+      // Silently fail; the in-memory stream is the primary data source
+    }
+  },
 };
 
 export const taskExecutionStream = new Stream(config);

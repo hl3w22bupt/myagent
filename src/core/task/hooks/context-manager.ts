@@ -1,9 +1,9 @@
-import { BaseTaskHook } from './base';
-import { TaskContext } from './types';
-import { ContextManager } from '../../context/manager';
-import { LLMSummarizer } from '../../llm/summarizer';
-import { getDataStore } from '../../database/data-store';
-import { ConversationHistoryEntry } from '../../database/context-types';
+import { BaseTaskHook } from './base.js';
+import { TaskContext } from './types.js';
+import { ContextManager } from '../../context/manager.js';
+import { LLMSummarizer } from '../../llm/summarizer.js';
+import { getDataStore } from '../../database/data-store.js';
+import { ConversationHistoryEntry } from '../../database/context-types.js';
 
 /**
  * Context Manager TaskHook

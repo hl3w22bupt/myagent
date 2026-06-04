@@ -13,9 +13,9 @@
  * 注意: MyEcho 特定逻辑（情绪分析、回复风格等）应由 MyEcho 后端处理。
  */
 
-import { BaseTaskHook } from './base';
-import type { TaskContext } from './types';
-import { getDataStore, type UserProfile } from '../../database/data-store';
+import { BaseTaskHook } from './base.js';
+import type { TaskContext } from './types.js';
+import { getDataStore, type UserProfile } from '../../database/data-store.js';
 
 /**
  * 会话特征提取结果（通用）

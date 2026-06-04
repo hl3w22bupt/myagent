@@ -5,14 +5,14 @@
  * Can orchestrate multiple specialized subagents.
  */
 
-import { Agent } from './agent';
-import { ExternalAgent } from './external-agent';
-import { MasterAgentConfig, AgentResult, DelegationPlan } from './types';
-import { getAgentStreams } from './hooks/progress-notify';
-import { RequestRewriter } from './request-rewriter';
-import { ContextManager } from '../context/manager';
-import { getDataStore } from '../database/data-store';
-import { OrchestratedContext } from '../context/orchestrator';
+import { Agent } from './agent.js';
+import { ExternalAgent } from './external-agent.js';
+import { MasterAgentConfig, AgentResult, DelegationPlan } from './types.js';
+import { getAgentStreams } from './hooks/progress-notify.js';
+import { RequestRewriter } from './request-rewriter.js';
+import { ContextManager } from '../context/manager.js';
+import { getDataStore } from '../database/data-store.js';
+import { OrchestratedContext } from '../context/orchestrator.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';

@@ -3,7 +3,7 @@
  * Get all available apps
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { getDataStore } from '../../src/core/database/data-store.js';
 
 export const config = {

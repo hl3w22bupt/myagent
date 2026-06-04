@@ -20,8 +20,8 @@
  */
 
 import { z } from 'zod';
-import { BaseAgentHook } from '../../agent/hooks/base';
-import type { AgentResult, AgentConfig } from '../../agent/types';
+import { BaseAgentHook } from '../../agent/hooks/base.js';
+import type { AgentResult, AgentConfig } from '../../agent/types.js';
 
 // ============================================================================
 // Types and Interfaces

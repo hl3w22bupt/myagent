@@ -16,9 +16,9 @@
  * - 简化调度器职责，专注于生命周期管理
  */
 
-import { SoulAgent } from '../agent/soul-agent';
-import { soulConfigLoader } from '../config/soul-config-loader';
-import { subagentConfigLoader } from '../config/subagent-config-loader';
+import { SoulAgent } from '../agent/soul-agent.js';
+import { soulConfigLoader } from '../config/soul-config-loader.js';
+import { subagentConfigLoader } from '../config/subagent-config-loader.js';
 
 /**
  * Scheduler instance manager

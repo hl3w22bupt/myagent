@@ -4,10 +4,10 @@
  * 获取 Soul 和 Subagent 的完整配置信息
  */
 
-import { soulConfigLoader } from '../../src/core/config/soul-config-loader';
+import { soulConfigLoader } from '../../src/core/config/soul-config-loader.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 /**
  * Soul Configuration API configuration.

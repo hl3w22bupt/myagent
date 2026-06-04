@@ -6,9 +6,9 @@
  * directly access Motia streams.
  */
 
-import { type StepConfig, logger, enqueue } from 'motia';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { executionTracesStream } from '../streams/execution-traces.stream';
+import { executionTracesStream } from '../streams/execution-traces.stream.js';
 
 /**
  * Submit Execution Trace API Step configuration.

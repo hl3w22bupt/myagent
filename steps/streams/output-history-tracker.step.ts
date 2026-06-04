@@ -7,8 +7,8 @@
  */
 
 import { z } from 'zod';
-import { logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 /**
  * Input schema for output history tracker.

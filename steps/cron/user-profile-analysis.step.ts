@@ -10,8 +10,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { type StepConfig, logger, cron, enqueue } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { type StepConfig, logger, cron, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 /**
  * AI 分析结果接口

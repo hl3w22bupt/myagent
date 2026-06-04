@@ -9,7 +9,7 @@
  * - Validates agent references against available subagents
  */
 
-import { ValidationError, WorkflowConfig, WorkflowStep } from './types';
+import { ValidationError, WorkflowConfig, WorkflowStep } from './types.js';
 
 const RESERVED_NAMES = ['input', 'output', 'env', 'loop', 'workflow', 'iteration'];
 

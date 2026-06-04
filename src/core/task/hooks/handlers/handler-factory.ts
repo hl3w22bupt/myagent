@@ -4,11 +4,11 @@
  * Creates appropriate handler based on hook type
  */
 
-import { HookHandler } from '../types';
-import { HttpWebhookHandler } from './http-webhook';
-import { ConditionCheckHandler } from './condition-check';
-import { MiddlewareHandler } from './middleware';
-import { NotificationHandler } from './notification';
+import { HookHandler } from '../types.js';
+import { HttpWebhookHandler } from './http-webhook.js';
+import { ConditionCheckHandler } from './condition-check.js';
+import { MiddlewareHandler } from './middleware.js';
+import { NotificationHandler } from './notification.js';
 
 export class HookHandlerFactory {
   static create(config: { type: string }): HookHandler {

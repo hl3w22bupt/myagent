@@ -4,7 +4,7 @@
  * Manages variables and state during workflow execution
  */
 
-import { WorkflowContextState } from './types';
+import { WorkflowContextState } from './types.js';
 
 export class WorkflowContext {
   private workflowId: string;

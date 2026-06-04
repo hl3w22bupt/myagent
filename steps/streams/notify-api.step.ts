@@ -5,9 +5,9 @@
  * Stores notifications in the task execution stream.
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { z } from 'zod';
-import { taskExecutionStream } from './task-execution.stream';
+import { taskExecutionStream } from './task-execution.stream.js';
 
 export const config = {
   name: 'notify-api',

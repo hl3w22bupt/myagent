@@ -8,10 +8,10 @@
  * 4. task-result-handler 等订阅者处理并保存所有数据
  */
 
-import { soulScheduler } from '../../src/core/scheduler/soul-scheduler';
-import { type StepConfig, logger, enqueue } from 'motia';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
-import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify';
+import { soulScheduler } from '../../src/core/scheduler/soul-scheduler.js';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
+import { setAgentStreams } from '../../src/core/agent/hooks/progress-notify.js';
 
 /**
  * Soul Execute API configuration.

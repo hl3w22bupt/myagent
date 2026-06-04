@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, stateManager } from 'motia';
+import { type StepConfig, logger, stateManager } from '../../src/iii-bridge.js';
 
 /**
  * Response schema for health check.
@@ -62,7 +62,7 @@ export const handler: any = async (_context: any) => {
       api: true, // If we're here, API is healthy
       agent: true,
       sandbox: true,
-      llm: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY) ? true : false,
+      llm: (process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) ? true : false,
     };
 
     // Get metrics from state if available

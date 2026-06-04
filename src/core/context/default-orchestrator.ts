@@ -15,8 +15,8 @@ import type {
   OrchestratedContext,
   OrchestratorConfig,
   FailureExperience,
-} from './orchestrator';
-import type { SessionState } from '../agent/types';
+} from './orchestrator.js';
+import type { SessionState } from '../agent/types.js';
 
 /**
  * 默认上下文编排器

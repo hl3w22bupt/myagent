@@ -6,10 +6,10 @@
  */
 
 // Base interface
-export { BaseAgentHook, type AgentContext } from './base';
+export { BaseAgentHook, type AgentContext } from './base.js';
 
 // Manager
-export { AgentHookManager } from './manager';
+export { AgentHookManager } from './manager.js';
 
 // Hook implementations
 export {
@@ -17,18 +17,18 @@ export {
   type AgentMonitoringConfig,
   type AgentHealth,
   type AgentMonitoringData,
-} from './monitoring';
+} from './monitoring.js';
 
 export {
   AgentContextSyncHook,
   type AgentContextSyncConfig,
-} from './context-sync';
+} from './context-sync.js';
 
 export {
   AgentProgressNotifyHook,
   type AgentProgressNotifyConfig,
   setAgentStreams,
   getAgentStreams,
-} from './progress-notify';
+} from './progress-notify.js';
 
-export { AgentTraceHook } from './trace-hook';
+export { AgentTraceHook } from './trace-hook.js';

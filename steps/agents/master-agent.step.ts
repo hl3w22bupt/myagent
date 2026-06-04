@@ -11,13 +11,14 @@
  * - Configuration unified with application-wide settings
  */
 
-import { type StepConfig, logger, enqueue, queue } from 'motia';
-import { taskExecutionStream } from '../streams/task-execution.stream';
-import { executionTracesStream } from '../streams/execution-traces.stream';
+import { type StepConfig, logger, enqueue, queue } from '../../src/iii-bridge.js';
+import { taskExecutionStream } from '../streams/task-execution.stream.js';
+import { executionTracesStream } from '../streams/execution-traces.stream.js';
 import { z as _z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { agentManager } from '../../src/index';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { agentManager } from '../../src/index.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
+import { loadAllSkills } from '../../src/core/skill/skill-loader.js';
 import {
   TaskHookExecutor,
   DefaultTaskHook,
@@ -28,23 +29,33 @@ import {
   UserProfileAccumulatorHook,
   TaskWorkspaceHook,
   TaskContext,
-} from '../../src/core/task/hooks/index';
-import { ContextManager } from '../../src/core/context/manager';
+} from '../../src/core/task/hooks/index.js';
+import { ContextManager } from '../../src/core/context/manager.js';
 import {
   AgentMonitoringHook,
-} from '../../src/core/agent/hooks/monitoring';
+} from '../../src/core/agent/hooks/monitoring.js';
 import {
   AgentContextSyncHook,
-} from '../../src/core/agent/hooks/context-sync';
+} from '../../src/core/agent/hooks/context-sync.js';
 import {
   AgentProgressNotifyHook,
   setAgentStreams,
-} from '../../src/core/agent/hooks/progress-notify';
-import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook';
-import { WorkflowEngine } from '../../src/core/workflow/engine';
-import { getWorkflowLoader } from '../../src/core/workflow/loader';
-import { getHookConfigLoader } from '../../src/core/task/hooks/hook-config-loader';
-import type { AgentResult } from '../../src/core/agent/types';
+} from '../../src/core/agent/hooks/progress-notify.js';
+import { AgentTraceHook } from '../../src/core/agent/hooks/trace-hook.js';
+import { WorkflowEngine } from '../../src/core/workflow/engine.js';
+import { getWorkflowLoader } from '../../src/core/workflow/loader.js';
+import { getHookConfigLoader } from '../../src/core/task/hooks/hook-config-loader.js';
+import type { AgentResult } from '../../src/core/agent/types.js';
+
+/** Cached skill names from SkillLoader — loaded once on first use. */
+let _cachedSkillNames: string[] | null = null;
+
+function getAllSkillNames(): string[] {
+  if (!_cachedSkillNames) {
+    _cachedSkillNames = loadAllSkills().map(s => s.name);
+  }
+  return _cachedSkillNames;
+}
 
 /**
  * Input schema for Master Agent step.
@@ -715,12 +726,20 @@ export const handler = async (input: any) => {
     // Determine agent type (default to master for backward compatibility)
     const agentType = input.agentType || 'master';
 
+    // Auto-populate availableSkills from SkillLoader if not explicitly specified
+    // When undefined: use ALL loaded skills (so delegation planning and PTCGenerator have full visibility)
+    // When empty array []: respect the caller's intent (conversational agent, no skills)
+    // When non-empty array: use as-is (caller-specified whitelist)
+    const effectiveSkills = input.availableSkills !== undefined
+      ? input.availableSkills
+      : getAllSkillNames();
+
     logger.info('Acquiring Agent', {
       sessionId,
       agentType,
       delegateTo: input.delegateTo,
-      availableSkills: input.availableSkills,
-      skillCount: input.availableSkills?.length || 0
+      availableSkills: effectiveSkills,
+      skillCount: effectiveSkills.length
     });
 
     logger.debug('[master-agent.step] Input received:', {
@@ -729,19 +748,17 @@ export const handler = async (input: any) => {
       'input.agentType': input.agentType,
       'input.delegateTo': input.delegateTo,
       'input.availableSkills': input.availableSkills,
+      effectiveSkillsCount: effectiveSkills.length,
     });
 
     // Get Agent from Manager (Agent, MasterAgent, or ExternalAgent)
     // each session has independent Agent instance
     // Hook: onAgentCreate and onAgentAcquire are called here
-    // Note: Only pass availableSkills if it's a non-empty array
-    // Empty array means "use all skills" (not "restrict to no skills")
+    // Pass effectiveSkills (auto-populated from SkillLoader if not explicitly specified)
     const acquireOptions: any = {
       agentType,
+      availableSkills: effectiveSkills,
     };
-    if (input.availableSkills && input.availableSkills.length > 0) {
-      acquireOptions.availableSkills = input.availableSkills;
-    }
     if (input.delegateTo && input.delegateTo.length > 0) {
       acquireOptions.delegateTo = input.delegateTo;
       logger.debug('[master-agent.step] Added delegateTo to acquireOptions:', input.delegateTo);

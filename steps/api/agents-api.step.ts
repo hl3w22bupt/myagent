@@ -5,7 +5,7 @@
  */
 
 import { z as _z } from 'zod';
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import * as yaml from 'js-yaml';

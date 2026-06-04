@@ -5,7 +5,7 @@
  * Manages notification lifecycle: create, send, track delivery
  */
 
-import { PostgresDataStore } from './postgres-store';
+import { PostgresDataStore } from './postgres-store.js';
 
 // Global store instance
 let postgresStore: PostgresDataStore | null = null;

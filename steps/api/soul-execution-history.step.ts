@@ -5,9 +5,9 @@
  */
 
 import { z } from 'zod';
-import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service';
+import { soulExecutionHistoryService } from '../../src/core/database/soul-data-service.js';
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 /**
  * Soul Execution History API configuration.

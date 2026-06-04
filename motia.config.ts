@@ -1,3 +1,3 @@
-// Motia 1.0.x does not export defineConfig.
-// This file is kept as a placeholder; Motia resolves its own configuration internally.
+// III Engine configuration is in config.yaml.
+// This file is no longer needed after migration from motia to pure iii.
 export default {};

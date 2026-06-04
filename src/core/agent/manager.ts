@@ -11,11 +11,11 @@
  * This is NOT tied to Motia - can be used in any framework.
  */
 
-import { Agent } from './agent';
-import { MasterAgent } from './master-agent';
-import { ExternalAgent } from './external-agent';
-import { AgentConfig, MasterAgentConfig, ExternalAgentConfig } from './types';
-import { AgentHookManager } from './hooks/manager';
+import { Agent } from './agent.js';
+import { MasterAgent } from './master-agent.js';
+import { ExternalAgent } from './external-agent.js';
+import { AgentConfig, MasterAgentConfig, ExternalAgentConfig } from './types.js';
+import { AgentHookManager } from './hooks/manager.js';
 
 /**
  * Configuration for AgentManager.

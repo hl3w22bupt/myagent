@@ -4,10 +4,10 @@
  * 停止指定的 Soul Agent 实例
  */
 
-import { soulStateDataService } from '../../src/core/database/soul-data-service';
-import { SoulState } from '../../src/core/agent/soul-types';
+import { soulStateDataService } from '../../src/core/database/soul-data-service.js';
+import { SoulState } from '../../src/core/agent/soul-types.js';
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 
 /**
  * Soul Session Stop API configuration.

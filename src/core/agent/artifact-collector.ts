@@ -11,7 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { AgentArtifacts, FileArtifact, ArtifactType } from './artifacts';
+import { AgentArtifacts, FileArtifact, ArtifactType } from './artifacts.js';
 
 /**
  * 产物收集器

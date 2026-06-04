@@ -4,7 +4,7 @@
  * 使用Anchored Iterative Summarization算法压缩上下文
  */
 
-import type { TaskContext, StructuredSummary, ConversationRound } from '../database/context-types';
+import type { TaskContext, StructuredSummary, ConversationRound } from '../database/context-types.js';
 
 export class ContextCompressor {
   private maxTokens: number;

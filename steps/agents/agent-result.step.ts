@@ -6,9 +6,9 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import type { ArtifactIndex } from '../../src/core/database/context-types';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import type { ArtifactIndex } from '../../src/core/database/context-types.js';
 
 /**
  * Metadata cache to avoid repeated character-indexed reconstruction

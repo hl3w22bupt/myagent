@@ -4,7 +4,7 @@
  * Validates conditions using regex patterns
  */
 
-import { HookHandler } from '../types';
+import { HookHandler } from '../types.js';
 
 export class ConditionCheckHandler implements HookHandler {
   async execute(context: any, config: any): Promise<any> {

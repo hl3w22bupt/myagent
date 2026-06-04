@@ -6,13 +6,13 @@
  * Uses unified skill-loader from core/skill layer for consistent discovery.
  */
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import {
   loadAllSkills,
   filterByTags,
   filterBySource,
   UnifiedSkillMetadata
-} from '../../src/core/skill/skill-loader';
+} from '../../src/core/skill/skill-loader.js';
 
 /**
  * Query parameters schema for skills list API.

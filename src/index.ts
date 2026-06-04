@@ -42,10 +42,10 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { AgentManager } from './core/agent/manager';
+import { AgentManager } from './core/agent/manager.js';
 import { resolve } from 'path';
 import { existsSync, readdirSync } from 'fs';
-import type { MasterAgentConfig, ExternalAgentConfig } from './core/agent/types';
+import type { MasterAgentConfig, ExternalAgentConfig } from './core/agent/types.js';
 
 /**
  * Global AgentManager singleton.

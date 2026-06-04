@@ -2,7 +2,7 @@ import {
   TaskTokenUsage,
   TotalUsage,
   TokenUsageRecordedEvent
-} from '../types';
+} from '../types.js';
 
 /**
  * Token Usage Storage Interface

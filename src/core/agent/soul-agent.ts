@@ -7,19 +7,19 @@
  * All business logic is defined in soul.yaml's goal field.
  */
 
-import { Agent } from './agent';
-import { AgentConfig } from './types';
-import { SoulConfig, SoulState, SoulInput, PrimitiveTool } from './soul-types';
-import { soulStateDataService } from '../database/soul-data-service';
-import { soulExecutionHistoryService } from '../database/soul-data-service';
-import { soulNotificationDataService } from '../database/soul-notification-service';
-import { SoulExecutionRecord } from './soul-execution-types';
-import { extractUserId } from '../utils/session-utils';
-import { createExecutionId, calculateDuration } from '../utils/date-utils';
-import { MAX_DECISION_LENGTH, DEFAULT_TASK_NAME } from '../constants/execution';
-import { getDataStore } from '../database/data-store';
-import { SoulContextBuilder } from '../context/soul-context-builder';
-import { SoulExecutionContext, DecisionResult } from './soul-context-types';
+import { Agent } from './agent.js';
+import { AgentConfig } from './types.js';
+import { SoulConfig, SoulState, SoulInput, PrimitiveTool } from './soul-types.js';
+import { soulStateDataService } from '../database/soul-data-service.js';
+import { soulExecutionHistoryService } from '../database/soul-data-service.js';
+import { soulNotificationDataService } from '../database/soul-notification-service.js';
+import { SoulExecutionRecord } from './soul-execution-types.js';
+import { extractUserId } from '../utils/session-utils.js';
+import { createExecutionId, calculateDuration } from '../utils/date-utils.js';
+import { MAX_DECISION_LENGTH, DEFAULT_TASK_NAME } from '../constants/execution.js';
+import { getDataStore } from '../database/data-store.js';
+import { SoulContextBuilder } from '../context/soul-context-builder.js';
+import { SoulExecutionContext, DecisionResult } from './soul-context-types.js';
 
 /**
  * SoulAgent - Autonomous agent with hibernation capabilities

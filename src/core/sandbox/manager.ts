@@ -10,9 +10,9 @@
  * This is NOT tied to Motia - can be used in any framework.
  */
 
-import { SandboxAdapter } from './types';
-import { SandboxFactory } from './factory';
-import { SandboxAdapterConfig } from './types';
+import { SandboxAdapter } from './types.js';
+import { SandboxFactory } from './factory.js';
+import { SandboxAdapterConfig } from './types.js';
 
 /**
  * Configuration for SandboxManager.

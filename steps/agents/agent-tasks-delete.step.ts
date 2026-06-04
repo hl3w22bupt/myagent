@@ -10,8 +10,8 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 /**
  * Query parameters schema for delete API.

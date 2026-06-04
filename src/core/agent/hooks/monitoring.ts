@@ -23,8 +23,8 @@
  * ```
  */
 
-import { BaseAgentHook, type Agent } from './base';
-import type { AgentConfig, AgentResult } from '../types';
+import { BaseAgentHook, type Agent } from './base.js';
+import type { AgentConfig, AgentResult } from '../types.js';
 
 /**
  * Configuration for AgentMonitoringHook.

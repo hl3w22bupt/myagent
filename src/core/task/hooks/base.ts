@@ -1,4 +1,4 @@
-import { TaskContext } from './types';
+import { TaskContext } from './types.js';
 
 /**
  * Abstract base class for all TaskHooks

@@ -16,7 +16,7 @@ export {
   validateCollectionNames,
   isReservedCollectionName,
   type ValidationResult,
-} from './collection-validator';
+} from './collection-validator.js';
 
 export {
   checkCollectionAccess,
@@ -26,7 +26,7 @@ export {
   revokeCollectionAccess,
   closePool as closeTenantIsolationPool,
   type AccessControlEntry,
-} from './tenant-isolation';
+} from './tenant-isolation.js';
 
 export {
   RateLimiter,
@@ -37,4 +37,4 @@ export {
   closeAllLimiters,
   type RateLimitConfig,
   type RateLimitResult,
-} from './rate-limiter';
+} from './rate-limiter.js';

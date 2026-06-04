@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, enqueue } from 'motia';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
 
 /**
  * Query parameters schema for retry API.
@@ -38,7 +38,7 @@ export const config = {
  */
 export const handler = async (request: any) => {
   // Parse query parameters
-  const queryParams: Record<string, any> = request.queryParams || {};
+  const queryParams: Record<string, any> = request.request?.queryParams || {};
   const validationResult = querySchema.safeParse(queryParams);
 
   if (!validationResult.success) {

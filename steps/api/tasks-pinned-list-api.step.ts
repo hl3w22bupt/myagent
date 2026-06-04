@@ -4,9 +4,9 @@
  * Returns list of pinned tasks
  */
 
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import type { Task } from '../../src/core/database/data-store';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import type { Task } from '../../src/core/database/data-store.js';
 
 /**
  * Pinned Tasks List API Step configuration.

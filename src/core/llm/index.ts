@@ -8,17 +8,17 @@
  * - Types: All LLM-related types
  */
 
-export { LLMClient, LLMPresets } from './client';
-export { LLMClientFactory, getLLMClientFactory } from './factory';
+export { LLMClient, LLMPresets } from './client.js';
+export { LLMClientFactory, getLLMClientFactory } from './factory.js';
 
 export type {
   LLMClientConfig,
   LLMMessage,
   LLMResponse,
   LLMProvider,
-} from './client';
+} from './client.js';
 
 export type {
   LLMFactoryConfig,
   LLMTraceConfig,
-} from './factory';
+} from './factory.js';

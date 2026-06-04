@@ -4,10 +4,10 @@
  * This maintains backward compatibility with existing imports
  */
 
-export { LLMClient, LLMPresets } from '../llm/client';
+export { LLMClient, LLMPresets } from '../llm/client.js';
 export type {
   LLMClientConfig,
   LLMMessage,
   LLMResponse,
   LLMProvider,
-} from '../llm/client';
+} from '../llm/client.js';

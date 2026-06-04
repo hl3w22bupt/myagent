@@ -26,7 +26,7 @@ import {
   SandboxResult,
   SandboxInfo,
   LocalSandboxConfig,
-} from '../types';
+} from '../types.js';
 
 export class LocalSandboxAdapter implements SandboxAdapter {
   private pythonPath: string;

@@ -9,8 +9,8 @@
  * - 组装并返回格式化的上下文
  */
 
-import type { UserProfile } from '../database/data-store';
-import type { SessionState } from '../agent/types';
+import type { UserProfile } from '../database/data-store.js';
+import type { SessionState } from '../agent/types.js';
 
 /**
  * 失败经验 - 从历史执行中提取的教训

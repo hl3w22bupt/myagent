@@ -134,7 +134,7 @@ describe('AppKnowledgeManager (Integration)', () => {
         'SELECT threshold FROM app_knowledge_mappings WHERE app_id = $1 AND table_name = $2',
         ['test-app', 'test-table']
       );
-      expect(dbResult.rows[0].threshold).toBe('0.800'); // Updated to 0.8
+      expect(Number(dbResult.rows[0].threshold)).toBeCloseTo(0.8);
     });
 
     it('should use default values for optional parameters', async () => {
@@ -156,7 +156,7 @@ describe('AppKnowledgeManager (Integration)', () => {
 
       expect(result.content_field).toBe('content');
       expect(result.embedding_field).toBe('embedding');
-      expect(result.threshold).toBe('0.700'); // PostgreSQL returns numeric as string
+      expect(Number(result.threshold)).toBeCloseTo(0.7);
       expect(result.enabled).toBe(true);
       expect(result.priority).toBe(0);
 

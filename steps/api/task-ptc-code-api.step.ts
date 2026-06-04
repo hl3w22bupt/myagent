@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
 
 // Initialize data store at module level (same pattern as context-api)
 const unifiedStore = getDataStore();

@@ -6,7 +6,7 @@
  */
 
 import { Pool } from 'pg';
-import type { Database } from './database.interface';
+import type { Database } from './database.interface.js';
 import type {
   Task,
   TaskStatus,
@@ -14,14 +14,14 @@ import type {
   CreateTaskData,
   User,
   UserProfile,
-} from './data-store';
+} from './data-store.js';
 import type {
   TaskContext,
   ArtifactIndex,
   CompressionHistory,
   OutputIndex,
   ConversationRound,
-} from './context-types';
+} from './context-types.js';
 
 /**
  * PostgreSQL DataStore configuration

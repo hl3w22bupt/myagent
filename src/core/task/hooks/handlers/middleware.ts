@@ -4,8 +4,8 @@
  * Intercepts and modifies input/output
  */
 
-import { HookHandler } from '../types';
-import { TemplateEngine } from '../../../config/template-engine';
+import { HookHandler } from '../types.js';
+import { TemplateEngine } from '../../../config/template-engine.js';
 
 export class MiddlewareHandler implements HookHandler {
   private httpCache = new Map<string, { value: any; expireTime: number }>();

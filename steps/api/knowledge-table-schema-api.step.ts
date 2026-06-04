@@ -4,7 +4,7 @@
  * Returns the schema structure of a knowledge table for UI field mapping configuration
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { Pool } from 'pg';
 
 let pool: Pool | null = null;

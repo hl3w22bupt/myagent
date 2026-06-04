@@ -3,11 +3,11 @@
  * Coordinates parallel retrieval from multiple vector stores
  */
 
-import type { IVectorStore, KnowledgeEntry, RetrieveOptions } from '../interfaces/vector-store.interface';
-import type { VectorStoreConfig } from '../interfaces/adapter-config.interface';
-import type { CoordinatorConfig } from './coordinator-config.interface';
-import { PostgresVectorStore } from '../adapters/postgres-adapter';
-import { validateConfig } from '../interfaces/adapter-config.interface';
+import type { IVectorStore, KnowledgeEntry, RetrieveOptions } from '../interfaces/vector-store.interface.js';
+import type { VectorStoreConfig } from '../interfaces/adapter-config.interface.js';
+import type { CoordinatorConfig } from './coordinator-config.interface.js';
+import { PostgresVectorStore } from '../adapters/postgres-adapter.js';
+import { validateConfig } from '../interfaces/adapter-config.interface.js';
 
 export class RetrievalCoordinator {
   private stores: Map<string, IVectorStore> = new Map();

@@ -7,10 +7,10 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, queue } from 'motia';
-import { getDataStore } from '../../src/core/database/data-store';
-import { PostgresTokenUsageStorage } from './storage/postgres-token-storage';
-import type { TokenUsageRecordedEvent } from './types';
+import { type StepConfig, logger, queue } from '../../src/iii-bridge.js';
+import { getDataStore } from '../../src/core/database/data-store.js';
+import { PostgresTokenUsageStorage } from './storage/postgres-token-storage.js';
+import type { TokenUsageRecordedEvent } from './types.js';
 
 /**
  * Input schema for token usage writer.
@@ -132,10 +132,13 @@ export const handler = async (event: TokenUsageRecordedEvent) => {
       };
     }
 
-    // Save task usage
+    // Save task usage (aggregated summary)
     await storage.saveTaskUsage(taskId, event);
 
-    logger.info('[Token Usage Writer] Task usage saved', {
+    // Save timeline entry (per-call record for detailed breakdown)
+    await storage.saveTimelineEntry(event);
+
+    logger.info('[Token Usage Writer] Task usage and timeline saved', {
       traceId,
       taskId,
       totalTokens,

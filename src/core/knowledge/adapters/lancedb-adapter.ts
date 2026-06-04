@@ -10,13 +10,13 @@ import type {
   KnowledgeEntry,
   RetrieveOptions,
   EmbeddingOptions,
-} from '../interfaces/vector-store.interface';
-import type { LanceDBConfig } from '../interfaces/adapter-config.interface';
+} from '../interfaces/vector-store.interface.js';
+import type { LanceDBConfig } from '../interfaces/adapter-config.interface.js';
 import {
   ValidationError,
   ConnectionError,
   EmbeddingGenerationError,
-} from '../errors/knowledge-errors';
+} from '../errors/knowledge-errors.js';
 
 // LanceDB type stubs for dynamic import
 interface LanceConnection {

@@ -7,24 +7,24 @@
  * - Result processing
  */
 
-import { LLMClient } from './llm-client';
-import { SandboxFactory } from '../sandbox/factory';
-import { PTCGenerator } from './ptc-generator';
-import { AgentConfig, AgentResult, AgentStep, SessionState } from './types';
-import { SkillDiscovery, getSkillDiscovery } from './skill-discovery';
-import { retryOperation, isDefaultRetryableError } from './retry';
-import { getAgentStreams } from './hooks/progress-notify';
-import { ContextManager } from '../context/manager';
-import { HITLState } from '../database/context-types';
-import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrator';
-import { DefaultContextOrchestrator } from '../context/default-orchestrator';
+import { LLMClient } from './llm-client.js';
+import { SandboxFactory } from '../sandbox/factory.js';
+import { PTCGenerator } from './ptc-generator.js';
+import { AgentConfig, AgentResult, AgentStep, SessionState } from './types.js';
+import { SkillDiscovery, getSkillDiscovery } from './skill-discovery.js';
+import { retryOperation, isDefaultRetryableError } from './retry.js';
+import { getAgentStreams } from './hooks/progress-notify.js';
+import { ContextManager } from '../context/manager.js';
+import { HITLState } from '../database/context-types.js';
+import { ContextOrchestrator, OrchestratedContext } from '../context/orchestrator.js';
+import { DefaultContextOrchestrator } from '../context/default-orchestrator.js';
 import Handlebars from 'handlebars';
-import { KnowledgeBase } from '../knowledge/knowledge-base';
-import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager';
-import { RequestRewriter } from './request-rewriter';
-import { ValidationHook, ValidationError } from '../hook/validation/validation-hook';
-import { resolveWorkspace } from '../workspace/constants';
-import { AgentArtifacts, FileArtifact } from './artifacts';
+import { KnowledgeBase } from '../knowledge/knowledge-base.js';
+import { getAppKnowledgeCollections } from '../knowledge/app-knowledge-manager.js';
+import { RequestRewriter } from './request-rewriter.js';
+import { ValidationHook, ValidationError } from '../hook/validation/validation-hook.js';
+import { resolveWorkspace } from '../workspace/constants.js';
+import { AgentArtifacts, FileArtifact } from './artifacts.js';
 import * as path from 'path';
 
 // 对话历史配置

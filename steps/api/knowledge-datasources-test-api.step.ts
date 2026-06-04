@@ -3,7 +3,7 @@
  * Test data source connection
  */
 
-import { type StepConfig, logger } from 'motia';
+import { type StepConfig, logger } from '../../src/iii-bridge.js';
 import { testConnection } from '../../src/core/knowledge/datasource-manager.js';
 import { getDataSource, updateDataSourceStatus } from '../../src/core/knowledge/datasource-store.js';
 

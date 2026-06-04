@@ -6,9 +6,9 @@
  */
 
 import { z } from 'zod';
-import { type StepConfig, logger, enqueue } from 'motia';
-import { getDataStore, TaskStatus } from '../../src/core/database/data-store';
-import { MessageIdGenerator } from '../../src/utils/message-id-generator';
+import { type StepConfig, logger, enqueue } from '../../src/iii-bridge.js';
+import { getDataStore, TaskStatus } from '../../src/core/database/data-store.js';
+import { MessageIdGenerator } from '../../src/utils/message-id-generator.js';
 
 /**
  * Task counter for generating unique task IDs.

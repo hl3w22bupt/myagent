@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { loadAllSkills } from '../skill/skill-loader';
+import { loadAllSkills } from '../skill/skill-loader.js';
 
 /**
  * Skill metadata extracted from skill.yaml

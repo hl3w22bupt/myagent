@@ -5,9 +5,9 @@
  * 确保 trace 功能在所有地方一致启用
  */
 
-import { LLMClientFactory, LLMFactoryConfig, LLMTraceConfig } from '../../llm/factory';
-import { LLMClient } from '../../llm/client';
-import { getAgentStreams } from '../../agent/hooks/progress-notify';
+import { LLMClientFactory, LLMFactoryConfig, LLMTraceConfig } from '../../llm/factory.js';
+import { LLMClient } from '../../llm/client.js';
+import { getAgentStreams } from '../../agent/hooks/progress-notify.js';
 
 export class LLMClientManager {
   private factory: LLMClientFactory;
