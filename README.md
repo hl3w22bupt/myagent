@@ -34,7 +34,7 @@ A cloud-native distributed AI agent platform — built on a production-grade **a
 
 **⚙️ Workflow Engine** — Define multi-step pipelines with agent/subagent invocations, parallel execution, conditional branching, HITL breakpoints, retry policies, and failure handlers.
 
-Built on [Motia](https://github.com/garrytan/gstack) — a unified backend framework.
+Built on the **iii engine** — a high-performance Rust runtime for event-driven backend systems.
 
 ---
 
@@ -48,7 +48,7 @@ Built on [Motia](https://github.com/garrytan/gstack) — a unified backend frame
 └──────────────────────────────────────────────────┬───────────────────────────┘
                                                     │ HTTP / WebSocket / SSE
 ┌──────────────────────────────────────────────────┴───────────────────────────┐
-│                              API Layer (Motia Steps)                          │
+│                              API Layer (iii Steps)                               │
 │   /agent/execute  /api/contexts  /workflows/*  /api/souls/*  /api/skills/*   │
 │   /api/knowledge/*  /api/traces/*  /api/token-usage/*  /api/sessions/*       │
 └──────────────────────────────────┬───────────────────────────────────────────┘
@@ -235,9 +235,6 @@ Observability and extensibility at every layer:
 # Install dependencies
 npm install
 
-# Generate Motia types
-npm run generate-types
-
 # Start production server (recommended)
 npm run start
 
@@ -270,7 +267,7 @@ curl http://localhost:3000/api/contexts/outputs/{taskId}
 ## Architecture
 
 ```
-Layer 1: Motia Integration (event-driven)
+Layer 1: iii Engine (event-driven runtime)
    ↓
 Layer 2: Agent Orchestration (Agent/MasterAgent, PTC)
    ↓
@@ -320,7 +317,7 @@ npm run setup:knowledge-base -- --execute --dimensions 768
 
 **Project Structure**:
 ```
-steps/           # Motia steps (API, Event, Cron)
+steps/           # iii steps (API, Event, Cron)
 ├── agents/      # Agent endpoints
 ├── api/         # HTTP API routes
 └── cron/        # Scheduled tasks
@@ -333,7 +330,7 @@ src/core/        # Core system
 
 motia-frontend/  # React UI
 docs/            # Documentation
-.cursor/rules/   # Motia best practices
+.cursor/rules/   # Development best practices
 ```
 
 **Testing**:
@@ -350,7 +347,6 @@ curl -X POST http://localhost:3000/agent/execute \
 **After code changes**:
 ```bash
 npm run build            # TypeScript changes
-npm run generate-types   # Motia config changes
 ```
 
 ## Documentation
@@ -366,19 +362,19 @@ npm run generate-types   # Motia config changes
 
 ## Contributing
 
-See `.cursor/rules/motia/` for Motia development best practices (11 detailed guides covering configuration, steps, state management, streaming, architecture, error handling, and more).
+See `.cursor/rules/` for development best practices covering configuration, steps, state management, streaming, architecture, error handling, and more.
 
 ## License
 
 MIT
 
-## Learn More About Motia
+## Learn More
 
-- [Motia Documentation](https://motia.dev/docs) - Complete guides and API reference
-- [Quick Start Guide](https://motia.dev/docs/getting-started/quick-start) - Detailed getting started tutorial
-- [Core Concepts](https://motia.dev/docs/concepts/overview) - Learn about Steps and Motia architecture
-- [Discord Community](https://discord.gg/motia) - Get help and connect with other developers
+- [iii Engine Documentation](https://iii.dev/docs) - Complete guides and API reference
+- [CLAUDE.md](./CLAUDE.md) - Project development guide
+- [API Reference](./API_REFERENCE.md) - All API endpoints
+- [Testing Workflow](./TESTING_WORKFLOW.md) - Complete testing guide
 
 ---
 
-**Built with [Motia](https://github.com/garrytan/gstack)** - Unified backend framework for modern applications
+**Built with the iii engine** — A high-performance Rust runtime for distributed backend systems
