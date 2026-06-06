@@ -13,13 +13,11 @@
 
 import {
   registerWorker,
-  Logger,
   TriggerAction,
   type ISdk,
   type InitOptions,
   type HttpRequest,
   type HttpResponse,
-  type TriggerInfo as IIITriggerInfo,
 } from 'iii-sdk';
 import { randomUUID } from 'node:crypto';
 
@@ -50,10 +48,28 @@ export function initIII(engineUrl?: string, opts?: InitOptions): ISdk {
 }
 
 // ---------------------------------------------------------------------------
-// Logger (singleton — same as motia)
+// Logger (singleton — console-based, replaces removed iii-sdk Logger)
 // ---------------------------------------------------------------------------
 
-export const logger = new Logger();
+class ConsoleLogger {
+  info(msg: string, meta?: unknown): void {
+    console.log(`[INFO] ${msg}`, meta ?? '');
+  }
+  warn(msg: string, meta?: unknown): void {
+    console.warn(`[WARN] ${msg}`, meta ?? '');
+  }
+  error(msg: string, meta?: unknown): void {
+    console.error(`[ERROR] ${msg}`, meta ?? '');
+  }
+  debug(msg: string, meta?: unknown): void {
+    console.debug(`[DEBUG] ${msg}`, meta ?? '');
+  }
+  _error(msg: string, meta?: unknown): void {
+    console.error(`[ERROR] ${msg}`, meta ?? '');
+  }
+}
+
+export const logger = new ConsoleLogger();
 
 // ---------------------------------------------------------------------------
 // enqueue — drop-in for motia's enqueue({ topic, data, messageGroupId? })
@@ -440,5 +456,5 @@ export function createFlowContext(trigger: TriggerInfo, input: any): FlowContext
 // Re-export types from iii-sdk that motia users might need
 // ---------------------------------------------------------------------------
 
-export { TriggerAction, registerWorker, Logger };
-export type { ISdk, InitOptions, HttpRequest, HttpResponse, IIITriggerInfo };
+export { TriggerAction, registerWorker };
+export type { ISdk, InitOptions, HttpRequest, HttpResponse };
