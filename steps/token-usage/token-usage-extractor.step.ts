@@ -45,7 +45,8 @@ export const config = {
  * Filters for llm_call stage and validates token data before emitting.
  */
 export const handler = async (trace: ExecutionTrace) => {
-  const { traceId, taskId, agentId, stage, metadata } = trace;
+  const { taskId, agentId, skillName, stage, metadata } = trace;
+  const traceId = trace.traceId || (trace as any).id;
 
   logger.info('[Token Usage Extractor] Received trace', {
     traceId,
@@ -129,7 +130,7 @@ export const handler = async (trace: ExecutionTrace) => {
     traceId,           // Idempotency key
     taskId,
     agentId: agentId || undefined,
-    skillName: undefined, // TODO: Extract from trace when available
+    skillName: skillName || undefined,
     model: llmModel,
     provider: llmProvider,
     promptTokens,
