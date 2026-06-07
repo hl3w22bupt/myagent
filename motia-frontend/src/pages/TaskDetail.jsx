@@ -15,6 +15,7 @@ import TokenUsageTab from '../components/TokenUsageTab'
 import WorkspaceTab from '../components/WorkspaceTab'
 import ClarificationWaitingCard from '../components/task/ClarificationWaitingCard'
 import ClarificationModal from '../components/task/ClarificationModal'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 import { useTaskPolling } from '../hooks/useTaskPolling'
 
 // 使用与 API 配置相同的基础 URL
@@ -410,6 +411,7 @@ function TaskDetail() {
   const [tableSortColumn, setTableSortColumn] = useState(null)
   const [tableSortDirection, setTableSortDirection] = useState('asc')
   const [tableCurrentPage, setTableCurrentPage] = useState(1)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // 获取 stream 实例
   const { stream } = useMotiaStream()
@@ -3041,64 +3043,30 @@ function TaskDetail() {
     )
   }
 
-  const handleDeleteTask = async () => {
+  const handleDeleteTask = () => {
     // ⭐ 停止轮询，防止在删除过程中显示 404 错误
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current)
       pollIntervalRef.current = null
     }
     setPolling(false)
+    setShowDeleteConfirm(true)
+  }
 
-    // 确认删除
-    if (!window.confirm(`确定要删除任务 ${task.taskId} 吗?此操作不可恢复。`)) {
-      // 用户取消删除，恢复轮询（只需获取一次数据，不需要持续轮询）
-      const fetchOnce = async () => {
-        try {
-          const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
-          setTask(task)
-        } catch (err) {
-          console.error('获取任务详情失败:', err)
-          setError('获取任务详情失败')
-        }
-      }
-      fetchOnce()
-      return
-    }
-
+  const executeDelete = async () => {
     try {
       console.log('=== 开始删除任务 ===')
       console.log('任务 ID:', task.taskId)
 
-      const response = await tasksAPI.deleteTask(task.taskId)
+      await tasksAPI.deleteTask(task.taskId)
 
       console.log('=== 删除成功 ===')
-      console.log('响应对象:', response)
-      console.log('响应数据:', response.data)
-      console.log('响应状态:', response.status)
-
-      // 删除成功后跳转回任务列表
       window.location.href = '/tasks'
     } catch (error) {
       console.error('=== 删除任务失败 ===')
-      console.error('完整错误对象:', error)
-      console.error('错误名称:', error.name)
       console.error('错误消息:', error.message)
-      console.error('错误堆栈:', error.stack)
 
-      if (error.response) {
-        console.error('HTTP 状态码:', error.response.status)
-        console.error('HTTP 状态文本:', error.response.statusText)
-        console.error('响应头:', error.response.headers)
-        console.error('响应数据:', error.response.data)
-      } else if (error.request) {
-        console.error('请求已发送但没有收到响应:', error.request)
-      } else {
-        console.error('请求设置错误:', error.message)
-      }
-
-      // 显示更详细的错误信息
       let errorMessage = '未知错误'
-
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message
       } else if (error.response?.data?.error) {
@@ -3109,11 +3077,10 @@ function TaskDetail() {
 
       alert(`删除任务失败: ${errorMessage}\n请查看浏览器控制台获取详细信息`)
 
-      // 删除失败，只需获取一次最新数据，不需要启动新的轮询
-      // useEffect 中的轮询会自动继续（因为组件没有卸载）
+      // 删除失败，恢复一次数据获取
       const fetchOnce = async () => {
         try {
-          const task = await tasksAPI.getTaskDetails(id, 5000) // 5秒超时
+          const task = await tasksAPI.getTaskDetails(id, 5000)
           setTask(task)
         } catch (err) {
           console.error('获取任务详情失败:', err)
@@ -3122,6 +3089,21 @@ function TaskDetail() {
       }
       fetchOnce()
     }
+  }
+
+  const handleCancelDelete = async () => {
+    setShowDeleteConfirm(false)
+    // 用户取消删除，恢复轮询（只需获取一次数据）
+    const fetchOnce = async () => {
+      try {
+        const task = await tasksAPI.getTaskDetails(id, 5000)
+        setTask(task)
+      } catch (err) {
+        console.error('获取任务详情失败:', err)
+        setError('获取任务详情失败')
+      }
+    }
+    fetchOnce()
   }
 
   const handlePinTask = async () => {
@@ -3703,6 +3685,18 @@ function TaskDetail() {
                 const result = await response.json();
                 console.log('[HITL] Clarification submitted:', result);
               }}
+            />
+
+            {/* 删除确认对话框 */}
+            <ConfirmDialog
+              open={showDeleteConfirm}
+              onClose={handleCancelDelete}
+              onConfirm={executeDelete}
+              title="删除任务"
+              message={`确定要删除任务 ${task?.taskId} 吗？此操作不可恢复。`}
+              confirmLabel="确认删除"
+              cancelLabel="取消"
+              variant="danger"
             />
           </div>
         </div>

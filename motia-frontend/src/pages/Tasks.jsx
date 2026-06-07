@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { tasksAPI, skillsAPI } from '../services/api'
+import ConfirmDialog from '../components/common/ConfirmDialog'
 import './Tasks.css'
 
 function Tasks() {
@@ -22,6 +23,7 @@ function Tasks() {
   const [isSelectMode, setIsSelectMode] = useState(false)
   const [deletingTasks, setDeletingTasks] = useState(new Set())
   const [pinningTasks, setPinningTasks] = useState(new Set())
+  const [confirmState, setConfirmState] = useState(null)
   const pageSize = 12
 
   // 使用 useRef 防止重复提交（立即生效，不受 setState 异步影响）
@@ -188,19 +190,7 @@ function Tasks() {
     event.preventDefault()
     event.stopPropagation()
 
-    // 确认删除
-    if (!window.confirm(`确定要删除任务 ${taskId} 吗?此操作不可恢复。`)) {
-      return
-    }
-
-    try {
-      await tasksAPI.deleteTask(taskId)
-      // 删除成功后刷新列表
-      fetchTasks()
-    } catch (error) {
-      console.error('删除任务失败:', error)
-      alert('删除任务失败,请稍后重试')
-    }
+    setConfirmState({ type: 'single', taskId })
   }
 
   const handlePinTask = async (taskId, event) => {
@@ -268,7 +258,6 @@ function Tasks() {
 
   // 批量删除任务
   const handleBatchDelete = async () => {
-    // 使用 useRef 防止重复提交（立即生效，不受 setState 异步影响）
     if (isDeletingRef.current) {
       console.warn('删除操作进行中，请勿重复点击')
       return
@@ -279,47 +268,32 @@ function Tasks() {
       return
     }
 
-    const count = selectedTasks.size
-    if (!window.confirm(`确定要删除选中的 ${count} 个任务吗?此操作不可恢复。`)) {
-      return
-    }
+    setConfirmState({ type: 'batch', count: selectedTasks.size, taskIds: Array.from(selectedTasks) })
+  }
 
+  const executeBatchDelete = async (taskIds) => {
     try {
-      // 立即标记删除中（防止重复点击）
       isDeletingRef.current = true
-      setDeletingTasks(new Set(selectedTasks))
+      setDeletingTasks(new Set(taskIds))
 
-      // 使用批量删除API（一次请求删除所有任务）
-      const response = await tasksAPI.deleteTasks(Array.from(selectedTasks))
-
-      // 处理响应
+      const response = await tasksAPI.deleteTasks(taskIds)
       const { summary, results } = response.data
 
       if (summary.successfulCount > 0) {
-        // 至少有一些任务删除成功
         let message = `成功删除 ${summary.successfulCount} 个任务`
-
         if (summary.failedCount > 0) {
           message += `，失败 ${summary.failedCount} 个`
-
-          // 显示失败的详情
           console.error('部分任务删除失败:', results.failed)
-
-          // 可选：显示更详细的错误信息
           if (results.failed && results.failed.length > 0) {
             const failedList = results.failed.map(f => `- ${f.taskId}: ${f.error}`).join('\n')
             console.error('失败任务列表:\n' + failedList)
           }
         }
-
-        // 删除成功后清空选择并刷新列表
         setSelectedTasks(new Set())
         setIsSelectMode(false)
         fetchTasks()
-
         alert(message)
       } else {
-        // 所有任务都删除失败
         throw new Error('批量删除失败')
       }
     } catch (error) {
@@ -327,7 +301,6 @@ function Tasks() {
       const errorMessage = error.response?.data?.message || error.message || '批量删除任务失败，请稍后重试'
       alert(errorMessage)
     } finally {
-      // 清除删除中状态
       isDeletingRef.current = false
       setDeletingTasks(new Set())
     }
@@ -746,6 +719,35 @@ function Tasks() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={async () => {
+          if (!confirmState) return
+          if (confirmState.type === 'single') {
+            try {
+              await tasksAPI.deleteTask(confirmState.taskId)
+              fetchTasks()
+            } catch (error) {
+              console.error('删除任务失败:', error)
+              alert('删除任务失败,请稍后重试')
+            }
+          } else if (confirmState.type === 'batch') {
+            await executeBatchDelete(confirmState.taskIds)
+          }
+          setConfirmState(null)
+        }}
+        title={confirmState?.type === 'batch' ? '批量删除任务' : '删除任务'}
+        message={
+          confirmState?.type === 'batch'
+            ? `确定要删除选中的 ${confirmState.count} 个任务吗？此操作不可恢复。`
+            : `确定要删除任务 ${confirmState?.taskId} 吗？此操作不可恢复。`
+        }
+        confirmLabel="确认删除"
+        cancelLabel="取消"
+        variant="danger"
+      />
     </div>
   )
 }
