@@ -58,6 +58,35 @@ modules:
     config:
       adapter:
         class: modules::queue::BuiltinQueueAdapter
+      queue_configs:
+        execution-trace-created:
+          max_retries: 3
+          concurrency: 1
+          backoff_ms: 1000
+        token-usage-recorded:
+          max_retries: 3
+          concurrency: 1
+          backoff_ms: 1000
+        agent-task-completed:
+          max_retries: 3
+          concurrency: 1
+          backoff_ms: 1000
+        agent-task-failed:
+          max_retries: 3
+          concurrency: 1
+          backoff_ms: 1000
+        agent-task-execute:
+          max_retries: 3
+          concurrency: 5
+          backoff_ms: 1000
+        agent-task-chat:
+          max_retries: 3
+          concurrency: 5
+          backoff_ms: 1000
+        soul-agent-execute:
+          max_retries: 3
+          concurrency: 5
+          backoff_ms: 1000
 
   - class: modules::pubsub::PubSubModule
     config:
