@@ -73,6 +73,10 @@ export const logger = new ConsoleLogger();
 
 // ---------------------------------------------------------------------------
 // enqueue — drop-in for motia's enqueue({ topic, data, messageGroupId? })
+//
+// Uses durable queues (TriggerAction.Enqueue) when a queue consumer is
+// registered for the topic; falls back to pub-sub (publish + Void) for
+// topics without registered consumers.
 // ---------------------------------------------------------------------------
 
 export interface EnqueueData<T = unknown> {
@@ -81,17 +85,55 @@ export interface EnqueueData<T = unknown> {
   messageGroupId?: string;
 }
 
+/** Maps a pub-sub topic to its durable queue consumer. */
+interface QueueMapping {
+  functionId: string;
+  queueName: string;
+}
+
+const _topicQueueMap = new Map<string, QueueMapping[]>();
+
+/**
+ * Register a durable queue consumer for a topic.
+ * Called at worker startup for each queue-type step trigger.
+ * Multiple consumers can subscribe to the same topic (fan-out at enqueue time).
+ */
+export function registerQueueConsumer(topic: string, functionId: string): void {
+  const queueName = topic.replace(/[._]/g, '-');
+  const entry: QueueMapping = { functionId, queueName };
+  const existing = _topicQueueMap.get(topic);
+  if (existing) {
+    existing.push(entry);
+  } else {
+    _topicQueueMap.set(topic, [entry]);
+  }
+}
+
 export async function enqueue<T = unknown>(event: EnqueueData<T>): Promise<void> {
   const iii = getIII();
-  await iii.trigger({
-    function_id: 'publish',
-    payload: {
-      topic: event.topic,
-      data: event.data,
-      messageGroupId: event.messageGroupId,
-    },
-    action: TriggerAction.Void(),
-  });
+  const mappings = _topicQueueMap.get(event.topic);
+
+  if (mappings && mappings.length > 0) {
+    // Durable queue path — enqueue to each registered consumer's queue
+    for (const { functionId, queueName } of mappings) {
+      await iii.trigger({
+        function_id: functionId,
+        payload: event.data,
+        action: TriggerAction.Enqueue({ queue: queueName }),
+      });
+    }
+  } else {
+    // Fallback: pub-sub for topics without registered queue consumers
+    await iii.trigger({
+      function_id: 'publish',
+      payload: {
+        topic: event.topic,
+        data: event.data,
+        messageGroupId: event.messageGroupId,
+      },
+      action: TriggerAction.Void(),
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@
  * Connects to the iii engine, loads compiled step files from dist/steps/,
  * and registers them via the iii-sdk.
  */
-import { initIII, type StepConfig } from './iii-bridge.js';
+import { initIII, registerQueueConsumer, type StepConfig } from './iii-bridge.js';
 import { readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
@@ -86,7 +86,9 @@ async function startWorker() {
               metadata: meta,
             });
           } else if (t.type === 'queue') {
+            const queueName = t.topic.replace(/[._]/g, '-');
             iii.registerFunction(fnId, async (payload: any) => {
+              // Enqueue delivers payload directly (not wrapped in publish's { topic, data } envelope)
               const data = payload?.payload || payload;
               await handler(data, {
                 traceId: payload?.trace_id || randomUUID(),
@@ -97,11 +99,12 @@ async function startWorker() {
               });
             });
             iii.registerTrigger({
-              type: 'subscribe',
+              type: 'durable:subscriber',
               function_id: fnId,
-              config: { topic: t.topic },
+              config: { topic: queueName },
               metadata: meta,
             });
+            registerQueueConsumer(t.topic, fnId);
           } else if (t.type === 'cron') {
             iii.registerFunction(fnId, async (payload: any) => {
               await handler(undefined, {
